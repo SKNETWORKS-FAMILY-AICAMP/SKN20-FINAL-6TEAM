@@ -1,0 +1,10 @@
+python-dotenv
+
+# Django
+Django>=5.0.0
+django-allauth
+gunicorn
+mysqlclient
+
+# Utilities
+requests>=2.31.0

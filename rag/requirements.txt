@@ -1,0 +1,26 @@
+python-dotenv
+
+beautifulsoup4
+requests
+tqdm
+
+# LangChain
+langchain
+langchain-core
+langchain-community
+langchain-openai
+langchain-huggingface
+langchain-chroma
+openai
+chromadb
+sentence-transformers
+rank-bm25
+langgraph
+
+tavily-python
+
+# FastAPI
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
