@@ -7,3 +7,8 @@ __pycache__
 .backend
 .rag
 .venv
+
+proposal/
+.claude
+CLAUDE.md
+PRD.md

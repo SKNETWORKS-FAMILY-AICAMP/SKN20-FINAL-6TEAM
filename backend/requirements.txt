@@ -1,10 +1,17 @@
-python-dotenv
-
 # Django
-Django>=5.0.0
-django-allauth
-gunicorn
-mysqlclient
+Django>=4.2,<5.0
+djangorestframework>=3.14.0
+djangorestframework-simplejwt>=5.3.0
+django-cors-headers>=4.3.0
+
+# Database
+mysqlclient>=2.2.0
+
+# HTTP Client
+httpx>=0.25.0
+
+# Server
+gunicorn>=21.0.0
 
 # Utilities
-requests>=2.31.0
+python-dotenv>=1.0.0

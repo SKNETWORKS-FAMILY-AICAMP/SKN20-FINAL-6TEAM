@@ -1,16 +1,25 @@
-# 1. Base image 설정
+# Backend Dockerfile
 FROM python:3.10-slim
 
-# 2. 작업 디렉토리 설정
 WORKDIR /app
 
-# 3. 의존성 파일 복사 및 설치
+# Install system dependencies for mysqlclient
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    default-libmysqlclient-dev \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 4. 소스 코드 복사
+# Copy source code
 COPY . .
 
-# 5. 실행 명령
-CMD [ "python", "main.py" ]
+# Expose port
+EXPOSE 8000
+
+# Run with gunicorn
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "config.wsgi:application"]

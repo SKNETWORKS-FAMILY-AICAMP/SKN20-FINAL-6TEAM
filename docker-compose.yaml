@@ -1,18 +1,78 @@
+version: '3.8'
+
 services:
+  # MySQL Database
+  db:
+    image: mysql:8.0
+    container_name: bizmate-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-bizmate123}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-bizmate}
+      MYSQL_USER: ${MYSQL_USER:-bizmate}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-bizmate123}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Django Backend
   backend:
     build: ./backend
+    container_name: bizmate-backend
+    restart: unless-stopped
     volumes:
       - ./backend:/app
     ports:
-      - "8000:8000"
+      - "8080:8000"
     environment:
-      - ENV=development
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-dev-secret-key}
+      - DJANGO_DEBUG=${DJANGO_DEBUG:-True}
+      - MYSQL_HOST=db
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-bizmate}
+      - MYSQL_USER=${MYSQL_USER:-bizmate}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-bizmate123}
+      - RAG_SERVICE_URL=http://rag:8001
+    depends_on:
+      db:
+        condition: service_healthy
 
+  # React Frontend
+  frontend:
+    build: ./frontend
+    container_name: bizmate-frontend
+    restart: unless-stopped
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8080/api
+    depends_on:
+      - backend
+
+  # RAG Service (LangChain/FastAPI)
   rag:
     build: ./rag
+    container_name: bizmate-rag
+    restart: unless-stopped
     volumes:
       - ./rag:/app
     ports:
       - "8001:8001"
     environment:
-      - ENV=dev
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - BIZINFO_API_KEY=${BIZINFO_API_KEY}
+      - KSTARTUP_API_KEY=${KSTARTUP_API_KEY}
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
