@@ -39,7 +39,8 @@ frontend/
     │   ├── auth.ts           # 인증 API
     │   ├── chat.ts           # 채팅 API
     │   ├── company.ts        # 기업 API
-    │   └── notification.ts   # 알림 API
+    │   ├── notification.ts   # 알림 API
+    │   └── admin.ts          # 관리자 API
     │
     ├── components/           # 재사용 컴포넌트
     │   ├── common/           # 공통 컴포넌트
@@ -61,10 +62,18 @@ frontend/
     │   │   ├── ChatHistory.tsx
     │   │   └── CompanyProfile.tsx
     │   │
-    │   └── layout/           # 레이아웃
-    │       ├── Header.tsx
-    │       ├── Footer.tsx
-    │       └── MainLayout.tsx
+    │   ├── layout/           # 레이아웃
+    │   │   ├── Header.tsx
+    │   │   ├── Footer.tsx
+    │   │   └── MainLayout.tsx
+    │   │
+    │   └── admin/            # 관리자 컴포넌트
+    │       ├── UserTable.tsx
+    │       ├── ChatReviewCard.tsx
+    │       ├── ReviewForm.tsx
+    │       ├── HealthStatus.tsx
+    │       ├── StatsCard.tsx
+    │       └── AdminSidebar.tsx
     │
     ├── pages/                # 페이지 컴포넌트
     │   ├── Home.tsx          # 메인 채팅 페이지
@@ -72,22 +81,32 @@ frontend/
     │   ├── Register.tsx      # 회원가입
     │   ├── Profile.tsx       # 내 정보
     │   ├── Company.tsx       # 기업 프로필
-    │   └── Notifications.tsx # 알림 센터
+    │   ├── Notifications.tsx # 알림 센터
+    │   │
+    │   └── admin/            # 관리자 페이지
+    │       ├── Dashboard.tsx     # 관리자 대시보드
+    │       ├── UserManagement.tsx    # 사용자 관리
+    │       ├── ChatReview.tsx    # 답변 품질 관리
+    │       ├── ServerHealth.tsx  # 서버 상태 모니터링
+    │       └── Statistics.tsx    # 통계
     │
     ├── hooks/                # 커스텀 훅
     │   ├── useAuth.ts
     │   ├── useChat.ts
-    │   └── useNotification.ts
+    │   ├── useNotification.ts
+    │   └── useAdmin.ts       # 관리자 훅
     │
     ├── stores/               # Zustand 스토어
     │   ├── authStore.ts
-    │   └── chatStore.ts
+    │   ├── chatStore.ts
+    │   └── adminStore.ts     # 관리자 스토어
     │
     ├── types/                # TypeScript 타입
     │   ├── user.ts
     │   ├── chat.ts
     │   ├── company.ts
-    │   └── notification.ts
+    │   ├── notification.ts
+    │   └── admin.ts          # 관리자 타입
     │
     └── utils/                # 유틸리티
         ├── storage.ts        # localStorage 헬퍼
@@ -143,6 +162,39 @@ docker run -p 3000:3000 bizmate-frontend
 - 읽음 처리
 - 알림 설정
 
+### 6. 관리자 페이지 (/admin/*) - 관리자 전용
+
+#### 6-1. 대시보드 (/admin)
+- 서비스 현황 요약
+- 주요 지표 카드 (사용자 수, 상담 수, 답변 품질)
+- 서버 상태 요약
+- 최근 활동 로그
+
+#### 6-2. 사용자 관리 (/admin/users)
+- 회원 목록 테이블 (검색/필터/페이지네이션)
+- 회원 상세 정보 모달
+- 회원 상태 변경 (활성/비활성/정지)
+- 회원 삭제
+
+#### 6-3. 답변 품질 관리 (/admin/reviews)
+- 상담 로그 목록 (도메인별 필터)
+- 질문-답변 상세 보기
+- 답변 품질 평가 (1-5점, 정확성, 유용성)
+- 피드백 작성
+- 도메인별 품질 통계
+
+#### 6-4. 서버 상태 모니터링 (/admin/health)
+- Backend/RAG/Database 상태 표시
+- 응답 시간 그래프
+- 상태 이력 타임라인
+- 에러 로그 조회
+
+#### 6-5. 통계 (/admin/stats)
+- 사용자 통계 (가입 추이, 유형별 분포)
+- 상담 통계 (일별/도메인별)
+- 답변 품질 통계 (평균 점수, 추이)
+- 서비스 사용량 통계
+
 ## 컴포넌트 설계
 
 ### ChatWindow
@@ -177,6 +229,43 @@ const domainLabels: Record<Domain, string> = {
 };
 ```
 
+### 관리자 컴포넌트
+
+#### HealthStatus
+```tsx
+interface HealthStatusProps {
+  service: 'backend' | 'rag' | 'database';
+  status: 'healthy' | 'degraded' | 'down';
+  responseTime: number;
+  lastChecked: Date;
+}
+```
+
+#### ReviewForm
+```tsx
+interface ReviewFormProps {
+  messageId: string;
+  onSubmit: (review: ReviewData) => void;
+}
+
+interface ReviewData {
+  score: 1 | 2 | 3 | 4 | 5;
+  isAccurate: boolean;
+  isHelpful: boolean;
+  feedback?: string;
+}
+```
+
+#### StatsCard
+```tsx
+interface StatsCardProps {
+  title: string;
+  value: number | string;
+  change?: number;  // 전일 대비 변화율
+  icon?: ReactNode;
+}
+```
+
 ## 상태 관리
 
 ### Auth Store (Zustand)
@@ -201,6 +290,33 @@ interface ChatState {
   sendMessage: (content: string) => Promise<void>;
   loadSession: (sessionId: string) => Promise<void>;
   createSession: () => Promise<void>;
+}
+```
+
+### Admin Store (Zustand)
+```typescript
+interface AdminState {
+  // 사용자 관리
+  users: User[];
+  selectedUser: User | null;
+
+  // 답변 품질
+  chatLogs: ChatSession[];
+  reviews: ResponseReview[];
+
+  // 서버 상태
+  healthStatus: ServiceHealth[];
+
+  // 통계
+  stats: DashboardStats | null;
+
+  // 액션
+  fetchUsers: (filters?: UserFilters) => Promise<void>;
+  updateUserStatus: (userId: string, status: string) => Promise<void>;
+  fetchChatLogs: (filters?: ChatFilters) => Promise<void>;
+  submitReview: (review: ReviewData) => Promise<void>;
+  fetchHealthStatus: () => Promise<void>;
+  fetchStats: () => Promise<void>;
 }
 ```
 

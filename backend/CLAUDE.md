@@ -52,9 +52,17 @@ backend/
     │   ├── urls.py
     │   └── admin.py
     │
-    └── notifications/         # 알림
+    ├── notifications/         # 알림
+    │   ├── __init__.py
+    │   ├── models.py         # Notification 모델
+    │   ├── serializers.py
+    │   ├── views.py
+    │   ├── urls.py
+    │   └── admin.py
+    │
+    └── administration/        # 관리자 기능
         ├── __init__.py
-        ├── models.py         # Notification 모델
+        ├── models.py         # ResponseReview, ServiceHealth 모델
         ├── serializers.py
         ├── views.py
         ├── urls.py
@@ -131,13 +139,41 @@ docker run -p 8000:8000 bizmate-backend
 | POST | `/api/notifications/settings/` | 알림 설정 |
 
 ### 관리자 (Admin)
+
+#### 사용자 관리
 | Method | Endpoint | 설명 |
 |--------|----------|------|
-| GET | `/api/admin/users/` | 회원 목록 |
-| GET | `/api/admin/users/{id}/` | 회원 상세 |
-| PATCH | `/api/admin/users/{id}/status/` | 회원 상태 변경 |
-| GET | `/api/admin/chats/` | 상담 로그 조회 |
-| GET | `/api/admin/stats/` | 통계 대시보드 |
+| GET | `/api/admin/users/` | 회원 목록 (필터/검색/페이지네이션) |
+| GET | `/api/admin/users/{id}/` | 회원 상세 정보 |
+| PATCH | `/api/admin/users/{id}/status/` | 회원 상태 변경 (활성/비활성/정지) |
+| DELETE | `/api/admin/users/{id}/` | 회원 삭제 |
+
+#### 답변 품질 관리
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| GET | `/api/admin/chats/` | 상담 로그 목록 (필터/검색) |
+| GET | `/api/admin/chats/{id}/` | 상담 상세 (질문-답변 전체) |
+| POST | `/api/admin/chats/{id}/review/` | 답변 품질 평가 등록 |
+| GET | `/api/admin/reviews/` | 품질 평가 목록 |
+| GET | `/api/admin/reviews/stats/` | 도메인별 답변 품질 통계 |
+
+#### 서버 상태 모니터링
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| GET | `/api/admin/health/` | 전체 서비스 상태 요약 |
+| GET | `/api/admin/health/backend/` | Backend 서버 상태 |
+| GET | `/api/admin/health/rag/` | RAG 서비스 상태 |
+| GET | `/api/admin/health/database/` | 데이터베이스 연결 상태 |
+| GET | `/api/admin/health/history/` | 서비스 상태 이력 |
+
+#### 통계 대시보드
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| GET | `/api/admin/stats/` | 종합 통계 대시보드 |
+| GET | `/api/admin/stats/users/` | 사용자 통계 (가입/활성/유형별) |
+| GET | `/api/admin/stats/chats/` | 상담 통계 (일별/도메인별) |
+| GET | `/api/admin/stats/quality/` | 답변 품질 통계 |
+| GET | `/api/admin/stats/usage/` | 서비스 사용량 통계 |
 
 ## 데이터 모델
 
@@ -191,6 +227,40 @@ class Notification(Model):
     content = TextField()
     is_read = BooleanField(default=False)
     created_at = DateTimeField(auto_now_add=True)
+```
+
+### ResponseReview (답변 품질 평가)
+```python
+class ResponseReview(Model):
+    message = ForeignKey(Message)  # 평가 대상 AI 응답
+    reviewer = ForeignKey(User)    # 평가한 관리자
+    score = IntegerField(choices=[1, 2, 3, 4, 5])  # 1-5점 척도
+    is_accurate = BooleanField()   # 정확성 여부
+    is_helpful = BooleanField()    # 유용성 여부
+    feedback = TextField(blank=True)  # 상세 피드백
+    created_at = DateTimeField(auto_now_add=True)
+```
+
+### ServiceHealth (서비스 상태)
+```python
+class ServiceHealth(Model):
+    service = CharField(choices=['backend', 'rag', 'database', 'frontend'])
+    status = CharField(choices=['healthy', 'degraded', 'down'])
+    response_time = IntegerField()  # ms 단위
+    error_message = TextField(blank=True)
+    checked_at = DateTimeField(auto_now_add=True)
+```
+
+### UsageStats (사용량 통계)
+```python
+class UsageStats(Model):
+    date = DateField()
+    total_users = IntegerField()
+    active_users = IntegerField()
+    total_chats = IntegerField()
+    total_messages = IntegerField()
+    avg_response_time = FloatField()  # 초 단위
+    domain_breakdown = JSONField()    # 도메인별 사용량
 ```
 
 ## 환경 변수
