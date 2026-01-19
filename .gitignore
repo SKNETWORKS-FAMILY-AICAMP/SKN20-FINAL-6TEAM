@@ -6,6 +6,7 @@ __pycache__
 # =============================================
 .backend
 .rag
+<<<<<<< HEAD
 .react
 .venv
 venv
@@ -34,3 +35,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+=======
+.venv
+
+# Python virtual environment (custom path)
+final/
+lib/
+>>>>>>> 4a2f71b (가상환경 gitignore 추가)
