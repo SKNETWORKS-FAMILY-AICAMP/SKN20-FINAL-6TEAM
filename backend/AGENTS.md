@@ -1,6 +1,7 @@
-# Backend 개발 가이드
+# Backend 개발 가이드 (AI 에이전트용)
 
-> 이 문서는 AI 에이전트가 백엔드 개발을 지원하기 위한 가이드입니다.
+> **이 문서는 다른 AI 에이전트가 백엔드 개발을 지원하기 위한 자기 완결적 가이드입니다.**
+> Claude Code는 [CLAUDE.md](./CLAUDE.md)를 참조하세요.
 
 ## 개요
 BizMate의 백엔드는 FastAPI를 사용하며, Google OAuth2 인증과 SQLAlchemy ORM을 사용합니다.
@@ -96,16 +97,37 @@ class UserService:
 ### 3. SQLAlchemy 모델
 ```python
 # apps/common/models.py
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text
+from sqlalchemy.orm import relationship
+from datetime import datetime
 from config.database import Base
 
 class User(Base):
     __tablename__ = "user"
 
-    user_id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, primary_key=True, autoincrement=True)
     google_email = Column(String(255), unique=True, nullable=False)
     username = Column(String(100), nullable=False)
     type_code = Column(String(4), ForeignKey("code.code"), default="U001")
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    # Relationships
+    companies = relationship("Company", back_populates="user")
+    histories = relationship("History", back_populates="user")
+
+class Company(Base):
+    __tablename__ = "company"
+
+    company_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("user.user_id"), nullable=False)
+    com_name = Column(String(200), nullable=False)
+    biz_num = Column(String(20), unique=True)
+    biz_code = Column(String(4), ForeignKey("code.code"))
+    created_at = Column(DateTime, default=datetime.now)
+
+    # Relationships
+    user = relationship("User", back_populates="companies")
 ```
 
 ### 4. Pydantic 스키마
@@ -227,21 +249,72 @@ app.include_router({기능}_router)
 1. `apps/{기능}/schemas.py`에 Pydantic 모델 추가
 2. Request/Response 스키마 분리
 
-## 환경 변수
-```
+## 환경 변수 (.env)
+```bash
 MYSQL_HOST=localhost
 MYSQL_PORT=3306
 MYSQL_DATABASE=final_test
 MYSQL_USER=root
 MYSQL_PASSWORD=
 
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
+GOOGLE_CLIENT_ID=your-client-id
+GOOGLE_CLIENT_SECRET=your-secret
 GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/callback
 
 JWT_SECRET_KEY=your-secret-key
 JWT_ALGORITHM=HS256
 JWT_EXPIRE_MINUTES=60
+```
+
+### 환경 설정 구현
+```python
+# config/settings.py
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    MYSQL_HOST: str = "localhost"
+    MYSQL_PORT: int = 3306
+    MYSQL_DATABASE: str = "final_test"
+    MYSQL_USER: str = "root"
+    MYSQL_PASSWORD: str = ""
+
+    GOOGLE_CLIENT_ID: str
+    GOOGLE_CLIENT_SECRET: str
+    GOOGLE_REDIRECT_URI: str
+
+    JWT_SECRET_KEY: str
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 60
+
+    class Config:
+        env_file = ".env"
+
+settings = Settings()
+```
+
+```python
+# config/database.py
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from config.settings import settings
+
+SQLALCHEMY_DATABASE_URL = (
+    f"mysql+pymysql://{settings.MYSQL_USER}:{settings.MYSQL_PASSWORD}"
+    f"@{settings.MYSQL_HOST}:{settings.MYSQL_PORT}/{settings.MYSQL_DATABASE}"
+)
+
+engine = create_engine(SQLALCHEMY_DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# 의존성
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 ```
 
 ## 테스트

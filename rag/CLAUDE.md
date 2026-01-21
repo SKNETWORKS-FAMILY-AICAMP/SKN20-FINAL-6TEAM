@@ -1,9 +1,12 @@
 # RAG Service - 멀티에이전트 시스템
 
+> **이 문서는 Claude Code를 위한 자기 완결적 개발 가이드입니다.**
+> 다른 AI 에이전트는 [AGENTS.md](./AGENTS.md)를 참조하세요.
+
 ## 개요
 BizMate의 핵심 AI 서비스입니다. LangChain과 LangGraph를 사용하여 6개 도메인 전문 에이전트와 Master Router를 구현합니다.
 
-**중요**: RAG 서비스는 프론트엔드(Next.js)와 직접 통신합니다. 백엔드를 거치지 않고 채팅 및 AI 응답을 처리합니다.
+**중요**: RAG 서비스는 프론트엔드(React + Vite)와 직접 통신합니다. Backend를 거치지 않고 채팅 및 AI 응답을 처리합니다.
 
 ## 기술 스택
 - Python 3.10+
@@ -103,10 +106,10 @@ docker run -p 8001:8001 bizmate-rag
 ### 프론트엔드 직접 통신
 ```
 ┌─────────────────────┐
-│  Frontend (Next.js) │
-│   localhost:3000    │
+│  Frontend (Vite)    │
+│   localhost:5173    │
 └─────────┬───────────┘
-          │ 직접 통신 (POST /api/chat, /api/chat/stream)
+          │ axios 직접 통신 (POST /api/chat, /api/chat/stream)
           ↓
 ┌─────────────────────┐
 │  RAG Service        │

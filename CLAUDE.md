@@ -11,7 +11,7 @@ BizMate는 예비 창업자, 스타트업 CEO, 중소기업 대표를 위한 AI 
 - 선제적 알림 시스템 (마감일 D-7, D-3 알림)
 
 ## 기술 스택
-- **Frontend**: Next.js 14 (App Router), React 18, TypeScript, TailwindCSS
+- **Frontend**: React 18 + Vite, TypeScript, TailwindCSS, React Router, axios
 - **Backend**: FastAPI, SQLAlchemy 2.0, Google OAuth2, JWT
 - **RAG Service**: FastAPI, LangChain, LangGraph, OpenAI GPT-4
 - **Database**: MySQL 8.0 (스키마: final_test)
@@ -26,17 +26,18 @@ SKN20-FINAL-6TEAM/
 ├── .env                   # 환경 변수 (git에서 제외)
 ├── .env.example           # 환경 변수 예시
 │
-├── frontend/              # Next.js 프론트엔드
+├── frontend/              # React 프론트엔드 (Vite)
 │   ├── CLAUDE.md          # Frontend 개발 가이드
 │   ├── AGENTS.md          # Frontend AI 에이전트 가이드
 │   ├── package.json
+│   ├── vite.config.ts     # Vite 설정
 │   ├── src/
-│   │   ├── app/           # App Router 페이지
+│   │   ├── pages/         # 페이지 컴포넌트
 │   │   ├── components/    # React 컴포넌트
 │   │   ├── hooks/         # 커스텀 훅
 │   │   ├── stores/        # Zustand 스토어
 │   │   ├── types/         # TypeScript 타입
-│   │   └── lib/           # API 클라이언트
+│   │   └── lib/           # API 클라이언트 (axios)
 │   └── Dockerfile
 │
 ├── backend/               # FastAPI 백엔드
@@ -79,7 +80,7 @@ SKN20-FINAL-6TEAM/
 ## 서비스 포트
 | 서비스 | 포트 | 설명 |
 |--------|------|------|
-| Frontend | 3000 | Next.js 개발 서버 |
+| Frontend | 5173 | Vite 개발 서버 |
 | Backend | 8000 | FastAPI REST API |
 | RAG | 8001 | RAG Service (LangChain/FastAPI) |
 | MySQL | 3306 | 데이터베이스 |
@@ -109,11 +110,11 @@ pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-**Frontend (Next.js)**
+**Frontend (React + Vite)**
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev  # Vite 개발 서버 (localhost:5173)
 ```
 
 **RAG Service**
@@ -130,10 +131,10 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ### 시스템 구성도
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         Frontend (Next.js)                       │
-│                    localhost:3000                                │
+│                      Frontend (React + Vite)                     │
+│                    localhost:5173                                │
 └───────────────┬─────────────────────────────┬───────────────────┘
-                │ REST API                    │ 직접 통신
+                │ axios (REST API)            │ axios (직접 통신)
                 │ (인증, 사용자, 기업)         │ (채팅, AI 응답)
                 ↓                             ↓
 ┌───────────────────────────┐    ┌─────────────────────────────────┐
@@ -170,18 +171,18 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 ### API 통신 흐름
-**인증/데이터 관리**: Frontend → Backend → MySQL
-**AI 채팅**: Frontend → RAG Service (직접 통신) → Vector DB
+**인증/데이터 관리**: Frontend (axios) → Backend → MySQL
+**AI 채팅**: Frontend (axios) → RAG Service (직접 통신) → Vector DB
 
 ```
-Frontend (Next.js)
+Frontend (React + Vite)
     │
-    ├── REST API ──→ Backend (FastAPI) ←→ MySQL
-    │                   └── 인증, 사용자, 기업, 이력, 일정
+    ├── axios (REST API) ──→ Backend (FastAPI) ←→ MySQL
+    │                          └── 인증, 사용자, 기업, 이력, 일정
     │
-    └── 직접 통신 ──→ RAG Service (FastAPI/LangChain)
-                        └── 채팅, AI 응답, 문서 생성
-                        └── Vector DB + External APIs
+    └── axios (직접 통신) ──→ RAG Service (FastAPI/LangChain)
+                               └── 채팅, AI 응답, 문서 생성
+                               └── Vector DB + External APIs
 ```
 
 ## 사용자 유형
@@ -227,7 +228,7 @@ chore: 빌드, 설정 변경
 - `prd.xlsx`: 상세 요구사항 정의서
 - `plan.docx`: 프로젝트 기획서
 - `backend/CLAUDE.md`: FastAPI 백엔드 개발 가이드
-- `frontend/CLAUDE.md`: Next.js 프론트엔드 개발 가이드
+- `frontend/CLAUDE.md`: React + Vite 프론트엔드 개발 가이드
 - `rag/CLAUDE.md`: 멀티에이전트 RAG 개발 가이드
 - `data/CLAUDE.md`: 데이터 크롤링/전처리 가이드
 
@@ -267,4 +268,4 @@ KSTARTUP_API_KEY=      # K-Startup API
 | RAG 전문가 | 벡터DB 구축, RAG 파이프라인 |
 | Expert Agent Part 1 | Startup, Tax, Funding Agent |
 | Expert Agent Part 2 | HR, Legal Agent, Action Executor |
-| 프론트엔드 | Next.js UI/UX, 채팅 인터페이스 |
+| 프론트엔드 | React + Vite UI/UX, 채팅 인터페이스 |
