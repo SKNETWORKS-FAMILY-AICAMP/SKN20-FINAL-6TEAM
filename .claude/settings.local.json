@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:marketplace.visualstudio.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.bizinfo.go.kr)",
+      "Bash(pip install:*)",
+      "Bash(python:*)"
+    ]
+  }
+}
