@@ -5,6 +5,8 @@
 ## 개요
 BizMate의 핵심 AI 서비스입니다. LangChain과 LangGraph를 사용하여 6개 도메인 전문 에이전트와 Master Router를 구현합니다.
 
+**중요**: RAG 서비스는 프론트엔드(Next.js)와 직접 통신합니다. 백엔드를 거치지 않고 채팅 및 AI 응답을 처리합니다.
+
 ## 기술 스택
 - Python 3.10+
 - FastAPI
@@ -43,9 +45,9 @@ rag/
 │   ├── chroma.py             # ChromaDB 클라이언트
 │   └── embeddings.py         # 임베딩 설정
 │
-├── data/                      # 데이터 수집/처리
+├── loaders/                   # 데이터 로더 (벡터DB 적재용)
 │   ├── __init__.py
-│   ├── funding_crawler.py    # 지원사업 크롤러
+│   ├── funding_loader.py     # 지원사업 데이터 로더
 │   └── law_loader.py         # 법령 데이터 로더
 │
 ├── schemas/                   # Pydantic 스키마
@@ -97,6 +99,34 @@ docker run -p 8001:8001 bizmate-rag
 | GET | `/api/funding/search` | 지원사업 검색 |
 | POST | `/api/funding/recommend` | 맞춤 지원사업 추천 |
 | POST | `/api/funding/sync` | 공고 데이터 동기화 |
+
+## 통신 아키텍처
+
+### 프론트엔드 직접 통신
+```
+┌─────────────────────┐
+│  Frontend (Next.js) │
+│   localhost:3000    │
+└─────────┬───────────┘
+          │ 직접 통신 (POST /api/chat, /api/chat/stream)
+          ↓
+┌─────────────────────┐
+│  RAG Service        │
+│  localhost:8001     │
+│                     │
+│  - Master Router    │
+│  - 6개 전문 에이전트 │
+│  - Action Executor  │
+└─────────┬───────────┘
+          │
+          ↓
+┌─────────────────────┐
+│  ChromaDB           │
+│  (Vector DB)        │
+└─────────────────────┘
+```
+
+**참고**: 사용자 인증, 기업 정보, 상담 이력 저장은 Backend(FastAPI)가 담당합니다.
 
 ## 멀티에이전트 아키텍처
 

@@ -1,409 +1,160 @@
-# Frontend - React Application
+# Frontend 개발 가이드
 
 > 이 문서는 AI 에이전트가 프론트엔드 개발을 지원하기 위한 가이드입니다.
 
 ## 개요
-BizMate의 프론트엔드 애플리케이션입니다. React와 TypeScript를 사용하여 통합 채팅 인터페이스와 사용자 관리 기능을 제공합니다.
+BizMate의 프론트엔드는 Next.js 14 App Router를 사용하며, React 18과 TypeScript로 구성됩니다.
 
 ## 기술 스택
-- React 18
-- TypeScript 5
-- Vite (빌드 도구)
+- Next.js 14 (App Router)
+- React 18, TypeScript 5
 - TailwindCSS (스타일링)
-- React Router v6 (라우팅)
-- Zustand (상태 관리)
-- React Query (서버 상태 관리)
-- Axios (HTTP 클라이언트)
+- Zustand (전역 상태 관리)
+- TanStack Query (서버 상태 관리)
 
 ## 프로젝트 구조
 ```
 frontend/
-├── AGENTS.md
-├── package.json
-├── vite.config.ts
-├── tailwind.config.js
-├── tsconfig.json
-├── index.html
-├── Dockerfile
-│
+├── src/
+│   ├── app/                  # App Router 페이지
+│   │   ├── layout.tsx        # 루트 레이아웃
+│   │   ├── page.tsx          # 메인 채팅 페이지
+│   │   ├── login/            # 로그인 페이지
+│   │   ├── profile/          # 사용자 프로필
+│   │   ├── company/          # 기업 정보 관리
+│   │   ├── schedule/         # 일정 관리
+│   │   └── admin/            # 관리자 페이지
+│   ├── components/           # React 컴포넌트
+│   │   ├── chat/             # 채팅 관련 컴포넌트
+│   │   │   ├── ChatWindow.tsx
+│   │   │   ├── MessageList.tsx
+│   │   │   ├── MessageInput.tsx
+│   │   │   └── DomainTag.tsx
+│   │   ├── common/           # 공통 컴포넌트
+│   │   │   ├── Button.tsx
+│   │   │   ├── Input.tsx
+│   │   │   ├── Modal.tsx
+│   │   │   └── Loading.tsx
+│   │   └── layout/           # 레이아웃 컴포넌트
+│   │       ├── Header.tsx
+│   │       ├── Sidebar.tsx
+│   │       └── Footer.tsx
+│   ├── hooks/                # 커스텀 훅
+│   │   ├── useAuth.ts
+│   │   ├── useChat.ts
+│   │   └── useCompany.ts
+│   ├── stores/               # Zustand 스토어
+│   │   ├── authStore.ts
+│   │   ├── chatStore.ts
+│   │   └── uiStore.ts
+│   ├── types/                # TypeScript 타입
+│   │   ├── user.ts
+│   │   ├── company.ts
+│   │   ├── chat.ts
+│   │   └── api.ts
+│   └── lib/                  # API 클라이언트
+│       ├── api.ts            # Backend API (인증, 사용자, 기업)
+│       └── rag.ts            # RAG API (채팅, AI 응답)
 ├── public/
-│   └── favicon.ico
-│
-└── src/
-    ├── main.tsx              # 앱 진입점
-    ├── App.tsx               # 메인 앱 컴포넌트
-    ├── index.css             # 전역 스타일
-    │
-    ├── api/                  # API 클라이언트
-    │   ├── client.ts         # Axios 인스턴스
-    │   ├── auth.ts           # 인증 API
-    │   ├── chat.ts           # 채팅 API
-    │   ├── company.ts        # 기업 API
-    │   ├── notification.ts   # 알림 API
-    │   └── admin.ts          # 관리자 API
-    │
-    ├── components/           # 재사용 컴포넌트
-    │   ├── common/           # 공통 컴포넌트
-    │   │   ├── Button.tsx
-    │   │   ├── Input.tsx
-    │   │   ├── Modal.tsx
-    │   │   └── Loading.tsx
-    │   │
-    │   ├── chat/             # 채팅 관련
-    │   │   ├── ChatWindow.tsx
-    │   │   ├── MessageList.tsx
-    │   │   ├── MessageInput.tsx
-    │   │   ├── MessageBubble.tsx
-    │   │   └── DomainTag.tsx
-    │   │
-    │   ├── sidebar/          # 사이드바
-    │   │   ├── Sidebar.tsx
-    │   │   ├── QuickQuestions.tsx
-    │   │   ├── ChatHistory.tsx
-    │   │   └── CompanyProfile.tsx
-    │   │
-    │   ├── layout/           # 레이아웃
-    │   │   ├── Header.tsx
-    │   │   ├── Footer.tsx
-    │   │   └── MainLayout.tsx
-    │   │
-    │   └── admin/            # 관리자 컴포넌트
-    │       ├── UserTable.tsx
-    │       ├── ChatReviewCard.tsx
-    │       ├── ReviewForm.tsx
-    │       ├── HealthStatus.tsx
-    │       ├── StatsCard.tsx
-    │       └── AdminSidebar.tsx
-    │
-    ├── pages/                # 페이지 컴포넌트
-    │   ├── Home.tsx          # 메인 채팅 페이지
-    │   ├── Login.tsx         # 로그인
-    │   ├── Register.tsx      # 회원가입
-    │   ├── Profile.tsx       # 내 정보
-    │   ├── Company.tsx       # 기업 프로필
-    │   ├── Notifications.tsx # 알림 센터
-    │   │
-    │   └── admin/            # 관리자 페이지
-    │       ├── Dashboard.tsx     # 관리자 대시보드
-    │       ├── UserManagement.tsx    # 사용자 관리
-    │       ├── ChatReview.tsx    # 답변 품질 관리
-    │       ├── ServerHealth.tsx  # 서버 상태 모니터링
-    │       └── Statistics.tsx    # 통계
-    │
-    ├── hooks/                # 커스텀 훅
-    │   ├── useAuth.ts
-    │   ├── useChat.ts
-    │   ├── useNotification.ts
-    │   └── useAdmin.ts       # 관리자 훅
-    │
-    ├── stores/               # Zustand 스토어
-    │   ├── authStore.ts
-    │   ├── chatStore.ts
-    │   └── adminStore.ts     # 관리자 스토어
-    │
-    ├── types/                # TypeScript 타입
-    │   ├── user.ts
-    │   ├── chat.ts
-    │   ├── company.ts
-    │   ├── notification.ts
-    │   └── admin.ts          # 관리자 타입
-    │
-    └── utils/                # 유틸리티
-        ├── storage.ts        # localStorage 헬퍼
-        └── format.ts         # 포맷팅 함수
+├── next.config.js
+├── tailwind.config.js
+└── package.json
 ```
 
-## 실행 방법
+## 코드 작성 규칙
 
-### 개발 환경
-```bash
-cd frontend
-npm install
-npm run dev
-```
+### 1. 컴포넌트 규칙
+- App Router 사용 (`src/app/` 하위에 페이지 생성)
+- 서버 컴포넌트 우선, 클라이언트 필요시 `'use client'` 선언
+- 컴포넌트 파일명은 PascalCase (예: `ChatWindow.tsx`)
 
-### 빌드
-```bash
-npm run build
-npm run preview  # 빌드 결과 미리보기
-```
+### 2. 상태 관리
+- **전역 상태**: Zustand 사용 (`stores/` 디렉토리)
+- **서버 상태**: TanStack Query 사용 (캐싱, 리페칭)
+- **로컬 상태**: React useState/useReducer
 
-### Docker
-```bash
-docker build -t bizmate-frontend .
-docker run -p 3000:3000 bizmate-frontend
-```
-
-## 주요 페이지
-
-### 1. 메인 채팅 (/)
-- 통합 채팅 인터페이스
-- 도메인별 응답 태그 표시
-- 대화 이력 사이드바
-- 빠른 질문 버튼
-
-### 2. 로그인/회원가입 (/login, /register)
-- 이메일/비밀번호 로그인
-- 소셜 로그인 (Google, Kakao)
-- 사용자 유형 선택
-
-### 3. 내 정보 (/profile)
-- 프로필 조회/수정
-- 비밀번호 변경
-- 회원 탈퇴
-
-### 4. 기업 프로필 (/company)
-- 기업 정보 등록/수정
-- 사업자등록증 업로드
-- 지원사업 자격 분석
-
-### 5. 알림 센터 (/notifications)
-- 알림 목록
-- 읽음 처리
-- 알림 설정
-
-### 6. 관리자 페이지 (/admin/*) - 관리자 전용
-
-#### 6-1. 대시보드 (/admin)
-- 서비스 현황 요약
-- 주요 지표 카드 (사용자 수, 상담 수, 답변 품질)
-- 서버 상태 요약
-- 최근 활동 로그
-
-#### 6-2. 사용자 관리 (/admin/users)
-- 회원 목록 테이블 (검색/필터/페이지네이션)
-- 회원 상세 정보 모달
-- 회원 상태 변경 (활성/비활성/정지)
-- 회원 삭제
-
-#### 6-3. 답변 품질 관리 (/admin/reviews)
-- 상담 로그 목록 (도메인별 필터)
-- 질문-답변 상세 보기
-- 답변 품질 평가 (1-5점, 정확성, 유용성)
-- 피드백 작성
-- 도메인별 품질 통계
-
-#### 6-4. 서버 상태 모니터링 (/admin/health)
-- Backend/RAG/Database 상태 표시
-- 응답 시간 그래프
-- 상태 이력 타임라인
-- 에러 로그 조회
-
-#### 6-5. 통계 (/admin/stats)
-- 사용자 통계 (가입 추이, 유형별 분포)
-- 상담 통계 (일별/도메인별)
-- 답변 품질 통계 (평균 점수, 추이)
-- 서비스 사용량 통계
-
-## 컴포넌트 설계
-
-### ChatWindow
-```tsx
-interface ChatWindowProps {
-  sessionId: string;
-  onNewSession: () => void;
-}
-```
-
-### MessageBubble
-```tsx
-interface MessageBubbleProps {
-  role: 'user' | 'assistant';
-  content: string;
-  domain?: string;
-  timestamp: Date;
-}
-```
-
-### DomainTag
-```tsx
-type Domain = 'startup' | 'tax' | 'funding' | 'hr' | 'legal' | 'marketing';
-
-const domainLabels: Record<Domain, string> = {
-  startup: '창업',
-  tax: '세무/회계',
-  funding: '지원사업',
-  hr: '노무',
-  legal: '법률',
-  marketing: '마케팅',
-};
-```
-
-### 관리자 컴포넌트
-
-#### HealthStatus
-```tsx
-interface HealthStatusProps {
-  service: 'backend' | 'rag' | 'database';
-  status: 'healthy' | 'degraded' | 'down';
-  responseTime: number;
-  lastChecked: Date;
-}
-```
-
-#### ReviewForm
-```tsx
-interface ReviewFormProps {
-  messageId: string;
-  onSubmit: (review: ReviewData) => void;
-}
-
-interface ReviewData {
-  score: 1 | 2 | 3 | 4 | 5;
-  isAccurate: boolean;
-  isHelpful: boolean;
-  feedback?: string;
-}
-```
-
-#### StatsCard
-```tsx
-interface StatsCardProps {
-  title: string;
-  value: number | string;
-  change?: number;  // 전일 대비 변화율
-  icon?: ReactNode;
-}
-```
-
-## 상태 관리
-
-### Auth Store (Zustand)
+### 3. API 통신
 ```typescript
-interface AuthState {
-  user: User | null;
-  token: string | null;
-  isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
-  updateProfile: (data: Partial<User>) => Promise<void>;
-}
+// Backend API (인증, 사용자, 기업 관리)
+import { api } from '@/lib/api';
+const user = await api.get('/users/me');
+
+// RAG API (채팅, AI 응답 - 직접 통신)
+import { ragApi } from '@/lib/rag';
+const response = await ragApi.post('/api/chat', { message });
 ```
 
-### Chat Store (Zustand)
-```typescript
-interface ChatState {
-  sessions: ChatSession[];
-  currentSession: ChatSession | null;
-  messages: Message[];
-  isLoading: boolean;
-  sendMessage: (content: string) => Promise<void>;
-  loadSession: (sessionId: string) => Promise<void>;
-  createSession: () => Promise<void>;
-}
-```
-
-### Admin Store (Zustand)
-```typescript
-interface AdminState {
-  // 사용자 관리
-  users: User[];
-  selectedUser: User | null;
-
-  // 답변 품질
-  chatLogs: ChatSession[];
-  reviews: ResponseReview[];
-
-  // 서버 상태
-  healthStatus: ServiceHealth[];
-
-  // 통계
-  stats: DashboardStats | null;
-
-  // 액션
-  fetchUsers: (filters?: UserFilters) => Promise<void>;
-  updateUserStatus: (userId: string, status: string) => Promise<void>;
-  fetchChatLogs: (filters?: ChatFilters) => Promise<void>;
-  submitReview: (review: ReviewData) => Promise<void>;
-  fetchHealthStatus: () => Promise<void>;
-  fetchStats: () => Promise<void>;
-}
-```
-
-## API 클라이언트
-
-### Axios 설정
-```typescript
-const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api',
-  timeout: 30000,
-});
-
-// JWT 토큰 자동 첨부
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('accessToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// 토큰 갱신 처리
-apiClient.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    if (error.response?.status === 401) {
-      // 토큰 갱신 로직
-    }
-    return Promise.reject(error);
-  }
-);
-```
+### 4. 타입 정의
+- 모든 props와 상태에 TypeScript 타입 정의
+- `src/types/` 디렉토리에 타입 파일 관리
 
 ## 환경 변수
 ```
-VITE_API_URL=http://localhost:8000/api
-VITE_GOOGLE_CLIENT_ID=
-VITE_KAKAO_CLIENT_ID=
+NEXT_PUBLIC_API_URL=http://localhost:8000    # Backend API
+NEXT_PUBLIC_RAG_URL=http://localhost:8001    # RAG API (직접 통신)
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=                # Google OAuth
 ```
 
-## 스타일 가이드
+## 주요 페이지 및 기능
 
-### 색상 팔레트
-```css
-:root {
-  --primary: #2563eb;      /* 파란색 */
-  --secondary: #64748b;    /* 회색 */
-  --success: #22c55e;      /* 초록색 */
-  --warning: #f59e0b;      /* 노란색 */
-  --danger: #ef4444;       /* 빨간색 */
-}
-```
+### 1. 메인 채팅 (`/`)
+- 통합 채팅 인터페이스 (REQ-UI-001)
+- 도메인 태그 표시 (REQ-UI-002)
+- 대화 이력 조회 (REQ-UI-004)
 
-### 도메인별 색상
-```typescript
-const domainColors: Record<Domain, string> = {
-  startup: 'bg-blue-100 text-blue-800',
-  tax: 'bg-green-100 text-green-800',
-  funding: 'bg-purple-100 text-purple-800',
-  hr: 'bg-orange-100 text-orange-800',
-  legal: 'bg-red-100 text-red-800',
-  marketing: 'bg-pink-100 text-pink-800',
-};
-```
+### 2. 로그인 (`/login`)
+- Google OAuth2 소셜 로그인 (REQ-UM-012)
+- 자동 로그인 (REQ-UM-014)
 
-## 반응형 디자인
-- Mobile: < 768px
-- Tablet: 768px - 1024px
-- Desktop: > 1024px
+### 3. 기업 프로필 (`/company`)
+- 프로필 등록/수정 (REQ-CP-001, REQ-CP-002)
+- 사업자등록증 업로드 (REQ-CP-003)
+
+### 4. 일정 관리 (`/schedule`)
+- 일정 조회/등록
+- 마감일 알림 연동
+
+### 5. 관리자 (`/admin`)
+- 회원 관리 (REQ-AD-001~004)
+- 상담 로그 조회 (REQ-AD-011~013)
+- 통계 대시보드 (REQ-AD-021~023)
+
+## 파일 수정 시 확인사항
+
+### 새 페이지 추가
+1. `src/app/` 하위에 폴더 생성
+2. `page.tsx` 파일 작성
+3. 필요시 `layout.tsx` 작성
+
+### 새 컴포넌트 추가
+1. `src/components/` 하위에 기능별 폴더 구분
+2. 공통 컴포넌트는 `common/` 디렉토리
+3. 인덱스 파일로 export 관리
+
+### 타입 정의 추가
+1. `src/types/` 디렉토리에 도메인별 파일 생성
+2. 공유 타입은 `common.ts` 에 정의
+
+### API 함수 추가
+1. Backend API: `src/lib/api.ts`
+2. RAG API: `src/lib/rag.ts`
 
 ## 테스트
 ```bash
-npm run test          # 단위 테스트
+npm run test          # 유닛 테스트
 npm run test:e2e      # E2E 테스트
+npm run lint          # 린트 검사
+npm run type-check    # 타입 검사
 ```
 
-## AI 에이전트 가이드라인
+## 성능 최적화
+- 이미지: next/image 사용
+- 폰트: next/font 사용
+- 코드 스플리팅: dynamic import 활용
+- 메모이제이션: useMemo, useCallback, React.memo
 
-### 코드 작성 시 주의사항
-1. TypeScript 타입을 명확히 정의할 것
-2. 컴포넌트는 `components/` 하위에 기능별로 구분
-3. API 호출은 `api/` 디렉토리의 함수 사용
-4. 전역 상태는 Zustand 스토어 활용
-5. TailwindCSS 유틸리티 클래스 사용
-
-### 파일 수정 시 확인사항
-- 새 페이지 추가 시 `App.tsx` 라우트 등록
-- 새 컴포넌트는 해당 디렉토리에 생성
-- 타입 정의는 `types/` 디렉토리에 추가
-- API 함수는 `api/` 디렉토리에 추가
+## UI/UX 요구사항
+- 반응형 디자인 (모바일 대응) (REQ-UI-201)
+- 빠른 질문 버튼 (REQ-UI-101)
+- 알림 센터 (REQ-UI-102)
+- 기업 프로필 요약 표시 (REQ-UI-103)

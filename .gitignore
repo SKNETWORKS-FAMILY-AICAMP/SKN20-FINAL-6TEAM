@@ -43,3 +43,5 @@ raw/
 law/
 bizinfo-convert/
 kstartup-convert/
+.agents/
+.cursor/
