@@ -40,3 +40,6 @@ dist-ssr
 scripts/
 raw/
 
+law/
+bizinfo-convert/
+kstartup-convert/
