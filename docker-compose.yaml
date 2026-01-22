@@ -8,20 +8,21 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-bizmate123}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-bizmate}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-final_test}
       MYSQL_USER: ${MYSQL_USER:-bizmate}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-bizmate123}
     ports:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./backend/database.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Django Backend
+  # FastAPI Backend
   backend:
     build: ./backend
     container_name: bizmate-backend
@@ -29,21 +30,22 @@ services:
     volumes:
       - ./backend:/app
     ports:
-      - "8080:8000"
+      - "8000:8000"
     environment:
-      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-dev-secret-key}
-      - DJANGO_DEBUG=${DJANGO_DEBUG:-True}
       - MYSQL_HOST=db
       - MYSQL_PORT=3306
-      - MYSQL_DATABASE=${MYSQL_DATABASE:-bizmate}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-final_test}
       - MYSQL_USER=${MYSQL_USER:-bizmate}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD:-bizmate123}
-      - RAG_SERVICE_URL=http://rag:8001
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-key-change-in-production}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
     depends_on:
       db:
         condition: service_healthy
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
-  # React Frontend
+  # React Frontend (Vite)
   frontend:
     build: ./frontend
     container_name: bizmate-frontend
@@ -52,27 +54,29 @@ services:
       - ./frontend:/app
       - /app/node_modules
     ports:
-      - "3000:3000"
+      - "5173:5173"
     environment:
-      - VITE_API_URL=http://localhost:8080/api
+      - VITE_API_URL=http://localhost:8000
+      - VITE_RAG_URL=http://localhost:8001
     depends_on:
       - backend
+    command: npm run dev -- --host
 
-  # RAG Service (LangChain/FastAPI)
-  rag:
-    build: ./rag
-    container_name: bizmate-rag
-    restart: unless-stopped
-    volumes:
-      - ./rag:/app
-    ports:
-      - "8001:8001"
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - BIZINFO_API_KEY=${BIZINFO_API_KEY}
-      - KSTARTUP_API_KEY=${KSTARTUP_API_KEY}
-    depends_on:
-      - backend
+  # RAG Service (LangChain/FastAPI) - Optional
+  # rag:
+  #   build: ./rag
+  #   container_name: bizmate-rag
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ./rag:/app
+  #   ports:
+  #     - "8001:8001"
+  #   environment:
+  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
+  #     - BIZINFO_API_KEY=${BIZINFO_API_KEY}
+  #     - KSTARTUP_API_KEY=${KSTARTUP_API_KEY}
+  #   depends_on:
+  #     - backend
 
 volumes:
   mysql_data:

@@ -1,4 +1,4 @@
-# Frontend Dockerfile
+# Frontend Dockerfile - Vite + React
 FROM node:20-alpine
 
 WORKDIR /app
@@ -10,8 +10,8 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Expose port
-EXPOSE 3000
+# Expose Vite dev server port
+EXPOSE 5173
 
-# Run development server
-CMD ["npm", "run", "dev"]
+# Run Vite development server with host flag
+CMD ["npm", "run", "dev", "--", "--host"]

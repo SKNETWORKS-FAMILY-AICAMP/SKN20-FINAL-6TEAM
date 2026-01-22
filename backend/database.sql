@@ -76,7 +76,7 @@ CREATE TABLE `history` (
     `question` LONGTEXT DEFAULT '' COMMENT '질문',
     `answer` LONGTEXT DEFAULT '' COMMENT 'JSON 형태 저장 가능',
     `parent_history_id` INT DEFAULT NULL COMMENT '부모 히스토리 ID (대화 연결)',
-    `sequence` INT NOT NULL DEFAULT 0 COMMENT '순서',
+    -- `sequence` INT NOT NULL DEFAULT 0 COMMENT '순서',
     `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `use_yn` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0: 미사용, 1: 사용',
@@ -87,7 +87,7 @@ CREATE TABLE `history` (
     INDEX `idx_history_user_id` (`user_id`),
     INDEX `idx_history_agent_code` (`agent_code`),
     INDEX `idx_history_parent_id` (`parent_history_id`),
-    INDEX `idx_history_sequence` (`sequence`),
+    -- INDEX `idx_history_sequence` (`sequence`),
     INDEX `idx_history_create_date` (`create_date`),
     INDEX `idx_history_use_yn` (`use_yn`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -1,5 +1,5 @@
-# Backend Dockerfile
-FROM python:3.10-slim
+# Backend Dockerfile - FastAPI
+FROM python:3.11-slim
 
 WORKDIR /app
 
@@ -18,8 +18,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source code
 COPY . .
 
+# Create upload directory
+RUN mkdir -p uploads/companies
+
 # Expose port
 EXPOSE 8000
 
-# Run with gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "config.wsgi:application"]
+# Run with uvicorn
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
