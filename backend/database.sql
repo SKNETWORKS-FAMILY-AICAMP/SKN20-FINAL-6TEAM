@@ -14,7 +14,7 @@ USE final_test;
 CREATE TABLE `code` (
     `code_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `name` VARCHAR(100) NOT NULL DEFAULT '',
-    `main_code` VARCHAR(1) NOT NULL COMMENT 'U:유저, B:업종, A:에이전트, H:주관기관',
+    `main_code` VARCHAR(1) NOT NULL COMMENT 'U:유저, B:업종, A:에이전트',
     `code` VARCHAR(4) NOT NULL UNIQUE,
     `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -25,6 +25,46 @@ CREATE TABLE `code` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
+-- 초기 Code 테이블 데이터 추가
+-- ============================================
+INSERT INTO
+	`code` (`name`, `main_code`, `code`)
+VALUES
+	-- 사용자 코드
+	('관리자', 'U', 'U001')
+    , ('예비 창업자', 'U', 'U002')
+    , ('사업자', 'U', 'U003')
+    -- 업종 코드
+	, ('농업, 임엄 및 어업', 'B', 'B001')
+    , ('광업', 'B', 'B002')
+    , ('제조업', 'B', 'B003')
+    , ('전기, 가스, 증기 및 공기 조절 공급업', 'B', 'B004')
+    , ('수도, 하수 및 페기물 처리, 원료 재생업', 'B', 'B005')
+    , ('건설업', 'B', 'B006')
+    , ('도매 및 소매업', 'B', 'B007')
+    , ('운수 및 창고업', 'B', 'B008')
+    , ('숙박 및 임식점업', 'B', 'B009')
+    , ('정보통신업', 'B', 'B010')
+    , ('금융 및 보험업', 'B', 'B011')
+    , ('부동산업', 'B', 'B011')
+    , ('전문, 과학 및 기술 서비스업', 'B', 'B012')
+    , ('사업시설 관리, 사업 지원 및 임대 서비스업', 'B', 'B013')
+    , ('공공 행정, 국방 및 사회보장 행정', 'B', 'B014')
+    , ('교육 서비스업', 'B', 'B015')
+    , ('보건업 및 사회복지 서비스업', 'B', 'B016')
+    , ('예술, 스포츠 및 여가관리 서비스업', 'B', 'B017')
+    , ('협회 및 단체, 수리 및 기타 개인 서비스업', 'B', 'B018')
+    , ('가구 내 고용활동 및 달리 분류되지 않은 자가소비 생산활동', 'B', 'B019')
+    , ('국제 및 외국기관', 'B', 'B020')
+    -- 에이전트 타입
+	, ('창업절차 에이전트', 'A', 'A001')
+	, ('세무/회계 에이전트', 'A', 'A002')
+	, ('법률 에이전트', 'A', 'A003')
+	, ('인사/노무 에이전트', 'A', 'A004')
+	, ('정부지원 에이전트', 'A', 'A005')
+	, ('마케팅 에이전트', 'A', 'A006');
+
+-- ============================================
 -- 2. User 테이블
 -- ============================================
 CREATE TABLE `user` (
@@ -32,7 +72,7 @@ CREATE TABLE `user` (
     `google_email` VARCHAR(255) NOT NULL UNIQUE,
     `username` VARCHAR(100) NOT NULL,
     `birth` DATETIME NOT NULL,
-    `type_code` VARCHAR(4) NOT NULL DEFAULT 'U001' COMMENT 'U001:예비창업자, U002:사업자',
+    `type_code` VARCHAR(4) NOT NULL DEFAULT 'U001' COMMENT 'U002:예비창업자, U003:사업자',
     `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `use_yn` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0: 미사용, 1: 사용',
@@ -120,16 +160,15 @@ CREATE TABLE `announce` (
     `ann_name` VARCHAR(255) NOT NULL DEFAULT '' COMMENT '공고 제목',
     `file_id` INT DEFAULT 0 COMMENT '공고 첨부파일',
     `biz_code` VARCHAR(4) NOT NULL DEFAULT 'B000' COMMENT '관련 업종코드',
-    `host_gov_code` VARCHAR(4) NOT NULL DEFAULT 'H000' COMMENT '주관기관 코드',
+    `host_gov` VARCHAR(255) NOT NULL DEFAULT '' COMMENT '주관기관',
     `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `use_yn` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0: 미사용, 1: 사용',
     
     FOREIGN KEY (`file_id`) REFERENCES `file`(`file_id`) ON DELETE SET NULL,
     FOREIGN KEY (`biz_code`) REFERENCES `code`(`code`) ON UPDATE CASCADE,
-    FOREIGN KEY (`host_gov_code`) REFERENCES `code`(`code`) ON UPDATE CASCADE,
     INDEX `idx_announce_biz_code` (`biz_code`),
-    INDEX `idx_announce_host_gov_code` (`host_gov_code`),
+    INDEX `idx_announce_host_gov` (`host_gov`),
     INDEX `idx_announce_use_yn` (`use_yn`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -156,31 +195,3 @@ CREATE TABLE `schedule` (
     INDEX `idx_schedule_end_date` (`end_date`),
     INDEX `idx_schedule_use_yn` (`use_yn`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ============================================
--- 초기 코드 데이터 삽입
--- ============================================
-INSERT INTO `code` (`name`, `main_code`, `code`) VALUES
--- 유저 타입
-('예비창업자', 'U', 'U001'),
-('사업자', 'U', 'U002'),
-
--- 에이전트 타입
-('창업절차 에이전트', 'A', 'A001'),
-('세무/회계 에이전트', 'A', 'A002'),
-('법률 에이전트', 'A', 'A003'),
-('인사/노무 에이전트', 'A', 'A004'),
-('정부지원 에이전트', 'A', 'A005'),
-('마케팅 에이전트', 'A', 'A006'),
-
--- 업종 코드 (예시)
-('음식점업', 'B', 'B001'),
-('소매업', 'B', 'B002'),
-('서비스업', 'B', 'B003'),
-('제조업', 'B', 'B004'),
-('IT/소프트웨어', 'B', 'B005'),
-
--- 주관기관 코드 (예시)
-('중소벤처기업부', 'H', 'H001'),
-('소상공인시장진흥공단', 'H', 'H002'),
-('창업진흥원', 'H', 'H003');
