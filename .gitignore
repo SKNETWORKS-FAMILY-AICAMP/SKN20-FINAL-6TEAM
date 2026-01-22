@@ -37,12 +37,15 @@ dist-ssr
 *.sw?
 =======
 .venv
-
+scripts/
 raw/
 
 law/
 bizinfo-convert/
 kstartup-convert/
+bizinfo-pdf/
+kstartup-pdf/
+
 .agents/
 .cursor/
 vercel-react-best-practices/
