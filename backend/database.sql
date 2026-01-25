@@ -4,14 +4,18 @@
 -- 정규화 수준: 3NF/BCNF
 -- ============================================
 
-CREATE SCHEMA IF NOT EXISTS final_test;
+-- 한글 깨짐 방지를 위한 charset 설정
+SET NAMES utf8mb4;
+SET CHARACTER SET utf8mb4;
+
+CREATE DATABASE IF NOT EXISTS final_test;
 USE final_test;
 
 -- ============================================
 -- 1. Code 테이블 (가장 먼저 생성 - 다른 테이블에서 참조)
 -- 업종, 권한, 에이전트, 주관기관 코드 통합 관리
 -- ============================================
-CREATE TABLE `code` (
+CREATE TABLE IF NOT EXISTS `code` (
     `code_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `name` VARCHAR(100) NOT NULL DEFAULT '',
     `main_code` VARCHAR(1) NOT NULL COMMENT 'U:유저, B:업종, A:에이전트',
@@ -25,54 +29,54 @@ CREATE TABLE `code` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
--- 초기 Code 테이블 데이터 추가
+-- 초기 Code 테이블 데이터 추가 (테이블이 비어있을 때만)
 -- ============================================
-INSERT INTO
-	`code` (`name`, `main_code`, `code`)
-VALUES
-	-- 사용자 코드
-	('관리자', 'U', 'U001')
-    , ('예비 창업자', 'U', 'U002')
-    , ('사업자', 'U', 'U003')
+INSERT INTO `code` (`name`, `main_code`, `code`)
+SELECT * FROM (
+    -- 사용자 코드
+    SELECT '관리자' AS name, 'U' AS main_code, 'U001' AS code
+    UNION ALL SELECT '예비 창업자', 'U', 'U002'
+    UNION ALL SELECT '사업자', 'U', 'U003'
     -- 업종 코드
-	, ('농업, 임엄 및 어업', 'B', 'B001')
-    , ('광업', 'B', 'B002')
-    , ('제조업', 'B', 'B003')
-    , ('전기, 가스, 증기 및 공기 조절 공급업', 'B', 'B004')
-    , ('수도, 하수 및 페기물 처리, 원료 재생업', 'B', 'B005')
-    , ('건설업', 'B', 'B006')
-    , ('도매 및 소매업', 'B', 'B007')
-    , ('운수 및 창고업', 'B', 'B008')
-    , ('숙박 및 임식점업', 'B', 'B009')
-    , ('정보통신업', 'B', 'B010')
-    , ('금융 및 보험업', 'B', 'B011')
-    , ('부동산업', 'B', 'B011')
-    , ('전문, 과학 및 기술 서비스업', 'B', 'B012')
-    , ('사업시설 관리, 사업 지원 및 임대 서비스업', 'B', 'B013')
-    , ('공공 행정, 국방 및 사회보장 행정', 'B', 'B014')
-    , ('교육 서비스업', 'B', 'B015')
-    , ('보건업 및 사회복지 서비스업', 'B', 'B016')
-    , ('예술, 스포츠 및 여가관리 서비스업', 'B', 'B017')
-    , ('협회 및 단체, 수리 및 기타 개인 서비스업', 'B', 'B018')
-    , ('가구 내 고용활동 및 달리 분류되지 않은 자가소비 생산활동', 'B', 'B019')
-    , ('국제 및 외국기관', 'B', 'B020')
+    UNION ALL SELECT '농업, 임엄 및 어업', 'B', 'B001'
+    UNION ALL SELECT '광업', 'B', 'B002'
+    UNION ALL SELECT '제조업', 'B', 'B003'
+    UNION ALL SELECT '전기, 가스, 증기 및 공기 조절 공급업', 'B', 'B004'
+    UNION ALL SELECT '수도, 하수 및 페기물 처리, 원료 재생업', 'B', 'B005'
+    UNION ALL SELECT '건설업', 'B', 'B006'
+    UNION ALL SELECT '도매 및 소매업', 'B', 'B007'
+    UNION ALL SELECT '운수 및 창고업', 'B', 'B008'
+    UNION ALL SELECT '숙박 및 임식점업', 'B', 'B009'
+    UNION ALL SELECT '정보통신업', 'B', 'B010'
+    UNION ALL SELECT '금융 및 보험업', 'B', 'B011'
+    UNION ALL SELECT '부동산업', 'B', 'B012'
+    UNION ALL SELECT '전문, 과학 및 기술 서비스업', 'B', 'B013'
+    UNION ALL SELECT '사업시설 관리, 사업 지원 및 임대 서비스업', 'B', 'B014'
+    UNION ALL SELECT '공공 행정, 국방 및 사회보장 행정', 'B', 'B015'
+    UNION ALL SELECT '교육 서비스업', 'B', 'B016'
+    UNION ALL SELECT '보건업 및 사회복지 서비스업', 'B', 'B017'
+    UNION ALL SELECT '예술, 스포츠 및 여가관리 서비스업', 'B', 'B018'
+    UNION ALL SELECT '협회 및 단체, 수리 및 기타 개인 서비스업', 'B', 'B019'
+    UNION ALL SELECT '가구 내 고용활동 및 달리 분류되지 않은 자가소비 생산활동', 'B', 'B020'
+    UNION ALL SELECT '국제 및 외국기관', 'B', 'B021'
     -- 에이전트 타입
-	, ('창업절차 에이전트', 'A', 'A001')
-	, ('세무/회계 에이전트', 'A', 'A002')
-	, ('법률 에이전트', 'A', 'A003')
-	, ('인사/노무 에이전트', 'A', 'A004')
-	, ('정부지원 에이전트', 'A', 'A005')
-	, ('마케팅 에이전트', 'A', 'A006');
+    UNION ALL SELECT '메인', 'A', 'A001'
+    UNION ALL SELECT '창업·지원', 'A', 'A002'
+    UNION ALL SELECT '재무·세무', 'A', 'A003'
+    UNION ALL SELECT '인사·노무', 'A', 'A004'
+    UNION ALL SELECT '평가·검증', 'A', 'A005'
+) AS init_data
+WHERE NOT EXISTS (SELECT 1 FROM `code` LIMIT 1);
 
 -- ============================================
 -- 2. User 테이블
 -- ============================================
-CREATE TABLE `user` (
+CREATE TABLE IF NOT EXISTS `user` (
     `user_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `google_email` VARCHAR(255) NOT NULL UNIQUE,
     `username` VARCHAR(100) NOT NULL,
     `birth` DATETIME NOT NULL,
-    `type_code` VARCHAR(4) NOT NULL DEFAULT 'U001' COMMENT 'U002:예비창업자, U003:사업자',
+    `type_code` VARCHAR(4) NOT NULL DEFAULT 'U002' COMMENT 'U001:관리자, U002:예비창업자, U003:사업자',
     `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `use_yn` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0: 미사용, 1: 사용',
@@ -83,9 +87,17 @@ CREATE TABLE `user` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
+-- Test용 User 데이터 추가 (테이블이 비어있을 때만)
+-- ============================================
+INSERT INTO `user` (`google_email`, `username`, `birth`, `type_code`)
+SELECT 'test@bizmate.com', '테스트 사용자', '1990-01-01', 'U002'
+WHERE NOT EXISTS (SELECT 1 FROM `user` LIMIT 1);	
+
+
+-- ============================================
 -- 3. Company 테이블
 -- ============================================
-CREATE TABLE `company` (
+CREATE TABLE IF NOT EXISTS `company` (
     `company_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `user_id` INT NOT NULL,
     `com_name` VARCHAR(255) NOT NULL DEFAULT '',
@@ -109,12 +121,12 @@ CREATE TABLE `company` (
 -- ============================================
 -- 4. History 테이블 (상담 및 질문 이력)
 -- ============================================
-CREATE TABLE `history` (
+CREATE TABLE IF NOT EXISTS `history` (
     `history_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `user_id` INT NOT NULL,
     `agent_code` VARCHAR(4) NOT NULL COMMENT '답변 에이전트 코드',
-    `question` LONGTEXT DEFAULT '' COMMENT '질문',
-    `answer` LONGTEXT DEFAULT '' COMMENT 'JSON 형태 저장 가능',
+    `question` LONGTEXT COMMENT '질문',
+    `answer` LONGTEXT COMMENT 'JSON 형태 저장 가능',
     `parent_history_id` INT DEFAULT NULL COMMENT '부모 히스토리 ID (대화 연결)',
     -- `sequence` INT NOT NULL DEFAULT 0 COMMENT '순서',
     `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -135,7 +147,7 @@ CREATE TABLE `history` (
 -- ============================================
 -- 5. File 테이블
 -- ============================================
-CREATE TABLE `file` (
+CREATE TABLE IF NOT EXISTS `file` (
     `file_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `file_name` VARCHAR(255) NOT NULL DEFAULT '',
     `file_path` VARCHAR(500) NOT NULL DEFAULT '',
@@ -155,7 +167,7 @@ CREATE TABLE `file` (
 -- ============================================
 -- 6. Announce 테이블 (공고)
 -- ============================================
-CREATE TABLE `announce` (
+CREATE TABLE IF NOT EXISTS `announce` (
     `announce_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `ann_name` VARCHAR(255) NOT NULL DEFAULT '' COMMENT '공고 제목',
     `file_id` INT DEFAULT 0 COMMENT '공고 첨부파일',
@@ -175,14 +187,14 @@ CREATE TABLE `announce` (
 -- ============================================
 -- 7. Schedule 테이블
 -- ============================================
-CREATE TABLE `schedule` (
+CREATE TABLE IF NOT EXISTS `schedule` (
     `schedule_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `company_id` INT NOT NULL,
     `announce_id` INT DEFAULT 0,
     `schedule_name` VARCHAR(255) NOT NULL DEFAULT '' COMMENT '일정 제목',
     `start_date` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '시작일시',
     `end_date` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '종료일시',
-    `memo` LONGTEXT DEFAULT '' COMMENT '메모',
+    `memo` LONGTEXT COMMENT '메모',
     `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `use_yn` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0: 미사용, 1: 사용',

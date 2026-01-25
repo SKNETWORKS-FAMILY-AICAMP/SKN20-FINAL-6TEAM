@@ -3,7 +3,7 @@ export interface User {
   user_id: number;
   google_email: string;
   username: string;
-  type_code: 'U001' | 'U002'; // U001: 예비창업자, U002: 사업자
+  type_code: 'U001' | 'U002' | 'U003'; // U001: 관리자, U002: 예비창업자, U003: 사업자
   birth?: string;
   create_date?: string;
 }
@@ -68,8 +68,9 @@ export const AGENT_COLORS: Record<AgentCode, string> = {
 
 // User type codes
 export const USER_TYPE_NAMES: Record<string, string> = {
-  U001: '예비창업자',
-  U002: '사업자',
+  U001: '관리자',
+  U002: '예비창업자',
+  U003: '사업자',
 };
 
 // Chat message
