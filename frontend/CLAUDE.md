@@ -434,3 +434,21 @@ export const MessageItem: React.FC<MessageItemProps> = ({
 - **라우팅**: React Router v6 사용 (`element` prop)
 - **API 기본 URL**: Backend(8000), RAG(8001)
 - **에러 처리**: axios 인터셉터에서 401 처리
+
+---
+
+## 코드 품질 가이드라인 (필수 준수)
+
+### 절대 금지 사항
+- **하드코딩 금지**: API URL, 포트 번호 등을 코드에 직접 작성 금지 → `import.meta.env.VITE_*` 사용
+- **매직 넘버/매직 스트링 금지**: `if (status === 1)`, `setTimeout(3000)` 등 의미 없는 값 직접 사용 금지
+- **중복 코드 금지**: 동일한 로직은 커스텀 훅 또는 유틸 함수로 추출
+- **any 타입 금지**: `any` 대신 명확한 타입 정의 필수
+- **인라인 스타일 남용 금지**: TailwindCSS 클래스 또는 CSS 모듈 사용
+
+### 필수 준수 사항
+- **환경 변수 사용**: 모든 설정값은 `.env` 파일의 `VITE_*` 환경 변수로 관리
+- **상수 정의**: 반복되는 값은 `constants.ts` 파일에 상수로 정의
+- **타입 명시**: 모든 컴포넌트 props, API 응답에 TypeScript 타입 정의 필수
+- **에러 처리**: API 호출 시 try-catch 또는 TanStack Query의 onError 사용
+- **의미 있는 네이밍**: 컴포넌트, 함수, 변수명은 역할을 명확히 표현

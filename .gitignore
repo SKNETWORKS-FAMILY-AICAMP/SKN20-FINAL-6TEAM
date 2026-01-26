@@ -39,6 +39,7 @@ dist-ssr
 .venv
 
 raw/
+data/origin/
 
 law/
 bizinfo-convert/
