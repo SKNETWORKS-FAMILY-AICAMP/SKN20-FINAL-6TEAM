@@ -28,7 +28,8 @@ flowchart TB
 
     subgraph Output["data/processed (출력)"]
         LAWS_OUT["laws/<br/>laws_full.jsonl<br/>law_lookup.json"]
-        INTERP_OUT["interpretations/<br/>*_interp.jsonl"]
+        INTERP_OUT["interpretations/<br/>interpretations.jsonl"]
+        COURT_OUT["court_cases/<br/>court_cases_labor.jsonl<br/>court_cases_tax.jsonl"]
         GUIDES_OUT["guides/<br/>industries.jsonl<br/>common_info.jsonl<br/>pdf_guides.jsonl"]
         SCHED_OUT["schedules/<br/>tax_schedule.jsonl"]
     end
@@ -62,6 +63,15 @@ flowchart TB
     style Output fill:#e8f5e9
     style RAG fill:#fce4ec
 ```
+
+### 1.2 개발 원칙
+
+| 원칙 | 설명 | 예시 |
+|------|------|------|
+| **하드코딩 금지** | 경로, 파일명, 상수값은 config.py에서 관리 | `OUTPUT_DIR = Path(config.OUTPUT_PATH)` |
+| **모듈화** | 단일 책임 원칙, 재사용 가능한 함수/클래스 설계 | Processor별 독립 모듈, 공통 유틸 분리 |
+| **설정 주입** | 외부 설정 파일(.env, config)을 통한 환경 분리 | `API_KEY = os.getenv("LAW_API_KEY")` |
+| **의존성 명시** | 함수/클래스 간 의존 관계를 명확히 문서화 | 섹션 9.2 의존성 그래프 참조 |
 
 ---
 
@@ -221,11 +231,10 @@ pie showData
 
 | 원본 파일 | 형식 | 크기 | 레코드 | 출력 파일 |
 |-----------|------|------|--------|-----------|
-| `data/origin/law/01_laws_full.json` | JSON | 304MB | 5,539 법령 | `data/processed/laws/laws_full.jsonl` |
-| `data/origin/law/02_smba_expc_full.json` | JSON | 4.2MB | 500건 | `data/processed/interpretations/smba_interp.jsonl` |
-| `data/origin/law/03_labor_expc_full.json` | JSON | 1.5MB | 200건 | `data/processed/interpretations/labor_interp.jsonl` |
-| `data/origin/law/04_nts_expc_full.json` | JSON | 1.5MB | 200건 | `data/processed/interpretations/nts_interp.jsonl` |
-| `data/origin/law/05_ftc_expc_full.json` | JSON | 1.5MB | 200건 | `data/processed/interpretations/ftc_interp.jsonl` |
+| `law-raw/01_laws_full.json` | JSON | 304MB | 5,539 법령 | `final_files/data/processed/laws/laws_full.jsonl` |
+| `law-raw/expc_전체.json` | JSON | 74MB | 8,604건 | `final_files/data/processed/interpretations/interpretations.jsonl` |
+| `law-raw/prec_labor.json` | JSON | 20MB | 981건 | `final_files/data/processed/court_cases/court_cases_labor.jsonl` |
+| `law-raw/prec_tax_accounting.json` | JSON | 25MB | 1,949건 | `final_files/data/processed/court_cases/court_cases_tax.jsonl` |
 | `data/origin/startup_support/startup_guide_complete.json` | JSON | 3.5MB | 1,589 업종 | `data/processed/guides/industries.jsonl` |
 | `data/origin/finance/국세청_세무일정_20260101.csv` | CSV | 20KB | 238건 | `data/processed/schedules/tax_schedule.jsonl` |
 | `data/origin/finance/2025 중소기업세제·세정지원 제도.pdf` | PDF | 13MB | - | `data/processed/guides/pdf_guides.jsonl` |
@@ -396,10 +405,10 @@ SKN20-FINAL-6TEAM/
         │   ├── laws_full.jsonl
         │   └── law_lookup.json
         ├── interpretations/
-        │   ├── smba_interp.jsonl
-        │   ├── labor_interp.jsonl
-        │   ├── nts_interp.jsonl
-        │   └── ftc_interp.jsonl
+        │   └── interpretations.jsonl
+        ├── court_cases/
+        │   ├── court_cases_labor.jsonl
+        │   └── court_cases_tax.jsonl
         ├── guides/
         │   ├── common_info.jsonl
         │   ├── industries.jsonl
