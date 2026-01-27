@@ -10,7 +10,7 @@ from apps.histories.router import router as histories_router
 from apps.schedules.router import router as schedules_router
 
 app = FastAPI(
-    title="BizMate API",
+    title="Bizi API",
     description="통합 창업/경영 상담 챗봇 백엔드 API",
     version="1.0.0",
     docs_url="/docs",
@@ -37,7 +37,7 @@ app.include_router(schedules_router)
 @app.get("/")
 async def root():
     return {
-        "message": "Welcome to BizMate API",
+        "message": "Welcome to Bizi API",
         "docs": "/docs",
         "redoc": "/redoc"
     }

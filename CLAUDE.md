@@ -1,8 +1,8 @@
-# BizMate - 통합 창업/경영 상담 챗봇
+# Bizi - 통합 창업/경영 상담 챗봇
 
 ## 프로젝트 개요
-BizMate는 예비 창업자, 스타트업 CEO, 중소기업 대표를 위한 AI 기반 통합 경영 상담 챗봇입니다.
-6개 전문 도메인(창업/세무/노무/법률/지원사업/마케팅)에 대한 맞춤형 상담을 제공합니다.
+Bizi는 예비 창업자, 스타트업 CEO, 중소기업 대표를 위한 AI 기반 통합 경영 상담 챗봇입니다.
+3개 전문 도메인(창업·지원사업 / 재무·세무 / 인사·노무)에 대한 맞춤형 상담을 제공합니다.
 
 ## 프로젝트 목표
 - 창업 절차, 세무, 노무, 법률, 지원사업, 마케팅 통합 상담
@@ -58,9 +58,10 @@ SKN20-FINAL-6TEAM/
 │
 ├── rag/                   # RAG 서비스 (LangChain/LangGraph)
 │   ├── CLAUDE.md          # RAG 개발 가이드
+│   ├── ARCHITECTURE.md    # RAG 아키텍처 (다이어그램)
 │   ├── AGENTS.md          # RAG AI 에이전트 가이드
 │   ├── main.py            # FastAPI 진입점
-│   ├── agents/            # 멀티에이전트 (6개 도메인 + Router)
+│   ├── agents/            # Agentic RAG (5개 에이전트)
 │   ├── chains/            # LangChain 체인
 │   ├── vectorstores/      # 벡터 DB 관리
 │   ├── schemas/           # Pydantic 스키마
@@ -155,20 +156,19 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 ### 멀티에이전트 시스템
-```
-사용자 입력 → Master Router → 도메인 에이전트 → 응답
-                    ↓
-    ┌─────────────────────────────────────┐
-    │ 1. Startup Agent (창업)              │
-    │ 2. Tax Agent (세무/회계)             │
-    │ 3. Funding Agent (지원사업)          │
-    │ 4. HR Agent (노무)                   │
-    │ 5. Legal Agent (법률)                │
-    │ 6. Marketing Agent (마케팅)          │
-    └─────────────────────────────────────┘
-                    ↓
-         Action Executor (문서 생성)
-```
+
+Agentic RAG 구조로 5개 에이전트 운영:
+
+| 에이전트 | 역할 |
+|---------|------|
+| 메인 라우터 | 질문 분류, 에이전트 조율, 평가 결과에 따른 재요청 |
+| 창업 및 지원 에이전트 | 창업절차, 지원사업, 마케팅 상담 |
+| 재무 및 세무 에이전트 | 세금, 회계, 재무 상담 |
+| 인사 및 노무 에이전트 | 근로, 채용, 법률 상담 |
+| 평가 에이전트 | 답변 품질 평가, 재요청 판단 |
+| Action Executor | 문서 생성 (근로계약서, 사업계획서 등) |
+
+상세 아키텍처는 [rag/ARCHITECTURE.md](./rag/ARCHITECTURE.md) 참조
 
 ### API 통신 흐름
 **인증/데이터 관리**: Frontend (axios) → Backend → MySQL
@@ -284,8 +284,8 @@ KSTARTUP_API_KEY=      # K-Startup API
 | 역할 | 담당 업무 |
 |------|----------|
 | PM & 백엔드 | 프로젝트 관리, FastAPI 서버, DB 설계 |
-| Master Router & 아키텍처 | LangGraph 기반 라우터, 시스템 설계 |
-| RAG 전문가 | 벡터DB 구축, RAG 파이프라인 |
-| Expert Agent Part 1 | Startup, Tax, Funding Agent |
-| Expert Agent Part 2 | HR, Legal Agent, Action Executor |
+| 메인 라우터 & 아키텍처 | LangGraph 기반 라우터, 시스템 설계, 평가 에이전트 |
+| RAG 전문가 | 벡터DB 구축, RAG 파이프라인, 공통 법령 DB |
+| 전문 에이전트 Part 1 | 창업 및 지원 에이전트, 재무 및 세무 에이전트 |
+| 전문 에이전트 Part 2 | 인사 및 노무 에이전트, Action Executor |
 | 프론트엔드 | React + Vite UI/UX, 채팅 인터페이스 |

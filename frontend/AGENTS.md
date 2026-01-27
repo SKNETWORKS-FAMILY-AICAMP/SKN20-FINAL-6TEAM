@@ -4,7 +4,7 @@
 > 모든 필수 정보가 이 문서에 포함되어 있습니다.
 
 ## 프로젝트 개요
-- **프로젝트명**: BizMate Frontend
+- **프로젝트명**: Bizi Frontend
 - **기술 스택**: React 18 + Vite 5 + TypeScript 5
 - **라우팅**: React Router v6
 - **스타일링**: TailwindCSS

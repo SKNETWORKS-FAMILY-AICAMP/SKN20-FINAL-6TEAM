@@ -1,61 +1,66 @@
-# RAG Service - 멀티에이전트 시스템
+# RAG Service - Agentic RAG 시스템
 
-> 이 문서는 AI 에이전트가 RAG 서비스 개발을 지원하기 위한 가이드입니다.
+> 이 문서는 AI 에이전트가 프로젝트를 이해하고 개발을 지원하기 위한 가이드입니다.
 
 ## 개요
-BizMate의 핵심 AI 서비스입니다. LangChain과 LangGraph를 사용하여 6개 도메인 전문 에이전트와 Master Router를 구현합니다.
 
-**중요**: RAG 서비스는 프론트엔드(Next.js)와 직접 통신합니다. 백엔드를 거치지 않고 채팅 및 AI 응답을 처리합니다.
+Bizi의 핵심 AI 서비스입니다. LangChain과 LangGraph를 사용하여
+Agentic RAG 시스템을 구현합니다. (5개 에이전트: 메인 라우터, 3개 전문 에이전트, 평가 에이전트)
+
+아키텍처 상세는 [ARCHITECTURE.md](./ARCHITECTURE.md)를 참조하세요.
+
+**중요**: RAG 서비스는 프론트엔드(React + Vite)와 직접 통신합니다. Backend를 거치지 않고 채팅 및 AI 응답을 처리합니다.
 
 ## 기술 스택
+
 - Python 3.10+
 - FastAPI
 - LangChain 0.1+
 - LangGraph
-- OpenAI GPT-4
+- OpenAI GPT-4o-mini
 - ChromaDB (벡터 DB)
 - httpx (HTTP 클라이언트)
 
 ## 프로젝트 구조
+
 ```
 rag/
-├── AGENTS.md
-├── main.py                    # FastAPI 진입점
+├── AGENTS.md                 # 이 파일 (개발 가이드)
+├── ARCHITECTURE.md           # 상세 아키텍처 (다이어그램)
+├── main.py                   # FastAPI 진입점
 ├── requirements.txt
 ├── Dockerfile
 │
-├── agents/                    # 멀티에이전트
+├── agents/                   # Agentic RAG 에이전트
 │   ├── __init__.py
-│   ├── router.py             # Master Router
+│   ├── router.py             # 메인 라우터 (질문 분류 및 조율)
 │   ├── base.py               # 기본 에이전트 클래스
-│   ├── startup.py            # 창업 에이전트
-│   ├── tax.py                # 세무/회계 에이전트
-│   ├── funding.py            # 지원사업 에이전트
-│   ├── hr.py                 # 노무 에이전트
-│   ├── legal.py              # 법률 에이전트
-│   ├── marketing.py          # 마케팅 에이전트
+│   ├── startup_funding.py    # 창업 및 지원 에이전트
+│   ├── finance_tax.py        # 재무 및 세무 에이전트
+│   ├── hr_labor.py           # 인사 및 노무 에이전트
+│   ├── evaluator.py          # 평가 에이전트
 │   └── executor.py           # Action Executor (문서 생성)
 │
-├── chains/                    # LangChain 체인
+├── chains/                   # LangChain 체인
 │   ├── __init__.py
 │   └── rag_chain.py          # RAG 체인
 │
-├── vectorstores/              # 벡터 DB 관리
+├── vectorstores/             # 벡터 DB 관리
 │   ├── __init__.py
 │   ├── chroma.py             # ChromaDB 클라이언트
 │   └── embeddings.py         # 임베딩 설정
 │
-├── loaders/                   # 데이터 로더 (벡터DB 적재용)
+├── loaders/                  # 데이터 로더 (벡터DB 적재용)
 │   ├── __init__.py
 │   ├── funding_loader.py     # 지원사업 데이터 로더
 │   └── law_loader.py         # 법령 데이터 로더
 │
-├── schemas/                   # Pydantic 스키마
+├── schemas/                  # Pydantic 스키마
 │   ├── __init__.py
 │   ├── request.py
 │   └── response.py
 │
-└── utils/                     # 유틸리티
+└── utils/                    # 유틸리티
     ├── __init__.py
     ├── prompts.py            # 프롬프트 템플릿
     └── config.py             # 설정
@@ -64,6 +69,7 @@ rag/
 ## 실행 방법
 
 ### 개발 환경
+
 ```bash
 cd rag
 python -m venv venv
@@ -73,6 +79,7 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 ### Docker
+
 ```bash
 docker build -t bizmate-rag .
 docker run -p 8001:8001 bizmate-rag
@@ -81,12 +88,14 @@ docker run -p 8001:8001 bizmate-rag
 ## API 엔드포인트
 
 ### 채팅
+
 | Method | Endpoint | 설명 |
 |--------|----------|------|
 | POST | `/api/chat` | 사용자 메시지 처리 및 응답 |
 | POST | `/api/chat/stream` | 스트리밍 응답 |
 
 ### 문서 생성
+
 | Method | Endpoint | 설명 |
 |--------|----------|------|
 | POST | `/api/documents/contract` | 근로계약서 생성 |
@@ -94,122 +103,103 @@ docker run -p 8001:8001 bizmate-rag
 | POST | `/api/documents/business-plan` | 사업계획서 생성 |
 
 ### 지원사업
+
 | Method | Endpoint | 설명 |
 |--------|----------|------|
 | GET | `/api/funding/search` | 지원사업 검색 |
 | POST | `/api/funding/recommend` | 맞춤 지원사업 추천 |
 | POST | `/api/funding/sync` | 공고 데이터 동기화 |
 
-## 통신 아키텍처
+## 도메인 분류 기준
 
-### 프론트엔드 직접 통신
-```
-┌─────────────────────┐
-│  Frontend (Next.js) │
-│   localhost:3000    │
-└─────────┬───────────┘
-          │ 직접 통신 (POST /api/chat, /api/chat/stream)
-          ↓
-┌─────────────────────┐
-│  RAG Service        │
-│  localhost:8001     │
-│                     │
-│  - Master Router    │
-│  - 6개 전문 에이전트 │
-│  - Action Executor  │
-└─────────┬───────────┘
-          │
-          ↓
-┌─────────────────────┐
-│  ChromaDB           │
-│  (Vector DB)        │
-└─────────────────────┘
-```
-
-**참고**: 사용자 인증, 기업 정보, 상담 이력 저장은 Backend(FastAPI)가 담당합니다.
-
-## 멀티에이전트 아키텍처
-
-### Master Router
-```
-사용자 입력
-    ↓
-[Master Router]
-    ↓ (도메인 분류)
-┌───────────────────────────────────────────┐
-│  startup  │  tax  │  funding  │  hr  │ ...│
-└───────────────────────────────────────────┘
-    ↓ (복합 질문 시 병렬 처리)
-[Response Aggregator]
-    ↓
-[Action Executor] (필요시)
-    ↓
-최종 응답
-```
-
-### 도메인 분류 기준
 ```python
 DOMAIN_KEYWORDS = {
-    'startup': ['창업', '사업자등록', '법인설립', '업종'],
-    'tax': ['세금', '부가세', '법인세', '회계', '세무'],
-    'funding': ['지원사업', '보조금', '정책자금', '공고'],
-    'hr': ['근로', '채용', '해고', '급여', '퇴직금', '연차'],
-    'legal': ['계약', '소송', '분쟁', '특허', '상표'],
-    'marketing': ['마케팅', '광고', '홍보', '브랜딩'],
+    'startup_funding': [
+        '창업', '사업자등록', '법인설립', '업종',
+        '지원사업', '보조금', '정책자금', '공고',
+        '마케팅', '광고', '홍보', '브랜딩'
+    ],
+    'finance_tax': [
+        '세금', '부가세', '법인세', '회계',
+        '세무', '재무', '결산', '세무조정'
+    ],
+    'hr_labor': [
+        '근로', '채용', '해고', '급여', '퇴직금', '연차',
+        '인사', '노무', '4대보험',
+        '계약', '소송', '분쟁', '특허', '상표'
+    ],
 }
 ```
 
 ## 에이전트 상세
 
-### 1. Startup Agent (창업)
-**데이터 소스**: 창업진흥원, 중소벤처기업부 자료
+### 1. 메인 라우터
+
+**역할**: 질문 분류, 에이전트 조율, 평가 결과에 따른 재요청
+
+**주요 기능**:
+- 사용자 질문 분석 및 도메인 분류
+- 복합 질문 시 여러 에이전트 병렬 호출
+- 에이전트 응답 통합
+- 평가 에이전트의 피드백에 따라 재요청 처리
+
+### 2. 창업 및 지원 에이전트
+
+**담당 도메인**: 창업, 지원사업, 마케팅
+**데이터 소스**: 창업진흥원, 중소벤처기업부, 기업마당 API, K-Startup API
+**벡터DB**: `startup_funding_db/`
+
 **주요 기능**:
 - 사업자 등록 절차 안내
 - 법인 설립 가이드
 - 업종별 인허가 정보
-- 업종 코드 검색
+- 지원사업 검색/필터
+- 기업 조건 매칭
+- 마케팅 전략 조언
 
-### 2. Tax Agent (세무/회계)
+### 3. 재무 및 세무 에이전트
+
+**담당 도메인**: 세무, 회계, 재무
 **데이터 소스**: 국세청 자료, 세법
+**벡터DB**: `finance_tax_db/`
+
 **주요 기능**:
 - 세금 종류별 안내
 - 신고/납부 일정
 - 세금 계산 가이드
 - 회계 기초 안내
+- 재무제표 분석
 
-### 3. Funding Agent (지원사업)
-**데이터 소스**: 기업마당 API, K-Startup API
-**주요 기능**:
-- 지원사업 검색/필터
-- 기업 조건 매칭
-- 마감일 기반 정렬
-- Top N 추천
+### 4. 인사 및 노무 에이전트
 
-### 4. HR Agent (노무)
-**데이터 소스**: 근로기준법, 시행령, 시행규칙
+**담당 도메인**: 노무, 인사
+**데이터 소스**: 근로기준법, 상법, 민법, 지식재산권법
+**벡터DB**: `hr_labor_db/`
+
 **주요 기능**:
 - Hierarchical RAG (법령 계층 검색)
 - 채용/해고 상담
 - 근로시간/휴가 안내
 - 임금/퇴직금 계산
-
-### 5. Legal Agent (법률)
-**데이터 소스**: 상법, 민법, 지식재산권법
-**주요 기능**:
-- 상법 기초 안내
 - 계약법 가이드
 - 지식재산권 안내
-- 분쟁 대응 가이드
 
-### 6. Marketing Agent (마케팅)
-**데이터 소스**: 마케팅 가이드, 사례 분석
-**주요 기능**:
-- 마케팅 전략 조언
-- 디지털 마케팅 가이드
-- 브랜딩 조언
+### 5. 평가 에이전트
 
-### Action Executor (문서 생성)
+**역할**: 답변 품질 평가 및 재요청 판단
+
+**평가 기준**:
+- 정확성: 제공된 정보가 사실에 부합하는지
+- 완성도: 질문에 대해 충분히 답변했는지
+- 관련성: 질문 의도에 맞는 답변인지
+- 출처 명시: 법령/규정 인용 시 출처가 있는지
+
+**재요청 기준**: 평가 점수가 threshold 미만일 경우 피드백과 함께 재요청
+
+### 6. Action Executor (문서 생성)
+
 **출력 형식**: PDF, HWP
+
 **생성 문서**:
 - 근로계약서
 - 취업규칙
@@ -217,9 +207,25 @@ DOMAIN_KEYWORDS = {
 - 급여명세서
 - 사업계획서 템플릿
 
+## 벡터DB 구성
+
+```
+ChromaDB
+├── startup_funding_db/   # 창업/지원/마케팅 전용
+├── finance_tax_db/       # 재무/세무 전용
+├── hr_labor_db/          # 인사/노무/법률 전용
+└── law_common_db/        # 법령/법령해석 (공통 - 모든 에이전트 공유)
+```
+
+### 공통 벡터DB 사용
+
+`law_common_db/`는 법령 원문과 법령 해석례를 저장하며, 모든 전문 에이전트가 공유합니다.
+법령 관련 질문 시 전용 DB 검색 후 공통 DB도 함께 검색하여 답변 정확도를 높입니다.
+
 ## 데이터 파이프라인
 
 ### 지원사업 데이터 수집
+
 ```python
 # 기업마당 API 연동
 async def fetch_bizinfo_announcements():
@@ -238,6 +244,7 @@ async def store_to_vectordb(announcements: list):
 ```
 
 ### 법령 데이터 로드
+
 ```python
 # Hierarchical RAG 구조
 HIERARCHY = {
@@ -251,6 +258,7 @@ HIERARCHY = {
 ## 요청/응답 스키마
 
 ### 채팅 요청
+
 ```python
 class ChatRequest(BaseModel):
     message: str
@@ -268,20 +276,28 @@ class CompanyContext(BaseModel):
 ```
 
 ### 채팅 응답
+
 ```python
 class ChatResponse(BaseModel):
     content: str
     domain: str
     sources: list[str] = []
     actions: list[ActionSuggestion] = []
+    evaluation: EvaluationResult | None = None
 
 class ActionSuggestion(BaseModel):
     type: str  # document_generation, funding_search, etc.
     label: str
     params: dict
+
+class EvaluationResult(BaseModel):
+    score: float
+    passed: bool
+    feedback: str | None = None
 ```
 
 ## 환경 변수
+
 ```
 OPENAI_API_KEY=
 BIZINFO_API_KEY=
@@ -292,25 +308,24 @@ CHROMA_PORT=8002
 
 ## 프롬프트 설계
 
-### Master Router 프롬프트
+### 메인 라우터 프롬프트
+
 ```
-당신은 BizMate의 Master Router입니다.
+당신은 Bizi의 메인 라우터입니다.
 사용자 질문을 분석하여 적절한 도메인으로 라우팅하세요.
 
 도메인 목록:
-- startup: 창업, 사업자등록, 법인설립
-- tax: 세금, 회계, 세무
-- funding: 지원사업, 보조금, 정책자금
-- hr: 근로, 채용, 급여, 노무
-- legal: 계약, 소송, 지식재산권
-- marketing: 마케팅, 광고, 홍보
+- startup_funding: 창업, 사업자등록, 법인설립, 지원사업, 보조금, 마케팅
+- finance_tax: 세금, 회계, 세무, 재무
+- hr_labor: 근로, 채용, 급여, 노무, 계약, 소송, 지식재산권
 
 복합 질문인 경우 여러 도메인을 선택하세요.
 ```
 
-### 도메인 에이전트 프롬프트 (예: HR Agent)
+### 도메인 에이전트 프롬프트 (예: 인사 및 노무 에이전트)
+
 ```
-당신은 BizMate의 노무 전문 상담사입니다.
+당신은 Bizi의 인사 및 노무 전문 상담사입니다.
 근로기준법과 관련 법령을 기반으로 정확한 정보를 제공하세요.
 
 사용자 유형: {user_type}
@@ -322,37 +337,42 @@ CHROMA_PORT=8002
 3. 사용자 유형에 맞는 눈높이로 설명하세요
 ```
 
+### 평가 에이전트 프롬프트
+
+```
+당신은 Bizi의 답변 품질 평가자입니다.
+다음 기준으로 답변을 평가하세요:
+
+1. 정확성 (0-25): 정보가 사실에 부합하는가?
+2. 완성도 (0-25): 질문에 충분히 답변했는가?
+3. 관련성 (0-25): 질문 의도에 맞는 답변인가?
+4. 출처 명시 (0-25): 법령/규정 인용 시 출처가 있는가?
+
+총점 70점 이상이면 PASS, 미만이면 FAIL.
+FAIL인 경우 구체적인 개선 피드백을 제공하세요.
+```
+
 ## 테스트
+
 ```bash
 pytest tests/
 pytest tests/ -v --cov=.
 ```
 
 ## 성능 목표
+
 - Router 분류 정확도: 95%
 - 공고 요약 정확도: 90%
 - 법령 답변 정확도: 90%
 - 응답 시간: 3초 이내
-
-## AI 에이전트 가이드라인
-
-### 코드 작성 시 주의사항
-1. 새 에이전트는 `agents/base.py`를 상속
-2. 프롬프트는 `utils/prompts.py`에 정의
-3. 스키마는 `schemas/` 디렉토리에 Pydantic 모델로 정의
-4. 벡터 DB 연동은 `vectorstores/` 모듈 사용
-
-### 파일 수정 시 확인사항
-- 새 에이전트 추가 시 `agents/__init__.py` 등록
-- 새 API 추가 시 `main.py`에 라우터 등록
-- 환경 변수는 `utils/config.py`에서 관리
-- LangChain 체인은 `chains/` 디렉토리에 정의
+- 평가 후 재요청 최대 횟수: 2회
 
 ---
 
 ## 코드 품질 가이드라인 (필수 준수)
 
 ### 절대 금지 사항
+
 - **하드코딩 금지**: API 키, ChromaDB 연결 정보 등을 코드에 직접 작성 금지 → `utils/config.py` 환경 변수 사용
 - **매직 넘버/매직 스트링 금지**: chunk_size, temperature 등 설정값을 코드에 직접 사용 금지
 - **중복 코드 금지**: 동일한 RAG 로직은 chains/ 또는 유틸 함수로 추출
@@ -360,6 +380,7 @@ pytest tests/ -v --cov=.
 - **API 키 노출 금지**: OpenAI, 외부 API 키를 코드/로그에 노출 금지
 
 ### 필수 준수 사항
+
 - **환경 변수 사용**: 모든 설정값은 `.env` 파일 + `utils/config.py`로 관리
 - **상수 정의**: 도메인 키워드, 에이전트 코드 등은 상수로 정의
 - **타입 힌트 사용**: 함수 파라미터와 반환값에 타입 힌트 필수

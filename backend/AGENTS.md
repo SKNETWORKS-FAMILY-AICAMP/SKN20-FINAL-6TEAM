@@ -4,7 +4,7 @@
 > Claude Code는 [CLAUDE.md](./CLAUDE.md)를 참조하세요.
 
 ## 개요
-BizMate의 백엔드는 FastAPI를 사용하며, Google OAuth2 인증과 SQLAlchemy ORM을 사용합니다.
+Bizi의 백엔드는 FastAPI를 사용하며, Google OAuth2 인증과 SQLAlchemy ORM을 사용합니다.
 RAG 서비스와 분리되어 사용자 인증, 데이터 관리를 담당합니다.
 
 ## 기술 스택

@@ -38,7 +38,7 @@ export const Sidebar: React.FC = () => {
     <Card className="h-screen w-64 p-4 shadow-xl shadow-blue-gray-900/5 rounded-none">
       <div className="mb-4 p-4">
         <Typography variant="h5" color="blue-gray">
-          BizMate
+          Bizi
         </Typography>
         <Typography variant="small" color="gray" className="mt-1">
           통합 창업/경영 상담

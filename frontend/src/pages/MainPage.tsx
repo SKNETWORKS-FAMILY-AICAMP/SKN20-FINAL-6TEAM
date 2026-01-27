@@ -122,7 +122,7 @@ const MainPage: React.FC = () => {
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-gray-500">
               <Typography variant="h6" color="gray" className="mb-2">
-                BizMate에 오신 것을 환영합니다!
+                Bizi에 오신 것을 환영합니다!
               </Typography>
               <Typography variant="small" color="gray">
                 궁금한 점을 자유롭게 물어보세요.

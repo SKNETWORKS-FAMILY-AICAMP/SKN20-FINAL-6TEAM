@@ -45,7 +45,7 @@ const LoginPage: React.FC = () => {
           {/* 로고 및 타이틀 */}
           <div className="text-center">
             <Typography variant="h3" color="blue-gray" className="mb-2">
-              BizMate
+              Bizi
             </Typography>
             <Typography variant="paragraph" color="gray">
               통합 창업/경영 상담 챗봇
@@ -55,7 +55,7 @@ const LoginPage: React.FC = () => {
           {/* 설명 */}
           <div className="bg-blue-50 p-4 rounded-lg">
             <Typography variant="small" color="blue-gray">
-              BizMate는 예비 창업자, 스타트업 CEO, 중소기업 대표를 위한
+              Bizi는 예비 창업자, 스타트업 CEO, 중소기업 대표를 위한
               AI 기반 통합 경영 상담 서비스입니다.
             </Typography>
             <ul className="mt-3 space-y-1 text-sm text-gray-600">
