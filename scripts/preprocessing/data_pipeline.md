@@ -115,12 +115,12 @@ erDiagram
     "url": "https://law.go.kr/법령/근로기준법",
     "collected_at": "2026-01-20T11:43:48"
   },
-  "related_laws": [],
   "effective_date": "2024-02-09",
-  "metadata": {
+  "metadata": {         # 필요한 경우 추가
     "ministry": "고용노동부",
     "enforcement_date": "20240209",
-    "article_count": 116
+    "article_count": 116,
+    "related_laws": []      
   }
 }
 ```
