@@ -457,16 +457,16 @@ class AnnouncementPreprocessor:
         self.bizinfo_processor = BizinfoProcessor()
         self.kstartup_processor = KstartupProcessor()
 
-        # 처리된 문서 저장
-        self.bizinfo_docs: List[AnnouncementDocument] = []
-        self.kstartup_docs: List[AnnouncementDocument] = []
+        # 중복 체크용
+        self.seen_hashes: set = set()
 
         # 통계
         self.stats = {
             "bizinfo_total": 0,
             "bizinfo_processed": 0,
             "kstartup_total": 0,
-            "kstartup_processed": 0
+            "kstartup_processed": 0,
+            "duplicates_removed": 0
         }
 
     def run(self) -> Dict[str, Any]:
@@ -475,26 +475,28 @@ class AnnouncementPreprocessor:
         logger.info("지원사업 공고 전처리 시작")
         logger.info("=" * 60)
 
+        all_documents: List[AnnouncementDocument] = []
+
         # 1. Bizinfo 처리
         bizinfo_files = list(self.input_dir.glob("bizinfo_*.json"))
         for file_path in bizinfo_files:
             logger.info(f"처리 중: {file_path.name}")
             docs = self._process_bizinfo(file_path)
-            self.bizinfo_docs.extend(docs)
+            all_documents.extend(docs)
 
         # 2. K-Startup 처리
         kstartup_files = list(self.input_dir.glob("kstartup_*.json"))
         for file_path in kstartup_files:
             logger.info(f"처리 중: {file_path.name}")
             docs = self._process_kstartup(file_path)
-            self.kstartup_docs.extend(docs)
+            all_documents.extend(docs)
 
-        # 3. 각각 JSONL 출력 (분리 저장)
-        bizinfo_output = self.output_dir / "bizinfo.jsonl"
-        kstartup_output = self.output_dir / "kstartup.jsonl"
+        # 3. 중복 제거
+        unique_documents = self._remove_duplicates(all_documents)
 
-        self._write_jsonl(self.bizinfo_docs, bizinfo_output)
-        self._write_jsonl(self.kstartup_docs, kstartup_output)
+        # 4. JSONL 출력
+        output_path = self.output_dir / "announcements.jsonl"
+        self._write_jsonl(unique_documents, output_path)
 
         # 5. 통계 JSON 출력
         stats_path = self.output_dir / "preprocessing_stats.json"
@@ -568,7 +570,8 @@ class AnnouncementPreprocessor:
             **self.stats,
             "total_processed": (
                 self.stats["bizinfo_processed"] +
-                self.stats["kstartup_processed"]
+                self.stats["kstartup_processed"] -
+                self.stats["duplicates_removed"]
             ),
             "processed_at": datetime.now().isoformat()
         }
@@ -580,12 +583,20 @@ class AnnouncementPreprocessor:
 
     def _print_summary(self):
         """결과 요약 출력"""
+        total = (
+            self.stats["bizinfo_processed"] +
+            self.stats["kstartup_processed"] -
+            self.stats["duplicates_removed"]
+        )
+
         logger.info("")
         logger.info("=" * 60)
         logger.info("전처리 완료!")
         logger.info("=" * 60)
-        logger.info(f"  기업마당: {self.stats['bizinfo_processed']}/{self.stats['bizinfo_total']}건 → bizinfo.jsonl")
-        logger.info(f"  K-Startup: {self.stats['kstartup_processed']}/{self.stats['kstartup_total']}건 → kstartup.jsonl")
+        logger.info(f"  기업마당: {self.stats['bizinfo_processed']}/{self.stats['bizinfo_total']}건")
+        logger.info(f"  K-Startup: {self.stats['kstartup_processed']}/{self.stats['kstartup_total']}건")
+        logger.info(f"  중복 제거: {self.stats['duplicates_removed']}건")
+        logger.info(f"  최종 출력: {total}건")
         logger.info("=" * 60)
 
 
