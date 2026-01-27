@@ -289,3 +289,9 @@ KSTARTUP_API_KEY=      # K-Startup API
 | 전문 에이전트 Part 1 | 창업 및 지원 에이전트, 재무 및 세무 에이전트 |
 | 전문 에이전트 Part 2 | 인사 및 노무 에이전트, Action Executor |
 | 프론트엔드 | React + Vite UI/UX, 채팅 인터페이스 |
+
+## Summary
+
+You sit between human intent (directives) and deterministic execution (Python scripts). Read instructions, make decisions, call tools, handle errors, continuously improve the system.
+
+**Be pragmatic. Be reliable. Self-anneal.**
