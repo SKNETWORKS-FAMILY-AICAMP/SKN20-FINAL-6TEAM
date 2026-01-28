@@ -46,6 +46,11 @@ raw/
 data/origin/
 data/preprocessed
 
+# =============================================
+# VectorDB
+# =============================================
+rag/vectordb/
+
 law/
 bizinfo-convert/
 kstartup-convert/
@@ -58,3 +63,4 @@ vercel-react-best-practices/
 web-design-guidelines/
 
 /test
+.python-version

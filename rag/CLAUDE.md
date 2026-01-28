@@ -48,8 +48,17 @@ rag/
 │
 ├── vectorstores/             # 벡터 DB 관리
 │   ├── __init__.py
+│   ├── config.py             # VectorDB 설정 및 청킹 설정
 │   ├── chroma.py             # ChromaDB 클라이언트
-│   └── embeddings.py         # 임베딩 설정
+│   ├── embeddings.py         # 임베딩 설정 (text-embedding-3-small)
+│   ├── loader.py             # 데이터 로더 및 청킹
+│   └── build_vectordb.py     # VectorDB 빌드 스크립트
+│
+├── vectordb/                 # VectorDB 저장 디렉토리 (git에서 제외)
+│   ├── startup_funding_db/   # 창업/지원/마케팅 전용
+│   ├── finance_tax_db/       # 재무/세무 전용
+│   ├── hr_labor_db/          # 인사/노무 전용
+│   └── law_common_db/        # 법령/법령해석 (공통)
 │
 ├── loaders/                  # 데이터 로더 (벡터DB 적재용)
 │   ├── __init__.py
@@ -84,6 +93,29 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ```bash
 docker build -t bizmate-rag .
 docker run -p 8001:8001 bizmate-rag
+```
+
+### VectorDB 빌드
+
+```bash
+# 프로젝트 루트의 .venv 활성화
+cd rag
+source ../.venv/bin/activate  # Windows: ..\.venv\Scripts\activate
+
+# 전체 VectorDB 빌드 (OPENAI_API_KEY 필요)
+python -m vectorstores.build_vectordb --all
+
+# 특정 DB만 빌드
+python -m vectorstores.build_vectordb --db startup_funding
+python -m vectorstores.build_vectordb --db finance_tax
+python -m vectorstores.build_vectordb --db hr_labor
+python -m vectorstores.build_vectordb --db law_common
+
+# 강제 재빌드 (기존 데이터 삭제 후 재생성)
+python -m vectorstores.build_vectordb --all --force
+
+# 통계 확인
+python -m vectorstores.build_vectordb --stats
 ```
 
 ## API 엔드포인트
@@ -211,50 +243,35 @@ DOMAIN_KEYWORDS = {
 ## 벡터DB 구성
 
 ```
-ChromaDB
-├── startup_funding_db/   # 창업/지원/마케팅 전용
-├── finance_tax_db/       # 재무/세무 전용
-├── hr_labor_db/          # 인사/노무/법률 전용
-└── law_common_db/        # 법령/법령해석 (공통 - 모든 에이전트 공유)
+vectordb/
+├── startup_funding_db/   # 창업/지원/마케팅 전용 (~2,100 documents)
+├── finance_tax_db/       # 재무/세무 전용 (~15,200 documents)
+├── hr_labor_db/          # 인사/노무 전용 (~8,200 documents)
+└── law_common_db/        # 법령/법령해석 공통 (~187,800 documents)
 ```
+
+### 데이터 소스 및 청킹 전략
+
+| DB | 파일 | 청킹 | 설정 |
+|----|------|------|------|
+| startup_funding | announcements.jsonl | 안함 | - |
+| startup_funding | industry_startup_guide_filtered.jsonl | 안함 | - |
+| startup_funding | startup_procedures_filtered.jsonl | 조건부 | size=1000, overlap=200 |
+| finance_tax | court_cases_tax.jsonl | 필수 | size=800, overlap=100 |
+| finance_tax | extracted_documents_final.jsonl | 필수 | size=800, overlap=100 |
+| hr_labor | court_cases_labor.jsonl | 필수 | size=800, overlap=100 |
+| law_common | laws_full.jsonl | 조건부 | size=800, overlap=100 |
+| law_common | interpretations.jsonl | 조건부 | size=800, overlap=100 |
 
 ### 공통 벡터DB 사용
 
 `law_common_db/`는 법령 원문과 법령 해석례를 저장하며, 모든 전문 에이전트가 공유합니다.
 법령 관련 질문 시 전용 DB 검색 후 공통 DB도 함께 검색하여 답변 정확도를 높입니다.
 
-## 데이터 파이프라인
+### 임베딩 모델
 
-### 지원사업 데이터 수집
-
-```python
-# 기업마당 API 연동
-async def fetch_bizinfo_announcements():
-    """기업마당 Open API에서 지원사업 공고 수집"""
-    pass
-
-# K-Startup API 연동
-async def fetch_kstartup_announcements():
-    """K-Startup Open API에서 스타트업 지원사업 수집"""
-    pass
-
-# 벡터DB 저장
-async def store_to_vectordb(announcements: list):
-    """수집된 공고를 임베딩하여 벡터DB에 저장"""
-    pass
-```
-
-### 법령 데이터 로드
-
-```python
-# Hierarchical RAG 구조
-HIERARCHY = {
-    '근로기준법': {
-        'level': 1,
-        'children': ['근로기준법 시행령', '근로기준법 시행규칙']
-    }
-}
-```
+- **모델**: `text-embedding-3-small` (OpenAI)
+- **벡터 공간**: cosine similarity
 
 ## 요청/응답 스키마
 
