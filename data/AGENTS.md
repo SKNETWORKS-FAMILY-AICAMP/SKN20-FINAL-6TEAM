@@ -1,291 +1,199 @@
-# Data 개발 가이드
+# Data AI 에이전트 개발 가이드
 
-> 이 문서는 AI 에이전트가 데이터 크롤링/전처리 스크립트 개발을 지원하기 위한 가이드입니다.
+> 이 문서는 AI 에이전트가 데이터 관리 및 활용을 지원하기 위한 가이드입니다.
+> 상세한 개발 가이드는 [CLAUDE.md](./CLAUDE.md)를 참조하세요.
 
 ## 개요
-Bizi의 RAG 시스템에 필요한 데이터를 수집하고 전처리하는 스크립트를 관리합니다.
-수집된 데이터는 벡터DB(ChromaDB)에 임베딩되어 저장됩니다.
+
+`data/` 폴더는 Bizi RAG 시스템에서 사용하는 모든 데이터를 저장합니다.
+- `origin/`: 원본 데이터 (크롤링 결과, PDF 파일 등)
+- `preprocessed/`: 전처리된 데이터 (JSONL 형식, RAG 입력용)
 
 ## 프로젝트 구조
+
 ```
 data/
-├── CLAUDE.md              # 개발 가이드
-├── AGENTS.md              # 이 파일
-├── requirements.txt
+├── CLAUDE.md                  # 상세 개발 가이드
+├── AGENTS.md                  # 이 파일
 │
-├── crawlers/              # 크롤러 스크립트
-│   ├── __init__.py
-│   ├── base.py            # 기본 크롤러 클래스
-│   ├── bizinfo.py         # 기업마당 API
-│   ├── kstartup.py        # K-Startup API
-│   ├── law.py             # 국가법령정보센터
-│   └── tax.py             # 국세청 데이터
+├── origin/                    # 원본 데이터
+│   ├── 근로기준법 질의회시집.pdf
+│   ├── law/                   # 법령 원본
+│   ├── startup_support/       # 창업 가이드 원본
+│   ├── finance/               # 세무/회계 원본
+│   └── labor/                 # 노동/인사 원본
 │
-├── preprocessors/         # 전처리 스크립트
-│   ├── __init__.py
-│   ├── cleaner.py         # 텍스트 정제
-│   ├── chunker.py         # 텍스트 분할
-│   └── embedder.py        # 임베딩 생성
-│
-├── pipelines/             # 파이프라인
-│   ├── __init__.py
-│   ├── base.py            # 기본 파이프라인 클래스
-│   ├── funding_pipeline.py
-│   ├── law_pipeline.py
-│   └── tax_pipeline.py
-│
-├── raw/                   # 원본 데이터 (gitignore)
-├── processed/             # 전처리 데이터 (gitignore)
-│
-└── scripts/               # 유틸리티 스크립트
-    ├── run_all.py
-    ├── sync_vectordb.py
-    └── schedule.py
+└── preprocessed/              # 전처리된 데이터 (JSONL)
+    ├── law/                   # 법령, 해석례, 판례
+    ├── labor/                 # 노동 질의회시
+    ├── finance/               # 세무일정, 가이드
+    └── startup_support/       # 창업 가이드
 ```
 
-## 코드 작성 규칙
+## 통합 스키마
 
-### 1. 크롤러 클래스
-```python
-# crawlers/base.py
-from abc import ABC, abstractmethod
-import httpx
+모든 전처리된 문서는 동일한 스키마를 따릅니다:
 
-class BaseCrawler(ABC):
-    def __init__(self, api_key: str | None = None):
-        self.api_key = api_key
-        self.client = httpx.AsyncClient()
-
-    @abstractmethod
-    async def fetch(self) -> list[dict]:
-        """데이터 수집"""
-        pass
-
-    @abstractmethod
-    async def parse(self, raw_data: dict) -> dict:
-        """데이터 파싱"""
-        pass
-
-    async def run(self) -> list[dict]:
-        raw_data = await self.fetch()
-        return [await self.parse(item) for item in raw_data]
+```json
+{
+  "id": "TYPE_SOURCE_ID",
+  "type": "law | interpretation | guide | schedule | labor_qa | ...",
+  "domain": "legal | tax | labor | startup | funding | marketing",
+  "title": "문서 제목",
+  "content": "RAG 검색용 본문",
+  "source": {
+    "name": "출처명",
+    "url": "원본 URL",
+    "collected_at": "2026-01-20T11:43:48"
+  },
+  "effective_date": "YYYY-MM-DD",
+  "related_laws": [
+    {
+      "law_id": "LAW_010719",
+      "law_name": "근로기준법",
+      "article_ref": "제15조"
+    }
+  ],
+  "metadata": {}
+}
 ```
 
-### 2. 크롤러 구현
-```python
-# crawlers/bizinfo.py
-from crawlers.base import BaseCrawler
+### 필수 필드
 
-class BizinfoCrawler(BaseCrawler):
-    BASE_URL = "https://www.bizinfo.go.kr/uss/rss/bizRss.do"
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `id` | string | 문서 고유 ID |
+| `type` | string | 문서 유형 |
+| `domain` | string | 도메인 |
+| `title` | string | 제목 |
+| `content` | string | RAG 검색용 본문 |
+| `source` | object | 출처 정보 |
 
-    async def fetch(self) -> list[dict]:
-        response = await self.client.get(
-            self.BASE_URL,
-            params={"api_key": self.api_key}
-        )
-        return response.json()["data"]
+### ID 체계
 
-    async def parse(self, raw_data: dict) -> dict:
-        return {
-            "title": raw_data["pblancNm"],
-            "content": raw_data["bsnsSumryCn"],
-            "deadline": raw_data["rcptEndDt"],
-            "organization": raw_data["jrsdInsttNm"],
-            "source": "bizinfo"
-        }
-```
+| 타입 | ID 형식 | 예시 |
+|------|---------|------|
+| 법령 | `LAW_{law_id}` | `LAW_010719` |
+| 해석례 | `INTERP_{기관}_{id}` | `INTERP_SMBA_313107` |
+| 판례 | `COURT_{domain}_{id}` | `COURT_LABOR_12345` |
+| 공고 | `ANNOUNCE_{source}_{id}` | `ANNOUNCE_BIZINFO_123` |
+| 가이드 | `GUIDE_{업종코드}` | `GUIDE_011000` |
+| 일정 | `SCHEDULE_TAX_{날짜}_{순번}` | `SCHEDULE_TAX_20260126_001` |
+| 질의회시 | `LABOR_QA_{장}_{페이지}_{순번}` | `LABOR_QA_1_15_001` |
 
-### 3. 전처리 함수
-```python
-# preprocessors/cleaner.py
-import re
-from bs4 import BeautifulSoup
+### 도메인 분류
 
-def clean_html(text: str) -> str:
-    """HTML 태그 제거"""
-    soup = BeautifulSoup(text, "html.parser")
-    return soup.get_text()
+| 도메인 | 설명 | 키워드 |
+|--------|------|--------|
+| `tax` | 세무/회계 | 세법, 소득세, 법인세, 부가가치세 |
+| `labor` | 노동/인사 | 근로, 노동, 고용, 임금, 퇴직, 해고 |
+| `startup` | 창업/사업자 | 사업자, 창업, 법인설립, 업종, 인허가 |
+| `funding` | 지원사업 | 지원사업, 보조금, 정책자금, 공고 |
+| `legal` | 법률 | 상법, 민법, 공정거래, 계약 |
+| `marketing` | 마케팅 | 광고, 홍보, 브랜딩 |
 
-def normalize_whitespace(text: str) -> str:
-    """공백 정규화"""
-    return re.sub(r'\s+', ' ', text).strip()
+## 출력 파일 목록
 
-def clean_text(text: str) -> str:
-    """텍스트 정제 파이프라인"""
-    text = clean_html(text)
-    text = normalize_whitespace(text)
-    return text
-```
+### law/
 
-### 4. 청커 (텍스트 분할)
-```python
-# preprocessors/chunker.py
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+| 파일 | 설명 | 예상 수 |
+|------|------|---------|
+| `laws_full.jsonl` | 전체 법령 | ~5,500 |
+| `law_lookup.json` | 법령명 → law_id 매핑 | - |
+| `interpretations.jsonl` | 법령해석례 | ~8,600 |
+| `court_cases_labor.jsonl` | 노동 판례 | ~1,000 |
+| `court_cases_tax.jsonl` | 세무 판례 | ~2,000 |
 
-def create_chunker(
-    chunk_size: int = 1000,
-    chunk_overlap: int = 200
-) -> RecursiveCharacterTextSplitter:
-    return RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        separators=["\n\n", "\n", ".", " "]
-    )
+### labor/
 
-def chunk_documents(
-    documents: list[str],
-    chunk_size: int = 1000,
-    chunk_overlap: int = 200
-) -> list[str]:
-    chunker = create_chunker(chunk_size, chunk_overlap)
-    chunks = []
-    for doc in documents:
-        chunks.extend(chunker.split_text(doc))
-    return chunks
-```
+| 파일 | 설명 | 예상 수 |
+|------|------|---------|
+| `labor_qa.jsonl` | 질의회시 (PDF 추출) | ~500 |
 
-### 5. 파이프라인
-```python
-# pipelines/funding_pipeline.py
-from crawlers.bizinfo import BizinfoCrawler
-from crawlers.kstartup import KstartupCrawler
-from preprocessors.cleaner import clean_text
-from preprocessors.chunker import chunk_documents
-from preprocessors.embedder import embed_documents
+### finance/
 
-async def run_funding_pipeline():
-    # 1. 수집
-    bizinfo = BizinfoCrawler(api_key=BIZINFO_API_KEY)
-    kstartup = KstartupCrawler(api_key=KSTARTUP_API_KEY)
+| 파일 | 설명 | 예상 수 |
+|------|------|---------|
+| `tax_schedule.jsonl` | 세무 신고 일정 | ~240 |
 
-    data = await bizinfo.run() + await kstartup.run()
+### startup_support/
 
-    # 2. 정제
-    cleaned = [clean_text(item["content"]) for item in data]
-
-    # 3. 청킹
-    chunks = chunk_documents(cleaned, chunk_size=1000)
-
-    # 4. 임베딩 & 저장
-    await embed_documents(chunks, collection="funding")
-
-    return len(chunks)
-```
-
-## 데이터 스키마
-
-### 지원사업 (funding)
-```python
-class FundingDocument:
-    title: str           # 공고 제목
-    content: str         # 공고 내용
-    deadline: str        # 마감일 (YYYY-MM-DD)
-    organization: str    # 주관기관
-    target: str          # 지원 대상
-    amount: str          # 지원 금액
-    source: str          # 출처 (bizinfo, kstartup)
-    url: str             # 원본 URL
-```
-
-### 법령 (law)
-```python
-class LawDocument:
-    title: str           # 법령명
-    article: str         # 조항 번호
-    content: str         # 조항 내용
-    level: int           # 계층 (1: 법령, 2: 시행령, 3: 시행규칙)
-    parent: str | None   # 상위 법령
-    effective_date: str  # 시행일
-```
-
-### 세무 (tax)
-```python
-class TaxDocument:
-    title: str           # 제목
-    category: str        # 카테고리 (법인세, 부가세, 원천세 등)
-    content: str         # 내용
-    year: int            # 연도
-    source: str          # 출처
-```
+| 파일 | 설명 | 예상 수 |
+|------|------|---------|
+| `industries.jsonl` | 업종별 창업 가이드 | ~1,600 |
+| `startup_procedures.jsonl` | 창업 절차 가이드 | - |
 
 ## 파일 수정 시 확인사항
 
-### 새 크롤러 추가
-1. `crawlers/base.py` 상속
-2. `crawlers/{source}.py` 생성
-3. `fetch()`, `parse()` 메서드 구현
-4. `crawlers/__init__.py`에 export 추가
+### 새 데이터 타입 추가
 
-### 새 파이프라인 추가
-1. `pipelines/{domain}_pipeline.py` 생성
-2. 수집 → 정제 → 청킹 → 저장 단계 구현
-3. `scripts/run_all.py`에 등록
+1. `scripts/preprocessing/{type}_preprocessor.py` 생성
+2. 통합 스키마 준수
+3. 적절한 `preprocessed/{domain}/` 폴더에 출력
+4. 이 문서의 출력 파일 목록 업데이트
 
-### 청킹 전략 변경
-1. `preprocessors/chunker.py` 수정
-2. 도메인별 chunk_size, chunk_overlap 설정
-3. 변경 후 전체 재인덱싱 필요
+### 스키마 변경
 
-## 환경 변수
-```
-OPENAI_API_KEY=
-BIZINFO_API_KEY=
-KSTARTUP_API_KEY=
-LAW_API_KEY=
-CHROMA_HOST=localhost
-CHROMA_PORT=8002
-```
+1. 이 문서와 `CLAUDE.md` 스키마 정의 업데이트
+2. 모든 전처리기 수정
+3. 벡터DB 재인덱싱 필요
 
-## 테스트
+### 법령 참조 연결
+
+해석례/판례에서 법령을 참조할 때:
+1. `law_lookup.json`에서 법령명으로 law_id 조회
+2. `related_laws` 필드에 추가
+3. 법령명만 있고 ID가 없는 경우 `law_id: null` 허용
+
+## 데이터 품질 검증
+
+### 검증 체크리스트
+
+- [ ] 모든 JSONL 레코드가 통합 스키마 준수
+- [ ] 필수 필드 (id, type, domain, title, content, source) 존재
+- [ ] ID 형식 규칙 준수 (중복 없음)
+- [ ] `related_laws[].law_id`가 유효한 값
+- [ ] 한글 인코딩 정상 (UTF-8)
+
+### 검증 스크립트
+
 ```bash
-# 유닛 테스트
-pytest tests/
+# JSONL 형식 확인
+head -3 data/preprocessed/law/laws_full.jsonl | jq .
 
-# 크롤러 테스트 (API 호출)
-pytest tests/crawlers/ -v
+# 레코드 수 확인
+wc -l data/preprocessed/*/*.jsonl
 
-# 전처리 테스트
-pytest tests/preprocessors/ -v
+# ID 중복 확인
+jq -r '.id' data/preprocessed/law/laws_full.jsonl | sort | uniq -d
 ```
 
 ## 주의사항
 
-### API 호출 제한
-- 기업마당 API: 일 10,000건
-- K-Startup API: 일 5,000건
-- 법령 API: 일 10,000건
+### .gitignore 설정
 
-### 크롤링 에티켓
-- robots.txt 준수
-- 요청 간격: 최소 1초
-- User-Agent 명시
-- 에러 시 재시도 로직 (exponential backoff)
+대용량 원본 데이터는 git에서 제외:
 
-### 데이터 저장
-- `raw/`: 원본 JSON/XML 저장 (디버깅용)
-- `processed/`: 전처리된 데이터 저장
-- 두 폴더 모두 `.gitignore`에 추가
+```gitignore
+origin/law/*.json
+origin/**/*.pdf
+origin/**/*.csv
+```
 
-### 벡터DB 동기화
-- 증분 업데이트 우선 (전체 재인덱싱 최소화)
-- 중복 문서 체크 (hash 기반)
-- 삭제된 공고 처리 (soft delete)
+### 인코딩
 
----
+- 모든 파일은 UTF-8 인코딩
+- CSV 파일이 EUC-KR인 경우 변환 필요
 
-## 코드 품질 가이드라인 (필수 준수)
+### 용량
 
-### 절대 금지 사항
-- **하드코딩 금지**: API 키, 파일 경로, URL 등을 코드에 직접 작성 금지 → 환경 변수 사용
-- **매직 넘버/매직 스트링 금지**: chunk_size, 요청 간격 등 설정값을 코드에 직접 사용 금지
-- **중복 코드 금지**: 동일한 크롤링/전처리 로직은 base 클래스 또는 유틸 함수로 추출
-- **API 키 노출 금지**: 외부 API 키를 코드/로그에 노출 금지
+- `origin/law/01_laws_full.json`: 304MB
+- 전체 origin: ~500MB
+- 전체 preprocessed: ~50MB
 
-### 필수 준수 사항
-- **환경 변수 사용**: 모든 설정값(API 키, 경로, 설정)은 `.env` 파일로 관리
-- **상수 정의**: 청킹 설정, API 엔드포인트 등은 상수로 정의
-- **타입 힌트 사용**: 함수 파라미터와 반환값에 타입 힌트 필수
-- **에러 처리**: API 호출 실패, 파싱 오류 등 예외 처리 필수
-- **의미 있는 네이밍**: 크롤러, 파이프라인, 함수명은 역할을 명확히 표현
-- **base 클래스 상속**: 새 크롤러/파이프라인은 반드시 base 클래스 상속
+## 참고 문서
+
+- [CLAUDE.md](./CLAUDE.md) - 상세 개발 가이드
+- [scripts/CLAUDE.md](../scripts/CLAUDE.md) - 크롤링/전처리 스크립트 가이드
+- [scripts/data_pipeline.md](../scripts/data_pipeline.md) - 전처리 파이프라인 상세 설명
+- [rag/CLAUDE.md](../rag/CLAUDE.md) - RAG 시스템 가이드

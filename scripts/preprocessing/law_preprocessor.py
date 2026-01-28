@@ -5,19 +5,6 @@ data_pipeline.md / happy-tinkering-toucan.md 기반
 - 법령 (01_laws_full.json) → laws/laws_full.jsonl + law_lookup.json
 - 법령해석례 (expc_전체.json) → interpretations/interpretations.jsonl
 - 판례 (prec_*.json) → court_cases/*.jsonl
-
-통일 스키마:
-{
-  "id": "LAW_xxx | INTERP_xxx | CASE_xxx",
-  "type": "law | interpretation | court_case",
-  "domain": "legal | tax | labor | startup | funding",
-  "title": "string",
-  "content": "string",
-  "source": {"name": "string", "url": "string?", "collected_at": "string?"},
-  "related_laws": [{"law_id": "string?", "law_name": "string", "article_ref": "string?"}],
-  "effective_date": "YYYY-MM-DD?",
-  "metadata": {}
-}
 """
 
 import json

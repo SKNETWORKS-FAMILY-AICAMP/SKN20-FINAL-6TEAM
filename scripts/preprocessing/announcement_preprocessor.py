@@ -64,11 +64,11 @@ class AnnouncementDocument:
 
     data_pipeline.md의 BaseDocument 구조를 따름:
     - id: ANNOUNCE_{SOURCE}_{original_id}
-    - type: "announcement"
+    - type: "startup_funding"
     - domain: "funding"
     """
     id: str
-    type: str  # "announcement"
+    type: str  # "startup_funding"
     domain: str  # "funding"
     title: str
     content: str  # RAG 검색용 본문 (요약 + 지원대상 + 지원금액 등 통합)
@@ -323,7 +323,7 @@ class BizinfoProcessor:
 
         return AnnouncementDocument(
             id=doc_id,
-            type="announcement",
+            type="startup_funding",
             domain="funding",
             title=title,
             content=content,
@@ -432,7 +432,7 @@ class KstartupProcessor:
 
         return AnnouncementDocument(
             id=doc_id,
-            type="announcement",
+            type="startup_funding",
             domain="funding",
             title=title,
             content=content,
