@@ -82,6 +82,47 @@ export interface ChatMessage {
   timestamp: Date;
 }
 
+// Chat session
+export interface ChatSession {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  created_at: string;
+  updated_at: string;
+}
+
+// Notification
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'schedule' | 'info' | 'warning';
+  is_read: boolean;
+  created_at: string;
+  link?: string;
+}
+
+// RAG Chat Response
+export interface RagChatResponse {
+  response: string;
+  agent_code: AgentCode;
+}
+
+// Calendar Event (for FullCalendar)
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  backgroundColor?: string;
+  borderColor?: string;
+  extendedProps?: {
+    schedule_id: number;
+    company_id: number;
+    memo?: string;
+  };
+}
+
 // API Response
 export interface ApiResponse<T> {
   data: T;

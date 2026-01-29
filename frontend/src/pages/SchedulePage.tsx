@@ -4,21 +4,26 @@ import {
   CardBody,
   CardHeader,
   Typography,
-  Input,
   Button,
-  Dialog,
-  DialogHeader,
-  DialogBody,
-  DialogFooter,
-  Textarea,
   IconButton,
   Alert,
-  Select,
-  Option,
+  ButtonGroup,
 } from '@material-tailwind/react';
-import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
+import {
+  PlusIcon,
+  PencilIcon,
+  TrashIcon,
+  CalendarIcon,
+  ListBulletIcon,
+} from '@heroicons/react/24/outline';
 import api from '../lib/api';
+import { CalendarView } from '../components/schedule/CalendarView';
+import { ScheduleDetailDialog } from '../components/schedule/ScheduleDetailDialog';
+import type { ScheduleFormData } from '../components/schedule/ScheduleDetailDialog';
+import { useNotifications } from '../hooks/useNotifications';
 import type { Schedule, Company } from '../types';
+
+type ViewMode = 'calendar' | 'list';
 
 const SchedulePage: React.FC = () => {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -26,15 +31,12 @@ const SchedulePage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
+  const [defaultDate, setDefaultDate] = useState<string>('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('calendar');
 
-  const [formData, setFormData] = useState({
-    company_id: '',
-    schedule_name: '',
-    start_date: '',
-    end_date: '',
-    memo: '',
-  });
+  // Generate notifications for upcoming deadlines
+  useNotifications(schedules);
 
   const fetchData = async () => {
     try {
@@ -55,31 +57,19 @@ const SchedulePage: React.FC = () => {
     fetchData();
   }, []);
 
-  const openCreateDialog = () => {
+  const openCreateDialog = (dateStr?: string) => {
     setEditingSchedule(null);
-    setFormData({
-      company_id: companies[0]?.company_id?.toString() || '',
-      schedule_name: '',
-      start_date: '',
-      end_date: '',
-      memo: '',
-    });
+    setDefaultDate(dateStr || '');
     setIsDialogOpen(true);
   };
 
   const openEditDialog = (schedule: Schedule) => {
     setEditingSchedule(schedule);
-    setFormData({
-      company_id: schedule.company_id.toString(),
-      schedule_name: schedule.schedule_name,
-      start_date: schedule.start_date.split('T')[0],
-      end_date: schedule.end_date.split('T')[0],
-      memo: schedule.memo || '',
-    });
+    setDefaultDate('');
     setIsDialogOpen(true);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (formData: ScheduleFormData) => {
     try {
       const data = {
         company_id: parseInt(formData.company_id),
@@ -99,10 +89,11 @@ const SchedulePage: React.FC = () => {
 
       setIsDialogOpen(false);
       fetchData();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { detail?: string } } };
       setMessage({
         type: 'error',
-        text: err.response?.data?.detail || '저장에 실패했습니다.',
+        text: error.response?.data?.detail || '저장에 실패했습니다.',
       });
     }
   };
@@ -113,12 +104,26 @@ const SchedulePage: React.FC = () => {
     try {
       await api.delete(`/schedules/${scheduleId}`);
       setMessage({ type: 'success', text: '일정이 삭제되었습니다.' });
+      setIsDialogOpen(false);
       fetchData();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { detail?: string } } };
       setMessage({
         type: 'error',
-        text: err.response?.data?.detail || '삭제에 실패했습니다.',
+        text: error.response?.data?.detail || '삭제에 실패했습니다.',
       });
+    }
+  };
+
+  const handleDateClick = (dateStr: string) => {
+    if (companies.length === 0) return;
+    openCreateDialog(dateStr);
+  };
+
+  const handleEventClick = (scheduleId: number) => {
+    const schedule = schedules.find((s) => s.schedule_id === scheduleId);
+    if (schedule) {
+      openEditDialog(schedule);
     }
   };
 
@@ -140,14 +145,34 @@ const SchedulePage: React.FC = () => {
         <Typography variant="h4" color="blue-gray">
           일정 관리
         </Typography>
-        <Button
-          className="flex items-center gap-2"
-          onClick={openCreateDialog}
-          disabled={companies.length === 0}
-        >
-          <PlusIcon className="h-4 w-4" />
-          일정 추가
-        </Button>
+        <div className="flex items-center gap-3">
+          {/* View mode toggle */}
+          <ButtonGroup variant="outlined" size="sm">
+            <Button
+              className={`flex items-center gap-1 ${viewMode === 'calendar' ? 'bg-blue-50' : ''}`}
+              onClick={() => setViewMode('calendar')}
+            >
+              <CalendarIcon className="h-4 w-4" />
+              캘린더
+            </Button>
+            <Button
+              className={`flex items-center gap-1 ${viewMode === 'list' ? 'bg-blue-50' : ''}`}
+              onClick={() => setViewMode('list')}
+            >
+              <ListBulletIcon className="h-4 w-4" />
+              리스트
+            </Button>
+          </ButtonGroup>
+
+          <Button
+            className="flex items-center gap-2"
+            onClick={() => openCreateDialog()}
+            disabled={companies.length === 0}
+          >
+            <PlusIcon className="h-4 w-4" />
+            일정 추가
+          </Button>
+        </div>
       </div>
 
       {message && (
@@ -170,18 +195,27 @@ const SchedulePage: React.FC = () => {
         <div className="text-center py-10">
           <Typography color="gray">로딩 중...</Typography>
         </div>
+      ) : viewMode === 'calendar' ? (
+        /* Calendar View */
+        <CalendarView
+          schedules={schedules}
+          onDateClick={handleDateClick}
+          onEventClick={handleEventClick}
+        />
       ) : schedules.length === 0 ? (
+        /* Empty list */
         <Card>
           <CardBody className="text-center py-10">
             <Typography color="gray">등록된 일정이 없습니다.</Typography>
             {companies.length > 0 && (
-              <Button className="mt-4" onClick={openCreateDialog}>
+              <Button className="mt-4" onClick={() => openCreateDialog()}>
                 첫 일정 등록하기
               </Button>
             )}
           </CardBody>
         </Card>
       ) : (
+        /* List View */
         <div className="space-y-4">
           {schedules.map((schedule) => (
             <Card key={schedule.schedule_id}>
@@ -196,11 +230,7 @@ const SchedulePage: React.FC = () => {
                     </Typography>
                   </div>
                   <div className="flex gap-1">
-                    <IconButton
-                      variant="text"
-                      size="sm"
-                      onClick={() => openEditDialog(schedule)}
-                    >
+                    <IconButton variant="text" size="sm" onClick={() => openEditDialog(schedule)}>
                       <PencilIcon className="h-4 w-4" />
                     </IconButton>
                     <IconButton
@@ -217,12 +247,10 @@ const SchedulePage: React.FC = () => {
               <CardBody className="pt-0">
                 <div className="flex gap-6 text-sm">
                   <div>
-                    <span className="text-gray-500">시작:</span>{' '}
-                    {formatDate(schedule.start_date)}
+                    <span className="text-gray-500">시작:</span> {formatDate(schedule.start_date)}
                   </div>
                   <div>
-                    <span className="text-gray-500">종료:</span>{' '}
-                    {formatDate(schedule.end_date)}
+                    <span className="text-gray-500">종료:</span> {formatDate(schedule.end_date)}
                   </div>
                 </div>
                 {schedule.memo && (
@@ -236,95 +264,16 @@ const SchedulePage: React.FC = () => {
         </div>
       )}
 
-      {/* 등록/수정 다이얼로그 */}
-      <Dialog open={isDialogOpen} handler={() => setIsDialogOpen(false)} size="md">
-        <DialogHeader>
-          {editingSchedule ? '일정 수정' : '일정 등록'}
-        </DialogHeader>
-        <DialogBody className="space-y-4">
-          <div>
-            <Typography variant="small" color="gray" className="mb-1">
-              기업 *
-            </Typography>
-            <Select
-              value={formData.company_id}
-              onChange={(val) => setFormData({ ...formData, company_id: val || '' })}
-              className="!border-gray-300"
-              labelProps={{ className: 'hidden' }}
-            >
-              {companies.map((company) => (
-                <Option key={company.company_id} value={company.company_id.toString()}>
-                  {company.com_name}
-                </Option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Typography variant="small" color="gray" className="mb-1">
-              일정명 *
-            </Typography>
-            <Input
-              value={formData.schedule_name}
-              onChange={(e) => setFormData({ ...formData, schedule_name: e.target.value })}
-              className="!border-gray-300"
-              labelProps={{ className: 'hidden' }}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Typography variant="small" color="gray" className="mb-1">
-                시작일 *
-              </Typography>
-              <Input
-                type="date"
-                value={formData.start_date}
-                onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                className="!border-gray-300"
-                labelProps={{ className: 'hidden' }}
-              />
-            </div>
-            <div>
-              <Typography variant="small" color="gray" className="mb-1">
-                종료일 *
-              </Typography>
-              <Input
-                type="date"
-                value={formData.end_date}
-                onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                className="!border-gray-300"
-                labelProps={{ className: 'hidden' }}
-              />
-            </div>
-          </div>
-          <div>
-            <Typography variant="small" color="gray" className="mb-1">
-              메모
-            </Typography>
-            <Textarea
-              value={formData.memo}
-              onChange={(e) => setFormData({ ...formData, memo: e.target.value })}
-              className="!border-gray-300"
-              labelProps={{ className: 'hidden' }}
-            />
-          </div>
-        </DialogBody>
-        <DialogFooter>
-          <Button variant="text" onClick={() => setIsDialogOpen(false)}>
-            취소
-          </Button>
-          <Button
-            onClick={handleSave}
-            disabled={
-              !formData.company_id ||
-              !formData.schedule_name.trim() ||
-              !formData.start_date ||
-              !formData.end_date
-            }
-          >
-            저장
-          </Button>
-        </DialogFooter>
-      </Dialog>
+      {/* Schedule Dialog */}
+      <ScheduleDetailDialog
+        open={isDialogOpen}
+        onClose={() => setIsDialogOpen(false)}
+        onSave={handleSave}
+        onDelete={handleDelete}
+        schedule={editingSchedule}
+        companies={companies}
+        defaultDate={defaultDate}
+      />
     </div>
   );
 };

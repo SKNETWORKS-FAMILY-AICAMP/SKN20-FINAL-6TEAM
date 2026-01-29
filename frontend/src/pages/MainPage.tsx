@@ -8,27 +8,25 @@ import {
   Chip,
   Spinner,
 } from '@material-tailwind/react';
-import { PaperAirplaneIcon } from '@heroicons/react/24/solid';
+import { PaperAirplaneIcon, PlusIcon } from '@heroicons/react/24/solid';
 import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
+import { useChat } from '../hooks/useChat';
+import { useDisplayUserType } from '../hooks/useDisplayUserType';
 import { AGENT_NAMES, AGENT_COLORS, USER_TYPE_NAMES } from '../types';
-import type { ChatMessage, AgentCode } from '../types';
-
-// 빠른 질문 버튼
-const quickQuestions = [
-  { label: '사업자 등록 방법', question: '사업자 등록은 어떻게 하나요?' },
-  { label: '법인 설립 절차', question: '법인 설립 절차를 알려주세요.' },
-  { label: '부가세 신고', question: '부가가치세 신고는 언제 해야 하나요?' },
-  { label: '직원 채용', question: '직원을 채용할 때 필요한 절차가 뭔가요?' },
-  { label: '지원사업 찾기', question: '우리 회사에 맞는 정부 지원사업을 추천해주세요.' },
-  { label: '근로계약서 작성', question: '근로계약서는 어떻게 작성하나요?' },
-];
+import { USER_QUICK_QUESTIONS } from '../lib/constants';
+import { NotificationBell } from '../components/layout/NotificationBell';
 
 const MainPage: React.FC = () => {
-  const { user } = useAuthStore();
-  const { messages, isLoading, addMessage, setLoading } = useChatStore();
+  const { isAuthenticated, user } = useAuthStore();
+  const displayUserType = useDisplayUserType();
+  const { sessions, currentSessionId, createSession } = useChatStore();
+  const { sendMessage, isLoading } = useChat();
   const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const currentSession = sessions.find((s) => s.id === currentSessionId);
+  const messages = currentSession?.messages || [];
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -40,34 +38,8 @@ const MainPage: React.FC = () => {
 
   const handleSendMessage = async (message: string) => {
     if (!message.trim() || isLoading) return;
-
-    // 사용자 메시지 추가
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      type: 'user',
-      content: message,
-      timestamp: new Date(),
-    };
-    addMessage(userMessage);
     setInputValue('');
-    setLoading(true);
-
-    // RAG 미구현 - "구현 중..." 응답
-    setTimeout(() => {
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        type: 'assistant',
-        content: '구현 중...\n\nRAG 시스템이 아직 연동되지 않았습니다. 멀티에이전트 시스템 구축 후 실제 답변이 제공됩니다.',
-        agent_code: 'A001' as AgentCode,
-        timestamp: new Date(),
-      };
-      addMessage(assistantMessage);
-      setLoading(false);
-    }, 1000);
-  };
-
-  const handleQuickQuestion = (question: string) => {
-    handleSendMessage(question);
+    await sendMessage(message);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -75,9 +47,16 @@ const MainPage: React.FC = () => {
     handleSendMessage(inputValue);
   };
 
+  const handleNewChat = () => {
+    createSession();
+  };
+
+  // Dynamic quick questions based on display user type
+  const quickQuestions = USER_QUICK_QUESTIONS[displayUserType] || USER_QUICK_QUESTIONS['U002'];
+
   return (
     <div className="flex flex-col h-full">
-      {/* 헤더 */}
+      {/* Header */}
       <div className="p-4 border-b bg-white">
         <div className="flex items-center justify-between">
           <div>
@@ -88,17 +67,18 @@ const MainPage: React.FC = () => {
               창업, 세무, 노무, 법률, 지원사업, 마케팅 통합 상담
             </Typography>
           </div>
-          {user && (
+          <div className="flex items-center gap-3">
             <Chip
-              value={USER_TYPE_NAMES[user.type_code] || user.type_code}
+              value={USER_TYPE_NAMES[displayUserType] || displayUserType}
               color="blue"
               variant="ghost"
             />
-          )}
+            {isAuthenticated && <NotificationBell />}
+          </div>
         </div>
       </div>
 
-      {/* 빠른 질문 버튼 */}
+      {/* Quick questions */}
       <div className="p-4 bg-gray-50 border-b">
         <Typography variant="small" color="gray" className="mb-2">
           빠른 질문
@@ -107,7 +87,7 @@ const MainPage: React.FC = () => {
           {quickQuestions.map((item, index) => (
             <button
               key={index}
-              onClick={() => handleQuickQuestion(item.question)}
+              onClick={() => handleSendMessage(item.question)}
               className="px-3 py-1.5 text-sm bg-white border rounded-full hover:bg-blue-50 hover:border-blue-300 transition-colors"
             >
               {item.label}
@@ -116,17 +96,28 @@ const MainPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 메시지 영역 */}
+      {/* Messages area */}
       <div className="flex-1 overflow-auto p-4 space-y-4">
-        {messages.length === 0 ? (
+        {!currentSessionId || messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-gray-500">
               <Typography variant="h6" color="gray" className="mb-2">
-                Bizi에 오신 것을 환영합니다!
+                {user
+                  ? `${user.username}님, 환영합니다!`
+                  : 'Bizi에 오신 것을 환영합니다!'}
               </Typography>
-              <Typography variant="small" color="gray">
+              <Typography variant="small" color="gray" className="mb-4">
                 궁금한 점을 자유롭게 물어보세요.
               </Typography>
+              {!currentSessionId && sessions.length > 0 && (
+                <button
+                  onClick={handleNewChat}
+                  className="inline-flex items-center gap-1 px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                >
+                  <PlusIcon className="h-4 w-4" />
+                  새 채팅 시작하기
+                </button>
+              )}
             </div>
           </div>
         ) : (
@@ -137,9 +128,7 @@ const MainPage: React.FC = () => {
             >
               <Card
                 className={`max-w-[70%] ${
-                  msg.type === 'user'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-white'
+                  msg.type === 'user' ? 'bg-blue-500 text-white' : 'bg-white'
                 }`}
               >
                 <CardBody className="p-3">
@@ -194,7 +183,7 @@ const MainPage: React.FC = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 입력 영역 */}
+      {/* Input area */}
       <div className="p-4 border-t bg-white">
         <form onSubmit={handleSubmit} className="flex gap-2">
           <div className="flex-1">
@@ -205,12 +194,8 @@ const MainPage: React.FC = () => {
               onChange={(e) => setInputValue(e.target.value)}
               disabled={isLoading}
               className="!border-gray-300 focus:!border-blue-500"
-              labelProps={{
-                className: 'hidden',
-              }}
-              containerProps={{
-                className: 'min-w-0',
-              }}
+              labelProps={{ className: 'hidden' }}
+              containerProps={{ className: 'min-w-0' }}
             />
           </div>
           <IconButton
