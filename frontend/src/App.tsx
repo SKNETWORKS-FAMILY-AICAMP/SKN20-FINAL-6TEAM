@@ -9,6 +9,7 @@ import {
   CompanyPage,
   SchedulePage,
   AdminPage,
+  UsageGuidePage,
 } from './pages';
 
 const App: React.FC = () => {
@@ -16,19 +17,20 @@ const App: React.FC = () => {
     <ThemeProvider>
       <BrowserRouter>
         <Routes>
-          {/* 로그인 페이지 */}
+          {/* Login page */}
           <Route path="/login" element={<LoginPage />} />
 
-          {/* 인증 필요한 페이지 */}
+          {/* All pages under MainLayout (authenticated + unauthenticated) */}
           <Route element={<MainLayout />}>
             <Route path="/" element={<MainPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/company" element={<CompanyPage />} />
             <Route path="/schedule" element={<SchedulePage />} />
+            <Route path="/guide" element={<UsageGuidePage />} />
             <Route path="/admin" element={<AdminPage />} />
           </Route>
 
-          {/* 404 - 메인으로 리다이렉트 */}
+          {/* Catch-all redirect (including /guest) */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

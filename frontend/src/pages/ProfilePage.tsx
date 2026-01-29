@@ -30,27 +30,28 @@ const ProfilePage: React.FC = () => {
     setMessage(null);
 
     try {
-      // 이름 업데이트
+      // Update name
       if (formData.username !== user?.username) {
         await api.put('/users/me', { username: formData.username });
       }
 
-      // 타입 업데이트
+      // Update type
       if (formData.type_code !== user?.type_code) {
         await api.put('/users/me/type', { type_code: formData.type_code });
       }
 
       updateUser({
         username: formData.username,
-        type_code: formData.type_code as 'U001' | 'U002',
+        type_code: formData.type_code as 'U001' | 'U002' | 'U003',
       });
 
       setMessage({ type: 'success', text: '프로필이 저장되었습니다.' });
       setIsEditing(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { detail?: string } } };
       setMessage({
         type: 'error',
-        text: err.response?.data?.detail || '저장에 실패했습니다.',
+        text: error.response?.data?.detail || '저장에 실패했습니다.',
       });
     } finally {
       setIsSaving(false);
@@ -96,7 +97,7 @@ const ProfilePage: React.FC = () => {
           </div>
         </CardHeader>
         <CardBody className="space-y-6">
-          {/* 이메일 (수정 불가) */}
+          {/* Email (read-only) */}
           <div>
             <Typography variant="small" color="gray" className="mb-1">
               이메일
@@ -109,7 +110,7 @@ const ProfilePage: React.FC = () => {
             />
           </div>
 
-          {/* 이름 */}
+          {/* Name */}
           <div>
             <Typography variant="small" color="gray" className="mb-1">
               이름
@@ -123,7 +124,7 @@ const ProfilePage: React.FC = () => {
             />
           </div>
 
-          {/* 사용자 유형 */}
+          {/* User Type */}
           <div>
             <Typography variant="small" color="gray" className="mb-1">
               사용자 유형
@@ -137,6 +138,7 @@ const ProfilePage: React.FC = () => {
               >
                 <Option value="U001">{USER_TYPE_NAMES['U001']}</Option>
                 <Option value="U002">{USER_TYPE_NAMES['U002']}</Option>
+                <Option value="U003">{USER_TYPE_NAMES['U003']}</Option>
               </Select>
             ) : (
               <Input
@@ -148,7 +150,7 @@ const ProfilePage: React.FC = () => {
             )}
           </div>
 
-          {/* 가입일 */}
+          {/* Join Date */}
           <div>
             <Typography variant="small" color="gray" className="mb-1">
               가입일
@@ -165,7 +167,7 @@ const ProfilePage: React.FC = () => {
             />
           </div>
 
-          {/* 버튼 */}
+          {/* Buttons */}
           {isEditing && (
             <div className="flex gap-2 pt-4">
               <Button onClick={handleSave} disabled={isSaving}>
