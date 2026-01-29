@@ -44,7 +44,7 @@ dist-ssr
 # =============================================
 raw/
 data/origin/
-data/processed
+data/preprocessed
 
 # =============================================
 # VectorDB

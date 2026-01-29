@@ -7,7 +7,7 @@
 
 Bizi RAG 시스템에서 사용하는 모든 데이터를 저장하는 폴더입니다.
 - `origin/`: 원본 데이터 (크롤링 결과, PDF 파일 등)
-- `processed/`: 전처리된 데이터 (JSONL 형식, RAG 입력용)
+- `preprocessed/`: 전처리된 데이터 (JSONL 형식, RAG 입력용)
 
 ## 프로젝트 구조s
 
