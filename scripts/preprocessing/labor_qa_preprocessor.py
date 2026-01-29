@@ -98,22 +98,22 @@ def parse_admin_info(text: str) -> tuple:
     return "", ""
 
 
-# 엔드포인트 패턴 (회시 종료 판단용) - () 안에 텍스트가 있으면 매칭
-ENDPOINT_PATTERN = re.compile(r'\([^)]+\)')
-
 # 엔드포인트 판단 기준
 ENDPOINT_RIGHT_MARGIN = 100  # 오른쪽 정렬 판단: 페이지 오른쪽 끝에서 이 px 이내
 ENDPOINT_LINE_GAP = 10  # 위 줄띄움 판단: 이전 텍스트와 이 px 이상 간격
 
+# 엔드포인트 정확한 패턴 (행정번호 전체 매칭): (과명-번호, YYYY.M.D.)
+ENDPOINT_EXACT_PATTERN = re.compile(r'^\s*\([가-힣]+-\d+,\s*\d{4}\.\d{1,2}\.\d{1,2}\.?\)\s*$')
+
 
 def find_endpoint_in_text(text: str) -> bool:
-    """텍스트에 엔드포인트 패턴 () 가 포함되어 있는지 확인"""
-    return bool(ENDPOINT_PATTERN.search(text))
+    """텍스트가 엔드포인트 패턴인지 확인 (해당 줄에 행정번호만 있는지)"""
+    return bool(ENDPOINT_EXACT_PATTERN.match(text.strip()))
 
 
 def is_valid_endpoint(item: dict, prev_item: dict = None) -> bool:
     """
-    엔드포인트 유효성 검사: () 안에 텍스트 + 우측 정렬 + 위 줄띄움
+    엔드포인트 유효성 검사: 행정번호만 있는 줄 + 우측 정렬 + 위 줄띄움
 
     Args:
         item: 현재 텍스트 아이템 (text, bbox, page_width 포함)
@@ -122,12 +122,12 @@ def is_valid_endpoint(item: dict, prev_item: dict = None) -> bool:
     Returns:
         True if valid endpoint
     """
-    text = item.get('text', '')
+    text = item.get('text', '').strip()
     bbox = item.get('bbox')
     page_width = item.get('page_width')
 
-    # 1. () 안에 텍스트가 있는지 확인
-    if not ENDPOINT_PATTERN.search(text):
+    # 1. 행정번호 패턴 확인: 해당 줄에 (과명-번호, YYYY.M.D.) 만 있는지
+    if not ENDPOINT_EXACT_PATTERN.match(text):
         return False
 
     # bbox 정보 없으면 패턴만으로는 판단 불가 (False)
@@ -1181,8 +1181,9 @@ def build_qa_item(raw_item: dict, pdf_filename: str, collected_at: str) -> dict:
 # ============================================================
 if __name__ == "__main__":
     # 설정
-    PDF_FILE = "../../data/origin/근로기준법 질의회시집(2018.4.~2023.6.).pdf"
-    OUTPUT_FILE = "../../data/preprocessed/labor/labor_interpretation.jsonl"
+    #PDF_FILE = "../../data/origin/근로기준법 질의회시집(2018.4.~2023.6.).pdf"
+    PDF_FILE = "근로기준법 질의회시집(2018.4.~2023.6.).pdf"
+    OUTPUT_FILE = "labor_interpretation.jsonl"
     START_PAGE = 22  # 0, 0 이면 전체 페이지
     END_PAGE = 615
 
