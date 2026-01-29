@@ -261,6 +261,7 @@ vectordb/
 | finance_tax | extracted_documents_final.jsonl | 필수 | size=800, overlap=100 |
 | hr_labor | court_cases_labor.jsonl | 필수 | size=800, overlap=100 |
 | hr_labor | labor_interpretation.jsonl | 조건부 | size=800, overlap=100 |
+| hr_labor | hr_major_insurance.jsonl | 조건부 | size=800, overlap=100 |
 | law_common | laws_full.jsonl | 조건부 | size=800, overlap=100 |
 | law_common | interpretations.jsonl | 조건부 | size=800, overlap=100 |
 

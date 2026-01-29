@@ -67,6 +67,7 @@ class ChunkingConfig:
         "laws_full.jsonl",
         "interpretations.jsonl",
         "labor_interpretation.jsonl",
+        "hr_major_insurance.jsonl"
     ])
 
     # 필수 청킹 파일 목록
@@ -135,6 +136,7 @@ FILE_TO_COLLECTION_MAPPING = {
     # hr_labor_db 컬렉션
     "court_cases_labor.jsonl": "hr_labor",
     "labor_interpretation.jsonl": "hr_labor",
+    "hr_major_insurance.jsonl": "hr_labor",
 
     # law_common_db 컬렉션
     "laws_full.jsonl": "law_common",
@@ -152,6 +154,7 @@ FILE_CHUNKING_CONFIG = {
     "laws_full.jsonl": ChunkingConfig(chunk_size=800, chunk_overlap=100),
     "interpretations.jsonl": ChunkingConfig(chunk_size=800, chunk_overlap=100),
     "labor_interpretation.jsonl": ChunkingConfig(chunk_size=800, chunk_overlap=100),
+    "hr_major_insurance.jsonl": ChunkingConfig(chunk_size=800, chunk_overlap=100),
 
     # 필수 청킹
     "court_cases_tax.jsonl": ChunkingConfig(chunk_size=800, chunk_overlap=100),
