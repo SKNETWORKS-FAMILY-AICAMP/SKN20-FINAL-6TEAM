@@ -163,8 +163,8 @@ class EvaluatorAgent:
             "context": context[:max_context_len] if context else "컨텍스트 없음",
         })
 
-        # 응답 파싱
-        parsed = self._parse_evaluation_response(response)
+        # 응답 파싱 (tuple 언패킹: dict, success)
+        parsed, parse_success = self._parse_evaluation_response(response)
 
         # EvaluationResult 생성
         scores = parsed.get("scores", {})
@@ -210,8 +210,8 @@ class EvaluatorAgent:
             "context": context[:max_context_len] if context else "컨텍스트 없음",
         })
 
-        # 응답 파싱
-        parsed = self._parse_evaluation_response(response)
+        # 응답 파싱 (tuple 언패킹: dict, success)
+        parsed, parse_success = self._parse_evaluation_response(response)
 
         # EvaluationResult 생성
         scores = parsed.get("scores", {})
