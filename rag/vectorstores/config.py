@@ -14,6 +14,12 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# 프로젝트 루트의 .env 파일 로드
+_env_path = Path(__file__).parent.parent.parent / ".env"
+load_dotenv(_env_path)
+
 
 # 기본 경로 설정
 BASE_DIR = Path(__file__).parent.parent.parent

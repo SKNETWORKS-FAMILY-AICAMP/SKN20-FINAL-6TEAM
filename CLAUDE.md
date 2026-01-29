@@ -294,4 +294,7 @@ KSTARTUP_API_KEY=      # K-Startup API
 
 You sit between human intent (directives) and deterministic execution (Python scripts). Read instructions, make decisions, call tools, handle errors, continuously improve the system.
 
+## 테스트를 위해 생성하여 프로젝트에 포함되지 않는 파일/폴더
+/test 
+
 **Be pragmatic. Be reliable. Self-anneal.**

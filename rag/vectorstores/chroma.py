@@ -12,8 +12,12 @@
         └── law_common_db (컬렉션)
 """
 
-from pathlib import Path
+import logging
+import threading
+from collections import OrderedDict
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 import chromadb
 from chromadb.config import Settings
@@ -24,6 +28,9 @@ from tqdm import tqdm
 from .config import COLLECTION_NAMES, VectorDBConfig
 from .embeddings import get_embeddings
 from .loader import DataLoader
+
+# 캐시 최대 크기 (도메인 개수보다 크게 설정)
+MAX_STORE_CACHE_SIZE = 10
 
 
 class ChromaVectorStore:
@@ -55,7 +62,9 @@ class ChromaVectorStore:
         self.embeddings = get_embeddings(self.config.embedding_model)
         self.loader = DataLoader()
         self._client: chromadb.PersistentClient | None = None
-        self._stores: dict[str, Chroma] = {}
+        # LRU 캐시 방식의 OrderedDict 사용
+        self._stores: OrderedDict[str, Chroma] = OrderedDict()
+        self._store_lock = threading.Lock()
 
         # 저장 디렉토리 생성
         self.config.persist_directory.mkdir(parents=True, exist_ok=True)
@@ -92,27 +101,37 @@ class ChromaVectorStore:
     def get_or_create_store(self, domain: str) -> Chroma:
         """도메인에 해당하는 Chroma 벡터 스토어를 가져오거나 생성합니다.
 
+        LRU 캐시 방식으로 관리하여 메모리 누수를 방지합니다.
+
         Args:
             domain: 도메인 키
 
         Returns:
             Chroma 벡터 스토어 인스턴스
         """
-        if domain in self._stores:
-            return self._stores[domain]
+        with self._store_lock:
+            if domain in self._stores:
+                # 기존 항목을 맨 뒤로 이동 (최근 사용)
+                self._stores.move_to_end(domain)
+                return self._stores[domain]
 
-        collection_name = self._get_collection_name(domain)
-        client = self._get_client()
+            collection_name = self._get_collection_name(domain)
+            client = self._get_client()
 
-        store = Chroma(
-            client=client,
-            collection_name=collection_name,
-            embedding_function=self.embeddings,
-            collection_metadata=self.config.collection_metadata,
-        )
+            store = Chroma(
+                client=client,
+                collection_name=collection_name,
+                embedding_function=self.embeddings,
+                collection_metadata=self.config.collection_metadata,
+            )
 
-        self._stores[domain] = store
-        return store
+            # 캐시 크기 초과 시 가장 오래된 항목 제거
+            while len(self._stores) >= MAX_STORE_CACHE_SIZE:
+                removed_domain, _ = self._stores.popitem(last=False)
+                logger.debug(f"캐시에서 제거됨: {removed_domain}")
+
+            self._stores[domain] = store
+            return store
 
     def build_vectordb(
         self,
@@ -140,8 +159,8 @@ class ChromaVectorStore:
             store = self.get_or_create_store(domain)
             existing_count = store._collection.count()
             if existing_count > 0:
-                print(f"컬렉션 {collection_name}이(가) 이미 존재합니다 ({existing_count}개 문서).")
-                print("재빌드하려면 force_rebuild=True를 사용하세요.")
+                logger.info(f"컬렉션 {collection_name}이(가) 이미 존재합니다 ({existing_count}개 문서).")
+                logger.info("재빌드하려면 force_rebuild=True를 사용하세요.")
                 return existing_count
 
         # 강제 재빌드 시 기존 컬렉션 삭제
@@ -149,7 +168,7 @@ class ChromaVectorStore:
             client.delete_collection(collection_name)
             if domain in self._stores:
                 del self._stores[domain]
-            print(f"기존 컬렉션 {collection_name} 삭제됨")
+            logger.info(f"기존 컬렉션 {collection_name} 삭제됨")
 
         store = self.get_or_create_store(domain)
 
@@ -159,10 +178,10 @@ class ChromaVectorStore:
             documents.append(doc)
 
         if not documents:
-            print(f"{domain}에 대한 문서를 찾을 수 없습니다")
+            logger.warning(f"{domain}에 대한 문서를 찾을 수 없습니다")
             return 0
 
-        print(f"{len(documents)}개 문서를 {collection_name}에 추가 중...")
+        logger.info(f"{len(documents)}개 문서를 {collection_name}에 추가 중...")
 
         # 배치로 문서 추가
         batch_size = self.config.batch_size
@@ -182,7 +201,7 @@ class ChromaVectorStore:
             )
             total_added += len(batch)
 
-        print(f"{total_added}개 문서가 {collection_name}에 성공적으로 추가됨")
+        logger.info(f"{total_added}개 문서가 {collection_name}에 성공적으로 추가됨")
         return total_added
 
     def build_all_vectordbs(self, force_rebuild: bool = False) -> dict[str, int]:
@@ -196,9 +215,9 @@ class ChromaVectorStore:
         """
         results = {}
         for domain in COLLECTION_NAMES.keys():
-            print(f"\n{'='*50}")
-            print(f"{domain} 빌드 중...")
-            print(f"{'='*50}")
+            logger.info(f"{'='*50}")
+            logger.info(f"{domain} 빌드 중...")
+            logger.info(f"{'='*50}")
             count = self.build_vectordb(domain, force_rebuild=force_rebuild)
             results[domain] = count
 
@@ -245,6 +264,40 @@ class ChromaVectorStore:
         """
         store = self.get_or_create_store(domain)
         return store.similarity_search_with_score(query, k=k, filter=filter)
+
+    def max_marginal_relevance_search(
+        self,
+        query: str,
+        domain: str,
+        k: int = 5,
+        fetch_k: int = 20,
+        lambda_mult: float = 0.5,
+        filter: dict[str, Any] | None = None,
+    ) -> list[Document]:
+        """MMR(Maximal Marginal Relevance) 검색을 수행합니다.
+
+        유사도와 다양성을 균형있게 고려하여 검색 결과를 반환합니다.
+        중복되거나 비슷한 내용의 문서를 줄이고 다양한 정보를 제공합니다.
+
+        Args:
+            query: 검색 쿼리 텍스트
+            domain: 검색할 도메인 키
+            k: 반환할 결과 수
+            fetch_k: MMR 알고리즘에 전달할 초기 후보 수
+            lambda_mult: 다양성 파라미터 (0=최대 다양성, 1=최대 유사도)
+            filter: 메타데이터 필터 (선택)
+
+        Returns:
+            다양성이 고려된 문서 리스트
+        """
+        store = self.get_or_create_store(domain)
+        return store.max_marginal_relevance_search(
+            query=query,
+            k=k,
+            fetch_k=fetch_k,
+            lambda_mult=lambda_mult,
+            filter=filter,
+        )
 
     def get_retriever(
         self,
@@ -326,3 +379,34 @@ class ChromaVectorStore:
         """
         client = self._get_client()
         return [c.name for c in client.list_collections()]
+
+    def clear_cache(self) -> int:
+        """스토어 캐시를 모두 정리합니다.
+
+        Returns:
+            정리된 캐시 항목 수
+        """
+        with self._store_lock:
+            count = len(self._stores)
+            self._stores.clear()
+            logger.info(f"스토어 캐시 정리 완료: {count}개 항목")
+            return count
+
+    def get_cache_info(self) -> dict[str, Any]:
+        """캐시 상태 정보를 반환합니다.
+
+        Returns:
+            캐시 상태 딕셔너리
+        """
+        with self._store_lock:
+            return {
+                "cached_domains": list(self._stores.keys()),
+                "cache_size": len(self._stores),
+                "max_cache_size": MAX_STORE_CACHE_SIZE,
+            }
+
+    def close(self) -> None:
+        """리소스를 정리합니다."""
+        self.clear_cache()
+        self._client = None
+        logger.info("ChromaVectorStore 리소스 정리 완료")
