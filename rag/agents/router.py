@@ -220,6 +220,7 @@ class MainRouter:
         """라우팅 노드: 해당 에이전트를 호출합니다."""
         responses = {}
         feedback = state.get("feedback")
+        search_strategy = state.get("search_strategy")
 
         for domain in state["domains"]:
             if domain in self.agents:
@@ -233,6 +234,7 @@ class MainRouter:
                 response = agent.process(
                     query=query,
                     user_context=state.get("user_context"),
+                    search_strategy=search_strategy,
                 )
                 responses[domain] = response
 
@@ -242,6 +244,7 @@ class MainRouter:
     async def _aroute_node(self, state: RouterState) -> RouterState:
         """라우팅 노드 (비동기 병렬 처리): 해당 에이전트를 병렬로 호출합니다."""
         feedback = state.get("feedback")
+        search_strategy = state.get("search_strategy")
         query = state["query"]
         if feedback:
             query = f"{query}\n\n[이전 답변 피드백: {feedback}]"
@@ -253,6 +256,7 @@ class MainRouter:
                 response = await agent.aprocess(
                     query=query,
                     user_context=state.get("user_context"),
+                    search_strategy=search_strategy,
                 )
                 return domain, response
             return None
@@ -260,7 +264,13 @@ class MainRouter:
         tasks = [call_agent(domain) for domain in state["domains"]]
         results = await asyncio.gather(*tasks)
 
-        responses = {domain: response for domain, response in results if domain}
+        # None 결과 필터링 후 딕셔너리 변환
+        responses = {}
+        for result in results:
+            if result is not None:
+                domain, response = result
+                responses[domain] = response
+
         state["responses"] = responses
         return state
 

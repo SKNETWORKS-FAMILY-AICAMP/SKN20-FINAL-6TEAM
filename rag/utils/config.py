@@ -92,8 +92,8 @@ class Settings(BaseSettings):
 
     # 고급 검색 설정
     enable_query_rewrite: bool = Field(default=True, description="쿼리 재작성 활성화")
-    enable_hybrid_search: bool = Field(default=False, description="Hybrid Search (BM25+Vector) 활성화")
-    enable_reranking: bool = Field(default=False, description="Re-ranking 활성화")
+    enable_hybrid_search: bool = Field(default=True, description="Hybrid Search (BM25+Vector) 활성화")
+    enable_reranking: bool = Field(default=True, description="Re-ranking 활성화")
     enable_context_compression: bool = Field(default=False, description="컨텍스트 압축 활성화")
     rerank_top_k: int = Field(default=5, description="Re-ranking 후 반환할 문서 수")
 

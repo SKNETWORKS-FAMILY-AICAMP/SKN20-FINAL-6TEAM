@@ -293,7 +293,11 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
         return response
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"채팅 처리 실패: {str(e)}")
+        logger.error(f"채팅 처리 실패: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="채팅 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+        )
 
 
 @app.post("/api/chat/stream", tags=["Chat"])
@@ -424,7 +428,11 @@ async def generate_contract(request: ContractRequest) -> DocumentResponse:
     try:
         return executor.generate_labor_contract(request)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"문서 생성 실패: {str(e)}")
+        logger.error(f"근로계약서 생성 실패: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="문서 생성 중 오류가 발생했습니다. 입력 정보를 확인해주세요."
+        )
 
 
 @app.post("/api/documents/business-plan", response_model=DocumentResponse, tags=["Documents"])
@@ -445,7 +453,11 @@ async def generate_business_plan(
     try:
         return executor.generate_business_plan_template(format=format)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"문서 생성 실패: {str(e)}")
+        logger.error(f"사업계획서 생성 실패: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="문서 생성 중 오류가 발생했습니다."
+        )
 
 
 # ============================================================
@@ -491,7 +503,11 @@ async def search_funding(
             ],
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"검색 실패: {str(e)}")
+        logger.error(f"지원사업 검색 실패: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="검색 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+        )
 
 
 # ============================================================
@@ -512,7 +528,11 @@ async def vectordb_stats() -> dict[str, Any]:
     try:
         return vector_store.get_all_stats()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"통계 조회 실패: {str(e)}")
+        logger.error(f"VectorDB 통계 조회 실패: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="통계 조회 중 오류가 발생했습니다."
+        )
 
 
 @app.get("/api/vectordb/collections", tags=["VectorDB"])
@@ -529,7 +549,11 @@ async def list_collections() -> dict[str, Any]:
         collections = vector_store.list_collections()
         return {"collections": collections}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"컬렉션 목록 조회 실패: {str(e)}")
+        logger.error(f"컬렉션 목록 조회 실패: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="컬렉션 목록 조회 중 오류가 발생했습니다."
+        )
 
 
 # ============================================================
@@ -573,7 +597,8 @@ async def get_cache_stats() -> dict[str, Any]:
         cache = get_response_cache()
         return cache.get_stats()
     except Exception as e:
-        return {"error": str(e)}
+        logger.error(f"캐시 통계 조회 실패: {e}", exc_info=True)
+        return {"error": "캐시 통계를 조회할 수 없습니다."}
 
 
 @app.post("/api/cache/clear", tags=["Monitoring"])
@@ -588,7 +613,11 @@ async def clear_cache() -> dict[str, Any]:
         count = cache.clear()
         return {"cleared": count, "message": f"{count}개 캐시 항목이 삭제되었습니다"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"캐시 삭제 실패: {str(e)}")
+        logger.error(f"캐시 삭제 실패: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="캐시 삭제 중 오류가 발생했습니다."
+        )
 
 
 @app.get("/api/config", tags=["Monitoring"])

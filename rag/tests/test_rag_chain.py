@@ -1,0 +1,232 @@
+"""RAG 체인 테스트."""
+
+import pytest
+from unittest.mock import MagicMock, patch, AsyncMock
+
+from langchain_core.documents import Document
+
+
+class TestRAGChainRetrieve:
+    """RAGChain retrieve 메서드 테스트."""
+
+    @pytest.fixture
+    def mock_vector_store(self):
+        """Mock VectorStore fixture."""
+        store = MagicMock()
+        store.max_marginal_relevance_search.return_value = [
+            Document(
+                page_content="테스트 문서 1",
+                metadata={"title": "문서1", "source": "출처1"},
+            ),
+            Document(
+                page_content="테스트 문서 2",
+                metadata={"title": "문서2", "source": "출처2"},
+            ),
+        ]
+        store.similarity_search.return_value = [
+            Document(
+                page_content="테스트 문서 1",
+                metadata={"title": "문서1", "source": "출처1"},
+            ),
+        ]
+        return store
+
+    @pytest.fixture
+    def rag_chain(self, mock_vector_store):
+        """RAGChain fixture."""
+        with patch("chains.rag_chain.ChatOpenAI"):
+            from chains.rag_chain import RAGChain
+            chain = RAGChain(vector_store=mock_vector_store)
+            chain._query_processor = None  # 쿼리 재작성 비활성화
+            chain._reranker = None  # Re-ranking 비활성화
+            return chain
+
+    def test_retrieve_default(self, rag_chain, mock_vector_store):
+        """기본 검색 테스트."""
+        docs = rag_chain.retrieve(
+            query="테스트 쿼리",
+            domain="finance_tax",
+        )
+
+        assert len(docs) > 0
+        mock_vector_store.max_marginal_relevance_search.assert_called()
+
+    def test_retrieve_with_search_strategy(self, rag_chain, mock_vector_store):
+        """검색 전략 적용 테스트."""
+        from utils.feedback import SearchStrategy
+
+        strategy = SearchStrategy(
+            k=5,
+            k_common=3,
+            use_query_rewrite=False,
+            use_rerank=False,
+            use_mmr=True,
+            mmr_lambda=0.7,
+        )
+
+        docs = rag_chain.retrieve(
+            query="테스트 쿼리",
+            domain="finance_tax",
+            search_strategy=strategy,
+        )
+
+        # 검색 전략의 k 값이 적용되었는지 확인
+        call_args = mock_vector_store.max_marginal_relevance_search.call_args
+        assert call_args[1]["k"] == 5
+        assert call_args[1]["lambda_mult"] == 0.7
+
+    def test_retrieve_no_mmr(self, rag_chain, mock_vector_store):
+        """MMR 비활성화 검색 테스트."""
+        docs = rag_chain.retrieve(
+            query="테스트 쿼리",
+            domain="finance_tax",
+            use_mmr=False,
+        )
+
+        mock_vector_store.similarity_search.assert_called()
+
+    def test_retrieve_include_common(self, rag_chain, mock_vector_store):
+        """공통 법령 DB 포함 검색 테스트."""
+        docs = rag_chain.retrieve(
+            query="테스트 쿼리",
+            domain="finance_tax",
+            include_common=True,
+        )
+
+        # finance_tax와 law_common 두 번 호출
+        calls = mock_vector_store.max_marginal_relevance_search.call_args_list
+        domains = [call[1]["domain"] for call in calls]
+        assert "finance_tax" in domains
+        assert "law_common" in domains
+
+
+class TestRAGChainFormatContext:
+    """RAGChain format_context 메서드 테스트."""
+
+    @pytest.fixture
+    def rag_chain(self):
+        """RAGChain fixture."""
+        with patch("chains.rag_chain.ChatOpenAI"), \
+             patch("chains.rag_chain.ChromaVectorStore"):
+            from chains.rag_chain import RAGChain
+            return RAGChain()
+
+    def test_format_context_empty(self, rag_chain):
+        """빈 문서 리스트 포맷팅 테스트."""
+        context = rag_chain.format_context([])
+        assert "관련 참고 자료가 없습니다" in context
+
+    def test_format_context_with_title(self, rag_chain):
+        """제목이 있는 문서 포맷팅 테스트."""
+        docs = [
+            Document(
+                page_content="문서 내용입니다.",
+                metadata={"title": "문서 제목", "source_name": "출처"},
+            ),
+        ]
+        context = rag_chain.format_context(docs)
+
+        assert "문서 제목" in context
+        assert "출처" in context
+        assert "문서 내용" in context
+
+    def test_format_context_without_title(self, rag_chain):
+        """제목이 없는 문서 포맷팅 테스트."""
+        docs = [
+            Document(
+                page_content="문서 내용입니다.",
+                metadata={"source_file": "파일.pdf"},
+            ),
+        ]
+        context = rag_chain.format_context(docs)
+
+        assert "파일.pdf" in context
+
+
+class TestRAGChainDocumentsToSources:
+    """RAGChain documents_to_sources 메서드 테스트."""
+
+    @pytest.fixture
+    def rag_chain(self):
+        """RAGChain fixture."""
+        with patch("chains.rag_chain.ChatOpenAI"), \
+             patch("chains.rag_chain.ChromaVectorStore"):
+            from chains.rag_chain import RAGChain
+            return RAGChain()
+
+    def test_documents_to_sources(self, rag_chain):
+        """SourceDocument 변환 테스트."""
+        docs = [
+            Document(
+                page_content="문서 내용입니다. " * 100,  # 긴 내용
+                metadata={
+                    "title": "문서 제목",
+                    "source_name": "출처명",
+                    "extra": "추가 정보",
+                },
+            ),
+        ]
+        sources = rag_chain.documents_to_sources(docs)
+
+        assert len(sources) == 1
+        assert sources[0].title == "문서 제목"
+        assert sources[0].source == "출처명"
+        assert len(sources[0].content) <= rag_chain.settings.source_content_length
+
+
+class TestRAGChainInvoke:
+    """RAGChain invoke 메서드 테스트."""
+
+    @pytest.fixture
+    def rag_chain(self):
+        """RAGChain fixture with mocks."""
+        with patch("chains.rag_chain.ChatOpenAI") as mock_llm, \
+             patch("chains.rag_chain.ChromaVectorStore") as mock_store:
+
+            # Mock LLM
+            mock_llm_instance = MagicMock()
+            mock_llm.return_value = mock_llm_instance
+
+            # Mock VectorStore
+            mock_store_instance = MagicMock()
+            mock_store_instance.max_marginal_relevance_search.return_value = [
+                Document(
+                    page_content="테스트 문서",
+                    metadata={"title": "제목", "source": "출처"},
+                ),
+            ]
+            mock_store.return_value = mock_store_instance
+
+            from chains.rag_chain import RAGChain
+            chain = RAGChain()
+            chain.vector_store = mock_store_instance
+
+            return chain
+
+    def test_invoke_with_search_strategy(self, rag_chain):
+        """검색 전략이 invoke에 전달되는지 테스트."""
+        from utils.feedback import SearchStrategy
+
+        strategy = SearchStrategy(k=7, use_rerank=True)
+
+        # retrieve 메서드를 mock
+        rag_chain.retrieve = MagicMock(return_value=[
+            Document(page_content="결과", metadata={}),
+        ])
+
+        with patch.object(rag_chain, "llm") as mock_llm:
+            mock_chain = MagicMock()
+            mock_chain.invoke.return_value = "응답"
+            mock_llm.__or__ = MagicMock(return_value=mock_chain)
+
+            result = rag_chain.invoke(
+                query="질문",
+                domain="finance_tax",
+                system_prompt="프롬프트",
+                search_strategy=strategy,
+            )
+
+        # retrieve가 search_strategy와 함께 호출되었는지 확인
+        rag_chain.retrieve.assert_called_once()
+        call_kwargs = rag_chain.retrieve.call_args[1]
+        assert call_kwargs["search_strategy"] == strategy

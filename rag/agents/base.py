@@ -6,7 +6,7 @@
 import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, AsyncGenerator
+from typing import TYPE_CHECKING, Any, AsyncGenerator
 
 from langchain_core.documents import Document
 
@@ -14,6 +14,9 @@ from chains.rag_chain import RAGChain
 from schemas.request import UserContext
 from schemas.response import ActionSuggestion, SourceDocument
 from utils.config import get_settings
+
+if TYPE_CHECKING:
+    from utils.feedback import SearchStrategy
 
 
 @dataclass
@@ -120,12 +123,14 @@ class BaseAgent(ABC):
         self,
         query: str,
         user_context: UserContext | None = None,
+        search_strategy: "SearchStrategy | None" = None,
     ) -> AgentResponse:
         """질문을 처리하고 응답을 생성합니다.
 
         Args:
             query: 사용자 질문
             user_context: 사용자 컨텍스트
+            search_strategy: 피드백 기반 검색 전략 (재시도 시 사용)
 
         Returns:
             에이전트 응답
@@ -146,6 +151,7 @@ class BaseAgent(ABC):
             system_prompt=self.get_system_prompt(),
             user_type=user_type,
             company_context=company_context,
+            search_strategy=search_strategy,
         )
 
         # 액션 제안
@@ -163,12 +169,14 @@ class BaseAgent(ABC):
         self,
         query: str,
         user_context: UserContext | None = None,
+        search_strategy: "SearchStrategy | None" = None,
     ) -> AgentResponse:
         """질문을 비동기로 처리합니다.
 
         Args:
             query: 사용자 질문
             user_context: 사용자 컨텍스트
+            search_strategy: 피드백 기반 검색 전략 (재시도 시 사용)
 
         Returns:
             에이전트 응답
@@ -189,6 +197,7 @@ class BaseAgent(ABC):
             system_prompt=self.get_system_prompt(),
             user_type=user_type,
             company_context=company_context,
+            search_strategy=search_strategy,
         )
 
         # 액션 제안
