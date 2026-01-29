@@ -17,7 +17,7 @@ from pathlib import Path
 
 # 기본 경로 설정
 BASE_DIR = Path(__file__).parent.parent.parent
-DATA_PREPROCESSED_DIR = BASE_DIR / "data" / "preprocessed"
+DATA_PREPROCESSED_DIR = BASE_DIR / "data" / "processed"
 VECTORDB_DIR = Path(__file__).parent.parent / "vectordb"
 
 # 컬렉션(테이블) 이름 매핑
