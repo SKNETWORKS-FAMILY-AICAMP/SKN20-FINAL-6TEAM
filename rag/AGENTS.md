@@ -28,6 +28,7 @@ rag/
 ├── AGENTS.md                 # 이 파일 (개발 가이드)
 ├── ARCHITECTURE.md           # 상세 아키텍처 (다이어그램)
 ├── main.py                   # FastAPI 진입점
+├── cli.py                    # CLI 테스트 모드
 ├── requirements.txt
 ├── Dockerfile
 │
@@ -38,32 +39,48 @@ rag/
 │   ├── startup_funding.py    # 창업 및 지원 에이전트
 │   ├── finance_tax.py        # 재무 및 세무 에이전트
 │   ├── hr_labor.py           # 인사 및 노무 에이전트
-│   ├── evaluator.py          # 평가 에이전트
+│   ├── evaluator.py          # 평가 에이전트 (LLM 기반)
 │   └── executor.py           # Action Executor (문서 생성)
 │
 ├── chains/                   # LangChain 체인
 │   ├── __init__.py
 │   └── rag_chain.py          # RAG 체인
 │
+├── evaluation/               # RAGAS 정량 평가
+│   ├── __init__.py
+│   ├── __main__.py           # 배치 평가 실행
+│   └── ragas_evaluator.py    # RAGAS 메트릭 평가기
+│
 ├── vectorstores/             # 벡터 DB 관리
 │   ├── __init__.py
+│   ├── config.py             # VectorDB 설정 및 청킹 설정
 │   ├── chroma.py             # ChromaDB 클라이언트
-│   └── embeddings.py         # 임베딩 설정
-│
-├── loaders/                  # 데이터 로더 (벡터DB 적재용)
-│   ├── __init__.py
-│   ├── funding_loader.py     # 지원사업 데이터 로더
-│   └── law_loader.py         # 법령 데이터 로더
+│   ├── embeddings.py         # 임베딩 설정
+│   ├── loader.py             # 데이터 로더 및 청킹
+│   └── build_vectordb.py     # VectorDB 빌드 스크립트
 │
 ├── schemas/                  # Pydantic 스키마
 │   ├── __init__.py
 │   ├── request.py
 │   └── response.py
 │
-└── utils/                    # 유틸리티
-    ├── __init__.py
-    ├── prompts.py            # 프롬프트 템플릿
-    └── config.py             # 설정
+├── utils/                    # 유틸리티
+│   ├── __init__.py
+│   ├── config.py             # 설정 (Pydantic BaseSettings)
+│   ├── prompts.py            # 프롬프트 템플릿
+│   ├── cache.py              # 응답 캐싱
+│   ├── feedback.py           # 피드백 분석
+│   ├── middleware.py         # 메트릭 수집, Rate Limiting
+│   ├── query.py              # 쿼리 재작성
+│   └── search.py             # Hybrid Search, Re-ranking
+│
+└── tests/                    # 테스트
+    ├── conftest.py
+    ├── test_api.py
+    ├── test_rag_chain.py
+    ├── test_evaluator.py
+    ├── test_ragas_evaluator.py
+    └── ...
 ```
 
 ## 실행 방법
@@ -300,8 +317,6 @@ class EvaluationResult(BaseModel):
 
 ```
 OPENAI_API_KEY=
-BIZINFO_API_KEY=
-KSTARTUP_API_KEY=
 CHROMA_HOST=localhost
 CHROMA_PORT=8002
 ```
@@ -387,3 +402,5 @@ pytest tests/ -v --cov=.
 - **Pydantic 스키마**: API 요청/응답은 반드시 `schemas/` Pydantic 모델로 검증
 - **에러 처리**: LangChain 체인 실행 시 예외 처리 필수
 - **의미 있는 네이밍**: 에이전트, 체인, 함수명은 역할을 명확히 표현
+
+**Be pragmatic. Be reliable. Self-anneal.**

@@ -119,6 +119,14 @@ class Settings(BaseSettings):
         description="Fallback 메시지"
     )
 
+    # RAGAS 평가 설정
+    enable_ragas_evaluation: bool = Field(
+        default=False, description="RAGAS 정량 평가 활성화"
+    )
+    ragas_log_file: str = Field(
+        default="ragas.log", description="RAGAS 메트릭 로그 파일명"
+    )
+
     # CORS 설정
     cors_origins: list[str] = Field(
         default=["http://localhost:5173", "http://localhost:3000"],

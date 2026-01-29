@@ -29,6 +29,7 @@ rag/
 ├── CLAUDE.md                 # 이 파일 (개발 가이드)
 ├── ARCHITECTURE.md           # 상세 아키텍처 (다이어그램)
 ├── main.py                   # FastAPI 진입점
+├── cli.py                    # CLI 테스트 모드
 ├── requirements.txt
 ├── Dockerfile
 │
@@ -39,12 +40,17 @@ rag/
 │   ├── startup_funding.py    # 창업 및 지원 에이전트
 │   ├── finance_tax.py        # 재무 및 세무 에이전트
 │   ├── hr_labor.py           # 인사 및 노무 에이전트
-│   ├── evaluator.py          # 평가 에이전트
+│   ├── evaluator.py          # 평가 에이전트 (LLM 기반)
 │   └── executor.py           # Action Executor (문서 생성)
 │
 ├── chains/                   # LangChain 체인
 │   ├── __init__.py
 │   └── rag_chain.py          # RAG 체인
+│
+├── evaluation/               # RAGAS 정량 평가
+│   ├── __init__.py
+│   ├── __main__.py           # 배치 평가 실행 (python -m evaluation)
+│   └── ragas_evaluator.py    # RAGAS 메트릭 평가기
 │
 ├── vectorstores/             # 벡터 DB 관리
 │   ├── __init__.py
@@ -60,20 +66,36 @@ rag/
 │   ├── hr_labor_db/          # 인사/노무 전용
 │   └── law_common_db/        # 법령/법령해석 (공통)
 │
-├── loaders/                  # 데이터 로더 (벡터DB 적재용)
-│   ├── __init__.py
-│   ├── funding_loader.py     # 지원사업 데이터 로더
-│   └── law_loader.py         # 법령 데이터 로더
-│
 ├── schemas/                  # Pydantic 스키마
 │   ├── __init__.py
 │   ├── request.py
 │   └── response.py
 │
-└── utils/                    # 유틸리티
-    ├── __init__.py
-    ├── prompts.py            # 프롬프트 템플릿
-    └── config.py             # 설정
+├── utils/                    # 유틸리티
+│   ├── __init__.py
+│   ├── config.py             # 설정 (Pydantic BaseSettings)
+│   ├── prompts.py            # 프롬프트 템플릿
+│   ├── cache.py              # 응답 캐싱
+│   ├── feedback.py           # 피드백 분석 및 검색 전략 조정
+│   ├── middleware.py         # 메트릭 수집, Rate Limiting 미들웨어
+│   ├── query.py              # 쿼리 재작성 및 처리
+│   └── search.py             # Hybrid Search, Re-ranking
+│
+├── tests/                    # 테스트
+│   ├── conftest.py           # pytest 설정
+│   ├── test_api.py           # API 엔드포인트 테스트
+│   ├── test_rag_chain.py     # RAG 체인 테스트
+│   ├── test_evaluator.py     # 평가 에이전트 테스트
+│   ├── test_ragas_evaluator.py  # RAGAS 평가 테스트
+│   ├── test_query.py         # 쿼리 처리 테스트
+│   ├── test_search.py        # 검색 테스트
+│   ├── test_cache.py         # 캐시 테스트
+│   ├── test_feedback.py      # 피드백 테스트
+│   └── test_middleware.py    # 미들웨어 테스트
+│
+└── logs/                     # 로그 (런타임 생성)
+    ├── chat.log              # 채팅 로그 (10MB, 5 로테이션)
+    └── ragas.log             # RAGAS 메트릭 로그 (JSON Lines)
 ```
 
 ## 실행 방법
@@ -320,8 +342,6 @@ class EvaluationResult(BaseModel):
 
 ```
 OPENAI_API_KEY=
-BIZINFO_API_KEY=
-KSTARTUP_API_KEY=
 CHROMA_HOST=localhost
 CHROMA_PORT=8002
 ```
@@ -372,6 +392,75 @@ CHROMA_PORT=8002
 FAIL인 경우 구체적인 개선 피드백을 제공하세요.
 ```
 
+## CLI 테스트 모드
+
+FastAPI 서버 없이 터미널에서 RAG 시스템을 직접 테스트할 수 있습니다.
+
+### 사용법
+
+```bash
+# 대화형 모드
+python -m cli
+
+# 단일 쿼리 모드
+python -m cli --query "사업자등록 절차 알려주세요"
+
+# RAGAS 평가 포함
+python -m cli --query "퇴직금 계산 방법" --ragas
+
+# 상세 출력 (컨텍스트 내용 포함)
+python -m cli --verbose
+
+# 사용자 유형 지정
+python -m cli --user-type startup_ceo
+```
+
+### 출력 정보
+
+- 질문/답변
+- 참고 문서 (출처, 제목)
+- LLM 평가 결과 (5개 기준 점수)
+- RAGAS 메트릭 (`--ragas` 옵션 사용 시)
+- 응답 시간
+
+## RAGAS 정량 평가
+
+기존 LLM 기반 평가(evaluator.py)에 추가로 RAGAS 라이브러리를 사용한 정량 평가를 지원합니다.
+
+### 메트릭
+
+| 메트릭 | 설명 | Ground Truth 필요 |
+|--------|------|-------------------|
+| Faithfulness | 답변이 검색된 컨텍스트와 사실적으로 일관되는지 | 아니오 |
+| Answer Relevancy | 답변이 질문에 관련 있는지 | 아니오 |
+| Context Precision | 검색된 컨텍스트가 정밀한지 (관련 문서 상위 랭킹) | 아니오 |
+| Context Recall | 검색된 컨텍스트가 정답을 충분히 커버하는지 | 예 |
+
+### 설정
+
+`.env` 파일에 추가:
+```
+ENABLE_RAGAS_EVALUATION=true
+```
+
+- 기본값: `false` (추가 LLM 호출로 비용/지연 발생)
+- 라이브 쿼리: Faithfulness, Answer Relevancy, Context Precision (3개)
+- 배치 평가 (ground_truth 포함): + Context Recall (4개)
+
+### 배치 평가
+
+```bash
+# 테스트 데이터셋으로 배치 평가
+python -m evaluation --dataset tests/test_dataset.jsonl --output results.json
+```
+
+### 로그
+
+RAGAS 메트릭은 `logs/ragas.log`에 JSON Lines 형식으로 기록됩니다:
+```json
+{"timestamp": "2026-01-30 14:30:00", "question": "퇴직금 계산 방법", "answer_preview": "퇴직금은...", "domains": ["hr_labor"], "response_time": 3.25, "ragas_metrics": {"faithfulness": 0.85, "answer_relevancy": 0.92, "context_precision": 0.78}}
+```
+
 ## 테스트
 
 ```bash
@@ -407,3 +496,5 @@ pytest tests/ -v --cov=.
 - **Pydantic 스키마**: API 요청/응답은 반드시 `schemas/` Pydantic 모델로 검증
 - **에러 처리**: LangChain 체인 실행 시 예외 처리 필수
 - **의미 있는 네이밍**: 에이전트, 체인, 함수명은 역할을 명확히 표현
+
+**Be pragmatic. Be reliable. Self-anneal.**

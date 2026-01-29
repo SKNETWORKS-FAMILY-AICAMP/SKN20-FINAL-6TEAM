@@ -80,6 +80,9 @@ class ChatResponse(BaseModel):
     evaluation: EvaluationResult | None = Field(default=None, description="평가 결과")
     session_id: str | None = Field(default=None, description="세션 ID")
     retry_count: int = Field(default=0, description="재시도 횟수")
+    ragas_metrics: dict[str, Any] | None = Field(
+        default=None, description="RAGAS 정량 평가 메트릭"
+    )
 
 
 class DocumentResponse(BaseModel):

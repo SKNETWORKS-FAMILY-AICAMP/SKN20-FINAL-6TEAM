@@ -137,6 +137,60 @@ def log_chat_interaction(
     # 로테이션 로거로 기록
     chat_logger.info(log_entry)
 
+
+def _get_ragas_logger() -> logging.Logger:
+    """RAGAS 메트릭 전용 로거를 반환합니다 (지연 초기화).
+
+    Returns:
+        RAGAS 메트릭 전용 로거
+    """
+    ragas_log = logging.getLogger("ragas_metrics")
+    if not ragas_log.handlers:
+        ragas_log.setLevel(logging.INFO)
+        ragas_handler = RotatingFileHandler(
+            LOG_DIR / settings.ragas_log_file,
+            maxBytes=10 * 1024 * 1024,  # 10MB
+            backupCount=5,
+            encoding="utf-8",
+        )
+        ragas_handler.setFormatter(logging.Formatter("%(message)s"))
+        ragas_log.addHandler(ragas_handler)
+        ragas_log.propagate = False
+    return ragas_log
+
+
+def log_ragas_metrics(
+    question: str,
+    answer: str,
+    metrics_dict: dict[str, Any],
+    domains: list[str],
+    response_time: float,
+) -> None:
+    """RAGAS 메트릭을 로그 파일에 JSON 형식으로 기록합니다.
+
+    Args:
+        question: 사용자 질문
+        answer: AI 응답
+        metrics_dict: RAGAS 메트릭 딕셔너리
+        domains: 처리된 도메인 리스트
+        response_time: 응답 시간 (초)
+    """
+    import json
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_data = {
+        "timestamp": timestamp,
+        "question": question[:200],
+        "answer_preview": answer[:200],
+        "domains": domains,
+        "response_time": round(response_time, 2),
+        "ragas_metrics": metrics_dict,
+    }
+
+    ragas_log = _get_ragas_logger()
+    ragas_log.info(json.dumps(log_data, ensure_ascii=False))
+
+
 # 전역 인스턴스
 router_agent: MainRouter | None = None
 executor: ActionExecutor | None = None
@@ -290,6 +344,36 @@ async def chat(request: ChatRequest) -> ChatResponse:
             response_time=response_time,
             evaluation=response.evaluation,
         )
+
+        # RAGAS 정량 평가 (설정 활성화 시)
+        if settings.enable_ragas_evaluation:
+            try:
+                from evaluation.ragas_evaluator import RagasEvaluator
+
+                ragas_eval = RagasEvaluator()
+                if ragas_eval.is_available:
+                    contexts = [
+                        s.content
+                        for s in response.sources
+                        if s.content and s.content.strip()
+                    ]
+                    if contexts:
+                        ragas_metrics = ragas_eval.evaluate_single(
+                            question=request.message,
+                            answer=response.content,
+                            contexts=contexts,
+                        )
+                        if ragas_metrics.available:
+                            log_ragas_metrics(
+                                question=request.message,
+                                answer=response.content,
+                                metrics_dict=ragas_metrics.to_dict(),
+                                domains=response.domains,
+                                response_time=response_time,
+                            )
+                            response.ragas_metrics = ragas_metrics.to_dict()
+            except Exception as e:
+                logger.warning(f"RAGAS 평가 실패 (무시됨): {e}")
 
         return response
     except Exception as e:
@@ -644,6 +728,7 @@ async def get_config() -> dict[str, Any]:
         "enable_rate_limit": settings.enable_rate_limit,
         "llm_timeout": settings.llm_timeout,
         "enable_fallback": settings.enable_fallback,
+        "enable_ragas_evaluation": settings.enable_ragas_evaluation,
     }
 
 
