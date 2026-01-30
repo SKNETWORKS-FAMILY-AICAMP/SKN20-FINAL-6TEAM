@@ -64,7 +64,7 @@ class Settings(BaseSettings):
 
     # 임베딩 설정
     embedding_model: str = Field(
-        default="text-embedding-3-small", description="임베딩 모델"
+        default="BAAI/bge-m3", description="임베딩 모델"
     )
 
     # ChromaDB 설정

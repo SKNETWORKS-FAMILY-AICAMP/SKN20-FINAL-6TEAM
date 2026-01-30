@@ -56,7 +56,7 @@ rag/
 │   ├── __init__.py
 │   ├── config.py             # VectorDB 설정 및 청킹 설정
 │   ├── chroma.py             # ChromaDB 클라이언트
-│   ├── embeddings.py         # 임베딩 설정 (text-embedding-3-small)
+│   ├── embeddings.py         # 임베딩 설정 (BAAI/bge-m3)
 │   ├── loader.py             # 데이터 로더 및 청킹
 │   └── build_vectordb.py     # VectorDB 빌드 스크립트
 │
@@ -294,7 +294,8 @@ vectordb/
 
 ### 임베딩 모델
 
-- **모델**: `text-embedding-3-small` (OpenAI)
+- **모델**: `BAAI/bge-m3` (HuggingFace, 로컬 실행, GPU 자동 감지)
+- **벡터 차원**: 1024
 - **벡터 공간**: cosine similarity
 
 ## 요청/응답 스키마

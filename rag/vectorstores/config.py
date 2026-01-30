@@ -92,14 +92,14 @@ class VectorDBConfig:
     하나의 persist_directory에 여러 컬렉션(테이블)을 저장합니다.
 
     Attributes:
-        embedding_model: OpenAI 임베딩 모델 이름
+        embedding_model: HuggingFace 임베딩 모델 이름
         persist_directory: ChromaDB 데이터 저장 경로
         collection_metadata: 컬렉션 메타데이터 (유사도 측정 방식 등)
         batch_size: 임베딩 배치 크기
     """
 
     # 임베딩 모델 설정
-    embedding_model: str = "text-embedding-3-small"
+    embedding_model: str = "BAAI/bge-m3"
 
     # ChromaDB 저장 경로 (하나의 디렉토리에 모든 컬렉션 저장)
     persist_directory: Path = field(default_factory=lambda: VECTORDB_DIR)
