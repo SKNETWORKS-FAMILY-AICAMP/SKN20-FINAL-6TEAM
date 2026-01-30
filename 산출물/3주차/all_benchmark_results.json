@@ -1,0 +1,318 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "created_at": "2026-01-30",
+    "total_models": 10,
+    "corpus_size": 27499,
+    "query_count": 150,
+    "test_data_version": "4.0",
+    "domains": ["startup_funding", "finance_tax", "hr_labor"]
+  },
+  "models": [
+    {
+      "model_name": "BGE-M3",
+      "model_id": "BAAI/bge-m3",
+      "provider": "BAAI (Open Source)",
+      "dimensions": 1024,
+      "parameters": "568M",
+      "cost": "Free",
+      "metrics": {
+        "MRR": 0.3197,
+        "MAP": 0.3020,
+        "HR@1": 0.2533,
+        "HR@3": 0.3333,
+        "HR@5": 0.4200,
+        "HR@10": 0.5133,
+        "Precision@5": 0.0853,
+        "Recall@5": 0.3922,
+        "NDCG@5": 0.3199,
+        "similarity": {"mean": 0.6775, "std": 0.0588, "min": 0.5516, "max": 0.8147}
+      },
+      "domain_metrics": {
+        "startup_funding": {"HR@5": 0.6400, "MRR": 0.5438},
+        "finance_tax": {"HR@5": 0.2400, "MRR": 0.1329},
+        "hr_labor": {"HR@5": 0.3800, "MRR": 0.2824}
+      },
+      "embedding_time_seconds": 345.84,
+      "docs_per_second": 79.51,
+      "execution_env": "RunPod RTX 3090 24GB"
+    },
+    {
+      "model_name": "multilingual-e5-large",
+      "model_id": "intfloat/multilingual-e5-large",
+      "provider": "Microsoft (Open Source)",
+      "dimensions": 1024,
+      "parameters": "560M",
+      "cost": "Free",
+      "metrics": {
+        "MRR": 0.3001,
+        "MAP": 0.2892,
+        "HR@1": 0.2400,
+        "HR@3": 0.3400,
+        "HR@5": 0.3933,
+        "HR@10": 0.4333,
+        "Precision@5": 0.0800,
+        "Recall@5": 0.3778,
+        "NDCG@5": 0.3099,
+        "similarity": {"mean": 0.8711, "std": 0.0192, "min": 0.8175, "max": 0.9163}
+      },
+      "domain_metrics": {
+        "startup_funding": {"HR@5": 0.5800, "MRR": 0.5450},
+        "finance_tax": {"HR@5": 0.2600, "MRR": 0.1356},
+        "hr_labor": {"HR@5": 0.3400, "MRR": 0.2197}
+      },
+      "embedding_time_seconds": 160.60,
+      "docs_per_second": 170.75,
+      "execution_env": "RunPod RTX 4090 24GB"
+    },
+    {
+      "model_name": "multilingual-e5-large-instruct",
+      "model_id": "intfloat/multilingual-e5-large-instruct",
+      "provider": "Microsoft (Open Source)",
+      "dimensions": 1024,
+      "parameters": "560M",
+      "cost": "Free",
+      "metrics": {
+        "MRR": 0.2868,
+        "MAP": 0.2753,
+        "HR@1": 0.2333,
+        "HR@3": 0.3067,
+        "HR@5": 0.3533,
+        "HR@10": 0.4200,
+        "Precision@5": 0.0707,
+        "Recall@5": 0.3389,
+        "NDCG@5": 0.2865,
+        "similarity": {"mean": 0.9179, "std": 0.0184, "min": 0.8730, "max": 0.9609}
+      },
+      "domain_metrics": {
+        "startup_funding": {"HR@5": 0.5400, "MRR": 0.5095},
+        "finance_tax": {"HR@5": 0.2200, "MRR": 0.1384},
+        "hr_labor": {"HR@5": 0.3000, "MRR": 0.2124}
+      },
+      "embedding_time_seconds": 64.03,
+      "docs_per_second": 428.23,
+      "execution_env": "RunPod RTX 4090 24GB"
+    },
+    {
+      "model_name": "jina-embeddings-v3",
+      "model_id": "jinaai/jina-embeddings-v3",
+      "provider": "Jina AI (Open Source)",
+      "dimensions": 1024,
+      "parameters": "570M",
+      "cost": "Free",
+      "metrics": {
+        "MRR": 0.2776,
+        "MAP": 0.2679,
+        "HR@1": 0.2333,
+        "HR@3": 0.3067,
+        "HR@5": 0.3400,
+        "HR@10": 0.3800,
+        "Precision@5": 0.0693,
+        "Recall@5": 0.3244,
+        "NDCG@5": 0.2801,
+        "similarity": {"mean": 0.7163, "std": 0.0716, "min": 0.5417, "max": 0.8490}
+      },
+      "domain_metrics": {
+        "startup_funding": {"HR@5": 0.5000, "MRR": 0.4767},
+        "finance_tax": {"HR@5": 0.2200, "MRR": 0.1252},
+        "hr_labor": {"HR@5": 0.3000, "MRR": 0.2310}
+      },
+      "embedding_time_seconds": 118.41,
+      "docs_per_second": 232.23,
+      "execution_env": "RunPod RTX 3090 24GB"
+    },
+    {
+      "model_name": "multilingual-e5-base",
+      "model_id": "intfloat/multilingual-e5-base",
+      "provider": "Microsoft (Open Source)",
+      "dimensions": 768,
+      "parameters": "278M",
+      "cost": "Free",
+      "metrics": {
+        "MRR": 0.2842,
+        "MAP": 0.2750,
+        "HR@1": 0.2467,
+        "HR@3": 0.2933,
+        "HR@5": 0.3400,
+        "HR@10": 0.3733,
+        "Precision@5": 0.0693,
+        "Recall@5": 0.3278,
+        "NDCG@5": 0.2866,
+        "similarity": {"mean": 0.8707, "std": 0.0192, "min": 0.8330, "max": 0.9178}
+      },
+      "domain_metrics": {
+        "startup_funding": {"HR@5": 0.5600, "MRR": 0.5320},
+        "finance_tax": {"HR@5": 0.2000, "MRR": 0.1377},
+        "hr_labor": {"HR@5": 0.2600, "MRR": 0.1830}
+      },
+      "embedding_time_seconds": 53.78,
+      "docs_per_second": 509.83,
+      "execution_env": "RunPod RTX 4090 24GB"
+    },
+    {
+      "model_name": "text-embedding-3-large",
+      "model_id": "text-embedding-3-large",
+      "provider": "OpenAI",
+      "dimensions": 3072,
+      "parameters": "Unknown",
+      "cost": "$0.13/1M tokens",
+      "metrics": {
+        "MRR": 0.2945,
+        "MAP": 0.2786,
+        "HR@1": 0.2467,
+        "HR@3": 0.3200,
+        "HR@5": 0.3333,
+        "HR@10": 0.4067,
+        "Precision@5": 0.0693,
+        "Recall@5": 0.3178,
+        "NDCG@5": 0.2855,
+        "similarity": {"mean": 0.5638, "std": 0.0745, "min": 0.3035, "max": 0.7514}
+      },
+      "domain_metrics": {
+        "startup_funding": {"HR@5": 0.6000, "MRR": 0.5800},
+        "finance_tax": {"HR@5": 0.1200, "MRR": 0.0895},
+        "hr_labor": {"HR@5": 0.2800, "MRR": 0.2141}
+      },
+      "embedding_time_seconds": 445.20,
+      "docs_per_second": 61.77,
+      "execution_env": "OpenAI API (Local)"
+    },
+    {
+      "model_name": "text-embedding-3-small",
+      "model_id": "text-embedding-3-small",
+      "provider": "OpenAI",
+      "dimensions": 1536,
+      "parameters": "Unknown",
+      "cost": "$0.02/1M tokens",
+      "metrics": {
+        "MRR": 0.1957,
+        "MAP": 0.1857,
+        "HR@1": 0.1533,
+        "HR@3": 0.2267,
+        "HR@5": 0.2533,
+        "HR@10": 0.3000,
+        "Precision@5": 0.0520,
+        "Recall@5": 0.2400,
+        "NDCG@5": 0.1971,
+        "similarity": {"mean": 0.5193, "std": 0.0720, "min": 0.3691, "max": 0.7248}
+      },
+      "domain_metrics": {
+        "startup_funding": {"HR@5": 0.5400, "MRR": 0.4340},
+        "finance_tax": {"HR@5": 0.0800, "MRR": 0.0627},
+        "hr_labor": {"HR@5": 0.1400, "MRR": 0.0905}
+      },
+      "embedding_time_seconds": 478.16,
+      "docs_per_second": 57.51,
+      "execution_env": "OpenAI API (Local)"
+    },
+    {
+      "model_name": "text-embedding-ada-002",
+      "model_id": "text-embedding-ada-002",
+      "provider": "OpenAI",
+      "dimensions": 1536,
+      "parameters": "Unknown",
+      "cost": "$0.10/1M tokens",
+      "metrics": {
+        "MRR": 0.1924,
+        "MAP": 0.1768,
+        "HR@1": 0.1600,
+        "HR@3": 0.2200,
+        "HR@5": 0.2267,
+        "HR@10": 0.2600,
+        "Precision@5": 0.0467,
+        "Recall@5": 0.2089,
+        "NDCG@5": 0.1856,
+        "similarity": {"mean": 0.8728, "std": 0.0186, "min": 0.8223, "max": 0.9225}
+      },
+      "domain_metrics": {
+        "startup_funding": {"HR@5": 0.5000, "MRR": 0.4199},
+        "finance_tax": {"HR@5": 0.0600, "MRR": 0.0422},
+        "hr_labor": {"HR@5": 0.1200, "MRR": 0.1151}
+      },
+      "embedding_time_seconds": 383.23,
+      "docs_per_second": 71.76,
+      "execution_env": "OpenAI API (Local)"
+    },
+    {
+      "model_name": "snowflake-arctic-embed-l-v2.0",
+      "model_id": "Snowflake/snowflake-arctic-embed-l-v2.0",
+      "provider": "Snowflake (Open Source)",
+      "dimensions": 1024,
+      "parameters": "335M",
+      "cost": "Free",
+      "metrics": {
+        "MRR": 0.1119,
+        "MAP": 0.1114,
+        "HR@1": 0.0733,
+        "HR@3": 0.1333,
+        "HR@5": 0.1733,
+        "HR@10": 0.2000,
+        "Precision@5": 0.0347,
+        "Recall@5": 0.1733,
+        "NDCG@5": 0.1243,
+        "similarity": {"mean": 0.4945, "std": 0.0433, "min": 0.3989, "max": 0.6243}
+      },
+      "domain_metrics": {
+        "startup_funding": {"HR@5": 0.1800, "MRR": 0.1395},
+        "finance_tax": {"HR@5": 0.1200, "MRR": 0.0448},
+        "hr_labor": {"HR@5": 0.2200, "MRR": 0.1513}
+      },
+      "embedding_time_seconds": 180.15,
+      "docs_per_second": 152.21,
+      "execution_env": "RunPod RTX 4090 24GB"
+    },
+    {
+      "model_name": "snowflake-arctic-embed-m-v1.5",
+      "model_id": "Snowflake/snowflake-arctic-embed-m-v1.5",
+      "provider": "Snowflake (Open Source)",
+      "dimensions": 768,
+      "parameters": "109M",
+      "cost": "Free",
+      "metrics": {
+        "MRR": 0.0000,
+        "MAP": 0.0000,
+        "HR@1": 0.0000,
+        "HR@3": 0.0000,
+        "HR@5": 0.0000,
+        "HR@10": 0.0000,
+        "Precision@5": 0.0000,
+        "Recall@5": 0.0000,
+        "NDCG@5": 0.0000,
+        "similarity": {"mean": 0.9647, "std": 0.0114, "min": 0.8971, "max": 0.9832}
+      },
+      "domain_metrics": {
+        "startup_funding": {"HR@5": 0.0000, "MRR": 0.0000},
+        "finance_tax": {"HR@5": 0.0000, "MRR": 0.0000},
+        "hr_labor": {"HR@5": 0.0000, "MRR": 0.0000}
+      },
+      "embedding_time_seconds": 85.19,
+      "docs_per_second": 321.90,
+      "execution_env": "RunPod RTX 4090 24GB",
+      "note": "Failed - English-only model, Korean not supported"
+    }
+  ],
+  "failed_models": [
+    {
+      "model_name": "bge-multilingual-gemma2",
+      "model_id": "BAAI/bge-multilingual-gemma2",
+      "failure_reason": "GPU memory exceeded (9B parameters, requires 48GB+ VRAM)"
+    },
+    {
+      "model_name": "gte-Qwen2-1.5B-instruct",
+      "model_id": "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+      "failure_reason": "Timeout - 1.5B parameters too slow for benchmark"
+    }
+  ],
+  "ranking": [
+    {"rank": 1, "model": "BGE-M3", "HR@5": 0.4200, "MRR": 0.3197, "provider": "Open Source"},
+    {"rank": 2, "model": "multilingual-e5-large", "HR@5": 0.3933, "MRR": 0.3001, "provider": "Open Source"},
+    {"rank": 3, "model": "multilingual-e5-large-instruct", "HR@5": 0.3533, "MRR": 0.2868, "provider": "Open Source"},
+    {"rank": 4, "model": "jina-embeddings-v3", "HR@5": 0.3400, "MRR": 0.2776, "provider": "Open Source"},
+    {"rank": 5, "model": "multilingual-e5-base", "HR@5": 0.3400, "MRR": 0.2842, "provider": "Open Source"},
+    {"rank": 6, "model": "text-embedding-3-large", "HR@5": 0.3333, "MRR": 0.2945, "provider": "OpenAI"},
+    {"rank": 7, "model": "text-embedding-3-small", "HR@5": 0.2533, "MRR": 0.1957, "provider": "OpenAI"},
+    {"rank": 8, "model": "text-embedding-ada-002", "HR@5": 0.2267, "MRR": 0.1924, "provider": "OpenAI"},
+    {"rank": 9, "model": "snowflake-arctic-embed-l-v2.0", "HR@5": 0.1733, "MRR": 0.1119, "provider": "Open Source"},
+    {"rank": 10, "model": "snowflake-arctic-embed-m-v1.5", "HR@5": 0.0000, "MRR": 0.0000, "provider": "Open Source"}
+  ]
+}
