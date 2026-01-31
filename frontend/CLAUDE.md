@@ -15,13 +15,18 @@
 ```
 frontend/
 ├── src/
-│   ├── pages/         # 페이지 컴포넌트 (MainPage, LoginPage 등)
-│   ├── components/    # 재사용 컴포넌트 (chat/, common/, layout/)
+│   ├── pages/         # 페이지 컴포넌트 (MainPage, LoginPage, CompanyPage 등)
+│   ├── components/
+│   │   ├── chat/      # 채팅 컴포넌트
+│   │   ├── common/    # 공통 컴포넌트 (RegionSelect.tsx 등)
+│   │   ├── company/   # 기업 관련 (CompanyForm.tsx - 통합 폼)
+│   │   ├── layout/    # Sidebar, MainLayout 등
+│   │   └── profile/   # ProfileDialog.tsx (모달 기반 프로필 관리)
 │   ├── hooks/         # 커스텀 훅 (useAuth, useChat, useCompany)
 │   ├── stores/        # Zustand 전역 상태 (authStore, chatStore, uiStore)
-│   ├── types/         # TypeScript 타입 정의
-│   ├── lib/           # API 클라이언트 (api.ts, rag.ts)
-│   ├── App.tsx        # React Router 설정
+│   ├── types/         # TypeScript 타입 정의 (index.ts)
+│   ├── lib/           # API 클라이언트 (api.ts, rag.ts), 상수 (constants.ts)
+│   ├── App.tsx        # React Router 설정 (MainLayout 래퍼 패턴)
 │   └── main.tsx       # 진입점
 ├── vite.config.ts
 └── package.json
@@ -142,31 +147,32 @@ const sendMessage = async (message: string) => {
 
 ### 3. 상태 관리
 
-#### Zustand 전역 상태 (src/stores/authStore.ts)
-```typescript
-import { create } from 'zustand';
+#### Zustand 전역 상태
 
-interface AuthState {
-  isAuthenticated: boolean;
-  user: User | null;
-  login: (user: User) => void;
-  logout: () => void;
-}
+**authStore** (`src/stores/authStore.ts`):
+- `isAuthenticated`, `user`, `accessToken` 관리
+- `login(user, token)`: 로그인 + 게스트 메시지 동기화 (`syncGuestMessages`) + 카운트 리셋
+- `logout()`: 토큰 제거 + 상태 초기화
+- `updateUser(userData)`: 사용자 정보 부분 업데이트
+- `persist` 미들웨어로 localStorage에 저장
 
-export const useAuthStore = create<AuthState>((set) => ({
-  isAuthenticated: false,
-  user: null,
-  login: (user) => set({ isAuthenticated: true, user }),
-  logout: () => set({ isAuthenticated: false, user: null }),
-}));
-```
+**chatStore** (`src/stores/chatStore.ts`):
+- **멀티세션**: `sessions: ChatSession[]`, `currentSessionId`
+- `createSession()` / `switchSession()` / `deleteSession()`: 채팅 세션 관리
+- `addMessage()`: 세션이 없으면 자동 생성, 첫 메시지로 제목 자동 설정
+- `lastHistoryId`: 마지막 동기화된 백엔드 history_id
+- `guestMessageCount`: 게스트 메시지 카운트 (10회 제한)
+- `syncGuestMessages()`: 로그인 시 게스트 대화를 백엔드 history에 일괄 저장
+- `persist` 미들웨어로 세션/카운트 localStorage 저장
 
 **사용**:
 ```typescript
 import { useAuthStore } from '@/stores/authStore';
+import { useChatStore } from '@/stores/chatStore';
 
 function MyComponent() {
   const { isAuthenticated, login, logout } = useAuthStore();
+  const { createSession, getMessages, addMessage } = useChatStore();
   // ...
 }
 ```
@@ -216,94 +222,149 @@ function ProfilePage() {
 
 ### 4. 타입 정의
 
+모든 타입은 `src/types/index.ts`에 통합 정의되어 있습니다.
+
 ```typescript
-// src/types/user.ts
+// src/types/index.ts (주요 타입)
 export interface User {
-  user_email: string;
-  user_name: string;
-  user_type: 'PRE_STARTUP' | 'STARTUP' | 'SME';
+  user_id: number;
+  google_email: string;
+  username: string;
+  type_code: 'U001' | 'U002' | 'U003'; // U001: 관리자, U002: 예비창업자, U003: 사업자
+  birth?: string;
+  create_date?: string;
 }
 
-// src/types/company.ts
 export interface Company {
   company_id: number;
-  business_number: string;
-  company_name: string;
-  industry_code: string;
+  user_id: number;
+  com_name: string;
+  biz_num: string;
+  addr: string;
+  open_date?: string;
+  biz_code?: string;
+  file_path: string;
+  main_yn: boolean;
+  create_date?: string;
 }
 
-// src/types/chat.ts
+export type AgentCode = 'A001' | 'A002' | 'A003' | 'A004' | 'A005' | 'A006';
+
 export interface ChatMessage {
   id: string;
-  message: string;
-  response: string;
-  agent_code: 'STARTUP' | 'TAX' | 'FUNDING' | 'HR' | 'LEGAL' | 'MARKETING';
-  created_at: string;
+  type: 'user' | 'assistant';
+  content: string;
+  agent_code?: AgentCode;
+  timestamp: Date;
 }
 
-// src/types/api.ts
+export interface ChatSession {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ApiResponse<T> {
   data: T;
   message?: string;
-  status: number;
 }
 ```
 
 ### 5. React Router 설정 (src/App.tsx)
+
+MainLayout 래퍼 패턴을 사용하여 인증/비인증 공통 레이아웃(Sidebar 포함)을 적용합니다.
+
 ```typescript
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import MainPage from './pages/MainPage';
-import LoginPage from './pages/LoginPage';
-import ProfilePage from './pages/ProfilePage';
-import CompanyPage from './pages/CompanyPage';
-import SchedulePage from './pages/SchedulePage';
-import AdminPage from './pages/AdminPage';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { MainLayout } from './components/layout';
+import {
+  LoginPage, MainPage, CompanyPage,
+  SchedulePage, AdminPage, UsageGuidePage,
+} from './pages';
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<MainPage />} />
+        {/* Login page (독립 레이아웃) */}
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/company" element={<CompanyPage />} />
-        <Route path="/schedule" element={<SchedulePage />} />
-        <Route path="/admin" element={<AdminPage />} />
+
+        {/* MainLayout 래퍼: Sidebar + Outlet */}
+        <Route element={<MainLayout />}>
+          <Route path="/" element={<MainPage />} />
+          <Route path="/company" element={<CompanyPage />} />
+          <Route path="/schedule" element={<SchedulePage />} />
+          <Route path="/guide" element={<UsageGuidePage />} />
+          <Route path="/admin" element={<AdminPage />} />
+        </Route>
+
+        {/* Catch-all redirect */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
 }
-
-export default App;
 ```
+
+**참고**: `/profile` 라우트는 제거되었으며, 프로필 관리는 Sidebar 설정(톱니바퀴) 아이콘 → `ProfileDialog` 모달로 전환됨.
 
 ---
 
 ## 주요 페이지 및 요구사항
 
 ### 1. 메인 채팅 페이지 (/)
-- 통합 채팅 인터페이스
-- 도메인 태그 표시 (STARTUP, TAX, FUNDING, HR, LEGAL, MARKETING)
-- 대화 이력 조회
-- 빠른 질문 버튼
+- 통합 채팅 인터페이스 (멀티세션 지원: 생성/전환/삭제)
+- 도메인 태그 표시 (AgentCode: A001~A006)
+- 대화 이력 조회 (ChatHistoryPanel)
+- 빠른 질문 버튼 (사용자 유형별: `USER_QUICK_QUESTIONS` / `GUEST_QUICK_QUESTIONS`)
+- 게스트 사용자: 10회 무료 메시지 제한 (`GUEST_MESSAGE_LIMIT`)
 
 ### 2. 로그인 페이지 (/login)
 - Google OAuth2 소셜 로그인
 - 자동 로그인 (토큰 저장)
+- 로그인 시 게스트 메시지 백엔드 동기화 (`syncGuestMessages`)
 
 ### 3. 기업 프로필 페이지 (/company)
-- 프로필 등록/수정 폼
+- 통합 `CompanyForm` (준비중/운영중 상태 토글)
+- `RegionSelect` 컴포넌트: 시/도 → 시/군/구 2단계 선택
 - 사업자등록증 업로드
-- 업종, 주소, 직원수 등 정보 입력
+- 업종, 주소 등 정보 입력
 
-### 4. 일정 관리 페이지 (/schedule)
+### 4. 프로필 관리 (ProfileDialog 모달)
+- Sidebar 설정 아이콘(톱니바퀴) 클릭으로 열림
+- 사용자 정보 조회/수정
+- **참고**: 별도 `/profile` 라우트 없음
+
+### 5. 일정 관리 페이지 (/schedule)
 - 일정 조회/등록
 - 마감일 알림 연동
 
-### 5. 관리자 페이지 (/admin)
+### 6. 사용 설명서 페이지 (/guide)
+- 서비스 사용법 안내
+
+### 7. 관리자 페이지 (/admin)
 - 회원 관리
 - 상담 로그 조회
 - 통계 대시보드
+- `U001` (관리자) 타입 사용자만 메뉴 노출
+
+---
+
+## 주요 상수 (src/lib/constants.ts)
+
+| 상수명 | 설명 |
+|--------|------|
+| `INDUSTRY_CODES` | 업종 코드 매핑 (B001~B021) |
+| `REGION_DATA` | 시/도 → 시/군/구 매핑 (17개 시도) |
+| `PROVINCES` | 시/도 목록 배열 |
+| `COMPANY_STATUS` | 기업 상태 (`PREPARING`: 준비 중, `OPERATING`: 운영 중) |
+| `GUEST_QUICK_QUESTIONS` | 게스트 상황별 빠른 질문 (`PRE_STARTUP` / `NEW_STARTUP` / `SME_CEO`) |
+| `USER_QUICK_QUESTIONS` | 로그인 사용자 유형별 빠른 질문 (`U001` / `U002` / `U003`) |
+| `GUEST_MESSAGE_LIMIT` | 게스트 무료 메시지 제한 수 (10) |
+| `SITUATION_LABELS` | 게스트 상황 라벨 |
+| `SITUATION_DESCRIPTIONS` | 게스트 상황 설명 |
 
 ---
 

@@ -325,8 +325,10 @@ settings = Settings()
 | Method | Endpoint | 설명 |
 |--------|----------|------|
 | GET | `/companies` | 내 기업 목록 |
+| GET | `/companies/{id}` | 기업 상세 조회 |
 | POST | `/companies` | 기업 등록 |
 | PUT | `/companies/{id}` | 기업 수정 |
+| DELETE | `/companies/{id}` | 기업 삭제 (소프트 삭제: `use_yn=False`) |
 | POST | `/companies/{id}/upload` | 사업자등록증 업로드 |
 
 ### 상담 이력 (histories)
@@ -360,7 +362,7 @@ settings = Settings()
 | schedule | 일정 | schedule_id, company_id, schedule_name, start_date |
 
 ### 코드 테이블 (main_code)
-- `U`: 사용자 유형 (U001: 예비창업자, U002: 사업자)
+- `U`: 사용자 유형 (U001: 관리자, U002: 예비창업자, U003: 사업자)
 - `B`: 업종 코드 (B001: 음식점업, B002: 소매업, ...)
 - `A`: 에이전트 코드 (A001: 창업, A002: 세무, A003: 지원사업, A004: 노무, A005: 법률, A006: 마케팅)
 - `H`: 주관기관 코드 (H001: 중소벤처기업부, ...)

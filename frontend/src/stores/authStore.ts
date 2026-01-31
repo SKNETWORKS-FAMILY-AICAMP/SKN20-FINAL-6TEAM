@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User } from '../types';
+import { useChatStore } from './chatStore';
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -20,6 +21,8 @@ export const useAuthStore = create<AuthState>()(
       login: (user, token) => {
         localStorage.setItem('accessToken', token);
         set({ isAuthenticated: true, user, accessToken: token });
+        useChatStore.getState().syncGuestMessages();
+        useChatStore.getState().resetGuestCount();
       },
       logout: () => {
         localStorage.removeItem('accessToken');

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   Card,
   CardBody,
-  CardHeader,
   Typography,
   Input,
   Button,
@@ -16,26 +15,45 @@ import {
   Alert,
 } from '@material-tailwind/react';
 import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { INDUSTRY_CODES } from '../../lib/constants';
+import { INDUSTRY_CODES, COMPANY_STATUS } from '../../lib/constants';
+import type { CompanyStatusKey } from '../../lib/constants';
+import { RegionSelect } from '../common/RegionSelect';
 import api from '../../lib/api';
 import { useAuthStore } from '../../stores/authStore';
 import type { Company } from '../../types';
 
-export const CeoCompanyForm: React.FC = () => {
+interface CompanyFormData {
+  status: CompanyStatusKey;
+  com_name: string;
+  biz_num: string;
+  biz_code: string;
+  addr: string;
+  open_date: string;
+}
+
+const INITIAL_FORM_DATA: CompanyFormData = {
+  status: 'PREPARING',
+  com_name: '(예비) 창업 준비',
+  biz_num: '',
+  biz_code: 'B001',
+  addr: '',
+  open_date: '',
+};
+
+const TABLE_HEADERS = ['회사명', '사업자번호', '업종', '주소', '개업일', '액션'];
+
+export const CompanyForm: React.FC = () => {
   const { updateUser } = useAuthStore();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const [formData, setFormData] = useState({
-    com_name: '',
-    biz_num: '',
-    addr: '',
-    open_date: '',
-    biz_code: 'B001',
-  });
+  const [formData, setFormData] = useState<CompanyFormData>(INITIAL_FORM_DATA);
+
+  const isPreparing = formData.status === 'PREPARING';
 
   const fetchCompanies = async () => {
     try {
@@ -54,28 +72,47 @@ export const CeoCompanyForm: React.FC = () => {
 
   const openCreateDialog = () => {
     setEditingCompany(null);
-    setFormData({ com_name: '', biz_num: '', addr: '', open_date: '', biz_code: 'B001' });
+    setFormData(INITIAL_FORM_DATA);
     setIsDialogOpen(true);
   };
 
   const openEditDialog = (company: Company) => {
     setEditingCompany(company);
+    const isOperating = Boolean(company.biz_num);
     setFormData({
+      status: isOperating ? 'OPERATING' : 'PREPARING',
       com_name: company.com_name,
-      biz_num: company.biz_num,
-      addr: company.addr,
-      open_date: company.open_date ? company.open_date.split('T')[0] : '',
+      biz_num: company.biz_num || '',
       biz_code: company.biz_code || 'B001',
+      addr: company.addr || '',
+      open_date: company.open_date ? company.open_date.split('T')[0] : '',
     });
     setIsDialogOpen(true);
   };
 
+  const handleStatusChange = (val: string | undefined) => {
+    const newStatus = (val as CompanyStatusKey) || 'PREPARING';
+    setFormData((prev) => ({
+      ...prev,
+      status: newStatus,
+      biz_num: newStatus === 'PREPARING' ? '' : prev.biz_num,
+      com_name: newStatus === 'PREPARING' && !prev.com_name ? '(예비) 창업 준비' : prev.com_name,
+    }));
+  };
+
   const handleSave = async () => {
+    setIsSaving(true);
+    setMessage(null);
+
     try {
       const data = {
-        ...formData,
+        com_name: formData.com_name,
+        biz_num: isPreparing ? '' : formData.biz_num,
+        biz_code: formData.biz_code,
+        addr: formData.addr,
         open_date: formData.open_date ? new Date(formData.open_date).toISOString() : null,
       };
+      console.log('[DEBUG] company save data:', data);
 
       if (editingCompany) {
         await api.put(`/companies/${editingCompany.company_id}`, data);
@@ -102,6 +139,8 @@ export const CeoCompanyForm: React.FC = () => {
         type: 'error',
         text: error.response?.data?.detail || '저장에 실패했습니다.',
       });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -157,58 +196,101 @@ export const CeoCompanyForm: React.FC = () => {
           </CardBody>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {companies.map((company) => (
-            <Card key={company.company_id}>
-              <CardHeader floated={false} shadow={false} className="rounded-none">
-                <div className="flex items-center justify-between">
-                  <Typography variant="h6" color="blue-gray">
-                    {company.com_name}
-                  </Typography>
-                  <div className="flex gap-1">
-                    <IconButton variant="text" size="sm" onClick={() => openEditDialog(company)}>
-                      <PencilIcon className="h-4 w-4" />
-                    </IconButton>
-                    <IconButton
-                      variant="text"
-                      size="sm"
-                      color="red"
-                      onClick={() => handleDelete(company.company_id)}
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                    </IconButton>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardBody className="pt-0">
-                <div className="space-y-2 text-sm">
-                  <div>
-                    <span className="text-gray-500">사업자번호:</span> {company.biz_num || '-'}
-                  </div>
-                  <div>
-                    <span className="text-gray-500">업종:</span>{' '}
-                    {INDUSTRY_CODES[company.biz_code || ''] || company.biz_code || '-'}
-                  </div>
-                  <div>
-                    <span className="text-gray-500">주소:</span> {company.addr || '-'}
-                  </div>
-                  <div>
-                    <span className="text-gray-500">개업일:</span>{' '}
-                    {company.open_date
-                      ? new Date(company.open_date).toLocaleDateString('ko-KR')
-                      : '-'}
-                  </div>
-                </div>
-              </CardBody>
-            </Card>
-          ))}
-        </div>
+        <Card>
+          <CardBody className="overflow-x-auto px-0">
+            <table className="w-full min-w-max table-auto text-left">
+              <thead>
+                <tr>
+                  {TABLE_HEADERS.map((head) => (
+                    <th key={head} className="border-b border-blue-gray-100 bg-blue-gray-50 p-4">
+                      <Typography variant="small" color="blue-gray" className="font-semibold leading-none">
+                        {head}
+                      </Typography>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {companies.map((company, index) => {
+                  const isLast = index === companies.length - 1;
+                  const rowClass = isLast ? 'p-4' : 'p-4 border-b border-blue-gray-50';
+                  return (
+                    <tr key={company.company_id}>
+                      <td className={rowClass}>
+                        <Typography variant="small" color="blue-gray" className="font-medium">
+                          {company.com_name}
+                        </Typography>
+                      </td>
+                      <td className={rowClass}>
+                        <Typography variant="small" color="gray">
+                          {company.biz_num || '-'}
+                        </Typography>
+                      </td>
+                      <td className={rowClass}>
+                        <Typography variant="small" color="gray">
+                          {INDUSTRY_CODES[company.biz_code || ''] || company.biz_code || '-'}
+                        </Typography>
+                      </td>
+                      <td className={rowClass}>
+                        <Typography variant="small" color="gray">
+                          {company.addr || '-'}
+                        </Typography>
+                      </td>
+                      <td className={rowClass}>
+                        <Typography variant="small" color="gray">
+                          {company.open_date
+                            ? new Date(company.open_date).toLocaleDateString('ko-KR')
+                            : '-'}
+                        </Typography>
+                      </td>
+                      <td className={rowClass}>
+                        <div className="flex gap-1">
+                          <IconButton variant="text" size="sm" onClick={() => openEditDialog(company)}>
+                            <PencilIcon className="h-4 w-4" />
+                          </IconButton>
+                          <IconButton
+                            variant="text"
+                            size="sm"
+                            color="red"
+                            onClick={() => handleDelete(company.company_id)}
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </IconButton>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </CardBody>
+        </Card>
       )}
 
       {/* Create/Edit Dialog */}
       <Dialog open={isDialogOpen} handler={() => setIsDialogOpen(false)} size="md">
         <DialogHeader>{editingCompany ? '기업 정보 수정' : '기업 등록'}</DialogHeader>
         <DialogBody className="space-y-4">
+          {/* Company Status */}
+          <div>
+            <Typography variant="small" color="gray" className="mb-1">
+              기업 상태 *
+            </Typography>
+            <Select
+              value={formData.status}
+              onChange={handleStatusChange}
+              className="!border-gray-300"
+              labelProps={{ className: 'hidden' }}
+            >
+              {(Object.entries(COMPANY_STATUS) as [CompanyStatusKey, string][]).map(([key, label]) => (
+                <Option key={key} value={key}>
+                  {label}
+                </Option>
+              ))}
+            </Select>
+          </div>
+
+          {/* Company Name */}
           <div>
             <Typography variant="small" color="gray" className="mb-1">
               회사명 *
@@ -220,6 +302,8 @@ export const CeoCompanyForm: React.FC = () => {
               labelProps={{ className: 'hidden' }}
             />
           </div>
+
+          {/* Business Registration Number */}
           <div>
             <Typography variant="small" color="gray" className="mb-1">
               사업자등록번호
@@ -228,10 +312,13 @@ export const CeoCompanyForm: React.FC = () => {
               value={formData.biz_num}
               onChange={(e) => setFormData({ ...formData, biz_num: e.target.value })}
               placeholder="000-00-00000"
+              disabled={isPreparing}
               className="!border-gray-300"
-              labelProps={{ className: 'hidden' }}
+              label=" "
             />
           </div>
+
+          {/* Industry */}
           <div>
             <Typography variant="small" color="gray" className="mb-1">
               업종
@@ -249,20 +336,22 @@ export const CeoCompanyForm: React.FC = () => {
               ))}
             </Select>
           </div>
+
+          {/* Address */}
           <div>
             <Typography variant="small" color="gray" className="mb-1">
               주소
             </Typography>
-            <Input
+            <RegionSelect
               value={formData.addr}
-              onChange={(e) => setFormData({ ...formData, addr: e.target.value })}
-              className="!border-gray-300"
-              labelProps={{ className: 'hidden' }}
+              onChange={(val) => setFormData({ ...formData, addr: val })}
             />
           </div>
+
+          {/* Open Date */}
           <div>
             <Typography variant="small" color="gray" className="mb-1">
-              개업일
+              {isPreparing ? '사업 시작 예정일' : '개업일'}
             </Typography>
             <Input
               type="date"
@@ -277,8 +366,8 @@ export const CeoCompanyForm: React.FC = () => {
           <Button variant="text" onClick={() => setIsDialogOpen(false)}>
             취소
           </Button>
-          <Button onClick={handleSave} disabled={!formData.com_name.trim()}>
-            저장
+          <Button onClick={handleSave} disabled={!formData.com_name.trim() || isSaving}>
+            {isSaving ? '저장 중...' : '저장'}
           </Button>
         </DialogFooter>
       </Dialog>

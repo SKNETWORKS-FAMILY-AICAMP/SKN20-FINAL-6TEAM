@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Card,
@@ -10,7 +10,6 @@ import {
 } from '@material-tailwind/react';
 import {
   ChatBubbleLeftRightIcon,
-  UserCircleIcon,
   BuildingOfficeIcon,
   CalendarDaysIcon,
   Cog6ToothIcon,
@@ -23,13 +22,13 @@ import {
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { ChatHistoryPanel } from './ChatHistoryPanel';
+import { ProfileDialog } from '../profile/ProfileDialog';
 
 /** Routes that require authentication to access */
-const AUTH_REQUIRED_PATHS = new Set(['/company', '/profile', '/schedule', '/admin']);
+const AUTH_REQUIRED_PATHS = new Set(['/company', '/schedule', '/admin']);
 
 const menuItems = [
   { path: '/', label: '채팅', icon: ChatBubbleLeftRightIcon },
-  { path: '/profile', label: '프로필', icon: UserCircleIcon },
   { path: '/company', label: '기업 정보', icon: BuildingOfficeIcon },
   { path: '/schedule', label: '일정 관리', icon: CalendarDaysIcon },
   { path: '/guide', label: '사용 설명서', icon: BookOpenIcon },
@@ -41,6 +40,7 @@ export const Sidebar: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated, logout, user } = useAuthStore();
   const { createSession } = useChatStore();
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -67,6 +67,7 @@ export const Sidebar: React.FC = () => {
   });
 
   return (
+    <>
     <Card className="h-screen w-64 flex flex-col shadow-xl shadow-blue-gray-900/5 rounded-none">
       {/* Logo */}
       <div className="p-4 border-b">
@@ -141,7 +142,7 @@ export const Sidebar: React.FC = () => {
               </div>
               <button
                 className="p-1 rounded-full hover:bg-gray-100 transition-colors"
-                onClick={() => navigate('/profile')}
+                onClick={() => setIsProfileOpen(true)}
                 title="설정"
               >
                 <Cog6ToothIcon className="h-5 w-5 text-gray-600" />
@@ -170,5 +171,9 @@ export const Sidebar: React.FC = () => {
         )}
       </div>
     </Card>
+
+      {/* Profile Dialog */}
+      <ProfileDialog open={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
+    </>
   );
 };

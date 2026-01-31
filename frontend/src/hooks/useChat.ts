@@ -4,19 +4,34 @@ import { useAuthStore } from '../stores/authStore';
 import ragApi from '../lib/rag';
 import api from '../lib/api';
 import type { ChatMessage, AgentCode, RagChatResponse } from '../types';
+import { GUEST_MESSAGE_LIMIT } from '../lib/constants';
 
 // Flag to switch between mock and RAG responses
 const USE_RAG = false;
 
 const ERROR_MESSAGE = '죄송합니다. 응답을 생성하는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+const GUEST_LIMIT_MESSAGE = '무료 체험 메시지를 모두 사용했습니다. 로그인하시면 무제한으로 상담을 이용할 수 있습니다.';
 
 export const useChat = () => {
-  const { addMessage, setLoading, isLoading } = useChatStore();
+  const { addMessage, setLoading, isLoading, lastHistoryId, setLastHistoryId, guestMessageCount, incrementGuestCount } = useChatStore();
   const { isAuthenticated } = useAuthStore();
 
   const sendMessage = useCallback(
     async (message: string) => {
       if (!message.trim() || isLoading) return;
+
+      // Guest message limit check
+      if (!isAuthenticated && guestMessageCount >= GUEST_MESSAGE_LIMIT) {
+        const limitMessage: ChatMessage = {
+          id: Date.now().toString(),
+          type: 'assistant',
+          content: GUEST_LIMIT_MESSAGE,
+          agent_code: 'A001',
+          timestamp: new Date(),
+        };
+        addMessage(limitMessage);
+        return;
+      }
 
       // Add user message
       const userMessage: ChatMessage = {
@@ -58,14 +73,18 @@ export const useChat = () => {
         // Save to backend history if authenticated
         if (isAuthenticated) {
           try {
-            await api.post('/histories', {
+            const historyResponse = await api.post('/histories', {
               agent_code: agentCode,
               question: message,
               answer: response,
+              parent_history_id: lastHistoryId,
             });
+            setLastHistoryId(historyResponse.data.history_id);
           } catch {
             // History save failure is non-critical
           }
+        } else {
+          incrementGuestCount();
         }
       } catch {
         const errorMessage: ChatMessage = {
@@ -80,7 +99,7 @@ export const useChat = () => {
         setLoading(false);
       }
     },
-    [addMessage, setLoading, isLoading, isAuthenticated]
+    [addMessage, setLoading, isLoading, isAuthenticated, lastHistoryId, setLastHistoryId, guestMessageCount, incrementGuestCount]
   );
 
   return { sendMessage, isLoading };

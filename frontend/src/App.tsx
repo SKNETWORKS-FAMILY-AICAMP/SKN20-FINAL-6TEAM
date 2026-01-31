@@ -5,7 +5,6 @@ import { MainLayout } from './components/layout';
 import {
   LoginPage,
   MainPage,
-  ProfilePage,
   CompanyPage,
   SchedulePage,
   AdminPage,
@@ -23,7 +22,6 @@ const App: React.FC = () => {
           {/* All pages under MainLayout (authenticated + unauthenticated) */}
           <Route element={<MainLayout />}>
             <Route path="/" element={<MainPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
             <Route path="/company" element={<CompanyPage />} />
             <Route path="/schedule" element={<SchedulePage />} />
             <Route path="/guide" element={<UsageGuidePage />} />

@@ -17,11 +17,12 @@
 frontend/
 ├── src/
 │   ├── pages/                # 페이지 컴포넌트
+│   │   ├── index.ts          # 배럴 export
 │   │   ├── MainPage.tsx      # 메인 채팅 (/)
 │   │   ├── LoginPage.tsx     # 로그인 (/login)
-│   │   ├── ProfilePage.tsx   # 사용자 프로필 (/profile)
 │   │   ├── CompanyPage.tsx   # 기업 정보 (/company)
 │   │   ├── SchedulePage.tsx  # 일정 관리 (/schedule)
+│   │   ├── UsageGuidePage.tsx # 사용 설명서 (/guide)
 │   │   └── AdminPage.tsx     # 관리자 (/admin)
 │   ├── components/
 │   │   ├── chat/             # 채팅 컴포넌트
@@ -30,31 +31,35 @@ frontend/
 │   │   │   ├── MessageInput.tsx
 │   │   │   └── DomainTag.tsx
 │   │   ├── common/           # 공통 컴포넌트
+│   │   │   ├── RegionSelect.tsx  # 시/도→시/군/구 2단계 지역 선택기
 │   │   │   ├── Button.tsx
 │   │   │   ├── Input.tsx
 │   │   │   ├── Modal.tsx
 │   │   │   └── Loading.tsx
+│   │   ├── company/          # 기업 관련
+│   │   │   └── CompanyForm.tsx   # 통합 기업 등록/수정 폼 (준비중/운영중 토글)
+│   │   ├── profile/          # 프로필 관리
+│   │   │   └── ProfileDialog.tsx # 모달 기반 프로필 조회/수정
 │   │   └── layout/           # 레이아웃
-│   │       ├── Header.tsx
+│   │       ├── MainLayout.tsx    # Outlet 래퍼 (Sidebar + 콘텐츠)
 │   │       ├── Sidebar.tsx
+│   │       ├── ChatHistoryPanel.tsx
 │   │       └── Footer.tsx
 │   ├── hooks/                # 커스텀 훅
 │   │   ├── useAuth.ts
 │   │   ├── useChat.ts
 │   │   └── useCompany.ts
 │   ├── stores/               # Zustand 스토어
-│   │   ├── authStore.ts      # 인증 상태
-│   │   ├── chatStore.ts      # 채팅 상태
+│   │   ├── authStore.ts      # 인증 상태 (persist, 게스트 동기화 연동)
+│   │   ├── chatStore.ts      # 채팅 상태 (멀티세션, persist)
 │   │   └── uiStore.ts        # UI 상태
 │   ├── types/                # TypeScript 타입
-│   │   ├── user.ts
-│   │   ├── company.ts
-│   │   ├── chat.ts
-│   │   └── api.ts
-│   ├── lib/                  # API 클라이언트
+│   │   └── index.ts          # 통합 타입 정의
+│   ├── lib/                  # API 클라이언트 + 상수
 │   │   ├── api.ts            # Backend API (axios)
-│   │   └── rag.ts            # RAG API (axios)
-│   ├── App.tsx               # 루트 컴포넌트 (라우팅)
+│   │   ├── rag.ts            # RAG API (axios)
+│   │   └── constants.ts      # 상수 (REGION_DATA, INDUSTRY_CODES 등)
+│   ├── App.tsx               # 루트 컴포넌트 (MainLayout 래퍼 라우팅)
 │   └── main.tsx              # 진입점
 ├── public/
 ├── index.html
@@ -96,33 +101,46 @@ export default MyPage;
 - 함수형 컴포넌트 사용
 
 ### 2. 라우팅 (React Router v6)
+
+MainLayout 래퍼 패턴으로 Sidebar + Outlet 구조를 사용합니다.
+
 ```typescript
 // src/App.tsx
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import MainPage from './pages/MainPage';
-import LoginPage from './pages/LoginPage';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { MainLayout } from './components/layout';
+import {
+  LoginPage, MainPage, CompanyPage,
+  SchedulePage, AdminPage, UsageGuidePage,
+} from './pages';
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<MainPage />} />
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/company" element={<CompanyPage />} />
-        <Route path="/schedule" element={<SchedulePage />} />
-        <Route path="/admin" element={<AdminPage />} />
+
+        {/* MainLayout: Sidebar + Outlet */}
+        <Route element={<MainLayout />}>
+          <Route path="/" element={<MainPage />} />
+          <Route path="/company" element={<CompanyPage />} />
+          <Route path="/schedule" element={<SchedulePage />} />
+          <Route path="/guide" element={<UsageGuidePage />} />
+          <Route path="/admin" element={<AdminPage />} />
+        </Route>
+
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
 }
-
-export default App;
 ```
+
+**참고**: `/profile`, `/guest` 라우트 없음. 프로필은 `ProfileDialog` 모달로 관리.
 
 **새 페이지 추가**:
 1. `src/pages/NewPage.tsx` 생성
-2. `App.tsx`에 `<Route path="/new" element={<NewPage />} />` 추가
+2. `src/pages/index.ts`에 export 추가
+3. `App.tsx`의 `<Route element={<MainLayout />}>` 내부에 `<Route path="/new" element={<NewPage />} />` 추가
 
 ### 3. API 통신 (axios)
 
@@ -273,65 +291,89 @@ function ProfilePage() {
 ```
 
 ### 5. 타입 정의
+
+모든 타입은 `src/types/index.ts`에 통합 정의:
+
 ```typescript
-// src/types/user.ts
+// src/types/index.ts (주요 타입)
 export interface User {
-  user_email: string;
-  user_name: string;
-  user_type: string; // 'PRE_STARTUP' | 'STARTUP' | 'SME'
+  user_id: number;
+  google_email: string;
+  username: string;
+  type_code: 'U001' | 'U002' | 'U003'; // U001: 관리자, U002: 예비창업자, U003: 사업자
+  birth?: string;
+  create_date?: string;
 }
 
-// src/types/api.ts
+export type AgentCode = 'A001' | 'A002' | 'A003' | 'A004' | 'A005' | 'A006';
+
+export interface ChatMessage {
+  id: string;
+  type: 'user' | 'assistant';
+  content: string;
+  agent_code?: AgentCode;
+  timestamp: Date;
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ApiResponse<T> {
   data: T;
   message?: string;
-  status: number;
-}
-
-// src/types/chat.ts
-export interface ChatMessage {
-  id: string;
-  message: string;
-  response: string;
-  agent_code: string; // 'STARTUP' | 'TAX' | 'FUNDING' | 'HR' | 'LEGAL' | 'MARKETING'
-  created_at: string;
 }
 ```
 
 **규칙**:
 - 모든 컴포넌트 props에 타입 정의
 - API 응답에 타입 정의
-- `src/types/` 디렉토리에 도메인별로 파일 구분
+- `src/types/index.ts`에 통합 관리
 
 ## 주요 페이지 및 요구사항
 
 ### 1. 메인 채팅 페이지 (/)
-- **기능**: 통합 채팅 인터페이스
+- **기능**: 통합 채팅 인터페이스 (멀티세션)
 - **요구사항**:
   - 도메인 태그 표시 (REQ-UI-002)
-  - 대화 이력 조회 (REQ-UI-004)
-  - 빠른 질문 버튼 (REQ-UI-101)
+  - 대화 이력 조회 - ChatHistoryPanel (REQ-UI-004)
+  - 빠른 질문 버튼 - 사용자 유형별 (REQ-UI-101)
+  - 게스트 10회 무료 메시지 제한
 
 ### 2. 로그인 페이지 (/login)
 - **기능**: Google OAuth2 소셜 로그인
 - **요구사항**:
   - Google 로그인 버튼 (REQ-UM-012)
   - 자동 로그인 (REQ-UM-014)
+  - 로그인 시 게스트 메시지 동기화 (`syncGuestMessages`)
 
 ### 3. 기업 프로필 페이지 (/company)
-- **기능**: 기업 정보 등록/수정
+- **기능**: 기업 정보 등록/수정 (통합 `CompanyForm`)
 - **요구사항**:
-  - 프로필 등록/수정 (REQ-CP-001, REQ-CP-002)
+  - 준비중/운영중 상태 토글
+  - `RegionSelect` 시/도→시/군/구 2단계 선택
   - 사업자등록증 업로드 (REQ-CP-003)
 
-### 4. 일정 관리 페이지 (/schedule)
+### 4. 프로필 관리 (ProfileDialog 모달)
+- **기능**: 사용자 정보 조회/수정
+- **접근**: Sidebar 설정(톱니바퀴) 아이콘 클릭
+- **참고**: 별도 라우트 없음 (모달 방식)
+
+### 5. 일정 관리 페이지 (/schedule)
 - **기능**: 일정 조회/등록
 - **요구사항**:
   - 일정 조회/등록
   - 마감일 알림 연동
 
-### 5. 관리자 페이지 (/admin)
-- **기능**: 관리자 대시보드
+### 6. 사용 설명서 페이지 (/guide)
+- **기능**: 서비스 사용법 안내
+
+### 7. 관리자 페이지 (/admin)
+- **기능**: 관리자 대시보드 (U001 타입만)
 - **요구사항**:
   - 회원 관리 (REQ-AD-001~004)
   - 상담 로그 조회 (REQ-AD-011~013)

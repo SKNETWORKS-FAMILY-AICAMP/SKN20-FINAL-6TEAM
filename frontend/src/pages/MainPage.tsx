@@ -158,7 +158,7 @@ const MainPage: React.FC = () => {
                       msg.type === 'user' ? 'text-blue-100' : 'text-gray-400'
                     }`}
                   >
-                    {msg.timestamp.toLocaleTimeString('ko-KR', {
+                    {new Date(msg.timestamp).toLocaleTimeString('ko-KR', {
                       hour: '2-digit',
                       minute: '2-digit',
                     })}

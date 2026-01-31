@@ -162,7 +162,7 @@ class UserResponse(BaseModel):
 | schedule | 일정 | schedule_id, company_id, schedule_name, start_date |
 
 ### 코드 테이블 (main_code)
-- `U`: 사용자 유형 (U001: 예비창업자, U002: 사업자)
+- `U`: 사용자 유형 (U001: 관리자, U002: 예비창업자, U003: 사업자)
 - `B`: 업종 코드 (B001: 음식점업, B002: 소매업, ...)
 - `A`: 에이전트 코드 (A001: 창업, A002: 세무, ...)
 - `H`: 주관기관 코드 (H001: 중소벤처기업부, ...)
@@ -189,8 +189,10 @@ class UserResponse(BaseModel):
 | Method | Endpoint | 설명 | 요구사항 |
 |--------|----------|------|----------|
 | GET | `/companies` | 내 기업 목록 | REQ-CP-001 |
+| GET | `/companies/{id}` | 기업 상세 조회 | REQ-CP-001 |
 | POST | `/companies` | 기업 등록 | REQ-CP-001 |
 | PUT | `/companies/{id}` | 기업 수정 | REQ-CP-002 |
+| DELETE | `/companies/{id}` | 기업 삭제 (소프트 삭제: `use_yn=False`) | REQ-CP-004 |
 | POST | `/companies/{id}/upload` | 사업자등록증 업로드 | REQ-CP-003 |
 
 ### 상담 이력 (histories)

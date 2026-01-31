@@ -1,11 +1,14 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ChatMessage, ChatSession } from '../types';
+import api from '../lib/api';
 
 interface ChatState {
   sessions: ChatSession[];
   currentSessionId: string | null;
   isLoading: boolean;
+  lastHistoryId: number | null;
+  guestMessageCount: number;
 
   // Session management
   createSession: (title?: string) => string;
@@ -17,6 +20,16 @@ interface ChatState {
   addMessage: (message: ChatMessage) => void;
   setLoading: (loading: boolean) => void;
   clearMessages: () => void;
+
+  // History linking
+  setLastHistoryId: (id: number | null) => void;
+
+  // Guest message limit
+  incrementGuestCount: () => void;
+  resetGuestCount: () => void;
+
+  // Guest → Login sync
+  syncGuestMessages: () => Promise<void>;
 
   // Getters
   getCurrentSession: () => ChatSession | undefined;
@@ -37,18 +50,21 @@ export const useChatStore = create<ChatState>()(
       sessions: [],
       currentSessionId: null,
       isLoading: false,
+      lastHistoryId: null,
+      guestMessageCount: 0,
 
       createSession: (title?: string) => {
         const session = createNewSession(title);
         set((state) => ({
           sessions: [session, ...state.sessions],
           currentSessionId: session.id,
+          lastHistoryId: null,
         }));
         return session.id;
       },
 
       switchSession: (sessionId: string) => {
-        set({ currentSessionId: sessionId });
+        set({ currentSessionId: sessionId, lastHistoryId: null });
       },
 
       deleteSession: (sessionId: string) => {
@@ -116,6 +132,44 @@ export const useChatStore = create<ChatState>()(
         }));
       },
 
+      setLastHistoryId: (id: number | null) => set({ lastHistoryId: id }),
+
+      incrementGuestCount: () =>
+        set((state) => ({ guestMessageCount: state.guestMessageCount + 1 })),
+
+      resetGuestCount: () => set({ guestMessageCount: 0 }),
+
+      syncGuestMessages: async () => {
+        const state = get();
+        const session = state.sessions.find((s) => s.id === state.currentSessionId);
+        if (!session || session.messages.length === 0) return;
+
+        const messages = session.messages;
+        let lastSyncedHistoryId: number | null = null;
+
+        for (let i = 0; i < messages.length; i++) {
+          const msg = messages[i];
+          if (msg.type !== 'user') continue;
+
+          const assistantMsg = messages[i + 1];
+          if (!assistantMsg || assistantMsg.type !== 'assistant') continue;
+
+          try {
+            const res = await api.post('/histories', {
+              agent_code: assistantMsg.agent_code || 'A001',
+              question: msg.content,
+              answer: assistantMsg.content,
+              parent_history_id: lastSyncedHistoryId,
+            });
+            lastSyncedHistoryId = res.data.history_id;
+          } catch {
+            // History sync failure is non-critical
+          }
+        }
+
+        set({ lastHistoryId: lastSyncedHistoryId });
+      },
+
       getCurrentSession: () => {
         const state = get();
         return state.sessions.find((s) => s.id === state.currentSessionId);
@@ -132,19 +186,8 @@ export const useChatStore = create<ChatState>()(
       partialize: (state) => ({
         sessions: state.sessions,
         currentSessionId: state.currentSessionId,
+        guestMessageCount: state.guestMessageCount,
       }),
-      onRehydrate: () => (state) => {
-        // Restore Date objects from serialized strings
-        if (state) {
-          state.sessions = state.sessions.map((session) => ({
-            ...session,
-            messages: session.messages.map((msg) => ({
-              ...msg,
-              timestamp: new Date(msg.timestamp),
-            })),
-          }));
-        }
-      },
     }
   )
 );

@@ -34,10 +34,15 @@ SKN20-FINAL-6TEAM/
 │   ├── src/
 │   │   ├── pages/         # 페이지 컴포넌트
 │   │   ├── components/    # React 컴포넌트
+│   │   │   ├── chat/      # 채팅 UI
+│   │   │   ├── common/    # 공통 (RegionSelect 등)
+│   │   │   ├── company/   # 기업 (CompanyForm)
+│   │   │   ├── layout/    # MainLayout, Sidebar
+│   │   │   └── profile/   # ProfileDialog (모달)
 │   │   ├── hooks/         # 커스텀 훅
 │   │   ├── stores/        # Zustand 스토어
 │   │   ├── types/         # TypeScript 타입
-│   │   └── lib/           # API 클라이언트 (axios)
+│   │   └── lib/           # API 클라이언트 (axios), 상수 (constants.ts)
 │   └── Dockerfile
 │
 ├── backend/               # FastAPI 백엔드
@@ -186,9 +191,11 @@ Frontend (React + Vite)
 ```
 
 ## 사용자 유형
-1. **예비 창업자**: 창업 절차, 사업자 등록, 기초 회계
-2. **스타트업 CEO**: 투자유치, 지원사업, 성장 전략
-3. **중소기업 대표**: 노무관리, 세무, 법률 리스크
+| 코드 | 유형 | 주요 관심사 |
+|------|------|-----------|
+| U001 | 관리자 | 시스템 관리, 회원 관리, 통계 |
+| U002 | 예비창업자 | 창업 절차, 사업자 등록, 기초 회계, 지원사업 |
+| U003 | 사업자 | 노무관리, 세무, 법률 리스크, 지원사업 |
 
 ## 개발 컨벤션
 
