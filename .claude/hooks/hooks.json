@@ -1,0 +1,53 @@
+{
+  "$schema": "https://claude.ai/hooks-schema.json",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "name": "python-type-hint-check",
+        "description": "Python 파일 수정 전 타입 힌트 권장",
+        "matcher": {
+          "tool": "Edit",
+          "file_pattern": "**/*.py"
+        },
+        "reminder": "Python 파일 수정 시 타입 힌트를 추가해주세요. 함수 매개변수와 반환 타입을 명시하세요."
+      },
+      {
+        "name": "env-file-security-warning",
+        "description": ".env 파일 수정 시 보안 경고",
+        "matcher": {
+          "tool": "Edit",
+          "file_pattern": "**/.env*"
+        },
+        "reminder": "⚠️ 환경 변수 파일을 수정합니다. API 키나 비밀번호가 포함된 경우 .gitignore에 추가되어 있는지 확인하세요."
+      }
+    ],
+    "PostToolUse": [
+      {
+        "name": "pytest-failure-analysis",
+        "description": "pytest 실패 시 분석 제안",
+        "matcher": {
+          "tool": "Bash",
+          "command_pattern": "pytest*"
+        },
+        "on_failure": "테스트 실패 원인을 분석하고 수정 방안을 제시해주세요."
+      },
+      {
+        "name": "lint-error-summary",
+        "description": "린트 에러 요약",
+        "matcher": {
+          "tool": "Bash",
+          "command_pattern": "*ruff*|*eslint*|*npm run lint*"
+        },
+        "on_failure": "린트 에러를 카테고리별로 요약하고 우선순위를 제안해주세요."
+      }
+    ],
+    "SessionStart": [
+      {
+        "name": "show-branch-info",
+        "description": "세션 시작 시 현재 브랜치 정보 표시",
+        "command": "git branch --show-current && git log -1 --oneline",
+        "reminder": "현재 브랜치와 마지막 커밋을 확인했습니다."
+      }
+    ]
+  }
+}

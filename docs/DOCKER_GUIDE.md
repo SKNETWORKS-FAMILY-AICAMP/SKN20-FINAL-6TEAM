@@ -182,6 +182,6 @@ Docker Desktop 설정에서 메모리를 늘려주세요:
 
 ## 추가 정보
 
-- 프로젝트 상세 정보: [CLAUDE.md](./CLAUDE.md)
-- Backend API 가이드: [backend/CLAUDE.md](./backend/CLAUDE.md)
-- Frontend 개발 가이드: [frontend/CLAUDE.md](./frontend/CLAUDE.md)
+- 프로젝트 상세 정보: [CLAUDE.md](../CLAUDE.md)
+- Backend API 가이드: [backend/CLAUDE.md](../backend/CLAUDE.md)
+- Frontend 개발 가이드: [frontend/CLAUDE.md](../frontend/CLAUDE.md)

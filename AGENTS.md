@@ -1,10 +1,11 @@
 # Bizi - 통합 창업/경영 상담 챗봇
 
-> 이 문서는 AI 에이전트가 프로젝트를 이해하고 개발을 지원하기 위한 가이드입니다.
+> **이 문서는 RAG 에이전트 및 다른 AI 시스템을 위한 가이드입니다.**
+> Claude Code 개발 가이드는 [CLAUDE.md](./CLAUDE.md)를 참조하세요.
 
 ## 프로젝트 개요
 Bizi는 예비 창업자, 스타트업 CEO, 중소기업 대표를 위한 AI 기반 통합 경영 상담 챗봇입니다.
-6개 전문 도메인(창업/세무/노무/법률/지원사업/마케팅)에 대한 맞춤형 상담을 제공합니다.
+3개 전문 도메인(창업·지원사업 / 재무·세무 / 인사·노무)에 대한 맞춤형 상담을 제공합니다.
 
 ## 프로젝트 목표
 - 창업 절차, 세무, 노무, 법률, 지원사업, 마케팅 통합 상담
@@ -13,9 +14,9 @@ Bizi는 예비 창업자, 스타트업 CEO, 중소기업 대표를 위한 AI 기
 - 선제적 알림 시스템 (마감일 D-7, D-3 알림)
 
 ## 기술 스택
-- **Frontend**: Next.js 14 (App Router), React 18, TypeScript, TailwindCSS
+- **Frontend**: React 18 + Vite, TypeScript, TailwindCSS, React Router
 - **Backend**: FastAPI, SQLAlchemy 2.0, Google OAuth2, JWT
-- **RAG Service**: FastAPI, LangChain, LangGraph, OpenAI GPT-4
+- **RAG Service**: FastAPI, LangChain, LangGraph, OpenAI GPT-4o-mini
 - **Database**: MySQL 8.0 (스키마: final_test)
 - **Vector DB**: ChromaDB
 - **Container**: Docker, Docker Compose
@@ -23,18 +24,18 @@ Bizi는 예비 창업자, 스타트업 CEO, 중소기업 대표를 위한 AI 기
 ## 프로젝트 구조
 ```
 SKN20-FINAL-6TEAM/
-├── CLAUDE.md              # 프로젝트 전체 가이드
-├── AGENTS.md              # 이 파일 (AI 에이전트 가이드)
+├── CLAUDE.md              # 프로젝트 전체 가이드 (Claude Code용)
+├── AGENTS.md              # 이 파일 (RAG/AI 에이전트용)
 ├── docker-compose.yaml    # Docker 서비스 구성
 ├── .env                   # 환경 변수 (git에서 제외)
 ├── .env.example           # 환경 변수 예시
 │
-├── frontend/              # Next.js 프론트엔드
+├── frontend/              # React + Vite 프론트엔드
 │   ├── CLAUDE.md          # Frontend 개발 가이드
 │   ├── AGENTS.md          # Frontend AI 에이전트 가이드
 │   ├── package.json
 │   ├── src/
-│   │   ├── app/           # App Router 페이지
+│   │   ├── pages/         # 페이지 컴포넌트
 │   │   ├── components/    # React 컴포넌트
 │   │   ├── hooks/         # 커스텀 훅
 │   │   ├── stores/        # Zustand 스토어
@@ -62,7 +63,7 @@ SKN20-FINAL-6TEAM/
 │   ├── CLAUDE.md          # RAG 개발 가이드
 │   ├── AGENTS.md          # RAG AI 에이전트 가이드
 │   ├── main.py            # FastAPI 진입점
-│   ├── agents/            # 멀티에이전트 (6개 도메인 + Router)
+│   ├── agents/            # Agentic RAG (5개 에이전트)
 │   ├── chains/            # LangChain 체인
 │   ├── vectorstores/      # 벡터 DB 관리
 │   ├── schemas/           # Pydantic 스키마
@@ -82,7 +83,7 @@ SKN20-FINAL-6TEAM/
 ## 서비스 포트
 | 서비스 | 포트 | 설명 |
 |--------|------|------|
-| Frontend | 3000 | Next.js 개발 서버 |
+| Frontend | 5173 | Vite 개발 서버 |
 | Backend | 8000 | FastAPI REST API |
 | RAG | 8001 | RAG Service (LangChain/FastAPI) |
 | MySQL | 3306 | 데이터베이스 |
@@ -112,11 +113,11 @@ pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-**Frontend (Next.js)**
+**Frontend (React + Vite)**
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev  # localhost:5173
 ```
 
 **RAG Service**
@@ -133,20 +134,20 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ### 시스템 구성도
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         Frontend (Next.js)                       │
-│                    localhost:3000                                │
+│                      Frontend (React + Vite)                     │
+│                    localhost:5173                                │
 └───────────────┬─────────────────────────────┬───────────────────┘
-                │ REST API                    │ 직접 통신
-                │ (인증, 사용자, 기업)         │ (채팅, AI 응답)
+                │ axios (REST API)            │ axios (직접 통신)
+                │ (인증, 사용자, 기업)            │ (채팅, AI 응답)
                 ↓                             ↓
 ┌───────────────────────────┐    ┌─────────────────────────────────┐
 │   Backend (FastAPI)       │    │      RAG Service (FastAPI)      │
 │   localhost:8000          │    │      localhost:8001             │
 │                           │    │                                 │
-│ - Google OAuth2 인증      │    │ - Master Router                 │
-│ - 사용자/기업 관리         │    │ - 6개 도메인 에이전트            │
-│ - 상담 이력 저장          │    │ - Action Executor               │
-│ - 일정 관리               │    │ - RAG 체인                      │
+│ - Google OAuth2 인증       │    │ - 메인 라우터                    │
+│ - 사용자/기업 관리            │    │ - 3개 전문 에이전트               │
+│ - 상담 이력 저장             │    │ - 평가 에이전트                   │
+│ - 일정 관리                 │    │ - Action Executor               │
 └───────────────┬───────────┘    └───────────┬─────────────────────┘
                 │                             │
                 ↓                             ↓
@@ -157,29 +158,28 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 ### 멀티에이전트 시스템
-```
-사용자 입력 → Master Router → 도메인 에이전트 → 응답
-                    ↓
-    ┌─────────────────────────────────────┐
-    │ 1. Startup Agent (창업)              │
-    │ 2. Tax Agent (세무/회계)             │
-    │ 3. Funding Agent (지원사업)          │
-    │ 4. HR Agent (노무)                   │
-    │ 5. Legal Agent (법률)                │
-    │ 6. Marketing Agent (마케팅)          │
-    └─────────────────────────────────────┘
-                    ↓
-         Action Executor (문서 생성)
-```
+
+Agentic RAG 구조로 5개 에이전트 운영:
+
+| 에이전트 | 역할 |
+|---------|------|
+| 메인 라우터 | 질문 분류, 에이전트 조율, 평가 결과에 따른 재요청 |
+| 창업 및 지원 에이전트 | 창업절차, 지원사업, 마케팅 상담 |
+| 재무 및 세무 에이전트 | 세금, 회계, 재무 상담 |
+| 인사 및 노무 에이전트 | 근로, 채용, 법률 상담 |
+| 평가 에이전트 | 답변 품질 평가, 재요청 판단 |
+| Action Executor | 문서 생성 (근로계약서, 사업계획서 등) |
 
 ### API 통신 흐름
-**인증/데이터 관리**: Frontend → Backend → MySQL
-**AI 채팅**: Frontend → RAG Service (직접 통신) → Vector DB
+**인증/데이터 관리**: Frontend (axios) → Backend → MySQL
+**AI 채팅**: Frontend (axios) → RAG Service (직접 통신) → Vector DB
 
 ## 사용자 유형
-1. **예비 창업자**: 창업 절차, 사업자 등록, 기초 회계
-2. **스타트업 CEO**: 투자유치, 지원사업, 성장 전략
-3. **중소기업 대표**: 노무관리, 세무, 법률 리스크
+| 코드 | 유형 | 주요 관심사 |
+|------|------|-----------|
+| U001 | 관리자 | 시스템 관리, 회원 관리, 통계 |
+| U002 | 예비창업자 | 창업 절차, 사업자 등록, 기초 회계, 지원사업 |
+| U003 | 사업자 | 노무관리, 세무, 법률 리스크, 지원사업 |
 
 ## 개발 컨벤션
 
@@ -218,10 +218,10 @@ chore: 빌드, 설정 변경
 ## 주요 참고 문서
 - `prd.xlsx`: 상세 요구사항 정의서
 - `plan.docx`: 프로젝트 기획서
-- `backend/AGENTS.md`: FastAPI 백엔드 개발 가이드
-- `frontend/AGENTS.md`: Next.js 프론트엔드 개발 가이드
-- `rag/AGENTS.md`: 멀티에이전트 RAG 개발 가이드
-- `data/AGENTS.md`: 데이터 크롤링/전처리 가이드
+- `backend/AGENTS.md`: FastAPI 백엔드 AI 에이전트 가이드
+- `frontend/AGENTS.md`: React + Vite 프론트엔드 AI 에이전트 가이드
+- `rag/AGENTS.md`: Agentic RAG 개발 가이드
+- `data/AGENTS.md`: 데이터 관리 AI 에이전트 가이드
 
 ## 환경 변수 (.env)
 ```
@@ -289,7 +289,7 @@ KSTARTUP_API_KEY=      # K-Startup API
 ### 파일 수정 시 확인사항
 - **새 API 추가**: `main.py`에 라우터 등록
 - **새 모델 추가**: `common/models.py` 수정 후 `database.sql` 반영
-- **새 페이지 추가**: `src/app/` 하위에 폴더/page.tsx 생성
+- **새 페이지 추가**: `src/pages/` 하위에 컴포넌트 생성, App.tsx에 라우트 추가
 - **새 에이전트 추가**: `agents/base.py` 상속, `agents/__init__.py` 등록
 
 ## R&R (역할 분담)

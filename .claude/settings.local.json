@@ -5,9 +5,19 @@
       "WebFetch(domain:marketplace.visualstudio.com)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:www.bizinfo.go.kr)",
+      "WebFetch(domain:k-startup.go.kr)",
       "Bash(pip install:*)",
+      "Bash(pip:*)",
       "Bash(python:*)",
-      "Bash(.venv/Scripts/python:*)",
+      "Bash(python3:*)",
+      "Bash(pytest:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(docker:*)",
+      "Bash(docker-compose:*)",
+      "Bash(ruff:*)",
+      "Bash(mypy:*)",
+      "Bash(uvicorn:*)",
       "Bash(wc:*)"
     ]
   }

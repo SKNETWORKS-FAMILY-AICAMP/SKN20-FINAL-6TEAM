@@ -199,6 +199,12 @@ Frontend (React + Vite)
 
 ## 개발 컨벤션
 
+상세 규칙은 `.claude/rules/` 폴더를 참조하세요:
+- `.claude/rules/coding-style.md`: 코딩 스타일
+- `.claude/rules/git-workflow.md`: Git 워크플로우
+- `.claude/rules/testing.md`: 테스트 규칙
+- `.claude/rules/security.md`: 보안 규칙
+
 ### Git 브랜치 전략
 - `main`: 배포 가능한 안정 버전
 - `develop`: 개발 통합 브랜치
@@ -252,12 +258,19 @@ chore: 빌드, 설정 변경
 | schedule | 일정 관리 |
 
 ## 주요 참고 문서
+
+### 프로젝트 문서
+- `docs/DOCKER_GUIDE.md`: Docker 실행 가이드
+- `docs/DATA_SCHEMA.md`: 데이터 통합 스키마 정의
 - `prd.xlsx`: 상세 요구사항 정의서
 - `plan.docx`: 프로젝트 기획서
+
+### 서비스별 개발 가이드
 - `backend/CLAUDE.md`: FastAPI 백엔드 개발 가이드
 - `frontend/CLAUDE.md`: React + Vite 프론트엔드 개발 가이드
-- `rag/CLAUDE.md`: 멀티에이전트 RAG 개발 가이드
-- `data/CLAUDE.md`: 데이터 크롤링/전처리 가이드
+- `rag/CLAUDE.md`: Agentic RAG 개발 가이드
+- `scripts/CLAUDE.md`: 데이터 크롤링/전처리 스크립트 가이드
+- `data/CLAUDE.md`: 데이터 폴더 가이드
 
 ## 환경 변수 (.env)
 ```

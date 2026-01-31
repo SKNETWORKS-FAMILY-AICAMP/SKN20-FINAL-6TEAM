@@ -315,3 +315,134 @@ test 'component should call dependency':
 
 ## Supporting Files Reference
 - [plan-template.md](plan-template.md) - Complete plan document template
+
+---
+
+## Bizi 프로젝트 특화 템플릿
+
+### RAG 에이전트 계획 템플릿
+
+새로운 RAG 에이전트 개발 시 사용:
+
+```markdown
+## RAG 에이전트: [에이전트명]
+
+### 개요
+- 담당 도메인: (창업·지원 / 재무·세무 / 인사·노무)
+- 사용할 벡터 컬렉션:
+- 프롬프트 템플릿 위치: `rag/prompts/`
+
+### Phase 1: 에이전트 기본 구조
+**Goal**: BaseAgent 상속, 기본 라우팅 연동
+**Test Strategy**:
+- [ ] 에이전트 초기화 테스트
+- [ ] 질문 라우팅 테스트
+**Tasks**:
+1. RED: pytest 테스트 케이스 작성
+2. GREEN: `rag/agents/[name]_agent.py` 구현
+3. REFACTOR: 코드 정리
+
+### Phase 2: RAG 체인 구현
+**Goal**: 벡터 검색 + LLM 응답 생성
+**Test Strategy**:
+- [ ] 벡터 검색 결과 검증
+- [ ] 응답 품질 테스트 (RAGAS)
+**Tasks**:
+1. RED: 검색 품질 테스트
+2. GREEN: LangChain 체인 구현
+3. REFACTOR: 프롬프트 최적화
+
+### Phase 3: 평가 및 통합
+**Goal**: 평가 에이전트 연동, 메인 라우터 통합
+**Test Strategy**:
+- [ ] 평가 점수 검증
+- [ ] 통합 테스트
+**Tasks**:
+1. RED: 통합 테스트 작성
+2. GREEN: 라우터 연동
+3. REFACTOR: 성능 최적화
+```
+
+### FastAPI 모듈 계획 템플릿
+
+새로운 API 모듈 개발 시 사용:
+
+```markdown
+## FastAPI 모듈: [모듈명]
+
+### 개요
+- 기능 설명:
+- 관련 테이블: `backend/database.sql` 참조
+- API 경로: `/api/v1/[module]/`
+
+### Phase 1: 데이터 모델 & 스키마
+**Goal**: SQLAlchemy 모델, Pydantic 스키마 정의
+**Test Strategy**:
+- [ ] 모델 CRUD 테스트
+**Tasks**:
+1. `backend/apps/[module]/models.py` 생성
+2. `backend/apps/[module]/schemas.py` 생성
+3. 테스트 코드 작성
+
+### Phase 2: 서비스 레이어
+**Goal**: 비즈니스 로직 구현
+**Test Strategy**:
+- [ ] 서비스 함수 단위 테스트
+**Tasks**:
+1. RED: 서비스 테스트 작성
+2. GREEN: `backend/apps/[module]/service.py` 구현
+3. REFACTOR: 에러 핸들링 개선
+
+### Phase 3: API 라우터
+**Goal**: REST 엔드포인트 노출
+**Test Strategy**:
+- [ ] 엔드포인트 통합 테스트
+- [ ] 인증/인가 테스트
+**Tasks**:
+1. RED: API 테스트 작성
+2. GREEN: `backend/apps/[module]/router.py` 구현
+3. `backend/main.py`에 라우터 등록
+
+### Phase 4: 프론트엔드 연동
+**Goal**: React 컴포넌트에서 API 호출
+**Tasks**:
+1. `frontend/src/lib/api.ts`에 API 함수 추가
+2. 컴포넌트 연동 및 테스트
+```
+
+### React 컴포넌트 계획 템플릿
+
+새로운 페이지/컴포넌트 개발 시 사용:
+
+```markdown
+## React 컴포넌트: [컴포넌트명]
+
+### 개요
+- 위치: `frontend/src/components/[category]/`
+- 사용 페이지:
+- 관련 API:
+
+### Phase 1: 타입 & 훅 정의
+**Goal**: TypeScript 타입, 커스텀 훅 작성
+**Tasks**:
+1. `types/[name].ts` 타입 정의
+2. `hooks/use[Name].ts` 훅 작성
+3. Vitest 테스트 작성
+
+### Phase 2: 컴포넌트 구현
+**Goal**: UI 컴포넌트 렌더링
+**Test Strategy**:
+- [ ] 렌더링 테스트
+- [ ] 사용자 인터랙션 테스트
+**Tasks**:
+1. 컴포넌트 구현
+2. TailwindCSS 스타일링
+3. 접근성 (a11y) 검증
+
+### Phase 3: 상태 관리 연동
+**Goal**: Zustand 스토어 연동
+**Tasks**:
+1. 필요시 스토어 생성/수정
+2. 컴포넌트-스토어 연결
+3. 통합 테스트
+```

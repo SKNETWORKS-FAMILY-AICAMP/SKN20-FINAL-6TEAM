@@ -201,46 +201,9 @@ python -m scripts.preprocessing.startup_guide_preprocessor
 
 ## 통합 스키마
 
-모든 전처리기는 동일한 스키마를 따릅니다:
+모든 전처리기는 동일한 스키마를 따릅니다. 상세 스키마 정의는 [docs/DATA_SCHEMA.md](../docs/DATA_SCHEMA.md)를 참조하세요.
 
-```json
-{
-  "id": "LAW_010719",
-  "type": "law",
-  "domain": "legal",
-  "title": "근로기준법",
-  "content": "제1조(목적) 이 법은 헌법에 따라...",
-  "source": {
-    "name": "국가법령정보센터",
-    "url": "https://law.go.kr/법령/근로기준법",
-    "collected_at": "2026-01-20T11:43:48"
-  },
-  "effective_date": "2024-02-09",
-  "metadata": {}
-}
-```
-
-### ID 체계
-
-| 타입 | ID 형식 | 예시 |
-|------|---------|------|
-| 법령 | `LAW_{law_id}` | `LAW_010719` |
-| 해석례 | `INTERP_{기관}_{id}` | `INTERP_SMBA_313107` |
-| 판례 | `COURT_{domain}_{id}` | `COURT_LABOR_12345` |
-| 공고 | `ANNOUNCE_{source}_{id}` | `ANNOUNCE_BIZINFO_123` |
-| 가이드 | `GUIDE_{업종코드}` | `GUIDE_011000` |
-| 일정 | `SCHEDULE_TAX_{날짜}_{순번}` | `SCHEDULE_TAX_20260126_001` |
-| 질의회시 | `LABOR_QA_{장}_{페이지}_{순번}` | `LABOR_QA_1_15_001` |
-
-### 도메인 분류
-
-| 도메인 | 키워드 |
-|--------|--------|
-| `tax` | 세법, 소득세, 법인세, 부가가치세 |
-| `labor` | 근로, 노동, 고용, 임금, 퇴직, 해고 |
-| `startup` | 사업자, 창업, 법인설립, 업종, 인허가 |
-| `funding` | 지원사업, 보조금, 정책자금, 공고 |
-| `legal` | 상법, 민법, 공정거래, 계약 |
+**필수 필드**: `id`, `type`, `domain`, `title`, `content`, `source`
 
 ---
 
@@ -289,6 +252,7 @@ DATA_PROCESSED_PATH=data/preprocessed
 
 ## 참고 문서
 
+- [docs/DATA_SCHEMA.md](../docs/DATA_SCHEMA.md) - 통합 스키마 정의
 - [data_pipeline.md](./data_pipeline.md) - 전처리 파이프라인 상세 설명
 - [data/CLAUDE.md](../data/CLAUDE.md) - 데이터 폴더 가이드
 - [rag/CLAUDE.md](../rag/CLAUDE.md) - RAG 시스템 가이드

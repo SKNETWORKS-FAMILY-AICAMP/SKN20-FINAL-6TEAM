@@ -1,7 +1,7 @@
-# Data AI 에이전트 개발 가이드
+# Data AI 에이전트 가이드
 
-> 이 문서는 AI 에이전트가 데이터 관리 및 활용을 지원하기 위한 가이드입니다.
-> 상세한 개발 가이드는 [CLAUDE.md](./CLAUDE.md)를 참조하세요.
+> **이 문서는 RAG 에이전트 및 다른 AI 시스템을 위한 가이드입니다.**
+> Claude Code 개발 가이드는 [CLAUDE.md](./CLAUDE.md)를 참조하세요.
 
 ## 개요
 
@@ -32,65 +32,9 @@ data/
 
 ## 통합 스키마
 
-모든 전처리된 문서는 동일한 스키마를 따릅니다:
+상세 스키마 정의는 [docs/DATA_SCHEMA.md](../docs/DATA_SCHEMA.md)를 참조하세요.
 
-```json
-{
-  "id": "TYPE_SOURCE_ID",
-  "type": "law | interpretation | guide | schedule | labor_qa | ...",
-  "domain": "legal | tax | labor | startup | funding | marketing",
-  "title": "문서 제목",
-  "content": "RAG 검색용 본문",
-  "source": {
-    "name": "출처명",
-    "url": "원본 URL",
-    "collected_at": "2026-01-20T11:43:48"
-  },
-  "effective_date": "YYYY-MM-DD",
-  "related_laws": [
-    {
-      "law_id": "LAW_010719",
-      "law_name": "근로기준법",
-      "article_ref": "제15조"
-    }
-  ],
-  "metadata": {}
-}
-```
-
-### 필수 필드
-
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `id` | string | 문서 고유 ID |
-| `type` | string | 문서 유형 |
-| `domain` | string | 도메인 |
-| `title` | string | 제목 |
-| `content` | string | RAG 검색용 본문 |
-| `source` | object | 출처 정보 |
-
-### ID 체계
-
-| 타입 | ID 형식 | 예시 |
-|------|---------|------|
-| 법령 | `LAW_{law_id}` | `LAW_010719` |
-| 해석례 | `INTERP_{기관}_{id}` | `INTERP_SMBA_313107` |
-| 판례 | `COURT_{domain}_{id}` | `COURT_LABOR_12345` |
-| 공고 | `ANNOUNCE_{source}_{id}` | `ANNOUNCE_BIZINFO_123` |
-| 가이드 | `GUIDE_{업종코드}` | `GUIDE_011000` |
-| 일정 | `SCHEDULE_TAX_{날짜}_{순번}` | `SCHEDULE_TAX_20260126_001` |
-| 질의회시 | `LABOR_QA_{장}_{페이지}_{순번}` | `LABOR_QA_1_15_001` |
-
-### 도메인 분류
-
-| 도메인 | 설명 | 키워드 |
-|--------|------|--------|
-| `tax` | 세무/회계 | 세법, 소득세, 법인세, 부가가치세 |
-| `labor` | 노동/인사 | 근로, 노동, 고용, 임금, 퇴직, 해고 |
-| `startup` | 창업/사업자 | 사업자, 창업, 법인설립, 업종, 인허가 |
-| `funding` | 지원사업 | 지원사업, 보조금, 정책자금, 공고 |
-| `legal` | 법률 | 상법, 민법, 공정거래, 계약 |
-| `marketing` | 마케팅 | 광고, 홍보, 브랜딩 |
+**필수 필드**: `id`, `type`, `domain`, `title`, `content`, `source`
 
 ## 출력 파일 목록
 
@@ -193,6 +137,7 @@ origin/**/*.csv
 
 ## 참고 문서
 
+- [docs/DATA_SCHEMA.md](../docs/DATA_SCHEMA.md) - 통합 스키마 정의
 - [CLAUDE.md](./CLAUDE.md) - 상세 개발 가이드
 - [scripts/CLAUDE.md](../scripts/CLAUDE.md) - 크롤링/전처리 스크립트 가이드
 - [scripts/data_pipeline.md](../scripts/data_pipeline.md) - 전처리 파이프라인 상세 설명

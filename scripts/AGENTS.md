@@ -1,7 +1,7 @@
-# Scripts AI 에이전트 개발 가이드
+# Scripts AI 에이전트 가이드
 
-> 이 문서는 AI 에이전트가 데이터 크롤링/전처리 스크립트 개발을 지원하기 위한 가이드입니다.
-> 상세한 개발 가이드는 [CLAUDE.md](./CLAUDE.md)를 참조하세요.
+> **이 문서는 RAG 에이전트 및 다른 AI 시스템을 위한 가이드입니다.**
+> Claude Code 개발 가이드는 [CLAUDE.md](./CLAUDE.md)를 참조하세요.
 
 ## 개요
 
@@ -177,37 +177,9 @@ if __name__ == "__main__":
 
 ## 통합 스키마
 
-모든 전처리된 문서는 동일한 스키마를 따릅니다:
+상세 스키마 정의는 [docs/DATA_SCHEMA.md](../docs/DATA_SCHEMA.md)를 참조하세요.
 
-```json
-{
-  "id": "TYPE_SOURCE_ID",
-  "type": "law | interpretation | guide | schedule | ...",
-  "domain": "legal | tax | labor | startup | funding | marketing",
-  "title": "문서 제목",
-  "content": "RAG 검색용 본문",
-  "source": {
-    "name": "출처명",
-    "url": "원본 URL",
-    "collected_at": "2026-01-20T11:43:48"
-  },
-  "effective_date": "YYYY-MM-DD",
-  "related_laws": [],
-  "metadata": {}
-}
-```
-
-### ID 체계
-
-| 타입 | ID 형식 | 예시 |
-|------|---------|------|
-| 법령 | `LAW_{law_id}` | `LAW_010719` |
-| 해석례 | `INTERP_{기관}_{id}` | `INTERP_SMBA_313107` |
-| 판례 | `COURT_{domain}_{id}` | `COURT_LABOR_12345` |
-| 공고 | `ANNOUNCE_{source}_{id}` | `ANNOUNCE_BIZINFO_123` |
-| 가이드 | `GUIDE_{업종코드}` | `GUIDE_011000` |
-| 일정 | `SCHEDULE_TAX_{날짜}_{순번}` | `SCHEDULE_TAX_20260126_001` |
-| 질의회시 | `LABOR_QA_{장}_{페이지}_{순번}` | `LABOR_QA_1_15_001` |
+**필수 필드**: `id`, `type`, `domain`, `title`, `content`, `source`
 
 ## 파일 수정 시 확인사항
 
@@ -280,6 +252,7 @@ wc -l data/preprocessed/*/*.jsonl
 
 ## 참고 문서
 
+- [docs/DATA_SCHEMA.md](../docs/DATA_SCHEMA.md) - 통합 스키마 정의
 - [CLAUDE.md](./CLAUDE.md) - 상세 개발 가이드
 - [data_pipeline.md](./data_pipeline.md) - 전처리 파이프라인 상세 설명
 - [data/CLAUDE.md](../data/CLAUDE.md) - 데이터 폴더 가이드

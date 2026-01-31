@@ -1,6 +1,7 @@
 # RAG Service - Agentic RAG 시스템
 
-> 이 문서는 AI 에이전트가 프로젝트를 이해하고 개발을 지원하기 위한 가이드입니다.
+> **이 문서는 RAG 에이전트 및 다른 AI 시스템을 위한 가이드입니다.**
+> Claude Code 개발 가이드는 [CLAUDE.md](./CLAUDE.md)를 참조하세요.
 
 ## 개요
 

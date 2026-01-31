@@ -9,7 +9,7 @@ Bizi RAG 시스템에서 사용하는 모든 데이터를 저장하는 폴더입
 - `origin/`: 원본 데이터 (크롤링 결과, PDF 파일 등)
 - `preprocessed/`: 전처리된 데이터 (JSONL 형식, RAG 입력용)
 
-## 프로젝트 구조s
+## 프로젝트 구조
 
 ```
 data/
@@ -98,68 +98,9 @@ RAG 시스템에 입력되는 통합 스키마 형식의 JSONL 파일입니다.
 
 ### 통합 스키마
 
-모든 전처리된 문서는 동일한 스키마를 따릅니다:
+상세 스키마 정의는 [docs/DATA_SCHEMA.md](../docs/DATA_SCHEMA.md)를 참조하세요.
 
-```json
-{
-  "id": "LAW_010719",
-  "type": "law",
-  "domain": "legal",
-  "title": "근로기준법",
-  "content": "제1조(목적) 이 법은 헌법에 따라...",
-  "source": {
-    "name": "국가법령정보센터",
-    "url": "https://law.go.kr/법령/근로기준법",
-    "collected_at": "2026-01-20T11:43:48"
-  },
-  "effective_date": "2024-02-09",
-  "related_laws": [
-    {
-      "law_id": "LAW_010719",
-      "law_name": "근로기준법",
-      "article_ref": "제15조"
-    }
-  ],
-  "metadata": {}
-}
-```
-
-### 필드 설명
-
-| 필드 | 타입 | 필수 | 설명 |
-|------|------|------|------|
-| `id` | string | O | 문서 고유 ID |
-| `type` | string | O | 문서 유형 (law, interpretation, guide, schedule 등) |
-| `domain` | string | O | 도메인 (legal, tax, labor, startup, funding, marketing) |
-| `title` | string | O | 제목 |
-| `content` | string | O | RAG 검색용 본문 |
-| `source` | object | O | 출처 정보 |
-| `effective_date` | string | - | 시행일/마감일 (YYYY-MM-DD) |
-| `related_laws` | array | - | 관련 법령 참조 |
-| `metadata` | object | - | 타입별 추가 데이터 |
-
-### ID 체계
-
-| 타입 | ID 형식 | 예시 |
-|------|---------|------|
-| 법령 | `LAW_{law_id}` | `LAW_010719` |
-| 해석례 | `INTERP_{기관}_{id}` | `INTERP_SMBA_313107` |
-| 판례 | `COURT_{domain}_{id}` | `COURT_LABOR_12345` |
-| 공고 | `ANNOUNCE_{source}_{id}` | `ANNOUNCE_BIZINFO_123` |
-| 가이드 | `GUIDE_{업종코드}` | `GUIDE_011000` |
-| 일정 | `SCHEDULE_TAX_{날짜}_{순번}` | `SCHEDULE_TAX_20260126_001` |
-| 질의회시 | `LABOR_QA_{장}_{페이지}_{순번}` | `LABOR_QA_1_15_001` |
-
-### 도메인 분류
-
-| 도메인 | 설명 | 키워드 |
-|--------|------|--------|
-| `tax` | 세무/회계 | 세법, 소득세, 법인세, 부가가치세 |
-| `labor` | 노동/인사 | 근로, 노동, 고용, 임금, 퇴직, 해고 |
-| `startup` | 창업/사업자 | 사업자, 창업, 법인설립, 업종, 인허가 |
-| `funding` | 지원사업 | 지원사업, 보조금, 정책자금, 공고 |
-| `legal` | 법률 | 상법, 민법, 공정거래, 계약 |
-| `marketing` | 마케팅 | 광고, 홍보, 브랜딩 |
+**필수 필드**: `id`, `type`, `domain`, `title`, `content`, `source`
 
 ---
 
@@ -327,6 +268,7 @@ origin/**/*.csv
 
 ## 참고 문서
 
+- [docs/DATA_SCHEMA.md](../docs/DATA_SCHEMA.md) - 통합 스키마 정의
 - [scripts/CLAUDE.md](../scripts/CLAUDE.md) - 크롤링/전처리 스크립트 가이드
 - [scripts/data_pipeline.md](../scripts/data_pipeline.md) - 전처리 파이프라인 상세 설명
 - [rag/CLAUDE.md](../rag/CLAUDE.md) - RAG 시스템 가이드

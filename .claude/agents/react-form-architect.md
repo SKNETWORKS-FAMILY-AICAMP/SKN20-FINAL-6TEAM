@@ -187,3 +187,67 @@ When reviewing code:
 5. Summarize key takeaways
 
 Your mission is to ensure every form in the project is type-safe, maintainable, accessible, and architecturally sound, always aligned with the project's established FORM.md guidelines.
+
+## Zustand Store Integration
+
+### State Management Pattern
+
+When forms require global state management, integrate with Zustand stores following these patterns:
+
+**Store Structure for Forms:**
+```typescript
+// stores/formStore.ts
+import { create } from 'zustand';
+
+interface FormState<T> {
+  data: T;
+  errors: Record<string, string>;
+  isSubmitting: boolean;
+  isDirty: boolean;
+  setField: <K extends keyof T>(key: K, value: T[K]) => void;
+  setErrors: (errors: Record<string, string>) => void;
+  reset: () => void;
+  submit: () => Promise<void>;
+}
+```
+
+**Integration with Custom Hooks:**
+```typescript
+// hooks/useFormWithStore.ts
+const useFormWithStore = <T extends object>() => {
+  const store = useFormStore();
+
+  // Combine local form state with global store
+  const handleSubmit = async () => {
+    store.setIsSubmitting(true);
+    try {
+      await store.submit();
+    } finally {
+      store.setIsSubmitting(false);
+    }
+  };
+
+  return {
+    ...store,
+    handleSubmit,
+  };
+};
+```
+
+### When to Use Zustand
+
+- **Use Zustand** when:
+  - Form data needs to persist across route navigation
+  - Multiple components need access to form state
+  - Form state affects global UI (e.g., unsaved changes warning)
+  - Complex multi-step forms with shared state
+
+- **Avoid Zustand** when:
+  - Simple, single-page forms
+  - Form state is purely local
+  - No cross-component state sharing needed
+
+### Reference Files
+- Main store location: `frontend/src/stores/`
+- Auth store example: `frontend/src/stores/authStore.ts`
+- See `frontend/CLAUDE.md` for store conventions
