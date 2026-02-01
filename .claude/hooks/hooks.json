@@ -18,7 +18,16 @@
           "tool": "Edit",
           "file_pattern": "**/.env*"
         },
-        "reminder": "⚠️ 환경 변수 파일을 수정합니다. API 키나 비밀번호가 포함된 경우 .gitignore에 추가되어 있는지 확인하세요."
+        "reminder": "환경 변수 파일을 수정합니다. API 키나 비밀번호가 포함된 경우 .gitignore에 추가되어 있는지 확인하세요."
+      },
+      {
+        "name": "git-push-review",
+        "description": "git push 전 리뷰 알림",
+        "matcher": {
+          "tool": "Bash",
+          "command_pattern": "git push*"
+        },
+        "reminder": "push 전 확인: 1) 모든 테스트 통과 여부 2) 코드 리뷰 완료 여부 3) CLAUDE.md/AGENTS.md 동기화 여부"
       }
     ],
     "PostToolUse": [
@@ -39,6 +48,24 @@
           "command_pattern": "*ruff*|*eslint*|*npm run lint*"
         },
         "on_failure": "린트 에러를 카테고리별로 요약하고 우선순위를 제안해주세요."
+      },
+      {
+        "name": "doc-staleness-reminder",
+        "description": "git commit 후 문서 최신 여부 확인",
+        "matcher": {
+          "tool": "Bash",
+          "command_pattern": "git commit*"
+        },
+        "reminder": "커밋 완료. 새 파일/엔드포인트/모듈을 추가했다면 해당 서비스의 CLAUDE.md와 AGENTS.md가 최신 상태인지 확인하세요. `/update-docs`로 자동 갱신할 수 있습니다."
+      },
+      {
+        "name": "console-log-warning",
+        "description": "JS/TS 파일 편집 후 console.log 경고",
+        "matcher": {
+          "tool": "Edit",
+          "file_pattern": "**/*.{ts,tsx,js,jsx}"
+        },
+        "reminder": "JS/TS 파일을 수정했습니다. console.log가 남아있다면 디버깅용인지 확인하고, 프로덕션 코드에서는 제거하세요."
       }
     ],
     "SessionStart": [

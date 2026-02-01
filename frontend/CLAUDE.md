@@ -53,99 +53,15 @@ VITE_GOOGLE_CLIENT_ID=your-client-id
 
 ## 코드 작성 가이드
 
-### 1. 새 페이지 추가
-```typescript
-// src/pages/MyPage.tsx
-import React from 'react';
+### 새 페이지 추가
+1. `src/pages/MyPage.tsx` 생성
+2. `src/App.tsx`에 라우트 추가: `<Route path="/mypage" element={<MyPage />} />`
 
-const MyPage: React.FC = () => {
-  return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold">My Page</h1>
-    </div>
-  );
-};
+### API 클라이언트
+- **Backend API**: `src/lib/api.ts` — JWT 토큰 자동 추가 (interceptor), 401 시 로그인 리다이렉트
+- **RAG API**: `src/lib/rag.ts` — 채팅/AI 응답 전용
 
-export default MyPage;
-```
-
-**라우트 등록**: `src/App.tsx`에 추가
-```typescript
-<Route path="/mypage" element={<MyPage />} />
-```
-
-### 2. API 클라이언트 설정
-
-#### Backend API (src/lib/api.ts)
-```typescript
-import axios from 'axios';
-
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
-  headers: { 'Content-Type': 'application/json' },
-});
-
-// JWT 토큰 자동 추가
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('accessToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// 401 에러 시 로그인 리다이렉트
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('accessToken');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
-
-export default api;
-```
-
-#### RAG API (src/lib/rag.ts)
-```typescript
-import axios from 'axios';
-
-const ragApi = axios.create({
-  baseURL: import.meta.env.VITE_RAG_URL,
-  headers: { 'Content-Type': 'application/json' },
-});
-
-export default ragApi;
-```
-
-#### API 사용 예시
-```typescript
-import api from '@/lib/api';
-import ragApi from '@/lib/rag';
-
-// Backend API 호출
-const getUser = async () => {
-  const response = await api.get('/users/me');
-  return response.data;
-};
-
-// 기업 정보 등록
-const createCompany = async (data: CompanyData) => {
-  const response = await api.post('/companies', data);
-  return response.data;
-};
-
-// RAG 채팅
-const sendMessage = async (message: string) => {
-  const response = await ragApi.post('/api/chat', { message });
-  return response.data;
-};
-```
-
-### 3. 상태 관리
+### 상태 관리
 
 #### Zustand 전역 상태
 
@@ -165,150 +81,17 @@ const sendMessage = async (message: string) => {
 - `syncGuestMessages()`: 로그인 시 게스트 대화를 백엔드 history에 일괄 저장
 - `persist` 미들웨어로 세션/카운트 localStorage 저장
 
-**사용**:
-```typescript
-import { useAuthStore } from '@/stores/authStore';
-import { useChatStore } from '@/stores/chatStore';
+사용법: `src/stores/` 파일 참조
 
-function MyComponent() {
-  const { isAuthenticated, login, logout } = useAuthStore();
-  const { createSession, getMessages, addMessage } = useChatStore();
-  // ...
-}
-```
+#### TanStack Query 서버 상태
+커스텀 훅 패턴: `src/hooks/` 참조 → 패턴: `.claude/rules/patterns.md`
 
-#### TanStack Query 서버 상태 (src/hooks/useUserApi.ts)
-```typescript
-import { useQuery, useMutation } from '@tanstack/react-query';
-import api from '@/lib/api';
+### 타입 정의
+모든 타입은 `src/types/index.ts`에 통합 정의 (User, Company, AgentCode, ChatMessage, ChatSession, ApiResponse 등)
 
-export const useUserQuery = () => {
-  return useQuery({
-    queryKey: ['user'],
-    queryFn: async () => {
-      const response = await api.get('/users/me');
-      return response.data;
-    },
-  });
-};
-
-export const useUpdateUserMutation = () => {
-  return useMutation({
-    mutationFn: async (data: UserData) => {
-      const response = await api.put('/users/me', data);
-      return response.data;
-    },
-  });
-};
-```
-
-**사용**:
-```typescript
-import { useUserQuery, useUpdateUserMutation } from '@/hooks/useUserApi';
-
-function ProfilePage() {
-  const { data: user, isLoading } = useUserQuery();
-  const updateUser = useUpdateUserMutation();
-
-  if (isLoading) return <Loading />;
-
-  const handleUpdate = () => {
-    updateUser.mutate({ name: 'New Name' });
-  };
-
-  return <div>{user.name}</div>;
-}
-```
-
-### 4. 타입 정의
-
-모든 타입은 `src/types/index.ts`에 통합 정의되어 있습니다.
-
-```typescript
-// src/types/index.ts (주요 타입)
-export interface User {
-  user_id: number;
-  google_email: string;
-  username: string;
-  type_code: 'U001' | 'U002' | 'U003'; // U001: 관리자, U002: 예비창업자, U003: 사업자
-  birth?: string;
-  create_date?: string;
-}
-
-export interface Company {
-  company_id: number;
-  user_id: number;
-  com_name: string;
-  biz_num: string;
-  addr: string;
-  open_date?: string;
-  biz_code?: string;
-  file_path: string;
-  main_yn: boolean;
-  create_date?: string;
-}
-
-export type AgentCode = 'A001' | 'A002' | 'A003' | 'A004' | 'A005' | 'A006';
-
-export interface ChatMessage {
-  id: string;
-  type: 'user' | 'assistant';
-  content: string;
-  agent_code?: AgentCode;
-  timestamp: Date;
-}
-
-export interface ChatSession {
-  id: string;
-  title: string;
-  messages: ChatMessage[];
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ApiResponse<T> {
-  data: T;
-  message?: string;
-}
-```
-
-### 5. React Router 설정 (src/App.tsx)
-
-MainLayout 래퍼 패턴을 사용하여 인증/비인증 공통 레이아웃(Sidebar 포함)을 적용합니다.
-
-```typescript
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { MainLayout } from './components/layout';
-import {
-  LoginPage, MainPage, CompanyPage,
-  SchedulePage, AdminPage, UsageGuidePage,
-} from './pages';
-
-function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        {/* Login page (독립 레이아웃) */}
-        <Route path="/login" element={<LoginPage />} />
-
-        {/* MainLayout 래퍼: Sidebar + Outlet */}
-        <Route element={<MainLayout />}>
-          <Route path="/" element={<MainPage />} />
-          <Route path="/company" element={<CompanyPage />} />
-          <Route path="/schedule" element={<SchedulePage />} />
-          <Route path="/guide" element={<UsageGuidePage />} />
-          <Route path="/admin" element={<AdminPage />} />
-        </Route>
-
-        {/* Catch-all redirect */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
-  );
-}
-```
-
-**참고**: `/profile` 라우트는 제거되었으며, 프로필 관리는 Sidebar 설정(톱니바퀴) 아이콘 → `ProfileDialog` 모달로 전환됨.
+### React Router 설정
+`src/App.tsx` 참조. MainLayout 래퍼 패턴으로 인증/비인증 공통 레이아웃(Sidebar) 적용.
+**참고**: `/profile` 라우트는 없음. 프로필 관리는 Sidebar 설정(톱니바퀴) → `ProfileDialog` 모달.
 
 ---
 
@@ -368,40 +151,6 @@ function App() {
 
 ---
 
-## 성능 최적화
-
-### Code Splitting
-```typescript
-import React, { Suspense, lazy } from 'react';
-import Loading from '@/components/common/Loading';
-
-const AdminPage = lazy(() => import('./pages/AdminPage'));
-
-function App() {
-  return (
-    <Suspense fallback={<Loading />}>
-      <Routes>
-        <Route path="/admin" element={<AdminPage />} />
-      </Routes>
-    </Suspense>
-  );
-}
-```
-
-### 메모이제이션
-```typescript
-import { useMemo, useCallback, memo } from 'react';
-
-const MyComponent = memo(({ data }) => {
-  const processed = useMemo(() => expensiveCalc(data), [data]);
-  const handleClick = useCallback(() => console.log('clicked'), []);
-
-  return <div onClick={handleClick}>{processed}</div>;
-});
-```
-
----
-
 ## API 엔드포인트 요약
 
 ### Backend API (localhost:8000)
@@ -424,47 +173,12 @@ const MyComponent = memo(({ data }) => {
 
 1. **파일명**: PascalCase (예: `ChatWindow.tsx`)
 2. **컴포넌트**: 함수형 컴포넌트 사용
-3. **Props**: 모든 props에 TypeScript 타입 정의
+3. **Props**: 모든 props에 TypeScript 타입 정의 → 패턴: `.claude/rules/patterns.md`
 4. **스타일**: TailwindCSS 유틸리티 클래스 사용
 5. **상태**:
    - 로컬 상태 → `useState`, `useReducer`
    - 전역 상태 → Zustand
    - 서버 상태 → TanStack Query
-
-### 컴포넌트 예시
-```typescript
-// src/components/chat/MessageItem.tsx
-import React from 'react';
-
-interface MessageItemProps {
-  message: string;
-  response: string;
-  agentCode: string;
-  createdAt: string;
-}
-
-export const MessageItem: React.FC<MessageItemProps> = ({
-  message,
-  response,
-  agentCode,
-  createdAt,
-}) => {
-  return (
-    <div className="p-4 border-b">
-      <div className="mb-2">
-        <span className="text-sm text-gray-500">{agentCode}</span>
-        <span className="text-xs text-gray-400 ml-2">{createdAt}</span>
-      </div>
-      <div className="mb-2">
-        <strong>질문:</strong> {message}
-      </div>
-      <div>
-        <strong>답변:</strong> {response}
-      </div>
-    </div>
-  );
-};
-```
 
 ---
 
@@ -496,20 +210,5 @@ export const MessageItem: React.FC<MessageItemProps> = ({
 - **API 기본 URL**: Backend(8000), RAG(8001)
 - **에러 처리**: axios 인터셉터에서 401 처리
 
----
-
-## 코드 품질 가이드라인 (필수 준수)
-
-### 절대 금지 사항
-- **하드코딩 금지**: API URL, 포트 번호 등을 코드에 직접 작성 금지 → `import.meta.env.VITE_*` 사용
-- **매직 넘버/매직 스트링 금지**: `if (status === 1)`, `setTimeout(3000)` 등 의미 없는 값 직접 사용 금지
-- **중복 코드 금지**: 동일한 로직은 커스텀 훅 또는 유틸 함수로 추출
-- **any 타입 금지**: `any` 대신 명확한 타입 정의 필수
-- **인라인 스타일 남용 금지**: TailwindCSS 클래스 또는 CSS 모듈 사용
-
-### 필수 준수 사항
-- **환경 변수 사용**: 모든 설정값은 `.env` 파일의 `VITE_*` 환경 변수로 관리
-- **상수 정의**: 반복되는 값은 `constants.ts` 파일에 상수로 정의
-- **타입 명시**: 모든 컴포넌트 props, API 응답에 TypeScript 타입 정의 필수
-- **에러 처리**: API 호출 시 try-catch 또는 TanStack Query의 onError 사용
-- **의미 있는 네이밍**: 컴포넌트, 함수, 변수명은 역할을 명확히 표현
+## 코드 품질
+`.claude/rules/coding-style.md`, `.claude/rules/patterns.md` 참조

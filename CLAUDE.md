@@ -72,12 +72,16 @@ SKN20-FINAL-6TEAM/
 │   ├── schemas/           # Pydantic 스키마
 │   └── Dockerfile
 │
-├── data/                  # 데이터 크롤링 및 전처리 스크립트
+├── scripts/               # 데이터 크롤링 및 전처리 스크립트
+│   ├── CLAUDE.md          # Scripts 개발 가이드
+│   ├── crawling/          # 크롤러 스크립트
+│   └── preprocessing/     # 전처리 스크립트
+│
+├── data/                  # 데이터 저장소
 │   ├── CLAUDE.md          # Data 개발 가이드
 │   ├── AGENTS.md          # Data AI 에이전트 가이드
-│   ├── crawlers/          # 크롤러 스크립트
-│   ├── preprocessors/     # 전처리 스크립트
-│   └── raw/               # 원본 데이터 (git에서 제외)
+│   ├── origin/            # 원본 데이터 (크롤링 결과, PDF 등)
+│   └── preprocessed/      # 전처리된 데이터 (JSONL, RAG 입력용)
 │
 └── docs/                  # 문서
     └── plans/             # 기능별 개발 계획서
@@ -92,45 +96,10 @@ SKN20-FINAL-6TEAM/
 | MySQL | 3306 | 데이터베이스 |
 | ChromaDB | 8002 | 벡터 데이터베이스 |
 
-## 빠른 시작
-
-### 1. 환경 변수 설정
-```bash
-cp .env.example .env
-# .env 파일을 열어 필요한 값 입력
-```
-
-### 2. Docker로 전체 서비스 실행
-```bash
-docker-compose up --build
-```
-
-### 3. 개별 서비스 실행
-
-**Backend (FastAPI)**
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-**Frontend (React + Vite)**
-```bash
-cd frontend
-npm install
-npm run dev  # Vite 개발 서버 (localhost:5173)
-```
-
-**RAG Service**
-```bash
-cd rag
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8001 --reload
-```
+## 실행
+Docker: `docker-compose up --build`
+개별 서비스 실행은 각 서비스의 CLAUDE.md 참조.
+환경 변수는 `.env.example`을 복사하여 `.env`로 생성.
 
 ## 핵심 아키텍처
 
@@ -139,18 +108,18 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ┌─────────────────────────────────────────────────────────────────┐
 │                      Frontend (React + Vite)                     │
 │                    localhost:5173                                │
-└───────────────┬─────────────────────────────┬───────────────────┘
-                │ axios (REST API)            │ axios (직접 통신)
-                │ (인증, 사용자, 기업)            │ (채팅, AI 응답)
-                ↓                             ↓
+└───────────────┬─────────────────────────────────┬───────────────┘
+                │ axios (REST API)                │ axios (직접 통신)
+                │ (인증, 사용자, 기업)               │ (채팅, AI 응답)
+                ↓                                 ↓
 ┌───────────────────────────┐    ┌─────────────────────────────────┐
 │   Backend (FastAPI)       │    │      RAG Service (FastAPI)      │
 │   localhost:8000          │    │      localhost:8001             │
 │                           │    │                                 │
 │ - Google OAuth2 인증       │    │ - Master Router                 │
-│ - 사용자/기업 관리            │    │ - 3개 도메인 에이전트               │
-│ - 상담 이력 저장             │    │ - Action Executor               │
-│ - 일정 관리                 │    │ - RAG 체인                       │ 
+│ - 사용자/기업 관리          │    │ - 3개 도메인 에이전트             │
+│ - 상담 이력 저장            │    │ - Action Executor               │
+│ - 일정 관리               │    │ - RAG 체인                       │
 └───────────────┬───────────┘    └───────────┬─────────────────────┘
                 │                             │
                 ↓                             ↓
@@ -176,19 +145,8 @@ Agentic RAG 구조로 5개 에이전트 운영:
 상세 아키텍처는 [rag/ARCHITECTURE.md](./rag/ARCHITECTURE.md) 참조
 
 ### API 통신 흐름
-**인증/데이터 관리**: Frontend (axios) → Backend → MySQL
-**AI 채팅**: Frontend (axios) → RAG Service (직접 통신) → Vector DB
-
-```
-Frontend (React + Vite)
-    │
-    ├── axios (REST API) ──→ Backend (FastAPI) ←→ MySQL
-    │                          └── 인증, 사용자, 기업, 이력, 일정
-    │
-    └── axios (직접 통신) ──→ RAG Service (FastAPI/LangChain)
-                               └── 채팅, AI 응답, 문서 생성
-                               └── Vector DB + External APIs
-```
+- **인증/데이터 관리**: Frontend (axios) → Backend → MySQL
+- **AI 채팅**: Frontend (axios) → RAG Service (직접 통신) → Vector DB
 
 ## 사용자 유형
 | 코드 | 유형 | 주요 관심사 |
@@ -204,42 +162,8 @@ Frontend (React + Vite)
 - `.claude/rules/git-workflow.md`: Git 워크플로우
 - `.claude/rules/testing.md`: 테스트 규칙
 - `.claude/rules/security.md`: 보안 규칙
-
-### Git 브랜치 전략
-- `main`: 배포 가능한 안정 버전
-- `develop`: 개발 통합 브랜치
-- `feature/*`: 기능 개발
-- `hotfix/*`: 긴급 버그 수정
-
-### 커밋 메시지
-```
-feat: 새로운 기능 추가
-fix: 버그 수정
-docs: 문서 수정
-refactor: 코드 리팩토링
-test: 테스트 추가
-chore: 빌드, 설정 변경
-```
-
-### 코드 품질 가이드라인
-
-#### 금지 사항
-- **하드코딩 금지**: URL, API 키, 포트 번호, 파일 경로 등을 코드에 직접 작성하지 말 것
-- **매직 넘버/매직 스트링 금지**: 의미 없는 숫자나 문자열을 직접 사용하지 말 것
-- **중복 코드 금지**: 동일한 로직이 2회 이상 반복되면 함수/유틸로 추출할 것
-- **보안 정보 노출 금지**: 비밀번호, API 키, 토큰 등을 코드에 직접 작성하지 말 것
-
-#### 필수 사항
-- **환경 변수 사용**: 모든 설정값은 환경 변수(.env)로 관리
-- **상수 정의**: 반복되는 값은 상수(constants)로 정의하여 사용
-- **적절한 에러 처리**: 예외 상황에 대한 처리 로직 필수 작성
-- **타입 명시**: TypeScript 타입, Python 타입 힌트 필수 사용
-- **의미 있는 변수명**: 변수/함수명은 역할을 명확히 표현
-- **코드 리팩토링**: 불필요한 중복 코드 제거
-- **코드 최적화**: 성능 최적화를 위한 코드 최적화
-- **코드 리뷰**: 코드 리뷰를 통한 코드 품질 개선
-- **모듈화**: 코드를 모듈로 분리하여 재사용성 높이기
-
+- `.claude/rules/patterns.md`: 코드 패턴
+- `.claude/rules/agents.md`: 에이전트 라우팅
 
 ## 데이터베이스 스키마
 - 스키마명: `final_test`
@@ -272,49 +196,8 @@ chore: 빌드, 설정 변경
 - `scripts/CLAUDE.md`: 데이터 크롤링/전처리 스크립트 가이드
 - `data/CLAUDE.md`: 데이터 폴더 가이드
 
-## 환경 변수 (.env)
-```
-# Database
-MYSQL_HOST=localhost
-MYSQL_PORT=3306
-MYSQL_DATABASE=final_test
-MYSQL_USER=root
-MYSQL_PASSWORD=
-
-# Backend (FastAPI)
-JWT_SECRET_KEY=your-secret-key
-
-# Google OAuth2
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-
-# OpenAI (RAG용)
-OPENAI_API_KEY=
-
-# ChromaDB
-CHROMA_HOST=localhost
-CHROMA_PORT=8002
-
-# External APIs
-BIZINFO_API_KEY=       # 기업마당 API
-KSTARTUP_API_KEY=      # K-Startup API
-```
-
-## R&R (역할 분담)
-| 역할 | 담당 업무 |
-|------|----------|
-| PM & 백엔드 | 프로젝트 관리, FastAPI 서버, DB 설계 |
-| 메인 라우터 & 아키텍처 | LangGraph 기반 라우터, 시스템 설계, 평가 에이전트 |
-| RAG 전문가 | 벡터DB 구축, RAG 파이프라인, 공통 법령 DB |
-| 전문 에이전트 Part 1 | 창업 및 지원 에이전트, 재무 및 세무 에이전트 |
-| 전문 에이전트 Part 2 | 인사 및 노무 에이전트, Action Executor |
-| 프론트엔드 | React + Vite UI/UX, 채팅 인터페이스 |
-
-## Summary
-
-You sit between human intent (directives) and deterministic execution (Python scripts). Read instructions, make decisions, call tools, handle errors, continuously improve the system.
+### 환경 변수
+`.env.example` 파일 참조. 주요 키: `MYSQL_*`, `JWT_SECRET_KEY`, `GOOGLE_CLIENT_ID/SECRET`, `OPENAI_API_KEY`, `CHROMA_HOST/PORT`, `BIZINFO_API_KEY`, `KSTARTUP_API_KEY`
 
 ## 테스트를 위해 생성하여 프로젝트에 포함되지 않는 파일/폴더
-/test 
-
-**Be pragmatic. Be reliable. Self-anneal.**
+/test

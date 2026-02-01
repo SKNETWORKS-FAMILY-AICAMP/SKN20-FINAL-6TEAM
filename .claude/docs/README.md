@@ -1,5 +1,7 @@
 # Bizi Claude Code 설정 가이드
 
+> **빠른 참조**: [QUICK_REFERENCE.md](./QUICK_REFERENCE.md) - 모든 에이전트, 커맨드, 스킬, 훅을 한 페이지에 정리
+
 ## 개요
 
 이 문서는 Bizi 프로젝트의 Claude Code 설정을 설명합니다.
@@ -10,13 +12,17 @@
 .claude/
 ├── docs/                    # 설명 문서 (이 폴더)
 │   ├── README.md
+│   ├── QUICK_REFERENCE.md   # 빠른 참조 가이드 (에이전트/커맨드/스킬/훅 전체)
 │   ├── agents/              # 에이전트 사용법
 │   └── skills/              # 스킬 사용법
 ├── rules/                   # 코드 규칙
 │   ├── coding-style.md      # 코딩 스타일
 │   ├── security.md          # 보안 규칙
 │   ├── testing.md           # 테스트 규칙
-│   └── git-workflow.md      # Git 워크플로우
+│   ├── git-workflow.md      # Git 워크플로우
+│   ├── performance.md       # 모델 선택, 컨텍스트 관리
+│   ├── agents.md            # 에이전트 라우팅 테이블
+│   └── patterns.md          # Python/FastAPI/React 패턴
 ├── agents/                  # 에이전트 정의
 │   ├── react-form-architect.md
 │   ├── code-reviewer.md
@@ -74,6 +80,7 @@
 | `/typecheck` | 타입 검사 실행 |
 | `/build-vectordb` | 벡터 인덱스 빌드 |
 | `/cli-test` | RAG CLI 테스트 |
+| `/update-docs` | CLAUDE.md/AGENTS.md 자동 갱신 |
 
 ## 규칙
 

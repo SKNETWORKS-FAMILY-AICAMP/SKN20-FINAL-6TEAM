@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: "코드 품질, 보안, 성능을 리뷰하는 에이전트. 코드 리뷰 요청 시 사용."
+description: "코드 품질, 보안, 성능을 리뷰하는 에이전트. 코드 리뷰 요청 시 사용. Use this agent when reviewing code for adherence to project guidelines, style guides, and best practices. This agent should be used proactively after writing or modifying code, especially before committing changes or creating pull requests.\n\n<example>\nContext: The user has just implemented a new feature.\nuser: \"코드 리뷰해줘\"\nassistant: \"I'll use the code-reviewer agent to review your recent changes.\"\n</example>\n\n<example>\nContext: The assistant has just written new code.\nassistant: \"Now I'll use the code-reviewer agent to review this implementation.\"\n</example>\n\n<example>\nContext: The user is about to create a PR.\nuser: \"PR 만들기 전에 코드 확인해줘\"\nassistant: \"Before creating the PR, I'll use the code-reviewer agent to ensure all code meets our standards.\"\n</example>"
 model: sonnet
 color: yellow
 ---

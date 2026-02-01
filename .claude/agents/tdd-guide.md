@@ -1,6 +1,6 @@
 ---
 name: tdd-guide
-description: "TDD(테스트 주도 개발) 가이드 에이전트. 테스트 작성, TDD 워크플로우 안내 시 사용."
+description: "TDD(테스트 주도 개발) 가이드 에이전트. 테스트 작성, TDD 워크플로우 안내 시 사용. Use this agent when writing tests, implementing features with TDD, or when the user asks for test-driven development guidance.\n\n<example>\nContext: User wants to write tests.\nuser: \"테스트 작성해줘\" or \"이 기능에 대한 테스트 추가해줘\"\nassistant: \"I'll use the tdd-guide agent to write tests following the Red-Green-Refactor cycle.\"\n</example>\n\n<example>\nContext: User wants to develop with TDD.\nuser: \"TDD로 개발하고 싶어\" or \"테스트 먼저 작성하고 구현해줘\"\nassistant: \"I'll use the tdd-guide agent to guide the TDD workflow.\"\n</example>"
 model: sonnet
 color: green
 ---
