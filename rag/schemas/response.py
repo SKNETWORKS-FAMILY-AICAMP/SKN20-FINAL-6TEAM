@@ -73,13 +73,14 @@ class ChatResponse(BaseModel):
     """
 
     content: str = Field(description="응답 내용")
-    domain: str = Field(description="주요 처리 도메인")
+    domain: str = Field(default="general", description="주요 처리 도메인")
     domains: list[str] = Field(default_factory=list, description="관련 도메인 목록")
     sources: list[SourceDocument] = Field(default_factory=list, description="참고 출처")
     actions: list[ActionSuggestion] = Field(default_factory=list, description="추천 액션")
     evaluation: EvaluationResult | None = Field(default=None, description="평가 결과")
     session_id: str | None = Field(default=None, description="세션 ID")
     retry_count: int = Field(default=0, description="재시도 횟수")
+    cached: bool = Field(default=False, description="캐시 히트 여부")
     ragas_metrics: dict[str, Any] | None = Field(
         default=None, description="RAGAS 정량 평가 메트릭"
     )

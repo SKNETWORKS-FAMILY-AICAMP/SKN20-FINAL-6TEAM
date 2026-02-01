@@ -170,13 +170,62 @@ async def process_query(
     user_context: UserContext | None = None,
 ) -> None:
     """단일 쿼리를 처리하고 결과를 출력합니다."""
+    from utils.cache import get_response_cache
+    from schemas.response import ActionSuggestion, EvaluationResult, ChatResponse
+
+    settings = get_settings()
     print_separator()
     print(f"[Q] {query}")
     print_separator("-")
 
     start_time = time.time()
-    response = await router.aprocess(query=query, user_context=user_context)
-    response_time = time.time() - start_time
+    cache_hit = False
+
+    # 캐시 확인
+    if settings.enable_response_cache:
+        cache = get_response_cache()
+        cached_response = cache.get(query)
+        if cached_response:
+            cache_hit = True
+            response_time = time.time() - start_time
+            # 캐시된 응답을 ChatResponse로 변환
+            response = ChatResponse(
+                content=cached_response.get("content", ""),
+                domains=cached_response.get("domains", []),
+                sources=[
+                    SourceDocument(**s) if isinstance(s, dict) else s
+                    for s in cached_response.get("sources", [])
+                ],
+                actions=[
+                    ActionSuggestion(**a) if isinstance(a, dict) else a
+                    for a in cached_response.get("actions", [])
+                ],
+                evaluation=EvaluationResult(**cached_response["evaluation"])
+                if cached_response.get("evaluation") else None,
+                cached=True,
+            )
+            print(f"\n[캐시 히트] {response_time:.3f}초\n")
+
+    # 캐시 미스: 새로운 응답 생성
+    if not cache_hit:
+        response = await router.aprocess(query=query, user_context=user_context)
+        response_time = time.time() - start_time
+
+        # 캐시 저장
+        if settings.enable_response_cache and response.content:
+            try:
+                cache = get_response_cache()
+                cache_data = {
+                    "content": response.content,
+                    "domains": response.domains,
+                    "sources": [s.model_dump() for s in response.sources],
+                    "actions": [a.model_dump() for a in response.actions],
+                    "evaluation": response.evaluation.model_dump()
+                    if response.evaluation else None,
+                }
+                cache.set(query, cache_data)
+            except Exception as e:
+                logger.warning(f"캐시 저장 실패: {e}")
 
     # 응답 출력
     print(f"\n[A] {response.content}\n")
@@ -184,7 +233,7 @@ async def process_query(
     # 메타 정보
     print_separator("-")
     print(f"[도메인] {', '.join(response.domains)}")
-    print(f"[응답시간] {response_time:.2f}초")
+    print(f"[응답시간] {response_time:.2f}초" + (" (캐시)" if cache_hit else ""))
     print(f"[재시도] {response.retry_count}회")
 
     # 출처

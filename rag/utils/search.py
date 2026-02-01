@@ -8,6 +8,7 @@ import logging
 import math
 import re
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Any
 
@@ -191,7 +192,7 @@ def reciprocal_rank_fusion(
     return results
 
 
-# Re-ranking 프롬프트
+# Re-ranking 프롬프트 (단일 문서용 - 폴백용)
 RERANK_PROMPT = """주어진 질문과 문서의 관련성을 0-10 점수로 평가하세요.
 
 ## 평가 기준
@@ -211,25 +212,62 @@ RERANK_PROMPT = """주어진 질문과 문서의 관련성을 0-10 점수로 평
 점수만 숫자로 출력하세요 (예: 8):"""
 
 
+# Batch Re-ranking 프롬프트 (여러 문서를 한 번에 평가)
+BATCH_RERANK_PROMPT = """주어진 질문과 각 문서의 관련성을 0-10 점수로 평가하세요.
+
+## 평가 기준
+- 10점: 질문에 직접 답하는 핵심 정보 포함
+- 7-9점: 관련성 높은 정보 포함
+- 4-6점: 부분적으로 관련 있음
+- 1-3점: 약간의 연관성만 있음
+- 0점: 전혀 관련 없음
+
+## 질문
+{query}
+
+## 문서 목록
+{documents}
+
+## 응답 형식
+각 문서 번호와 점수를 한 줄에 하나씩 출력하세요:
+1:8
+2:6
+3:9
+..."""
+
+
 class LLMReranker:
     """LLM 기반 Re-ranker.
 
     Cross-encoder 스타일의 LLM 기반 재정렬을 수행합니다.
+    배치 처리로 여러 문서를 한 번에 평가하여 성능을 최적화합니다.
     """
+
+    # 문서당 최대 길이 (배치 시)
+    DOC_MAX_LENGTH = 400
 
     def __init__(self):
         """LLMReranker를 초기화합니다."""
         self.settings = get_settings()
+        # 배치 크기를 설정에서 가져옴
+        self.batch_size = self.settings.rerank_batch_size
+        # Re-ranking은 검색 품질에 중요하므로 메인 모델 사용
         self.llm = ChatOpenAI(
-            model="gpt-4o-mini",  # 빠른 모델 사용
+            model=self.settings.openai_model,
             temperature=0.0,
             api_key=self.settings.openai_api_key,
         )
         self._chain = self._build_chain()
+        self._batch_chain = self._build_batch_chain()
 
     def _build_chain(self):
-        """Re-ranking 체인을 빌드합니다."""
+        """Re-ranking 체인을 빌드합니다 (단일 문서용 폴백)."""
         prompt = ChatPromptTemplate.from_template(RERANK_PROMPT)
+        return prompt | self.llm | StrOutputParser()
+
+    def _build_batch_chain(self):
+        """Batch Re-ranking 체인을 빌드합니다."""
+        prompt = ChatPromptTemplate.from_template(BATCH_RERANK_PROMPT)
         return prompt | self.llm | StrOutputParser()
 
     def _parse_score(self, response: str) -> float:
@@ -244,18 +282,88 @@ class LLMReranker:
             pass
         return 5.0  # 기본값
 
+    def _parse_batch_scores(self, response: str, doc_count: int) -> list[float]:
+        """배치 응답에서 점수 목록을 추출합니다."""
+        scores = [5.0] * doc_count  # 기본값으로 초기화
+
+        try:
+            # "1:8", "2:6" 형식 파싱
+            lines = response.strip().split('\n')
+            for line in lines:
+                line = line.strip()
+                if ':' in line:
+                    parts = line.split(':')
+                    if len(parts) >= 2:
+                        try:
+                            idx = int(parts[0].strip()) - 1  # 1-based to 0-based
+                            score = float(parts[1].strip())
+                            if 0 <= idx < doc_count:
+                                scores[idx] = min(10, max(0, score))
+                        except (ValueError, IndexError):
+                            continue
+        except Exception as e:
+            logger.warning(f"배치 점수 파싱 실패: {e}")
+
+        return scores
+
+    def _format_documents_for_batch(self, documents: list[Document]) -> str:
+        """문서 목록을 배치 프롬프트용 문자열로 포맷팅합니다."""
+        formatted = []
+        for i, doc in enumerate(documents, 1):
+            content = doc.page_content[:self.DOC_MAX_LENGTH]
+            # 줄바꿈을 공백으로 치환하여 한 줄로 압축
+            content = ' '.join(content.split())
+            formatted.append(f"[문서 {i}]\n{content}")
+        return "\n\n".join(formatted)
+
+    def _score_batch(
+        self,
+        query: str,
+        documents: list[Document],
+    ) -> list[tuple[Document, float]]:
+        """배치 단위로 문서들의 관련성 점수를 계산합니다."""
+        try:
+            docs_text = self._format_documents_for_batch(documents)
+            response = self._batch_chain.invoke({
+                "query": query,
+                "documents": docs_text,
+            })
+            scores = self._parse_batch_scores(response, len(documents))
+            return list(zip(documents, scores))
+        except Exception as e:
+            logger.warning(f"배치 Re-ranking 실패, 기본값 사용: {e}")
+            return [(doc, 5.0) for doc in documents]
+
+    def _score_document(self, query: str, doc: Document) -> tuple[Document, float]:
+        """단일 문서의 관련성 점수를 계산합니다 (폴백용)."""
+        try:
+            response = self._chain.invoke({
+                "query": query,
+                "document": doc.page_content[:1000],
+            })
+            score = self._parse_score(response)
+            return (doc, score)
+        except Exception as e:
+            logger.warning(f"Re-ranking 실패: {e}")
+            return (doc, 5.0)
+
     def rerank(
         self,
         query: str,
         documents: list[Document],
         top_k: int = 5,
+        max_workers: int = 3,
     ) -> list[Document]:
-        """문서를 재정렬합니다.
+        """문서를 배치 처리로 재정렬합니다.
+
+        여러 문서를 배치로 묶어 한 번의 LLM 호출로 평가합니다.
+        배치가 여러 개인 경우 병렬 처리합니다.
 
         Args:
             query: 검색 쿼리
             documents: 문서 리스트
             top_k: 반환할 문서 수
+            max_workers: 배치 병렬 처리 수
 
         Returns:
             재정렬된 문서 리스트
@@ -263,19 +371,30 @@ class LLMReranker:
         if len(documents) <= top_k:
             return documents
 
+        # 문서를 배치로 분할
+        batches = [
+            documents[i:i + self.batch_size]
+            for i in range(0, len(documents), self.batch_size)
+        ]
+
         scored_docs: list[tuple[Document, float]] = []
 
-        for doc in documents:
-            try:
-                response = self._chain.invoke({
-                    "query": query,
-                    "document": doc.page_content[:1000],
-                })
-                score = self._parse_score(response)
-                scored_docs.append((doc, score))
-            except Exception as e:
-                logger.warning(f"Re-ranking 실패: {e}")
-                scored_docs.append((doc, 5.0))
+        # 배치가 1개면 직접 처리, 여러 개면 병렬 처리
+        if len(batches) == 1:
+            scored_docs = self._score_batch(query, batches[0])
+        else:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [
+                    executor.submit(self._score_batch, query, batch)
+                    for batch in batches
+                ]
+
+                for future in as_completed(futures):
+                    try:
+                        batch_results = future.result()
+                        scored_docs.extend(batch_results)
+                    except Exception as e:
+                        logger.warning(f"배치 Re-ranking 실패: {e}")
 
         # 점수로 정렬
         scored_docs.sort(key=lambda x: x[1], reverse=True)
@@ -287,15 +406,15 @@ class LLMReranker:
         query: str,
         documents: list[Document],
         top_k: int = 5,
-        max_concurrent: int = 5,
+        max_concurrent: int = 3,
     ) -> list[Document]:
-        """문서를 비동기로 재정렬합니다.
+        """문서를 비동기 배치 처리로 재정렬합니다.
 
         Args:
             query: 검색 쿼리
             documents: 문서 리스트
             top_k: 반환할 문서 수
-            max_concurrent: 최대 동시 처리 수
+            max_concurrent: 최대 동시 배치 수
 
         Returns:
             재정렬된 문서 리스트
@@ -303,28 +422,42 @@ class LLMReranker:
         if len(documents) <= top_k:
             return documents
 
+        # 문서를 배치로 분할
+        batches = [
+            documents[i:i + self.batch_size]
+            for i in range(0, len(documents), self.batch_size)
+        ]
+
         semaphore = asyncio.Semaphore(max_concurrent)
 
-        async def score_one(doc: Document) -> tuple[Document, float]:
+        async def score_batch_async(
+            batch: list[Document],
+        ) -> list[tuple[Document, float]]:
             async with semaphore:
                 try:
-                    response = await self._chain.ainvoke({
+                    docs_text = self._format_documents_for_batch(batch)
+                    response = await self._batch_chain.ainvoke({
                         "query": query,
-                        "document": doc.page_content[:1000],
+                        "documents": docs_text,
                     })
-                    score = self._parse_score(response)
-                    return doc, score
+                    scores = self._parse_batch_scores(response, len(batch))
+                    return list(zip(batch, scores))
                 except Exception as e:
-                    logger.warning(f"Re-ranking 실패: {e}")
-                    return doc, 5.0
+                    logger.warning(f"비동기 배치 Re-ranking 실패: {e}")
+                    return [(doc, 5.0) for doc in batch]
 
-        tasks = [score_one(doc) for doc in documents]
-        results = await asyncio.gather(*tasks)
+        tasks = [score_batch_async(batch) for batch in batches]
+        batch_results = await asyncio.gather(*tasks)
+
+        # 결과 병합
+        scored_docs: list[tuple[Document, float]] = []
+        for batch_result in batch_results:
+            scored_docs.extend(batch_result)
 
         # 점수로 정렬
-        results = sorted(results, key=lambda x: x[1], reverse=True)
+        scored_docs.sort(key=lambda x: x[1], reverse=True)
 
-        return [doc for doc, _ in results[:top_k]]
+        return [doc for doc, _ in scored_docs[:top_k]]
 
 
 class HybridSearcher:

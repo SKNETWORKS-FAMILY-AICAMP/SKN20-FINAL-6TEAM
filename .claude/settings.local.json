@@ -18,7 +18,32 @@
       "Bash(ruff:*)",
       "Bash(mypy:*)",
       "Bash(uvicorn:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(...venvScriptspython.exe -m cli --query \"직원 해고할 때 주의사항\" --verbose)",
+      "Bash(F:LDG_CODESworkspaceSKN20SKN20-FINAL-6TEAM.venvScriptspython.exe -m cli --query \"직원 해고할 때 주의사항\" --verbose)",
+      "Bash(/f/LDG_CODES/workspace/SKN20/SKN20-FINAL-6TEAM/.venv/Scripts/python.exe -m cli:*)",
+      "Bash(/f/LDG_CODES/workspace/SKN20/SKN20-FINAL-6TEAM/.venv/Scripts/pip.exe install:*)",
+      "Bash(\"F:/LDG_CODES/workspace/SKN20/SKN20-FINAL-6TEAM/.venv/Scripts/python.exe\" -c:*)",
+      "Bash(\"F:/LDG_CODES/workspace/SKN20/SKN20-FINAL-6TEAM/.venv/Scripts/python.exe\" cli.py --query \"직원 해고할 때 주의사항\" --verbose)",
+      "Bash(\"F:/LDG_CODES/workspace/SKN20/SKN20-FINAL-6TEAM/.venv/Scripts/python.exe\" cli.py --query \"부가세 신고 기한\")",
+      "Bash(\"F:/LDG_CODES/workspace/SKN20/SKN20-FINAL-6TEAM/.venv/Scripts/python.exe\" cli.py --query \"직원 해고할 때 주의사항\")",
+      "Bash(F:)",
+      "Bash(..\\\\.venv\\\\Scripts\\\\python.exe -m cli --query \"직원 해고할 때 주의사항\" --verbose)",
+      "Bash(powershell:*)",
+      "Bash(cmd /c \"cd rag && ..\\\\.venv\\\\Scripts\\\\activate.bat && python -m cli --query \"\"사업자등록 절차 알려주세요\"\"\")",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(curl:*)",
+      "Bash(../.venv/Scripts/python.exe:*)",
+      "Bash(taskkill:*)",
+      "Bash(timeout:*)",
+      "Bash(...venvScriptspython.exe -m uvicorn:*)",
+      "Bash(ping:*)",
+      "Bash(F:LDG_CODESworkspaceSKN20SKN20-FINAL-6TEAM.venvScriptspython.exe -m uvicorn:*)",
+      "Bash(cmd /c \"cd /d F:\\\\LDG_CODES\\\\workspace\\\\SKN20\\\\SKN20-FINAL-6TEAM\\\\rag && F:\\\\LDG_CODES\\\\workspace\\\\SKN20\\\\SKN20-FINAL-6TEAM\\\\.venv\\\\Scripts\\\\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8001\")",
+      "Bash(cmd /c \"cd /d F:\\\\LDG_CODES\\\\workspace\\\\SKN20\\\\SKN20-FINAL-6TEAM\\\\rag && F:\\\\LDG_CODES\\\\workspace\\\\SKN20\\\\SKN20-FINAL-6TEAM\\\\.venv\\\\Scripts\\\\activate && python -m uvicorn main:app --host 0.0.0.0 --port 8001\")",
+      "Bash(cmd /c \"cd /d F:\\\\LDG_CODES\\\\workspace\\\\SKN20\\\\SKN20-FINAL-6TEAM\\\\rag && call F:\\\\LDG_CODES\\\\workspace\\\\SKN20\\\\SKN20-FINAL-6TEAM\\\\.venv\\\\Scripts\\\\activate.bat && python -m uvicorn main:app --host 0.0.0.0 --port 8001\")",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)"
     ]
   }
 }

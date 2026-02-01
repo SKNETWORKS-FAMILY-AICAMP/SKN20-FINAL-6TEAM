@@ -48,7 +48,13 @@ from schemas import (
     ContractRequest,
     DocumentResponse,
 )
-from schemas.response import HealthResponse, StreamResponse
+from schemas.response import (
+    ActionSuggestion,
+    EvaluationResult,
+    HealthResponse,
+    SourceDocument,
+    StreamResponse,
+)
 from utils.config import get_settings
 from utils.middleware import (
     RateLimitMiddleware,
@@ -284,6 +290,9 @@ async def health_check() -> HealthResponse:
         # 간단한 모델 목록 조회로 연결 확인
         client.models.list(limit=1)
         openai_status = {"status": "connected", "model": settings.openai_model}
+    except ImportError:
+        openai_status = {"status": "error", "message": "openai 패키지가 설치되지 않았습니다"}
+        overall_status = "unhealthy"
     except openai.AuthenticationError:
         openai_status = {"status": "error", "message": "API 키가 유효하지 않습니다"}
         overall_status = "unhealthy"
@@ -312,6 +321,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
     """채팅 엔드포인트.
 
     사용자 메시지를 처리하고 AI 응답을 반환합니다.
+    동일 질문에 대해 캐싱된 응답을 반환하여 성능을 최적화합니다.
 
     Args:
         request: 채팅 요청
@@ -326,6 +336,38 @@ async def chat(request: ChatRequest) -> ChatResponse:
         # 시작 시간 기록
         start_time = time.time()
 
+        # 캐시 확인 (설정 활성화 시)
+        cache_hit = False
+        if settings.enable_response_cache:
+            cache = get_response_cache()
+            cached_response = cache.get(request.message)
+            if cached_response:
+                cache_hit = True
+                response_time = time.time() - start_time
+                logger.info(f"캐시 히트: {request.message[:50]}... ({response_time:.3f}초)")
+
+                # 캐시된 응답을 ChatResponse로 변환
+                domains = cached_response.get("domains", [])
+                response = ChatResponse(
+                    content=cached_response.get("content", ""),
+                    domain=domains[0] if domains else "general",
+                    domains=domains,
+                    sources=[
+                        SourceDocument(**s) if isinstance(s, dict) else s
+                        for s in cached_response.get("sources", [])
+                    ],
+                    actions=[
+                        ActionSuggestion(**a) if isinstance(a, dict) else a
+                        for a in cached_response.get("actions", [])
+                    ],
+                    evaluation=EvaluationResult(**cached_response["evaluation"])
+                    if cached_response.get("evaluation") else None,
+                    session_id=request.session_id,
+                    cached=True,
+                )
+                return response
+
+        # 캐시 미스: 새로운 응답 생성
         response = await router_agent.aprocess(
             query=request.message,
             user_context=request.user_context,
@@ -334,6 +376,23 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
         # 응답 시간 계산
         response_time = time.time() - start_time
+
+        # 캐시 저장 (성공적인 응답만)
+        if settings.enable_response_cache and response.content:
+            try:
+                cache = get_response_cache()
+                cache_data = {
+                    "content": response.content,
+                    "domains": response.domains,
+                    "sources": [s.model_dump() for s in response.sources],
+                    "actions": [a.model_dump() for a in response.actions],
+                    "evaluation": response.evaluation.model_dump()
+                    if response.evaluation else None,
+                }
+                cache.set(request.message, cache_data)
+                logger.debug(f"캐시 저장: {request.message[:50]}...")
+            except Exception as e:
+                logger.warning(f"캐시 저장 실패 (무시됨): {e}")
 
         # 로그 기록
         log_chat_interaction(
@@ -389,7 +448,7 @@ async def chat_stream(request: ChatRequest):
     """스트리밍 채팅 엔드포인트.
 
     SSE(Server-Sent Events)를 사용하여 응답을 스트리밍합니다.
-    단일 도메인 질문은 진정한 토큰 스트리밍, 복합 도메인은 전체 응답 후 스트리밍.
+    캐시된 응답은 빠르게 스트리밍, 새 응답은 토큰 단위 스트리밍합니다.
 
     Args:
         request: 채팅 요청
@@ -402,66 +461,138 @@ async def chat_stream(request: ChatRequest):
 
     async def generate():
         try:
+            import asyncio
+
             # 시작 시간 기록
             start_time = time.time()
             final_content = ""
             final_sources = []
             final_domains = []
             final_actions = []
+            cache_hit = False
 
-            # 진정한 스트리밍 (MainRouter.astream 사용)
-            token_index = 0
-            async for chunk in router_agent.astream(
-                query=request.message,
-                user_context=request.user_context,
-            ):
-                if chunk["type"] == "token":
-                    stream_chunk = StreamResponse(
-                        type="token",
-                        content=chunk["content"],
-                        metadata={"index": token_index},
-                    )
-                    yield f"data: {stream_chunk.model_dump_json()}\n\n"
-                    token_index += 1
-                elif chunk["type"] == "done":
-                    final_content = chunk["content"]
-                    final_sources = chunk.get("sources", [])
-                    final_domains = chunk.get("domains", [])
-                    final_actions = chunk.get("actions", [])
+            # 캐시 확인 (설정 활성화 시)
+            if settings.enable_response_cache:
+                cache = get_response_cache()
+                cached_response = cache.get(request.message)
+                if cached_response:
+                    cache_hit = True
+                    final_content = cached_response.get("content", "")
+                    final_domains = cached_response.get("domains", [])
+                    final_sources = cached_response.get("sources", [])
+                    final_actions = cached_response.get("actions", [])
+
+                    logger.info(f"스트리밍 캐시 히트: {request.message[:50]}...")
+
+                    # 캐시된 응답을 빠르게 스트리밍 (청크 단위로)
+                    chunk_size = 30  # 30자씩 스트리밍 (10→30 속도 개선)
+                    token_index = 0
+                    for i in range(0, len(final_content), chunk_size):
+                        chunk_text = final_content[i:i + chunk_size]
+                        stream_chunk = StreamResponse(
+                            type="token",
+                            content=chunk_text,
+                            metadata={"index": token_index, "cached": True},
+                        )
+                        yield f"data: {stream_chunk.model_dump_json()}\n\n"
+                        token_index += 1
+                        # 최소 딜레이로 빠른 스트리밍 (0.01→0.005)
+                        await asyncio.sleep(0.005)
+
+            # 캐시 미스: 새로운 응답 생성 및 스트리밍
+            if not cache_hit:
+                # 진정한 스트리밍 (MainRouter.astream 사용)
+                token_index = 0
+                async for chunk in router_agent.astream(
+                    query=request.message,
+                    user_context=request.user_context,
+                ):
+                    if chunk["type"] == "token":
+                        stream_chunk = StreamResponse(
+                            type="token",
+                            content=chunk["content"],
+                            metadata={"index": token_index},
+                        )
+                        yield f"data: {stream_chunk.model_dump_json()}\n\n"
+                        token_index += 1
+                    elif chunk["type"] == "done":
+                        final_content = chunk["content"]
+                        final_sources = chunk.get("sources", [])
+                        final_domains = chunk.get("domains", [])
+                        final_actions = chunk.get("actions", [])
+
+                # 캐시 저장
+                if settings.enable_response_cache and final_content:
+                    try:
+                        cache = get_response_cache()
+                        cache_data = {
+                            "content": final_content,
+                            "domains": final_domains,
+                            "sources": [
+                                s.model_dump() if hasattr(s, 'model_dump') else s
+                                for s in final_sources
+                            ],
+                            "actions": [
+                                a.model_dump() if hasattr(a, 'model_dump') else a
+                                for a in final_actions
+                            ],
+                        }
+                        cache.set(request.message, cache_data)
+                    except Exception as e:
+                        logger.warning(f"스트리밍 캐시 저장 실패: {e}")
 
             # 응답 시간 계산
             response_time = time.time() - start_time
 
-            # 로그 기록
-            log_chat_interaction(
-                question=request.message,
-                answer=final_content,
-                sources=final_sources,
-                domains=final_domains,
-                response_time=response_time,
-                evaluation=chunk.get("evaluation"),
-            )
+            # 로그 기록 (캐시 미스인 경우만)
+            if not cache_hit:
+                log_chat_interaction(
+                    question=request.message,
+                    answer=final_content,
+                    sources=final_sources,
+                    domains=final_domains,
+                    response_time=response_time,
+                    evaluation=None,
+                )
 
             # 출처 정보
             for source in final_sources:
+                if isinstance(source, dict):
+                    source_content = source.get("content", "")[:100]
+                    source_title = source.get("title", "")
+                    source_src = source.get("source", "")
+                else:
+                    source_content = source.content[:100] if hasattr(source, 'content') else ""
+                    source_title = source.title if hasattr(source, 'title') else ""
+                    source_src = source.source if hasattr(source, 'source') else ""
+
                 source_chunk = StreamResponse(
                     type="source",
-                    content=source.content[:100] if hasattr(source, 'content') else "",
+                    content=source_content,
                     metadata={
-                        "title": source.title if hasattr(source, 'title') else "",
-                        "source": source.source if hasattr(source, 'source') else "",
+                        "title": source_title,
+                        "source": source_src,
                     },
                 )
                 yield f"data: {source_chunk.model_dump_json()}\n\n"
 
             # 액션 정보
             for action in final_actions:
+                if isinstance(action, dict):
+                    action_label = action.get("label", "")
+                    action_type = action.get("type", "")
+                    action_params = action.get("params", {})
+                else:
+                    action_label = action.label if hasattr(action, 'label') else ""
+                    action_type = action.type if hasattr(action, 'type') else ""
+                    action_params = action.params if hasattr(action, 'params') else {}
+
                 action_chunk = StreamResponse(
                     type="action",
-                    content=action.label if hasattr(action, 'label') else "",
+                    content=action_label,
                     metadata={
-                        "type": action.type if hasattr(action, 'type') else "",
-                        "params": action.params if hasattr(action, 'params') else {},
+                        "type": action_type,
+                        "params": action_params,
                     },
                 )
                 yield f"data: {action_chunk.model_dump_json()}\n\n"
@@ -473,6 +604,7 @@ async def chat_stream(request: ChatRequest):
                     "domain": final_domains[0] if final_domains else "general",
                     "domains": final_domains,
                     "response_time": response_time,
+                    "cached": cache_hit,
                 },
             )
             yield f"data: {done_chunk.model_dump_json()}\n\n"

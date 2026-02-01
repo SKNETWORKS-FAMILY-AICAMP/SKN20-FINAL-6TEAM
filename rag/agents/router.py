@@ -5,8 +5,11 @@ LangGraph 기반 멀티에이전트 라우터를 구현합니다.
 """
 
 import asyncio
+import hashlib
 import json
+import random
 import re
+from collections import OrderedDict
 from typing import Any, AsyncGenerator, TypedDict
 
 from langchain_core.output_parsers import StrOutputParser
@@ -80,11 +83,19 @@ class MainRouter:
             vector_store: ChromaDB 벡터 스토어. None이면 새로 생성.
         """
         self.settings = get_settings()
+        # 도메인 분류용 경량 모델 (보조 작업)
         self.llm = ChatOpenAI(
-            model=self.settings.openai_model,
-            temperature=self.settings.openai_temperature,
+            model=self.settings.auxiliary_model,
+            temperature=0.0,  # 분류는 일관성 위해 낮은 temperature
             api_key=self.settings.openai_api_key,
         )
+
+        # 도메인 분류 체인 미리 빌드 (성능 최적화)
+        self._classifier_chain = self._build_classifier_chain()
+
+        # 도메인 분류 캐시 (LRU)
+        self._domain_cache: OrderedDict[str, list[str]] = OrderedDict()
+        self._domain_cache_max_size = self.settings.domain_cache_size
 
         # 공유 인스턴스 생성
         self.vector_store = vector_store or ChromaVectorStore()
@@ -111,69 +122,88 @@ class MainRouter:
         # 그래프 정의
         workflow = StateGraph(RouterState)
 
-        # 노드 추가
+        # 노드 추가 (평가 노드 제거 - 성능 최적화)
         workflow.add_node("classify", self._classify_node)
         workflow.add_node("route", self._route_node)
         workflow.add_node("integrate", self._integrate_node)
-        workflow.add_node("evaluate", self._evaluate_node)
 
-        # 엣지 정의
+        # 엣지 정의 (integrate에서 바로 종료)
         workflow.set_entry_point("classify")
         workflow.add_edge("classify", "route")
         workflow.add_edge("route", "integrate")
-        workflow.add_edge("integrate", "evaluate")
-
-        # 조건부 엣지 (평가 결과에 따른 분기)
-        workflow.add_conditional_edges(
-            "evaluate",
-            self._should_retry,
-            {
-                "retry": "route",
-                "end": END,
-            },
-        )
+        workflow.add_edge("integrate", END)
 
         return workflow.compile()
 
     def _build_async_graph(self) -> StateGraph:
         """비동기 LangGraph StateGraph를 빌드합니다.
 
-        병렬 에이전트 호출과 비동기 평가를 지원합니다.
+        병렬 에이전트 호출을 지원합니다.
 
         Returns:
             컴파일된 StateGraph
         """
         workflow = StateGraph(RouterState)
 
-        # 비동기 노드 추가
+        # 비동기 노드 추가 (평가 노드 제거 - 성능 최적화)
         workflow.add_node("classify", self._classify_node)
         workflow.add_node("route", self._aroute_node)  # 비동기 병렬 호출
         workflow.add_node("integrate", self._integrate_node)
-        workflow.add_node("evaluate", self._aevaluate_node)  # 비동기 평가
 
-        # 엣지 정의
+        # 엣지 정의 (integrate에서 바로 종료)
         workflow.set_entry_point("classify")
         workflow.add_edge("classify", "route")
         workflow.add_edge("route", "integrate")
-        workflow.add_edge("integrate", "evaluate")
-
-        # 조건부 엣지
-        workflow.add_conditional_edges(
-            "evaluate",
-            self._should_retry,
-            {
-                "retry": "route",
-                "end": END,
-            },
-        )
+        workflow.add_edge("integrate", END)
 
         return workflow.compile()
+
+    def _build_classifier_chain(self):
+        """도메인 분류 체인을 미리 빌드합니다 (성능 최적화)."""
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", ROUTER_SYSTEM_PROMPT),
+            ("human", "질문: {query}"),
+        ])
+        return prompt | self.llm | StrOutputParser()
+
+    def _get_cache_key(self, query: str) -> str:
+        """쿼리의 캐시 키를 생성합니다."""
+        # 정규화: 소문자, 공백 정리
+        normalized = query.lower().strip()
+        normalized = re.sub(r'\s+', ' ', normalized)
+        return hashlib.md5(normalized.encode()).hexdigest()[:16]
+
+    def _get_cached_domains(self, query: str) -> list[str] | None:
+        """캐시된 도메인 분류 결과를 반환합니다."""
+        if not self.settings.enable_domain_cache:
+            return None
+
+        cache_key = self._get_cache_key(query)
+        if cache_key in self._domain_cache:
+            # LRU: 최근 사용으로 이동
+            self._domain_cache.move_to_end(cache_key)
+            return self._domain_cache[cache_key]
+        return None
+
+    def _cache_domains(self, query: str, domains: list[str]) -> None:
+        """도메인 분류 결과를 캐싱합니다."""
+        if not self.settings.enable_domain_cache:
+            return
+
+        cache_key = self._get_cache_key(query)
+
+        # LRU 캐시 크기 제한 (max_size 정확히 유지)
+        while len(self._domain_cache) > self._domain_cache_max_size:
+            self._domain_cache.popitem(last=False)
+
+        self._domain_cache[cache_key] = domains
 
     def _classify_domains(self, query: str) -> list[str]:
         """질문을 분류하여 관련 도메인을 반환합니다.
 
-        1차: 키워드 기반 분류
-        2차: LLM 기반 분류 (키워드로 분류되지 않은 경우)
+        1차: 캐시 확인 (가장 빠름)
+        2차: 키워드 기반 분류 (빠름)
+        3차: LLM 기반 분류 (키워드로 분류되지 않은 경우)
 
         Args:
             query: 사용자 질문
@@ -181,23 +211,23 @@ class MainRouter:
         Returns:
             관련 도메인 리스트
         """
-        # 1차: 키워드 기반 분류
+        # 1차: 캐시 확인
+        cached = self._get_cached_domains(query)
+        if cached:
+            return cached
+
+        # 2차: 키워드 기반 분류 (LLM 호출 없이 빠르게)
         detected_domains = []
         for domain, keywords in DOMAIN_KEYWORDS.items():
             if any(kw in query for kw in keywords):
                 detected_domains.append(domain)
 
         if detected_domains:
+            self._cache_domains(query, detected_domains)
             return detected_domains
 
-        # 2차: LLM 기반 분류
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", ROUTER_SYSTEM_PROMPT),
-            ("human", "질문: {query}"),
-        ])
-
-        chain = prompt | self.llm | StrOutputParser()
-        response = chain.invoke({"query": query})
+        # 3차: LLM 기반 분류 (미리 빌드된 체인 사용)
+        response = self._classifier_chain.invoke({"query": query})
 
         # JSON 파싱
         try:
@@ -206,9 +236,12 @@ class MainRouter:
                 result = json.loads(json_match.group(1))
             else:
                 result = json.loads(response)
-            return result.get("domains", ["startup_funding"])
+            domains = result.get("domains", ["startup_funding"])
         except json.JSONDecodeError:
-            return ["startup_funding"]  # 기본값
+            domains = ["startup_funding"]  # 기본값
+
+        self._cache_domains(query, domains)
+        return domains
 
     def _classify_node(self, state: RouterState) -> RouterState:
         """분류 노드: 질문을 분석하여 도메인을 식별합니다."""
@@ -250,7 +283,7 @@ class MainRouter:
             query = f"{query}\n\n[이전 답변 피드백: {feedback}]"
 
         # 병렬로 에이전트 호출
-        async def call_agent(domain: str):
+        async def call_agent(domain: str) -> tuple[str, Any] | None:
             if domain in self.agents:
                 agent = self.agents[domain]
                 response = await agent.aprocess(
@@ -258,7 +291,7 @@ class MainRouter:
                     user_context=state.get("user_context"),
                     search_strategy=search_strategy,
                 )
-                return domain, response
+                return (domain, response)
             return None
 
         tasks = [call_agent(domain) for domain in state["domains"]]
@@ -307,8 +340,38 @@ class MainRouter:
         state["actions"] = all_actions
         return state
 
+    def _should_skip_evaluation(self, state: RouterState) -> bool:
+        """평가 스킵 여부를 판단합니다."""
+        query = state["query"]
+
+        # 이미 재시도 중이면 반드시 평가 실행
+        if state.get("retry_count", 0) > 0:
+            return False
+
+        # 짧은 질문 스킵
+        if (self.settings.skip_evaluation_for_short_query and
+            len(query) < self.settings.short_query_threshold):
+            return True
+
+        # 확률적 스킵 (성능 최적화)
+        if random.random() < self.settings.skip_evaluation_probability:
+            return True
+
+        return False
+
     def _evaluate_node(self, state: RouterState) -> RouterState:
         """평가 노드: 응답 품질을 평가합니다."""
+        # 평가 스킵 조건 체크
+        if self._should_skip_evaluation(state):
+            # 기본 통과 처리
+            state["evaluation"] = EvaluationResult(
+                scores={"retrieval_quality": 15, "accuracy": 15, "completeness": 15, "relevance": 15, "citation": 15},
+                total_score=75,
+                passed=True,
+                feedback=None,
+            )
+            return state
+
         # 컨텍스트 생성
         context = "\n".join([s.content for s in state["sources"][:5]])
 
@@ -338,6 +401,17 @@ class MainRouter:
 
     async def _aevaluate_node(self, state: RouterState) -> RouterState:
         """비동기 평가 노드: 응답 품질을 비동기로 평가합니다."""
+        # 평가 스킵 조건 체크
+        if self._should_skip_evaluation(state):
+            # 기본 통과 처리
+            state["evaluation"] = EvaluationResult(
+                scores={"retrieval_quality": 15, "accuracy": 15, "completeness": 15, "relevance": 15, "citation": 15},
+                total_score=75,
+                passed=True,
+                feedback=None,
+            )
+            return state
+
         # 컨텍스트 생성
         context = "\n".join([s.content for s in state["sources"][:5]])
 

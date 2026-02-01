@@ -53,8 +53,9 @@ class EvaluatorAgent:
     def __init__(self):
         """EvaluatorAgent를 초기화합니다."""
         self.settings = get_settings()
+        # 평가용 경량 모델 (성능 최적화, 스킵 확률 낮춤으로 보완)
         self.llm = ChatOpenAI(
-            model=self.settings.openai_model,
+            model=self.settings.auxiliary_model,
             temperature=0.0,  # 평가는 일관성을 위해 낮은 temperature 사용
             api_key=self.settings.openai_api_key,
         )
@@ -166,6 +167,9 @@ class EvaluatorAgent:
         # 응답 파싱 (tuple 언패킹: dict, success)
         parsed, parse_success = self._parse_evaluation_response(response)
 
+        if not parse_success:
+            logger.warning("평가 응답 파싱 실패 - 기본값 사용")
+
         # EvaluationResult 생성
         scores = parsed.get("scores", {})
         total_score = parsed.get("total_score", sum(scores.values()))
@@ -212,6 +216,9 @@ class EvaluatorAgent:
 
         # 응답 파싱 (tuple 언패킹: dict, success)
         parsed, parse_success = self._parse_evaluation_response(response)
+
+        if not parse_success:
+            logger.warning("비동기 평가 응답 파싱 실패 - 기본값 사용")
 
         # EvaluationResult 생성
         scores = parsed.get("scores", {})

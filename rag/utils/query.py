@@ -1,6 +1,6 @@
 """쿼리 처리 유틸리티 모듈.
 
-쿼리 재작성, 확장, 컨텍스트 압축 등의 기능을 제공합니다.
+쿼리 재작성, 확장, Multi-query 생성, 컨텍스트 압축 등의 기능을 제공합니다.
 """
 
 import asyncio
@@ -15,6 +15,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from utils.config import get_settings
+from utils.prompts import MULTI_QUERY_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -67,19 +68,21 @@ CONTEXT_COMPRESSION_PROMPT = """주어진 문서에서 질문과 관련된 핵�
 class QueryProcessor:
     """쿼리 처리 클래스.
 
-    쿼리 재작성, 확장, 해시 생성 등의 기능을 제공합니다.
+    쿼리 재작성, Multi-query 생성, 해시 생성 등의 기능을 제공합니다.
     """
 
     def __init__(self):
         """QueryProcessor를 초기화합니다."""
         self.settings = get_settings()
+        # Multi-query, 쿼리 재작성용 경량 모델 (보조 작업)
         self.llm = ChatOpenAI(
-            model=self.settings.openai_model,
+            model=self.settings.auxiliary_model,
             temperature=0.0,  # 일관된 결과를 위해 낮은 temperature
             api_key=self.settings.openai_api_key,
         )
         self._rewrite_chain = self._build_rewrite_chain()
         self._compression_chain = self._build_compression_chain()
+        self._multi_query_chain = self._build_multi_query_chain()
 
     def _build_rewrite_chain(self):
         """쿼리 재작성 체인을 빌드합니다."""
@@ -89,6 +92,11 @@ class QueryProcessor:
     def _build_compression_chain(self):
         """컨텍스트 압축 체인을 빌드합니다."""
         prompt = ChatPromptTemplate.from_template(CONTEXT_COMPRESSION_PROMPT)
+        return prompt | self.llm | StrOutputParser()
+
+    def _build_multi_query_chain(self):
+        """Multi-query 생성 체인을 빌드합니다."""
+        prompt = ChatPromptTemplate.from_template(MULTI_QUERY_PROMPT)
         return prompt | self.llm | StrOutputParser()
 
     def rewrite_query(self, query: str) -> str:
@@ -265,6 +273,100 @@ class QueryProcessor:
         ]
 
         return keywords
+
+    def generate_multi_queries(
+        self,
+        query: str,
+        count: int | None = None,
+    ) -> list[str]:
+        """하나의 질문을 여러 검색 쿼리로 변환합니다.
+
+        Multi-query Retrieval을 위해 원본 질문을 다양한 관점의
+        검색 쿼리로 변환합니다. 원본 쿼리도 결과에 포함됩니다.
+
+        Args:
+            query: 원본 사용자 쿼리
+            count: 생성할 쿼리 개수 (None이면 설정값 사용)
+
+        Returns:
+            검색 쿼리 리스트 (원본 포함)
+        """
+        count = count or self.settings.multi_query_count
+
+        try:
+            response = self._multi_query_chain.invoke({
+                "query": query,
+                "count": count,
+            })
+
+            # 응답 파싱: 줄바꿈으로 구분된 쿼리들
+            queries = self._parse_multi_query_response(response, query)
+            logger.debug(f"Multi-query 생성: {queries}")
+            return queries
+
+        except Exception as e:
+            logger.warning(f"Multi-query 생성 실패, 원본만 사용: {e}")
+            return [query]
+
+    async def agenerate_multi_queries(
+        self,
+        query: str,
+        count: int | None = None,
+    ) -> list[str]:
+        """하나의 질문을 비동기로 여러 검색 쿼리로 변환합니다.
+
+        Args:
+            query: 원본 사용자 쿼리
+            count: 생성할 쿼리 개수 (None이면 설정값 사용)
+
+        Returns:
+            검색 쿼리 리스트 (원본 포함)
+        """
+        count = count or self.settings.multi_query_count
+
+        try:
+            response = await self._multi_query_chain.ainvoke({
+                "query": query,
+                "count": count,
+            })
+
+            queries = self._parse_multi_query_response(response, query)
+            logger.debug(f"Multi-query 생성: {queries}")
+            return queries
+
+        except Exception as e:
+            logger.warning(f"Multi-query 생성 실패, 원본만 사용: {e}")
+            return [query]
+
+    def _parse_multi_query_response(
+        self,
+        response: str,
+        original_query: str,
+    ) -> list[str]:
+        """Multi-query LLM 응답을 파싱합니다.
+
+        Args:
+            response: LLM 응답 문자열
+            original_query: 원본 쿼리
+
+        Returns:
+            파싱된 쿼리 리스트 (원본 포함)
+        """
+        # 줄바꿈으로 분리
+        lines = response.strip().split("\n")
+
+        queries = []
+        for line in lines:
+            # 빈 줄, 번호 제거
+            cleaned = re.sub(r"^\d+[\.\)]\s*", "", line.strip())
+            if cleaned and len(cleaned) >= 5:
+                queries.append(cleaned)
+
+        # 원본 쿼리를 맨 앞에 추가 (중복 방지)
+        if original_query not in queries:
+            queries.insert(0, original_query)
+
+        return queries
 
 
 # 싱글톤 인스턴스

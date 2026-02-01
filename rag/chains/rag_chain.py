@@ -6,6 +6,7 @@
 
 import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.documents import Document
@@ -68,7 +69,9 @@ class RAGChain:
     @property
     def query_processor(self):
         """QueryProcessor 인스턴스 (지연 로딩)."""
-        if self._query_processor is None and self.settings.enable_query_rewrite:
+        if self._query_processor is None and (
+            self.settings.enable_query_rewrite or self.settings.enable_multi_query
+        ):
             from utils.query import get_query_processor
             self._query_processor = get_query_processor()
         return self._query_processor
@@ -109,6 +112,7 @@ class RAGChain:
         use_mmr: bool = True,
         use_query_rewrite: bool | None = None,
         use_rerank: bool | None = None,
+        use_multi_query: bool | None = None,
         search_strategy: "SearchStrategy | None" = None,
     ) -> list[Document]:
         """벡터 스토어에서 관련 문서를 검색합니다.
@@ -124,6 +128,7 @@ class RAGChain:
             use_mmr: MMR 검색 사용 여부 (다양성 확보)
             use_query_rewrite: 쿼리 재작성 사용 여부 (None이면 설정값)
             use_rerank: Re-ranking 사용 여부 (None이면 설정값)
+            use_multi_query: Multi-query Retrieval 사용 여부 (None이면 설정값)
             search_strategy: 피드백 기반 검색 전략 (재시도 시 사용)
 
         Returns:
@@ -145,6 +150,58 @@ class RAGChain:
             fetch_k_mult = self.settings.mmr_fetch_k_multiplier
             lambda_mult = self.settings.mmr_lambda_mult
 
+        # Multi-query 설정 확인
+        if use_multi_query is None:
+            use_multi_query = self.settings.enable_multi_query
+
+        # Re-ranking 설정 확인
+        if use_rerank is None:
+            use_rerank = self.settings.enable_reranking
+
+        # Multi-query Retrieval 사용 시
+        if use_multi_query and self.query_processor:
+            documents = self._retrieve_with_multi_query(
+                query=query,
+                domain=domain,
+                k=k,
+                k_common=k_common,
+                include_common=include_common,
+                use_mmr=use_mmr,
+                use_rerank=use_rerank,
+                fetch_k_mult=fetch_k_mult,
+                lambda_mult=lambda_mult,
+            )
+        else:
+            # 기존 단일 쿼리 검색
+            documents = self._retrieve_single_query(
+                query=query,
+                domain=domain,
+                k=k,
+                k_common=k_common,
+                include_common=include_common,
+                use_mmr=use_mmr,
+                use_query_rewrite=use_query_rewrite,
+                use_rerank=use_rerank,
+                fetch_k_mult=fetch_k_mult,
+                lambda_mult=lambda_mult,
+            )
+
+        return documents
+
+    def _retrieve_single_query(
+        self,
+        query: str,
+        domain: str,
+        k: int,
+        k_common: int,
+        include_common: bool,
+        use_mmr: bool,
+        use_query_rewrite: bool | None,
+        use_rerank: bool,
+        fetch_k_mult: int,
+        lambda_mult: float,
+    ) -> list[Document]:
+        """단일 쿼리로 검색합니다 (기존 로직)."""
         documents: list[Document] = []
 
         # 쿼리 재작성 (설정에 따라)
@@ -160,10 +217,8 @@ class RAGChain:
                 logger.warning(f"쿼리 재작성 실패: {e}")
                 search_query = query
 
-        # Re-ranking 사용 시 더 많이 검색
-        if use_rerank is None:
-            use_rerank = self.settings.enable_reranking
-        fetch_k = k * 3 if use_rerank else k
+        # Re-ranking 사용 시 더 많이 검색 (2배로 축소하여 성능 개선)
+        fetch_k = k * 2 if use_rerank else k
 
         # 도메인별 검색 (MMR 또는 일반 유사도 검색)
         try:
@@ -187,7 +242,7 @@ class RAGChain:
 
         # 공통 법령 DB 검색
         if include_common and domain != "law_common":
-            common_fetch_k = k_common * 2 if use_rerank else k_common
+            common_fetch_k = int(k_common * 1.5) if use_rerank else k_common
 
             try:
                 if use_mmr:
@@ -218,6 +273,216 @@ class RAGChain:
                 documents = documents[:k]
         elif len(documents) > k:
             documents = documents[:k]
+
+        return documents
+
+    def _search_single_query_for_multi(
+        self,
+        search_query: str,
+        domain: str,
+        k_per_query: int,
+        k_common_per_query: int,
+        include_common: bool,
+        use_mmr: bool,
+        fetch_k_mult: int,
+        lambda_mult: float,
+    ) -> list:
+        """단일 쿼리로 검색합니다 (Multi-query용 헬퍼)."""
+        from utils.search import SearchResult
+
+        query_results: list[SearchResult] = []
+
+        # 도메인 검색
+        try:
+            if use_mmr:
+                domain_docs = self.vector_store.max_marginal_relevance_search(
+                    query=search_query,
+                    domain=domain,
+                    k=k_per_query,
+                    fetch_k=k_per_query * fetch_k_mult,
+                    lambda_mult=lambda_mult,
+                )
+            else:
+                domain_docs = self.vector_store.similarity_search(
+                    query=search_query,
+                    domain=domain,
+                    k=k_per_query,
+                )
+
+            for i, doc in enumerate(domain_docs):
+                query_results.append(SearchResult(
+                    document=doc,
+                    score=1.0 - (i / max(len(domain_docs), 1)),
+                    source="vector",
+                ))
+        except Exception as e:
+            logger.error(f"Multi-query 도메인 검색 실패 ({domain}): {e}")
+
+        # 공통 법령 DB 검색
+        if include_common and domain != "law_common":
+            try:
+                if use_mmr:
+                    common_docs = self.vector_store.max_marginal_relevance_search(
+                        query=search_query,
+                        domain="law_common",
+                        k=k_common_per_query,
+                        fetch_k=k_common_per_query * fetch_k_mult,
+                        lambda_mult=lambda_mult,
+                    )
+                else:
+                    common_docs = self.vector_store.similarity_search(
+                        query=search_query,
+                        domain="law_common",
+                        k=k_common_per_query,
+                    )
+
+                for i, doc in enumerate(common_docs):
+                    query_results.append(SearchResult(
+                        document=doc,
+                        score=1.0 - (i / max(len(common_docs), 1)),
+                        source="vector",
+                    ))
+            except Exception as e:
+                logger.error(f"Multi-query 공통 법령 DB 검색 실패: {e}")
+
+        return query_results
+
+    def _retrieve_with_multi_query(
+        self,
+        query: str,
+        domain: str,
+        k: int,
+        k_common: int,
+        include_common: bool,
+        use_mmr: bool,
+        use_rerank: bool,
+        fetch_k_mult: int,
+        lambda_mult: float,
+    ) -> list[Document]:
+        """Multi-query Retrieval로 검색합니다 (최적화된 병렬 처리).
+
+        원본 쿼리 검색과 Multi-query 생성을 병렬로 실행하여 지연 시간을 최소화합니다.
+        """
+        import time
+        from utils.search import reciprocal_rank_fusion
+
+        start_time = time.time()
+
+        # 쿼리당 검색 수 계산 (예상 쿼리 수 기준)
+        expected_query_count = self.settings.multi_query_count + 1  # +1 for original
+        k_per_query = max(2, k // expected_query_count + 1)
+        k_common_per_query = max(1, k_common // expected_query_count + 1)
+
+        all_results: list[list] = []
+        additional_queries: list[str] = []
+
+        # 병렬 실행: 원본 쿼리 검색 + Multi-query 생성
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            # 원본 쿼리로 먼저 검색 시작
+            original_search_future = executor.submit(
+                self._search_single_query_for_multi,
+                query,
+                domain,
+                k_per_query,
+                k_common_per_query,
+                include_common,
+                use_mmr,
+                fetch_k_mult,
+                lambda_mult,
+            )
+
+            # 동시에 Multi-query 생성
+            multi_query_future = executor.submit(
+                self.query_processor.generate_multi_queries,
+                query,
+            )
+
+            # 원본 쿼리 검색 결과 수집
+            try:
+                original_results = original_search_future.result()
+                if original_results:
+                    all_results.append(original_results)
+            except Exception as e:
+                logger.error(f"원본 쿼리 검색 실패: {e}")
+
+            # Multi-query 결과 수집
+            try:
+                queries = multi_query_future.result()
+                # 원본 쿼리 제외
+                additional_queries = [q for q in queries if q != query]
+                logger.info(f"Multi-query 생성: {queries}")
+            except Exception as e:
+                logger.warning(f"Multi-query 생성 실패: {e}")
+
+        # 추가 쿼리들 병렬 검색 (원본은 이미 검색됨)
+        if additional_queries:
+            # max_workers 제한으로 스레드 과다 생성 방지
+            max_workers = min(len(additional_queries), 3)
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [
+                    executor.submit(
+                        self._search_single_query_for_multi,
+                        search_query,
+                        domain,
+                        k_per_query,
+                        k_common_per_query,
+                        include_common,
+                        use_mmr,
+                        fetch_k_mult,
+                        lambda_mult,
+                    )
+                    for search_query in additional_queries
+                ]
+
+                for future in futures:
+                    try:
+                        query_results = future.result()
+                        if query_results:
+                            all_results.append(query_results)
+                    except Exception as e:
+                        logger.error(f"Multi-query 검색 실패: {e}")
+
+        search_time = time.time() - start_time
+        logger.debug(f"검색 완료: {search_time:.2f}초, {len(all_results)}개 쿼리 결과")
+
+        # RRF로 결과 병합
+        total_k = k + k_common if include_common else k
+        if all_results:
+            merged_results = reciprocal_rank_fusion(all_results)
+
+            # 고신뢰도 결과 확인: 상위 total_k개의 RRF 점수가 높으면 Re-ranking 스킵
+            # RRF 점수 > 0.03 = 여러 쿼리에서 상위 랭킹된 문서
+            high_confidence_count = sum(
+                1 for r in merged_results[:total_k] if r.score > 0.03
+            )
+            skip_rerank = high_confidence_count >= total_k * 0.8  # 80% 이상 고신뢰도
+
+            documents = [r.document for r in merged_results]
+            logger.debug(
+                f"Multi-query RRF 병합 완료: {len(documents)}개 문서, "
+                f"고신뢰도: {high_confidence_count}/{total_k}"
+            )
+        else:
+            documents = []
+            skip_rerank = True
+
+        # Re-ranking (배치 처리로 최적화됨)
+        rerank_start = time.time()
+        if use_rerank and self.reranker and len(documents) > total_k and not skip_rerank:
+            try:
+                documents = self.reranker.rerank(query, documents, top_k=total_k)
+                rerank_time = time.time() - rerank_start
+                logger.debug(f"Re-ranking 완료: {len(documents)}개 문서, {rerank_time:.2f}초")
+            except Exception as e:
+                logger.warning(f"Re-ranking 실패: {e}")
+                documents = documents[:total_k]
+        elif len(documents) > total_k:
+            if skip_rerank:
+                logger.debug(f"Re-ranking 스킵: 고신뢰도 결과 ({high_confidence_count}개)")
+            documents = documents[:total_k]
+
+        total_time = time.time() - start_time
+        logger.info(f"Multi-query 검색 총 소요시간: {total_time:.2f}초")
 
         return documents
 
@@ -503,7 +768,7 @@ class RAGChain:
         fetch_k_mult = self.settings.mmr_fetch_k_multiplier
         lambda_mult = self.settings.mmr_lambda_mult
         use_rerank = self.settings.enable_reranking
-        fetch_k = k * 3 if use_rerank else k
+        fetch_k = k * 2 if use_rerank else k
 
         # 도메인별 검색
         try:

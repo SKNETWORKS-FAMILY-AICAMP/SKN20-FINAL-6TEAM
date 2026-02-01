@@ -59,7 +59,11 @@ class Settings(BaseSettings):
                 "'sk-'로 시작해야 합니다."
             )
         return v
-    openai_model: str = Field(default="gpt-4o-mini", description="LLM 모델")
+    openai_model: str = Field(default="gpt-4o-mini", description="메인 LLM 모델 (답변 생성)")
+    auxiliary_model: str = Field(
+        default="gpt-3.5-turbo",
+        description="보조 LLM 모델 (분류, 평가, Multi-query 등 경량 작업)"
+    )
     openai_temperature: float = Field(default=0.3, description="LLM temperature")
 
     # 임베딩 설정
@@ -75,42 +79,51 @@ class Settings(BaseSettings):
     bizinfo_api_key: str = Field(default="", description="기업마당 API 키")
     kstartup_api_key: str = Field(default="", description="K-Startup API 키")
 
-    # 평가 설정
-    evaluation_threshold: int = Field(default=70, description="평가 통과 임계값 (100점 만점)")
-    max_retry_count: int = Field(default=2, description="최대 재시도 횟수")
+    # 평가 설정 (품질-성능 균형)
+    evaluation_threshold: int = Field(default=68, description="평가 통과 임계값 (품질 유지)")
+    max_retry_count: int = Field(default=1, description="최대 재시도 횟수 (성능 위해 1회)")
+    skip_evaluation_for_cached: bool = Field(default=True, description="캐시 히트 시 평가 스킵")
+    skip_evaluation_for_short_query: bool = Field(default=True, description="짧은 질문 평가 스킵")
+    short_query_threshold: int = Field(default=8, description="짧은 질문 기준 글자 수")
+    skip_evaluation_probability: float = Field(default=0.15, description="일반 질문 평가 스킵 확률 (15%)")
 
-    # RAG 설정
+    # RAG 설정 (성능 최적화)
     retrieval_k: int = Field(default=3, description="도메인별 검색 결과 개수")
     retrieval_k_common: int = Field(default=2, description="공통 법령 DB 검색 결과 개수")
-    mmr_fetch_k_multiplier: int = Field(default=4, description="MMR 검색 시 초기 후보 배수")
-    mmr_lambda_mult: float = Field(default=0.6, description="MMR 다양성 파라미터 (0=최대 다양성, 1=최대 유사도)")
+    mmr_fetch_k_multiplier: int = Field(default=3, description="MMR 검색 시 초기 후보 배수 (4→3 최적화)")
+    mmr_lambda_mult: float = Field(default=0.7, description="MMR 다양성 파라미터 (0.6→0.7 유사도 우선)")
 
     # 컨텍스트 길이 설정
     format_context_length: int = Field(default=500, description="컨텍스트 포맷팅 시 문서 내용 최대 길이")
     source_content_length: int = Field(default=300, description="SourceDocument 변환 시 내용 최대 길이")
     evaluator_context_length: int = Field(default=2000, description="평가 시 컨텍스트 최대 길이")
 
-    # 고급 검색 설정
-    enable_query_rewrite: bool = Field(default=True, description="쿼리 재작성 활성화")
+    # 고급 검색 설정 (성능 최적화)
+    enable_query_rewrite: bool = Field(default=False, description="쿼리 재작성 비활성화 (Multi-query로 대체)")
+    enable_multi_query: bool = Field(default=True, description="Multi-query Retrieval 활성화")
+    multi_query_count: int = Field(default=2, description="Multi-query 생성 시 쿼리 개수 (2개로 최적화)")
     enable_hybrid_search: bool = Field(default=True, description="Hybrid Search (BM25+Vector) 활성화")
     enable_reranking: bool = Field(default=True, description="Re-ranking 활성화")
-    enable_context_compression: bool = Field(default=False, description="컨텍스트 압축 활성화")
-    rerank_top_k: int = Field(default=5, description="Re-ranking 후 반환할 문서 수")
+    enable_context_compression: bool = Field(default=False, description="컨텍스트 압축 비활성화 (성능)")
+    rerank_top_k: int = Field(default=4, description="Re-ranking 후 반환할 문서 수 (5→4 최적화)")
+    rerank_batch_size: int = Field(default=4, description="Re-ranking 배치 크기 (6→4 최적화)")
 
-    # 캐싱 설정
+    # 캐싱 설정 (성능 최적화)
     enable_response_cache: bool = Field(default=True, description="응답 캐싱 활성화")
     cache_max_size: int = Field(default=500, description="캐시 최대 크기")
-    cache_ttl: int = Field(default=3600, description="캐시 TTL (초)")
+    cache_ttl: int = Field(default=7200, description="캐시 TTL (초) - 2시간으로 연장")
+    enable_domain_cache: bool = Field(default=True, description="도메인 분류 캐싱 활성화")
+    domain_cache_size: int = Field(default=200, description="도메인 분류 캐시 크기")
 
     # Rate Limiting 설정
     enable_rate_limit: bool = Field(default=True, description="Rate Limiting 활성화")
     rate_limit_rate: float = Field(default=10.0, description="초당 토큰 충전 속도")
     rate_limit_capacity: float = Field(default=100.0, description="최대 토큰 수 (버스트)")
 
-    # 타임아웃 설정
-    llm_timeout: float = Field(default=30.0, description="LLM 호출 타임아웃 (초)")
-    search_timeout: float = Field(default=10.0, description="검색 타임아웃 (초)")
-    total_timeout: float = Field(default=60.0, description="전체 요청 타임아웃 (초)")
+    # 타임아웃 설정 (성능 최적화)
+    llm_timeout: float = Field(default=20.0, description="LLM 호출 타임아웃 (30→20초)")
+    search_timeout: float = Field(default=8.0, description="검색 타임아웃 (10→8초)")
+    total_timeout: float = Field(default=45.0, description="전체 요청 타임아웃 (60→45초)")
 
     # Fallback 설정
     enable_fallback: bool = Field(default=True, description="Fallback 응답 활성화")
