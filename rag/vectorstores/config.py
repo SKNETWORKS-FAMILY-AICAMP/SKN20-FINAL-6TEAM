@@ -104,9 +104,12 @@ class VectorDBConfig:
     # ChromaDB 저장 경로 (하나의 디렉토리에 모든 컬렉션 저장)
     persist_directory: Path = field(default_factory=lambda: VECTORDB_DIR)
 
-    # 컬렉션 메타데이터 설정
+    # 컬렉션 메타데이터 설정 (HNSW 정확도 최적화)
     collection_metadata: dict = field(default_factory=lambda: {
-        "hnsw:space": "cosine",  # 코사인 유사도 사용
+        "hnsw:space": "cosine",           # 코사인 유사도 사용
+        "hnsw:M": 48,                     # 노드당 연결 수 (16→48, 정확도↑ 메모리↑)
+        "hnsw:construction_ef": 200,      # 인덱스 빌드 시 탐색 범위 (100→200)
+        "hnsw:search_ef": 150,            # 검색 시 탐색 범위 (10→150, 정확도↑ 속도↓)
     })
 
     # 임베딩 배치 크기
