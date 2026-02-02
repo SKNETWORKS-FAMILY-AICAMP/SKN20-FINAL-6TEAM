@@ -8,6 +8,42 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+class AgentTimingMetrics(BaseModel):
+    """에이전트별 타이밍 메트릭.
+
+    Attributes:
+        domain: 에이전트 도메인
+        retrieve_time: 검색 시간 (초)
+        generate_time: 생성 시간 (초)
+        total_time: 에이전트 총 시간 (초)
+    """
+
+    domain: str = Field(description="에이전트 도메인")
+    retrieve_time: float = Field(default=0.0, description="검색 시간 (초)")
+    generate_time: float = Field(default=0.0, description="생성 시간 (초)")
+    total_time: float = Field(default=0.0, description="에이전트 총 시간 (초)")
+
+
+class TimingMetrics(BaseModel):
+    """RAG 처리 단계별 타이밍 메트릭.
+
+    Attributes:
+        classify_time: 분류 시간 (초)
+        agents: 에이전트별 타이밍
+        integrate_time: 통합 시간 (초)
+        evaluate_time: 평가 시간 (초)
+        total_time: 총 응답 시간 (초)
+    """
+
+    classify_time: float = Field(default=0.0, description="분류 시간 (초)")
+    agents: list[AgentTimingMetrics] = Field(
+        default_factory=list, description="에이전트별 타이밍"
+    )
+    integrate_time: float = Field(default=0.0, description="통합 시간 (초)")
+    evaluate_time: float = Field(default=0.0, description="평가 시간 (초)")
+    total_time: float = Field(default=0.0, description="총 응답 시간 (초)")
+
+
 class ActionSuggestion(BaseModel):
     """추천 액션.
 
@@ -82,6 +118,9 @@ class ChatResponse(BaseModel):
     retry_count: int = Field(default=0, description="재시도 횟수")
     ragas_metrics: dict[str, Any] | None = Field(
         default=None, description="RAGAS 정량 평가 메트릭"
+    )
+    timing_metrics: TimingMetrics | None = Field(
+        default=None, description="단계별 처리 시간 메트릭"
     )
 
 

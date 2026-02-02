@@ -7,6 +7,7 @@ LangGraph 기반 멀티에이전트 라우터를 구현합니다.
 import asyncio
 import json
 import re
+import time
 from typing import Any, AsyncGenerator, TypedDict
 
 from langchain_core.output_parsers import StrOutputParser
@@ -17,9 +18,11 @@ from langgraph.graph import END, StateGraph
 from schemas.request import UserContext
 from schemas.response import (
     ActionSuggestion,
+    AgentTimingMetrics,
     ChatResponse,
     EvaluationResult,
     SourceDocument,
+    TimingMetrics,
 )
 from chains.rag_chain import RAGChain
 from utils.config import get_settings
@@ -46,6 +49,7 @@ class RouterState(TypedDict):
     retry_count: int
     feedback: str | None
     search_strategy: SearchStrategy | None  # 피드백 기반 검색 전략
+    timing_metrics: dict[str, Any]  # 단계별 타이밍 메트릭
 
 
 class MainRouter:
@@ -212,13 +216,16 @@ class MainRouter:
 
     def _classify_node(self, state: RouterState) -> RouterState:
         """분류 노드: 질문을 분석하여 도메인을 식별합니다."""
+        start = time.time()
         domains = self._classify_domains(state["query"])
         state["domains"] = domains
+        state["timing_metrics"]["classify_time"] = time.time() - start
         return state
 
     def _route_node(self, state: RouterState) -> RouterState:
         """라우팅 노드: 해당 에이전트를 호출합니다."""
         responses = {}
+        agent_timings = []
         feedback = state.get("feedback")
         search_strategy = state.get("search_strategy")
 
@@ -231,14 +238,23 @@ class MainRouter:
                 if feedback:
                     query = f"{query}\n\n[이전 답변 피드백: {feedback}]"
 
+                start = time.time()
                 response = agent.process(
                     query=query,
                     user_context=state.get("user_context"),
                     search_strategy=search_strategy,
                 )
+                elapsed = time.time() - start
                 responses[domain] = response
+                agent_timings.append({
+                    "domain": domain,
+                    "retrieve_time": response.metadata.get("retrieve_time", 0.0),
+                    "generate_time": response.metadata.get("generate_time", 0.0),
+                    "total_time": elapsed,
+                })
 
         state["responses"] = responses
+        state["timing_metrics"]["agents"] = agent_timings
         return state
 
     async def _aroute_node(self, state: RouterState) -> RouterState:
@@ -249,33 +265,44 @@ class MainRouter:
         if feedback:
             query = f"{query}\n\n[이전 답변 피드백: {feedback}]"
 
-        # 병렬로 에이전트 호출
+        # 병렬로 에이전트 호출 (타이밍 포함)
         async def call_agent(domain: str):
             if domain in self.agents:
                 agent = self.agents[domain]
+                start = time.time()
                 response = await agent.aprocess(
                     query=query,
                     user_context=state.get("user_context"),
                     search_strategy=search_strategy,
                 )
-                return domain, response
+                elapsed = time.time() - start
+                return domain, response, elapsed
             return None
 
         tasks = [call_agent(domain) for domain in state["domains"]]
         results = await asyncio.gather(*tasks)
 
-        # None 결과 필터링 후 딕셔너리 변환
+        # None 결과 필터링 후 딕셔너리 변환 및 타이밍 수집
         responses = {}
+        agent_timings = []
         for result in results:
             if result is not None:
-                domain, response = result
+                domain, response, elapsed = result
                 responses[domain] = response
+                agent_timings.append({
+                    "domain": domain,
+                    "retrieve_time": response.metadata.get("retrieve_time", 0.0),
+                    "generate_time": response.metadata.get("generate_time", 0.0),
+                    "total_time": elapsed,
+                })
 
         state["responses"] = responses
+        state["timing_metrics"]["agents"] = agent_timings
         return state
 
     def _integrate_node(self, state: RouterState) -> RouterState:
         """통합 노드: 여러 에이전트의 응답을 통합합니다."""
+        start = time.time()
         responses = state["responses"]
         all_sources = []
         all_actions = []
@@ -305,10 +332,12 @@ class MainRouter:
         state["final_response"] = final_response
         state["sources"] = all_sources
         state["actions"] = all_actions
+        state["timing_metrics"]["integrate_time"] = time.time() - start
         return state
 
     def _evaluate_node(self, state: RouterState) -> RouterState:
         """평가 노드: 응답 품질을 평가합니다."""
+        start = time.time()
         # 컨텍스트 생성
         context = "\n".join([s.content for s in state["sources"][:5]])
 
@@ -319,6 +348,7 @@ class MainRouter:
         )
 
         state["evaluation"] = evaluation
+        state["timing_metrics"]["evaluate_time"] = time.time() - start
 
         # 미통과 시 피드백 저장 및 검색 전략 조정
         if not evaluation.passed:
@@ -338,6 +368,7 @@ class MainRouter:
 
     async def _aevaluate_node(self, state: RouterState) -> RouterState:
         """비동기 평가 노드: 응답 품질을 비동기로 평가합니다."""
+        start = time.time()
         # 컨텍스트 생성
         context = "\n".join([s.content for s in state["sources"][:5]])
 
@@ -348,6 +379,7 @@ class MainRouter:
         )
 
         state["evaluation"] = evaluation
+        state["timing_metrics"]["evaluate_time"] = time.time() - start
 
         # 미통과 시 피드백 저장 및 검색 전략 조정
         if not evaluation.passed:
@@ -389,6 +421,9 @@ class MainRouter:
         Returns:
             채팅 응답
         """
+        # 총 시간 측정 시작
+        total_start = time.time()
+
         # 초기 상태
         initial_state: RouterState = {
             "query": query,
@@ -402,10 +437,33 @@ class MainRouter:
             "retry_count": 0,
             "feedback": None,
             "search_strategy": None,
+            "timing_metrics": {},
         }
 
         # 그래프 실행
         final_state = self.graph.invoke(initial_state)
+
+        # 총 시간 계산
+        total_time = time.time() - total_start
+
+        # 타이밍 메트릭 객체 생성
+        timing_data = final_state.get("timing_metrics", {})
+        agent_timings = [
+            AgentTimingMetrics(
+                domain=a["domain"],
+                retrieve_time=a.get("retrieve_time", 0.0),
+                generate_time=a.get("generate_time", 0.0),
+                total_time=a.get("total_time", 0.0),
+            )
+            for a in timing_data.get("agents", [])
+        ]
+        timing_metrics = TimingMetrics(
+            classify_time=timing_data.get("classify_time", 0.0),
+            agents=agent_timings,
+            integrate_time=timing_data.get("integrate_time", 0.0),
+            evaluate_time=timing_data.get("evaluate_time", 0.0),
+            total_time=total_time,
+        )
 
         # 응답 생성
         domains = final_state["domains"]
@@ -417,6 +475,7 @@ class MainRouter:
             actions=final_state["actions"],
             evaluation=final_state.get("evaluation"),
             retry_count=final_state.get("retry_count", 0),
+            timing_metrics=timing_metrics,
         )
 
     async def aprocess(
@@ -435,6 +494,9 @@ class MainRouter:
         Returns:
             채팅 응답
         """
+        # 총 시간 측정 시작
+        total_start = time.time()
+
         # 초기 상태
         initial_state: RouterState = {
             "query": query,
@@ -448,10 +510,33 @@ class MainRouter:
             "retry_count": 0,
             "feedback": None,
             "search_strategy": None,
+            "timing_metrics": {},
         }
 
         # 비동기 그래프 실행 (병렬 에이전트 호출 + 비동기 평가)
         final_state = await self.async_graph.ainvoke(initial_state)
+
+        # 총 시간 계산
+        total_time = time.time() - total_start
+
+        # 타이밍 메트릭 객체 생성
+        timing_data = final_state.get("timing_metrics", {})
+        agent_timings = [
+            AgentTimingMetrics(
+                domain=a["domain"],
+                retrieve_time=a.get("retrieve_time", 0.0),
+                generate_time=a.get("generate_time", 0.0),
+                total_time=a.get("total_time", 0.0),
+            )
+            for a in timing_data.get("agents", [])
+        ]
+        timing_metrics = TimingMetrics(
+            classify_time=timing_data.get("classify_time", 0.0),
+            agents=agent_timings,
+            integrate_time=timing_data.get("integrate_time", 0.0),
+            evaluate_time=timing_data.get("evaluate_time", 0.0),
+            total_time=total_time,
+        )
 
         # 응답 생성
         domains = final_state["domains"]
@@ -463,6 +548,7 @@ class MainRouter:
             actions=final_state["actions"],
             evaluation=final_state.get("evaluation"),
             retry_count=final_state.get("retry_count", 0),
+            timing_metrics=timing_metrics,
         )
 
     async def astream(

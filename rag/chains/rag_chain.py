@@ -6,6 +6,7 @@
 
 import asyncio
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.documents import Document
@@ -349,15 +350,17 @@ class RAGChain:
             search_strategy: 피드백 기반 검색 전략
 
         Returns:
-            응답 딕셔너리 (content, sources, documents)
+            응답 딕셔너리 (content, sources, documents, retrieve_time, generate_time)
         """
-        # 문서 검색
+        # 문서 검색 - 시간 측정
+        retrieve_start = time.time()
         documents = self.retrieve(
             query=query,
             domain=domain,
             include_common=include_common,
             search_strategy=search_strategy,
         )
+        retrieve_time = time.time() - retrieve_start
 
         # 컨텍스트 포맷팅
         context = self.format_context(documents)
@@ -368,20 +371,24 @@ class RAGChain:
             ("human", "{query}"),
         ])
 
-        # 체인 실행
+        # 체인 실행 - 시간 측정
         chain = prompt | self.llm | StrOutputParser()
 
+        generate_start = time.time()
         response = chain.invoke({
             "query": query,
             "context": context,
             "user_type": user_type,
             "company_context": company_context,
         })
+        generate_time = time.time() - generate_start
 
         return {
             "content": response,
             "sources": self.documents_to_sources(documents),
             "documents": documents,
+            "retrieve_time": retrieve_time,
+            "generate_time": generate_time,
         }
 
     async def ainvoke(
@@ -428,7 +435,8 @@ class RAGChain:
             except Exception as e:
                 logger.warning(f"쿼리 재작성 실패: {e}")
 
-        # 문서 검색 (동기 호출을 스레드로 실행)
+        # 문서 검색 (동기 호출을 스레드로 실행) - 시간 측정
+        retrieve_start = time.time()
         documents = await asyncio.to_thread(
             self._retrieve_with_rewritten_query,
             search_query,
@@ -437,6 +445,7 @@ class RAGChain:
             None,
             include_common,
         )
+        retrieve_time = time.time() - retrieve_start
 
         # 컨텍스트 압축 (설정에 따라)
         if self.settings.enable_context_compression and self.query_processor:
@@ -456,9 +465,10 @@ class RAGChain:
             ("human", "{query}"),
         ])
 
-        # 체인 실행 (타임아웃 적용)
+        # 체인 실행 (타임아웃 적용) - 시간 측정
         chain = prompt | self.llm | StrOutputParser()
 
+        generate_start = time.time()
         try:
             response = await asyncio.wait_for(
                 chain.ainvoke({
@@ -475,11 +485,14 @@ class RAGChain:
                 response = self.settings.fallback_message
             else:
                 raise
+        generate_time = time.time() - generate_start
 
         result = {
             "content": response,
             "sources": self.documents_to_sources(documents),
             "documents": documents,
+            "retrieve_time": retrieve_time,
+            "generate_time": generate_time,
         }
 
         # 캐시 저장

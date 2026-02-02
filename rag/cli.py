@@ -32,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from agents.router import MainRouter
 from schemas.request import UserContext
-from schemas.response import SourceDocument
+from schemas.response import SourceDocument, TimingMetrics
 from utils.config import get_settings
 from vectorstores.chroma import ChromaVectorStore
 
@@ -56,6 +56,13 @@ RAGAS_METRIC_LABELS: dict[str, str] = {
     "answer_relevancy": "Answer Relevancy (답변 관련성)",
     "context_precision": "Context Precision (컨텍스트 정밀도)",
     "context_recall": "Context Recall (컨텍스트 재현율)",
+}
+
+# 도메인 라벨
+DOMAIN_LABELS: dict[str, str] = {
+    "startup_funding": "창업/지원",
+    "finance_tax": "재무/세무",
+    "hr_labor": "인사/노무",
 }
 
 
@@ -127,6 +134,22 @@ def print_ragas_metrics(metrics: Any) -> None:
             print(f"  {label}: {value:.4f}")
 
 
+def print_timing_metrics(timing: TimingMetrics) -> None:
+    """단계별 처리 시간을 출력합니다."""
+    print(f"  분류: {timing.classify_time:.3f}초")
+
+    for agent in timing.agents:
+        domain_label = DOMAIN_LABELS.get(agent.domain, agent.domain)
+        print(f"  에이전트 [{domain_label}]:")
+        print(f"    - 검색: {agent.retrieve_time:.3f}초")
+        print(f"    - 생성: {agent.generate_time:.3f}초")
+        print(f"    - 소계: {agent.total_time:.3f}초")
+
+    print(f"  통합: {timing.integrate_time:.3f}초")
+    print(f"  평가: {timing.evaluate_time:.3f}초")
+    print(f"  총합: {timing.total_time:.3f}초")
+
+
 def _log_ragas_metrics_to_file(
     question: str,
     answer: str,
@@ -184,8 +207,14 @@ async def process_query(
     # 메타 정보
     print_separator("-")
     print(f"[도메인] {', '.join(response.domains)}")
-    print(f"[응답시간] {response_time:.2f}초")
     print(f"[재시도] {response.retry_count}회")
+
+    # 처리 시간 (단계별)
+    print("\n[처리 시간]")
+    if response.timing_metrics:
+        print_timing_metrics(response.timing_metrics)
+    else:
+        print(f"  총합: {response_time:.2f}초")
 
     # 출처
     print("\n[참고문서]")

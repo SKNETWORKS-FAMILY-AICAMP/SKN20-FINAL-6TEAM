@@ -163,6 +163,10 @@ class BaseAgent(ABC):
             sources=result["sources"],
             actions=actions,
             documents=result["documents"],
+            metadata={
+                "retrieve_time": result.get("retrieve_time", 0.0),
+                "generate_time": result.get("generate_time", 0.0),
+            },
         )
 
     async def aprocess(
@@ -209,6 +213,10 @@ class BaseAgent(ABC):
             sources=result["sources"],
             actions=actions,
             documents=result["documents"],
+            metadata={
+                "retrieve_time": result.get("retrieve_time", 0.0),
+                "generate_time": result.get("generate_time", 0.0),
+            },
         )
 
     async def astream(
