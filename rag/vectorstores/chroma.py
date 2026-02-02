@@ -242,7 +242,13 @@ class ChromaVectorStore:
             유사한 문서 리스트
         """
         store = self.get_or_create_store(domain)
-        return store.similarity_search(query, k=k, filter=filter)
+        collection_name = self._get_collection_name(domain)
+        logger.info("[벡터검색] similarity_search: 컬렉션=%s, k=%d", collection_name, k)
+        results = store.similarity_search(query, k=k, filter=filter)
+        logger.info("[벡터검색] similarity_search 결과: %d건", len(results))
+        titles = [r.metadata.get("title", "제목없음") for r in results]
+        logger.info("[벡터검색] 검색 문서: %s", titles)
+        return results
 
     def similarity_search_with_score(
         self,
@@ -263,7 +269,13 @@ class ChromaVectorStore:
             (문서, 유사도 점수) 튜플 리스트
         """
         store = self.get_or_create_store(domain)
-        return store.similarity_search_with_score(query, k=k, filter=filter)
+        collection_name = self._get_collection_name(domain)
+        logger.info("[벡터검색] similarity_search_with_score: 컬렉션=%s, k=%d", collection_name, k)
+        results = store.similarity_search_with_score(query, k=k, filter=filter)
+        logger.info("[벡터검색] similarity_search_with_score 결과: %d건", len(results))
+        titles = [doc.metadata.get("title", "제목없음") for doc, _ in results]
+        logger.info("[벡터검색] 검색 문서: %s", titles)
+        return results
 
     def max_marginal_relevance_search(
         self,
@@ -291,13 +303,19 @@ class ChromaVectorStore:
             다양성이 고려된 문서 리스트
         """
         store = self.get_or_create_store(domain)
-        return store.max_marginal_relevance_search(
+        collection_name = self._get_collection_name(domain)
+        logger.info("[벡터검색] MMR: 컬렉션=%s, k=%d, fetch_k=%d", collection_name, k, fetch_k)
+        results = store.max_marginal_relevance_search(
             query=query,
             k=k,
             fetch_k=fetch_k,
             lambda_mult=lambda_mult,
             filter=filter,
         )
+        logger.info("[벡터검색] MMR 결과: %d건", len(results))
+        titles = [r.metadata.get("title", "제목없음") for r in results]
+        logger.info("[벡터검색] 검색 문서: %s", titles)
+        return results
 
     def get_retriever(
         self,

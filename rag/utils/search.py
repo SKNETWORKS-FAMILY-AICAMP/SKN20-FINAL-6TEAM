@@ -263,6 +263,8 @@ class LLMReranker:
         if len(documents) <= top_k:
             return documents
 
+        logger.info("[리랭킹] 시작: %d건 → top_%d", len(documents), top_k)
+
         scored_docs: list[tuple[Document, float]] = []
 
         for doc in documents:
@@ -279,6 +281,9 @@ class LLMReranker:
 
         # 점수로 정렬
         scored_docs.sort(key=lambda x: x[1], reverse=True)
+
+        scores_list = [s for _, s in scored_docs]
+        logger.info("[리랭킹] 완료: 점수 범위 %.1f~%.1f", min(scores_list), max(scores_list))
 
         return [doc for doc, _ in scored_docs[:top_k]]
 
@@ -303,6 +308,8 @@ class LLMReranker:
         if len(documents) <= top_k:
             return documents
 
+        logger.info("[리랭킹] 시작: %d건 → top_%d", len(documents), top_k)
+
         semaphore = asyncio.Semaphore(max_concurrent)
 
         async def score_one(doc: Document) -> tuple[Document, float]:
@@ -323,6 +330,9 @@ class LLMReranker:
 
         # 점수로 정렬
         results = sorted(results, key=lambda x: x[1], reverse=True)
+
+        scores_list = [s for _, s in results]
+        logger.info("[리랭킹] 완료: 점수 범위 %.1f~%.1f", min(scores_list), max(scores_list))
 
         return [doc for doc, _ in results[:top_k]]
 
@@ -376,6 +386,8 @@ class HybridSearcher:
         Returns:
             검색된 문서 리스트
         """
+        logger.info("[하이브리드] 검색 시작: 도메인=%s, k=%d", domain, k)
+
         fetch_k = k * 3  # 더 많이 가져와서 융합
 
         # 벡터 검색
@@ -394,17 +406,20 @@ class HybridSearcher:
             ]
         except Exception as e:
             logger.warning(f"벡터 검색 실패: {e}")
+        logger.info("[하이브리드] 벡터 검색: %d건", len(vector_results))
 
         # BM25 검색 (인덱스가 있는 경우)
         bm25_results = []
         if domain in self.bm25_indices:
             bm25_results = self.bm25_indices[domain].search(query, k=fetch_k)
+        logger.info("[하이브리드] BM25 검색: %d건", len(bm25_results))
 
         # 결과 융합
         if bm25_results:
             combined = reciprocal_rank_fusion([vector_results, bm25_results])
         else:
             combined = vector_results
+        logger.info("[하이브리드] RRF 융합 완료: %d건", len(combined))
 
         # 상위 결과 추출
         documents = [r.document for r in combined[:fetch_k]]
@@ -435,23 +450,28 @@ class HybridSearcher:
         Returns:
             검색된 문서 리스트
         """
+        logger.info("[하이브리드] 검색 시작: 도메인=%s, k=%d", domain, k)
+
         fetch_k = k * 3
 
         # 벡터 검색 (동기 -> 스레드)
         vector_results = await asyncio.to_thread(
             self._vector_search, query, domain, fetch_k
         )
+        logger.info("[하이브리드] 벡터 검색: %d건", len(vector_results))
 
         # BM25 검색
         bm25_results = []
         if domain in self.bm25_indices:
             bm25_results = self.bm25_indices[domain].search(query, k=fetch_k)
+        logger.info("[하이브리드] BM25 검색: %d건", len(bm25_results))
 
         # 결과 융합
         if bm25_results:
             combined = reciprocal_rank_fusion([vector_results, bm25_results])
         else:
             combined = vector_results
+        logger.info("[하이브리드] RRF 융합 완료: %d건", len(combined))
 
         documents = [r.document for r in combined[:fetch_k]]
 

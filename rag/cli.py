@@ -12,8 +12,11 @@ FastAPI 서버 없이 터미널에서 RAG 시스템을 직접 테스트합니다
     # RAGAS 평가 포함
     python -m cli --query "퇴직금 계산 방법" --ragas
 
-    # 상세 출력 (컨텍스트 내용 포함)
-    python -m cli --verbose
+    # 로그 숨김 (WARNING만 출력)
+    python -m cli --quiet
+
+    # 검색 기능 토글
+    python -m cli --no-hybrid --no-rerank
 """
 
 import argparse
@@ -66,12 +69,24 @@ DOMAIN_LABELS: dict[str, str] = {
 }
 
 
-def setup_logging(verbose: bool = False) -> None:
-    """CLI용 로깅을 설정합니다."""
-    level = logging.DEBUG if verbose else logging.WARNING
+def setup_logging(quiet: bool = False, debug: bool = False) -> None:
+    """CLI용 로깅을 설정합니다.
+
+    Args:
+        quiet: True이면 WARNING 레벨 로그만 출력
+        debug: True이면 DEBUG 레벨 로그 출력
+    """
+    if debug:
+        level = logging.DEBUG
+    elif quiet:
+        level = logging.WARNING
+    else:
+        level = logging.INFO
+
     logging.basicConfig(
         level=level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
     )
 
 
@@ -304,11 +319,14 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 사용 예시:
-  python -m cli                              # 대화형 모드
+  python -m cli                              # 대화형 모드 (INFO 로그 기본 출력)
   python -m cli --query "창업 절차"            # 단일 쿼리
   python -m cli --query "퇴직금 계산" --ragas  # RAGAS 평가 포함
-  python -m cli --verbose                     # 상세 출력
+  python -m cli --quiet                       # 로그 숨김 (WARNING만 출력)
+  python -m cli --debug                       # 디버그 출력 (DEBUG 로그)
   python -m cli --user-type startup_ceo       # 사용자 유형 지정
+  python -m cli --no-hybrid --no-rerank       # Hybrid Search, Re-ranking 비활성화
+  python -m cli --no-rewrite                  # 쿼리 재작성 비활성화
         """,
     )
     parser.add_argument(
@@ -325,11 +343,10 @@ def parse_args() -> argparse.Namespace:
         help="RAGAS 정량 평가 활성화",
     )
     parser.add_argument(
-        "--verbose",
-        "-v",
+        "--quiet",
         action="store_true",
         default=False,
-        help="상세 출력 (컨텍스트 내용 포함)",
+        help="로그 숨김 (WARNING만 출력, 컨텍스트 내용 미표시)",
     )
     parser.add_argument(
         "--user-type",
@@ -338,18 +355,69 @@ def parse_args() -> argparse.Namespace:
         choices=["prospective", "startup_ceo", "sme_owner"],
         help="사용자 유형 (기본: prospective)",
     )
+
+    # 검색 기능 토글
+    search_group = parser.add_argument_group("검색 기능 토글")
+    search_group.add_argument(
+        "--no-hybrid",
+        action="store_true",
+        default=False,
+        help="Hybrid Search (BM25+RRF) 비활성화",
+    )
+    search_group.add_argument(
+        "--no-rerank",
+        action="store_true",
+        default=False,
+        help="Re-ranking 비활성화",
+    )
+    search_group.add_argument(
+        "--no-rewrite",
+        action="store_true",
+        default=False,
+        help="쿼리 재작성 비활성화",
+    )
+    search_group.add_argument(
+        "--debug",
+        action="store_true",
+        default=False,
+        help="DEBUG 레벨 로그 출력",
+    )
+
     return parser.parse_args()
 
 
 async def main() -> None:
     """CLI 메인 함수."""
     args = parse_args()
-    setup_logging(verbose=args.verbose)
+    setup_logging(quiet=args.quiet, debug=args.debug)
+
+    # verbose: 컨텍스트 내용 미리보기 제어 (--quiet가 아니면 기본 표시)
+    verbose = not args.quiet
+
+    # CLI 인자로 검색 기능 토글
+    settings = get_settings()
+    if args.no_hybrid:
+        settings.override(enable_hybrid_search=False)
+    if args.no_rerank:
+        settings.override(enable_reranking=False)
+    if args.no_rewrite:
+        settings.override(enable_query_rewrite=False)
 
     # 초기화
     print("RAG 서비스 초기화 중...")
     vector_store = ChromaVectorStore()
     router = MainRouter(vector_store=vector_store)
+
+    # 임베딩 디바이스 정보 출력
+    from vectorstores.embeddings import get_device
+    device = get_device()
+    device_label = {"cuda": "GPU (CUDA)", "mps": "GPU (Apple MPS)", "cpu": "CPU"}
+    print(f"  임베딩 디바이스: {device_label.get(device, device)}")
+
+    # 검색 기능 상태 출력
+    print(f"  Hybrid Search (BM25+RRF): {'ON' if settings.enable_hybrid_search else 'OFF'}")
+    print(f"  Re-ranking: {'ON' if settings.enable_reranking else 'OFF'}")
+    print(f"  Query Rewrite: {'ON' if settings.enable_query_rewrite else 'OFF'}")
     print("초기화 완료.\n")
 
     user_context = UserContext(user_type=args.user_type)
@@ -360,7 +428,7 @@ async def main() -> None:
             await process_query(
                 router,
                 args.query,
-                verbose=args.verbose,
+                verbose=verbose,
                 enable_ragas=args.ragas,
                 user_context=user_context,
             )
@@ -368,7 +436,7 @@ async def main() -> None:
             # 대화형 모드
             await interactive_mode(
                 router,
-                verbose=args.verbose,
+                verbose=verbose,
                 enable_ragas=args.ragas,
                 user_context=user_context,
             )

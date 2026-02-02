@@ -6,6 +6,7 @@ LangGraph 기반 멀티에이전트 라우터를 구현합니다.
 
 import asyncio
 import json
+import logging
 import re
 import time
 from typing import Any, AsyncGenerator, TypedDict
@@ -33,6 +34,8 @@ from agents.evaluator import EvaluatorAgent
 from agents.finance_tax import FinanceTaxAgent
 from agents.hr_labor import HRLaborAgent
 from agents.startup_funding import StartupFundingAgent
+
+logger = logging.getLogger(__name__)
 
 
 class RouterState(TypedDict):
@@ -187,14 +190,20 @@ class MainRouter:
         """
         # 1차: 키워드 기반 분류
         detected_domains = []
+        matched_keywords: dict[str, list[str]] = {}
         for domain, keywords in DOMAIN_KEYWORDS.items():
-            if any(kw in query for kw in keywords):
+            hits = [kw for kw in keywords if kw in query]
+            if hits:
                 detected_domains.append(domain)
+                matched_keywords[domain] = hits
 
         if detected_domains:
+            logger.info("[분류] 키워드 매칭 성공: %s", detected_domains)
+            logger.info("[분류] 매칭 키워드: %s", matched_keywords)
             return detected_domains
 
         # 2차: LLM 기반 분류
+        logger.info("[분류] 키워드 매칭 실패, LLM 분류 사용")
         prompt = ChatPromptTemplate.from_messages([
             ("system", ROUTER_SYSTEM_PROMPT),
             ("human", "질문: {query}"),
@@ -219,7 +228,9 @@ class MainRouter:
         start = time.time()
         domains = self._classify_domains(state["query"])
         state["domains"] = domains
-        state["timing_metrics"]["classify_time"] = time.time() - start
+        classify_time = time.time() - start
+        state["timing_metrics"]["classify_time"] = classify_time
+        logger.info("[분류] 도메인=%s (%.3fs)", domains, classify_time)
         return state
 
     def _route_node(self, state: RouterState) -> RouterState:
@@ -228,6 +239,8 @@ class MainRouter:
         agent_timings = []
         feedback = state.get("feedback")
         search_strategy = state.get("search_strategy")
+
+        logger.info("[라우팅] 호출할 에이전트: %s", state["domains"])
 
         for domain in state["domains"]:
             if domain in self.agents:
@@ -238,6 +251,7 @@ class MainRouter:
                 if feedback:
                     query = f"{query}\n\n[이전 답변 피드백: {feedback}]"
 
+                logger.info("[라우팅] 에이전트 [%s] 호출 시작", domain)
                 start = time.time()
                 response = agent.process(
                     query=query,
@@ -245,6 +259,7 @@ class MainRouter:
                     search_strategy=search_strategy,
                 )
                 elapsed = time.time() - start
+                logger.info("[라우팅] 에이전트 [%s] 완료 (%.3fs)", domain, elapsed)
                 responses[domain] = response
                 agent_timings.append({
                     "domain": domain,
@@ -265,10 +280,13 @@ class MainRouter:
         if feedback:
             query = f"{query}\n\n[이전 답변 피드백: {feedback}]"
 
+        logger.info("[라우팅] 비동기 병렬 호출: %s", state["domains"])
+
         # 병렬로 에이전트 호출 (타이밍 포함)
         async def call_agent(domain: str):
             if domain in self.agents:
                 agent = self.agents[domain]
+                logger.info("[라우팅] 에이전트 [%s] 비동기 호출 시작", domain)
                 start = time.time()
                 response = await agent.aprocess(
                     query=query,
@@ -276,6 +294,7 @@ class MainRouter:
                     search_strategy=search_strategy,
                 )
                 elapsed = time.time() - start
+                logger.info("[라우팅] 에이전트 [%s] 완료 (%.3fs)", domain, elapsed)
                 return domain, response, elapsed
             return None
 
@@ -332,7 +351,9 @@ class MainRouter:
         state["final_response"] = final_response
         state["sources"] = all_sources
         state["actions"] = all_actions
-        state["timing_metrics"]["integrate_time"] = time.time() - start
+        integrate_time = time.time() - start
+        state["timing_metrics"]["integrate_time"] = integrate_time
+        logger.info("[통합] 응답 통합 완료: %d자 (%.3fs)", len(final_response), integrate_time)
         return state
 
     def _evaluate_node(self, state: RouterState) -> RouterState:
@@ -348,12 +369,20 @@ class MainRouter:
         )
 
         state["evaluation"] = evaluation
-        state["timing_metrics"]["evaluate_time"] = time.time() - start
+        evaluate_time = time.time() - start
+        state["timing_metrics"]["evaluate_time"] = evaluate_time
+        logger.info(
+            "[평가] 점수=%d/100, %s (%.3fs)",
+            evaluation.total_score,
+            "PASS" if evaluation.passed else "FAIL",
+            evaluate_time,
+        )
 
         # 미통과 시 피드백 저장 및 검색 전략 조정
         if not evaluation.passed:
             state["feedback"] = evaluation.feedback
             state["retry_count"] = state.get("retry_count", 0) + 1
+            logger.info("[평가] 재시도 #%d: %s", state["retry_count"], evaluation.feedback)
 
             # 피드백 기반 검색 전략 계산
             analyzer = get_feedback_analyzer()
@@ -379,12 +408,20 @@ class MainRouter:
         )
 
         state["evaluation"] = evaluation
-        state["timing_metrics"]["evaluate_time"] = time.time() - start
+        evaluate_time = time.time() - start
+        state["timing_metrics"]["evaluate_time"] = evaluate_time
+        logger.info(
+            "[평가] 점수=%d/100, %s (%.3fs)",
+            evaluation.total_score,
+            "PASS" if evaluation.passed else "FAIL",
+            evaluate_time,
+        )
 
         # 미통과 시 피드백 저장 및 검색 전략 조정
         if not evaluation.passed:
             state["feedback"] = evaluation.feedback
             state["retry_count"] = state.get("retry_count", 0) + 1
+            logger.info("[평가] 재시도 #%d: %s", state["retry_count"], evaluation.feedback)
 
             # 피드백 기반 검색 전략 계산
             analyzer = get_feedback_analyzer()

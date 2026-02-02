@@ -148,6 +148,8 @@ class RAGChain:
 
         documents: list[Document] = []
 
+        logger.info("[검색] 도메인=%s, 쿼리='%s'", domain, query[:50])
+
         # 쿼리 재작성 (설정에 따라)
         search_query = query
         if use_query_rewrite is None:
@@ -155,19 +157,29 @@ class RAGChain:
 
         if use_query_rewrite and self.query_processor:
             try:
+                rewrite_start = time.time()
                 search_query = self.query_processor.rewrite_query(query)
-                logger.debug(f"쿼리 재작성: '{query}' -> '{search_query}'")
+                rewrite_time = time.time() - rewrite_start
+                logger.info("[검색] 쿼리 재작성: '%s' → '%s' (%.3fs)", query[:30], search_query[:30], rewrite_time)
             except Exception as e:
                 logger.warning(f"쿼리 재작성 실패: {e}")
                 search_query = query
+        else:
+            logger.info("[검색] 쿼리 재작성: 비활성화")
 
         # Re-ranking 사용 시 더 많이 검색
         if use_rerank is None:
             use_rerank = self.settings.enable_reranking
         fetch_k = k * 3 if use_rerank else k
 
+        logger.info(
+            "[검색] 검색 방법: %s, use_rerank=%s, fetch_k=%d",
+            "MMR" if use_mmr else "similarity", use_rerank, fetch_k,
+        )
+
         # 도메인별 검색 (MMR 또는 일반 유사도 검색)
         try:
+            domain_search_start = time.time()
             if use_mmr:
                 domain_docs = self.vector_store.max_marginal_relevance_search(
                     query=search_query,
@@ -182,7 +194,9 @@ class RAGChain:
                     domain=domain,
                     k=fetch_k,
                 )
+            domain_search_time = time.time() - domain_search_start
             documents.extend(domain_docs)
+            logger.info("[검색] 도메인 DB: %d건 (%.3fs)", len(domain_docs), domain_search_time)
         except Exception as e:
             logger.error(f"도메인 검색 실패 ({domain}): {e}")
 
@@ -191,6 +205,7 @@ class RAGChain:
             common_fetch_k = k_common * 2 if use_rerank else k_common
 
             try:
+                common_search_start = time.time()
                 if use_mmr:
                     common_docs = self.vector_store.max_marginal_relevance_search(
                         query=search_query,
@@ -205,15 +220,20 @@ class RAGChain:
                         domain="law_common",
                         k=common_fetch_k,
                     )
+                common_search_time = time.time() - common_search_start
                 documents.extend(common_docs)
+                logger.info("[검색] 공통 법령 DB: %d건 (%.3fs)", len(common_docs), common_search_time)
             except Exception as e:
                 logger.error(f"공통 법령 DB 검색 실패: {e}")
 
         # Re-ranking (설정에 따라)
         if use_rerank and self.reranker and len(documents) > k:
             try:
+                pre_rerank_count = len(documents)
+                rerank_start = time.time()
                 documents = self.reranker.rerank(query, documents, top_k=k)
-                logger.debug(f"Re-ranking 완료: {len(documents)}개 문서")
+                rerank_time = time.time() - rerank_start
+                logger.info("[검색] Re-ranking: %d건 → %d건 (%.3fs)", pre_rerank_count, len(documents), rerank_time)
             except Exception as e:
                 logger.warning(f"Re-ranking 실패: {e}")
                 documents = documents[:k]
@@ -280,7 +300,11 @@ class RAGChain:
             포맷팅된 컨텍스트 문자열
         """
         if not documents:
+            logger.info("[컨텍스트] 포맷팅 대상 문서 없음")
             return "관련 참고 자료가 없습니다."
+
+        titles = [doc.metadata.get("title", "제목 없음") for doc in documents]
+        logger.info("[컨텍스트] 포맷팅 대상 %d건: %s", len(documents), titles)
 
         context_parts = []
         for i, doc in enumerate(documents, 1):
@@ -361,6 +385,7 @@ class RAGChain:
             search_strategy=search_strategy,
         )
         retrieve_time = time.time() - retrieve_start
+        logger.info("[invoke] 검색 완료: %d건 (%.3fs)", len(documents), retrieve_time)
 
         # 컨텍스트 포맷팅
         context = self.format_context(documents)
@@ -382,6 +407,7 @@ class RAGChain:
             "company_context": company_context,
         })
         generate_time = time.time() - generate_start
+        logger.info("[생성] LLM 응답 생성 완료 (%.3fs, %d자)", generate_time, len(response))
 
         return {
             "content": response,
@@ -424,14 +450,19 @@ class RAGChain:
         if use_cache and self.response_cache:
             cached = self.response_cache.get(query, domain)
             if cached:
-                logger.debug(f"캐시 히트: {query[:30]}...")
+                logger.info("[ainvoke] 캐시 히트: '%s...'", query[:30])
                 return cached
+
+        logger.info("[ainvoke] 도메인=%s, 쿼리='%s'", domain, query[:50])
 
         # 쿼리 재작성 (비동기)
         search_query = query
         if self.settings.enable_query_rewrite and self.query_processor:
             try:
+                rewrite_start = time.time()
                 search_query = await self.query_processor.arewrite_query(query)
+                rewrite_time = time.time() - rewrite_start
+                logger.info("[ainvoke] 쿼리 재작성: '%s' → '%s' (%.3fs)", query[:30], search_query[:30], rewrite_time)
             except Exception as e:
                 logger.warning(f"쿼리 재작성 실패: {e}")
 
@@ -446,10 +477,12 @@ class RAGChain:
             include_common,
         )
         retrieve_time = time.time() - retrieve_start
+        logger.info("[ainvoke] 검색 완료: %d건 (%.3fs)", len(documents), retrieve_time)
 
         # 컨텍스트 압축 (설정에 따라)
         if self.settings.enable_context_compression and self.query_processor:
             try:
+                logger.info("[ainvoke] 컨텍스트 압축 적용: %d건", len(documents))
                 documents = await self.query_processor.acompress_documents(
                     query, documents
                 )
@@ -486,6 +519,7 @@ class RAGChain:
             else:
                 raise
         generate_time = time.time() - generate_start
+        logger.info("[생성] LLM 응답 생성 완료 (%.3fs, %d자)", generate_time, len(response))
 
         result = {
             "content": response,

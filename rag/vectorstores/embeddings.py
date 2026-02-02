@@ -20,7 +20,7 @@ from .config import VectorDBConfig
 logger = logging.getLogger(__name__)
 
 
-def _get_device() -> str:
+def get_device() -> str:
     """CUDA > MPS > CPU 우선순위로 디바이스 반환."""
     if torch.cuda.is_available():
         return "cuda"
@@ -41,7 +41,7 @@ def get_embeddings(model: str | None = None) -> HuggingFaceEmbeddings:
     """
     config = VectorDBConfig()
     model_name = model or config.embedding_model
-    device = _get_device()
+    device = get_device()
 
     logger.info(f"임베딩 모델 로딩: {model_name} (디바이스: {device})")
 

@@ -4,6 +4,8 @@
 """
 
 import asyncio
+import logging
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, AsyncGenerator
@@ -17,6 +19,8 @@ from utils.config import get_settings
 
 if TYPE_CHECKING:
     from utils.feedback import SearchStrategy
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -135,6 +139,9 @@ class BaseAgent(ABC):
         Returns:
             에이전트 응답
         """
+        logger.info("[에이전트] %s process 시작: '%s'", self.domain, query[:50])
+        start = time.time()
+
         # 사용자 컨텍스트 처리
         user_type = "예비 창업자"
         company_context = "정보 없음"
@@ -156,6 +163,15 @@ class BaseAgent(ABC):
 
         # 액션 제안
         actions = self.suggest_actions(query, result["content"])
+
+        elapsed = time.time() - start
+        logger.info(
+            "[에이전트] %s process 완료 (%.3fs, 검색=%.3fs, 생성=%.3fs)",
+            self.domain,
+            elapsed,
+            result.get("retrieve_time", 0.0),
+            result.get("generate_time", 0.0),
+        )
 
         return AgentResponse(
             content=result["content"],
@@ -185,6 +201,9 @@ class BaseAgent(ABC):
         Returns:
             에이전트 응답
         """
+        logger.info("[에이전트] %s aprocess 시작: '%s'", self.domain, query[:50])
+        start = time.time()
+
         # 사용자 컨텍스트 처리
         user_type = "예비 창업자"
         company_context = "정보 없음"
@@ -206,6 +225,15 @@ class BaseAgent(ABC):
 
         # 액션 제안
         actions = self.suggest_actions(query, result["content"])
+
+        elapsed = time.time() - start
+        logger.info(
+            "[에이전트] %s aprocess 완료 (%.3fs, 검색=%.3fs, 생성=%.3fs)",
+            self.domain,
+            elapsed,
+            result.get("retrieve_time", 0.0),
+            result.get("generate_time", 0.0),
+        )
 
         return AgentResponse(
             content=result["content"],

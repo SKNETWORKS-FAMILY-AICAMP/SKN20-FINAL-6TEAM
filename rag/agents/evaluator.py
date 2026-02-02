@@ -147,6 +147,11 @@ class EvaluatorAgent:
         Returns:
             평가 결과
         """
+        logger.info(
+            "[평가] 평가 시작: 질문='%s', 답변=%d자, 컨텍스트=%d자",
+            question[:50], len(answer), len(context),
+        )
+
         # 프롬프트 구성
         prompt = ChatPromptTemplate.from_messages([
             ("system", EVALUATOR_PROMPT),
@@ -165,11 +170,23 @@ class EvaluatorAgent:
 
         # 응답 파싱 (tuple 언패킹: dict, success)
         parsed, parse_success = self._parse_evaluation_response(response)
+        logger.info("[평가] LLM 응답 파싱 %s", "성공" if parse_success else "실패")
 
         # EvaluationResult 생성
         scores = parsed.get("scores", {})
         total_score = parsed.get("total_score", sum(scores.values()))
         passed = total_score >= self.threshold
+
+        logger.info(
+            "[평가] 기준별 점수: 검색품질=%d, 정확성=%d, 완성도=%d, 관련성=%d, 출처=%d",
+            scores.get("retrieval_quality", 0), scores.get("accuracy", 0),
+            scores.get("completeness", 0), scores.get("relevance", 0),
+            scores.get("citation", 0),
+        )
+        logger.info(
+            "[평가] 총점=%d/100, 임계값=%d → %s",
+            total_score, self.threshold, "PASS" if passed else "FAIL",
+        )
 
         return EvaluationResult(
             scores=scores,
@@ -194,6 +211,11 @@ class EvaluatorAgent:
         Returns:
             평가 결과
         """
+        logger.info(
+            "[평가] 평가 시작: 질문='%s', 답변=%d자, 컨텍스트=%d자",
+            question[:50], len(answer), len(context),
+        )
+
         # 프롬프트 구성
         prompt = ChatPromptTemplate.from_messages([
             ("system", EVALUATOR_PROMPT),
@@ -212,11 +234,23 @@ class EvaluatorAgent:
 
         # 응답 파싱 (tuple 언패킹: dict, success)
         parsed, parse_success = self._parse_evaluation_response(response)
+        logger.info("[평가] LLM 응답 파싱 %s", "성공" if parse_success else "실패")
 
         # EvaluationResult 생성
         scores = parsed.get("scores", {})
         total_score = parsed.get("total_score", sum(scores.values()))
         passed = total_score >= self.threshold
+
+        logger.info(
+            "[평가] 기준별 점수: 검색품질=%d, 정확성=%d, 완성도=%d, 관련성=%d, 출처=%d",
+            scores.get("retrieval_quality", 0), scores.get("accuracy", 0),
+            scores.get("completeness", 0), scores.get("relevance", 0),
+            scores.get("citation", 0),
+        )
+        logger.info(
+            "[평가] 총점=%d/100, 임계값=%d → %s",
+            total_score, self.threshold, "PASS" if passed else "FAIL",
+        )
 
         return EvaluationResult(
             scores=scores,

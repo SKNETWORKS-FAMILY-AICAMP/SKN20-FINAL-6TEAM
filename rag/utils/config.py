@@ -138,6 +138,43 @@ class Settings(BaseSettings):
     port: int = Field(default=8001, description="서버 포트")
     debug: bool = Field(default=False, description="디버그 모드")
 
+    # CLI에서 런타임 오버라이드 가능한 설정 키 (보안 관련 필드 제외)
+    _ALLOWED_OVERRIDES: set[str] = {
+        "enable_hybrid_search",
+        "enable_reranking",
+        "enable_query_rewrite",
+        "enable_context_compression",
+        "enable_response_cache",
+        "debug",
+    }
+
+    def override(self, **kwargs: Any) -> None:
+        """런타임에 설정값을 오버라이드합니다 (CLI용).
+
+        허용된 필드만 변경 가능하며, 타입 검증을 수행합니다.
+        API 키, 호스트, 포트 등 보안/인프라 관련 필드는 변경 불가합니다.
+
+        Args:
+            **kwargs: 오버라이드할 설정 키-값 쌍
+        """
+        for key, value in kwargs.items():
+            if key not in self._ALLOWED_OVERRIDES:
+                logger.warning(f"오버라이드 불가능한 설정: {key}")
+                continue
+
+            field_info = self.model_fields.get(key)
+            if field_info and field_info.annotation is not None:
+                expected = field_info.annotation
+                if not isinstance(value, expected):
+                    logger.warning(
+                        f"타입 불일치: {key}는 {expected.__name__}이어야 함 "
+                        f"(입력: {type(value).__name__})"
+                    )
+                    continue
+
+            object.__setattr__(self, key, value)
+            logger.info(f"설정 오버라이드: {key} = {value}")
+
     @property
     def vectordb_dir(self) -> Path:
         """VectorDB 저장 디렉토리 경로."""

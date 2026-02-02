@@ -400,7 +400,7 @@ FastAPI 서버 없이 터미널에서 RAG 시스템을 직접 테스트할 수 �
 ### 사용법
 
 ```bash
-# 대화형 모드
+# 대화형 모드 (INFO 로그 기본 출력)
 python -m cli
 
 # 단일 쿼리 모드
@@ -409,12 +409,48 @@ python -m cli --query "사업자등록 절차 알려주세요"
 # RAGAS 평가 포함
 python -m cli --query "퇴직금 계산 방법" --ragas
 
-# 상세 출력 (컨텍스트 내용 포함)
-python -m cli --verbose
+# 로그 숨김 (WARNING만 출력)
+python -m cli --quiet
+
+# 디버그 출력 (DEBUG 로그 포함)
+python -m cli --debug
 
 # 사용자 유형 지정
 python -m cli --user-type startup_ceo
+
+# 검색 기능 토글
+python -m cli --no-hybrid                    # Hybrid Search (BM25+RRF) 비활성화
+python -m cli --no-rerank                    # Re-ranking 비활성화
+python -m cli --no-rewrite                   # 쿼리 재작성 비활성화
+python -m cli --no-hybrid --no-rerank        # 여러 기능 동시 비활성화
 ```
+
+### CLI 옵션
+
+| 옵션 | 설명 |
+|------|------|
+| `--query`, `-q` | 단일 쿼리 모드 |
+| `--ragas` | RAGAS 정량 평가 활성화 |
+| `--quiet` | 로그 숨김 (WARNING만 출력, 컨텍스트 내용 미표시) |
+| `--debug` | DEBUG 로그 출력 (모든 로그) |
+| `--user-type` | 사용자 유형 (prospective, startup_ceo, sme_owner) |
+| `--no-hybrid` | Hybrid Search (BM25+RRF) 비활성화 |
+| `--no-rerank` | Re-ranking 비활성화 |
+| `--no-rewrite` | 쿼리 재작성 비활성화 |
+
+### 초기화 출력
+
+CLI 시작 시 다음 정보가 표시됩니다:
+- 임베딩 디바이스 (GPU (CUDA) / GPU (Apple MPS) / CPU)
+- Hybrid Search, Re-ranking, Query Rewrite 활성화 상태
+
+### 로그 레벨
+
+| 레벨 | 옵션 | 출력 내용 |
+|------|------|----------|
+| INFO | (기본) | 각 단계별 검색/생성 시간, 문서 수, 도메인 분류, 평가 기준별 점수, 검색 문서 제목 등 |
+| WARNING | `--quiet` | 경고 및 에러만 |
+| DEBUG | `--debug` | 모든 내부 처리 과정 상세 출력 |
 
 ### 출력 정보
 
