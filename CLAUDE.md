@@ -11,7 +11,7 @@ Bizi는 예비 창업자, 스타트업 CEO, 중소기업 대표를 위한 AI 기
 - 선제적 알림 시스템 (마감일 D-7, D-3 알림)
 
 ## 기술 스택
-- **Frontend**: React 18 + Vite, TypeScript, TailwindCSS, React Router, axios
+- **Frontend**: React 18 + Vite, TypeScript, TailwindCSS, React Router, axios, react-markdown
 - **Backend**: FastAPI, SQLAlchemy 2.0, Google OAuth2, JWT
 - **RAG Service**: FastAPI, LangChain, LangGraph, OpenAI GPT-4
 - **Database**: MySQL 8.0 (스키마: final_test)

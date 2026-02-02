@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   Card,
   CardBody,
@@ -141,17 +143,22 @@ const MainPage: React.FC = () => {
                       />
                     </div>
                   )}
-                  <Typography
-                    variant="small"
-                    className={msg.type === 'user' ? 'text-white' : 'text-gray-800'}
-                  >
-                    {msg.content.split('\n').map((line, i) => (
-                      <React.Fragment key={i}>
-                        {line}
-                        {i < msg.content.split('\n').length - 1 && <br />}
-                      </React.Fragment>
-                    ))}
-                  </Typography>
+                  {msg.type === 'assistant' ? (
+                    <div className="markdown-body text-sm text-gray-800">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <Typography variant="small" className="text-white">
+                      {msg.content.split('\n').map((line, i) => (
+                        <React.Fragment key={i}>
+                          {line}
+                          {i < msg.content.split('\n').length - 1 && <br />}
+                        </React.Fragment>
+                      ))}
+                    </Typography>
+                  )}
                   <Typography
                     variant="small"
                     className={`text-xs mt-1 ${

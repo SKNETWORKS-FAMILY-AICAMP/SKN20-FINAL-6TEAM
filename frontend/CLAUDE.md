@@ -4,7 +4,7 @@
 > 다른 AI 에이전트는 [AGENTS.md](./AGENTS.md)를 참조하세요.
 
 ## 프로젝트 개요
-- **기술 스택**: React 18 + Vite 5 + TypeScript 5
+- **기술 스택**: React 18 + Vite 5 + TypeScript 5, react-markdown + remark-gfm
 - **라우팅**: React Router v6
 - **HTTP 클라이언트**: axios
 - **상태 관리**: Zustand (전역), TanStack Query (서버)
@@ -103,6 +103,7 @@ VITE_GOOGLE_CLIENT_ID=your-client-id
 - 대화 이력 조회 (ChatHistoryPanel)
 - 빠른 질문 버튼 (사용자 유형별: `USER_QUICK_QUESTIONS` / `GUEST_QUICK_QUESTIONS`)
 - 게스트 사용자: 10회 무료 메시지 제한 (`GUEST_MESSAGE_LIMIT`)
+- **응답 Markdown 렌더링**: 어시스턴트 응답은 `react-markdown` + `remark-gfm`으로 GFM 렌더링 (사용자 메시지는 plain text 유지)
 
 ### 2. 로그인 페이지 (/login)
 - Google OAuth2 소셜 로그인
@@ -210,6 +211,7 @@ VITE_GOOGLE_CLIENT_ID=your-client-id
 - **라우팅**: React Router v6 사용 (`element` prop)
 - **API 기본 URL**: Backend(8000), RAG(8001)
 - **에러 처리**: axios 인터셉터에서 401 처리
+- **마크다운 스타일**: `src/index.css`의 `.markdown-body` 클래스 — 채팅 응답 전용 마크다운 렌더링 스타일
 
 ## 코드 품질
 `.claude/rules/coding-style.md`, `.claude/rules/patterns.md` 참조

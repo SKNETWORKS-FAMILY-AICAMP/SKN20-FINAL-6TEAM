@@ -102,10 +102,38 @@ export interface Notification {
   link?: string;
 }
 
-// RAG Chat Response
+// RAG Chat Response (matches rag/schemas/response.py ChatResponse)
 export interface RagChatResponse {
-  response: string;
-  agent_code: AgentCode;
+  content: string;
+  domain: string;
+  domains: string[];
+  sources: RagSourceDocument[];
+  actions: RagActionSuggestion[];
+  evaluation: RagEvaluationResult | null;
+  session_id: string | null;
+  retry_count: number;
+  ragas_metrics: Record<string, unknown> | null;
+}
+
+export interface RagSourceDocument {
+  title: string | null;
+  content: string;
+  source: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface RagActionSuggestion {
+  type: string;
+  label: string;
+  description: string | null;
+  params: Record<string, unknown>;
+}
+
+export interface RagEvaluationResult {
+  scores: Record<string, number>;
+  total_score: number;
+  passed: boolean;
+  feedback: string | null;
 }
 
 // Calendar Event (for FullCalendar)

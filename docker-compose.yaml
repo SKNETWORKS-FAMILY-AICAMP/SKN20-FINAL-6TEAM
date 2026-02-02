@@ -63,21 +63,29 @@ services:
       - backend
     command: npm run dev -- --host
 
-  # RAG Service (LangChain/FastAPI) - Optional
-  # rag:
-  #   build: ./rag
-  #   container_name: bizmate-rag
-  #   restart: unless-stopped
-  #   volumes:
-  #     - ./rag:/app
-  #   ports:
-  #     - "8001:8001"
-  #   environment:
-  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
-  #     - BIZINFO_API_KEY=${BIZINFO_API_KEY}
-  #     - KSTARTUP_API_KEY=${KSTARTUP_API_KEY}
-  #   depends_on:
-  #     - backend
+  # RAG Service (LangChain/FastAPI)
+  rag:
+    build: ./rag
+    container_name: bizmate-rag
+    restart: unless-stopped
+    volumes:
+      - ./rag:/app
+      - huggingface_cache:/root/.cache/huggingface
+    ports:
+      - "8001:8001"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - BIZINFO_API_KEY=${BIZINFO_API_KEY:-}
+      - KSTARTUP_API_KEY=${KSTARTUP_API_KEY:-}
+      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    command: uvicorn main:app --host 0.0.0.0 --port 8001
 
 volumes:
   mysql_data:
+  huggingface_cache:

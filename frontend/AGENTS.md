@@ -3,7 +3,7 @@
 > 상세 개발 가이드: [CLAUDE.md](./CLAUDE.md)
 
 ## Tech Stack
-React 18 / Vite 5 / TypeScript 5 / React Router v6 / TailwindCSS / Zustand / TanStack Query / axios
+React 18 / Vite 5 / TypeScript 5 / React Router v6 / TailwindCSS / Zustand / TanStack Query / axios / react-markdown + remark-gfm
 
 ## Project Structure
 ```

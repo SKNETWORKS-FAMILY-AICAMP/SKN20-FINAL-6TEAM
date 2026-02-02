@@ -1,3 +1,16 @@
+import type { AgentCode } from '../types';
+
+// RAG domain → AgentCode mapping
+export const DOMAIN_TO_AGENT_CODE: Record<string, AgentCode> = {
+  startup_funding: 'A0000002',
+  finance_tax: 'A0000003',
+  hr_labor: 'A0000004',
+  general: 'A0000001',
+};
+
+export const domainToAgentCode = (domain: string): AgentCode =>
+  DOMAIN_TO_AGENT_CODE[domain] || 'A0000001';
+
 // Industry codes - KSIC(한국표준산업분류) 기반 Major categories (대분류 21개)
 export const INDUSTRY_MAJOR: Record<string, string> = {
   BA000000: '농업, 임업 및 어업',
