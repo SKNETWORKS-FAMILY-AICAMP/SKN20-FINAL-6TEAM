@@ -18,7 +18,13 @@
       "Bash(ruff:*)",
       "Bash(mypy:*)",
       "Bash(uvicorn:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(iconv:*)",
+      "Bash(__NEW_LINE_dcb44ae8b7cb5400__ python3 -c \"\nimport pandas as pd\ndf = pd.read_excel\\(''data/origin/startup_funding/\\(붙임2\\)업종코드_표준산업분류연계표_홈페이지게시.xlsx''\\)\nprint\\(''Shape:'', df.shape\\)\nprint\\(''Columns:'', list\\(df.columns\\)\\)\nprint\\(\\)\nprint\\(df.head\\(10\\).to_string\\(\\)\\)\n\")",
+      "Bash(pip3 list:*)",
+      "Bash(/Users/backgold/WorkSpace/SKN20-FINAL-6TEAM/backend/venv/bin/python3:*)",
+      "Bash(pip3 install:*)",
+      "Bash(curl:*)"
     ]
   }
 }

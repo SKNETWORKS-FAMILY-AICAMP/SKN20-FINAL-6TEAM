@@ -156,7 +156,7 @@ export const useChatStore = create<ChatState>()(
 
           try {
             const res = await api.post('/histories', {
-              agent_code: assistantMsg.agent_code || 'A001',
+              agent_code: assistantMsg.agent_code || 'A0000001',
               question: msg.content,
               answer: assistantMsg.content,
               parent_history_id: lastSyncedHistoryId,

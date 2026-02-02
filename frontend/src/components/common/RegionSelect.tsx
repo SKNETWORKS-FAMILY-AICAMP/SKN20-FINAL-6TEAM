@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Select, Option } from '@material-tailwind/react';
-import { REGION_DATA, PROVINCES } from '../../lib/constants';
+import { REGION_SIDO, REGION_SIGUNGU, PROVINCES } from '../../lib/constants';
 
 interface RegionSelectProps {
   value: string;
@@ -10,77 +10,82 @@ interface RegionSelectProps {
 
 /**
  * 2-tier region select: 시/도 + 시/군/구
- * value format: "시/도 시/군/구" (e.g. "서울특별시 강남구")
+ * value format: R-code (e.g. "R1168000" for 서울특별시 강남구)
  */
 export const RegionSelect: React.FC<RegionSelectProps> = ({ value, onChange, disabled = false }) => {
-  const [province, setProvince] = useState('');
-  const [district, setDistrict] = useState('');
+  const [sidoCode, setSidoCode] = useState('');
+  const [sigunguCode, setSigunguCode] = useState('');
 
-  // Sync local state from parent value
+  // Sync local state from parent value (R-code)
   useEffect(() => {
     if (!value) {
-      setProvince('');
-      setDistrict('');
+      setSidoCode('');
+      setSigunguCode('');
       return;
     }
 
-    for (const prov of PROVINCES) {
-      if (value.startsWith(prov)) {
-        const remaining = value.slice(prov.length).trim();
-        const districts = REGION_DATA[prov] || [];
-        setProvince(prov);
-        setDistrict(remaining && districts.includes(remaining) ? remaining : '');
+    // Find which sido this sigungu belongs to
+    for (const sido of PROVINCES) {
+      const sigungus = REGION_SIGUNGU[sido] || {};
+      if (value === sido) {
+        setSidoCode(sido);
+        setSigunguCode('');
+        return;
+      }
+      if (value in sigungus) {
+        setSidoCode(sido);
+        setSigunguCode(value);
         return;
       }
     }
 
-    setProvince('');
-    setDistrict('');
+    setSidoCode('');
+    setSigunguCode('');
   }, [value]);
 
-  const districtOptions = province ? (REGION_DATA[province] || []) : [];
+  const sigunguOptions = sidoCode ? (REGION_SIGUNGU[sidoCode] || {}) : {};
 
-  const handleProvinceChange = (val: string | undefined) => {
-    const newProvince = val || '';
-    setProvince(newProvince);
-    setDistrict('');
-    onChange(newProvince);
+  const handleSidoChange = (val: string | undefined) => {
+    const newSido = val || '';
+    setSidoCode(newSido);
+    setSigunguCode('');
+    onChange(newSido);
   };
 
-  const handleDistrictChange = (val: string | undefined) => {
-    const newDistrict = val || '';
-    setDistrict(newDistrict);
-    if (province && newDistrict) {
-      onChange(`${province} ${newDistrict}`);
+  const handleSigunguChange = (val: string | undefined) => {
+    const newSigungu = val || '';
+    setSigunguCode(newSigungu);
+    if (newSigungu) {
+      onChange(newSigungu);
     }
   };
 
   return (
     <div className="grid grid-cols-2 gap-2">
       <Select
-        value={province}
-        onChange={handleProvinceChange}
+        value={sidoCode}
+        onChange={handleSidoChange}
         disabled={disabled}
         className="!border-gray-300"
         labelProps={{ className: 'hidden' }}
       >
-        {PROVINCES.map((prov) => (
-          <Option key={prov} value={prov}>
-            {prov}
+        {PROVINCES.map((code) => (
+          <Option key={code} value={code}>
+            {REGION_SIDO[code]}
           </Option>
         ))}
       </Select>
       <Select
-        key={province}
-        value={district}
-        onChange={handleDistrictChange}
-        disabled={disabled || !province}
+        key={sidoCode}
+        value={sigunguCode}
+        onChange={handleSigunguChange}
+        disabled={disabled || !sidoCode}
         className="!border-gray-300"
         labelProps={{ className: 'hidden' }}
       >
-        {districtOptions.map((dist) => (
-          <Option key={dist} value={dist}>
-            {dist}
+        {Object.entries(sigunguOptions).map(([code, name]) => (
+          <Option key={code} value={code}>
+            {name}
           </Option>
         ))}
       </Select>

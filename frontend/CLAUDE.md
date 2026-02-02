@@ -139,12 +139,13 @@ VITE_GOOGLE_CLIENT_ID=your-client-id
 
 | 상수명 | 설명 |
 |--------|------|
-| `INDUSTRY_CODES` | 업종 코드 매핑 (B001~B021) |
-| `REGION_DATA` | 시/도 → 시/군/구 매핑 (17개 시도) |
+| `INDUSTRY_MAJOR` / `INDUSTRY_MINOR` | KSIC 기반 업종 코드 (대분류 21개, 소분류 232개) |
+| `INDUSTRY_ALL` | 대분류 + 소분류 통합 조회용 (자동 생성) |
+| `REGION_SIDO` / `REGION_SIGUNGU` | 시/도 → 시/군/구 매핑 (17개 시도, 264개 시군구) |
 | `PROVINCES` | 시/도 목록 배열 |
 | `COMPANY_STATUS` | 기업 상태 (`PREPARING`: 준비 중, `OPERATING`: 운영 중) |
 | `GUEST_QUICK_QUESTIONS` | 게스트 상황별 빠른 질문 (`PRE_STARTUP` / `NEW_STARTUP` / `SME_CEO`) |
-| `USER_QUICK_QUESTIONS` | 로그인 사용자 유형별 빠른 질문 (`U001` / `U002` / `U003`) |
+| `USER_QUICK_QUESTIONS` | 로그인 사용자 유형별 빠른 질문 (`U0000001` / `U0000002` / `U0000003`) |
 | `GUEST_MESSAGE_LIMIT` | 게스트 무료 메시지 제한 수 (10) |
 | `SITUATION_LABELS` | 게스트 상황 라벨 |
 | `SITUATION_DESCRIPTIONS` | 게스트 상황 설명 |

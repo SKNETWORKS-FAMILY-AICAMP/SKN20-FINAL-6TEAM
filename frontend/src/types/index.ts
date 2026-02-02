@@ -3,7 +3,7 @@ export interface User {
   user_id: number;
   google_email: string;
   username: string;
-  type_code: 'U001' | 'U002' | 'U003'; // U001: 관리자, U002: 예비창업자, U003: 사업자
+  type_code: 'U0000001' | 'U0000002' | 'U0000003'; // U0000001: 관리자, U0000002: 예비창업자, U0000003: 사업자
   birth?: string;
   create_date?: string;
 }
@@ -46,31 +46,31 @@ export interface Schedule {
 }
 
 // Agent codes
-export type AgentCode = 'A001' | 'A002' | 'A003' | 'A004' | 'A005' | 'A006';
+export type AgentCode = 'A0000001' | 'A0000002' | 'A0000003' | 'A0000004' | 'A0000005' | 'A0000006';
 
 export const AGENT_NAMES: Record<AgentCode, string> = {
-  A001: '창업절차',
-  A002: '세무/회계',
-  A003: '법률',
-  A004: '인사/노무',
-  A005: '정부지원',
-  A006: '마케팅',
+  A0000001: '메인',
+  A0000002: '창업·지원',
+  A0000003: '재무·세무',
+  A0000004: '인사·노무',
+  A0000005: '평가·검증',
+  A0000006: '마케팅',
 };
 
 export const AGENT_COLORS: Record<AgentCode, string> = {
-  A001: 'bg-blue-500',
-  A002: 'bg-green-500',
-  A003: 'bg-purple-500',
-  A004: 'bg-orange-500',
-  A005: 'bg-cyan-500',
-  A006: 'bg-pink-500',
+  A0000001: 'bg-blue-500',
+  A0000002: 'bg-green-500',
+  A0000003: 'bg-purple-500',
+  A0000004: 'bg-orange-500',
+  A0000005: 'bg-cyan-500',
+  A0000006: 'bg-pink-500',
 };
 
 // User type codes
 export const USER_TYPE_NAMES: Record<string, string> = {
-  U001: '관리자',
-  U002: '예비창업자',
-  U003: '사업자',
+  U0000001: '관리자',
+  U0000002: '예비창업자',
+  U0000003: '사업자',
 };
 
 // Chat message

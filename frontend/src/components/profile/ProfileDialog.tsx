@@ -30,7 +30,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
 
   const [formData, setFormData] = useState({
     username: user?.username || '',
-    type_code: user?.type_code || 'U001',
+    type_code: user?.type_code || 'U0000001',
   });
 
   // Sync form data when dialog opens or user changes
@@ -38,7 +38,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
     if (open && user) {
       setFormData({
         username: user.username || '',
-        type_code: user.type_code || 'U001',
+        type_code: user.type_code || 'U0000001',
       });
       setIsEditing(false);
       setMessage(null);
@@ -60,7 +60,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
 
       updateUser({
         username: formData.username,
-        type_code: formData.type_code as 'U001' | 'U002' | 'U003',
+        type_code: formData.type_code as 'U0000001' | 'U0000002' | 'U0000003',
       });
 
       setMessage({ type: 'success', text: '프로필이 저장되었습니다.' });
@@ -79,7 +79,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
   const handleCancel = () => {
     setFormData({
       username: user?.username || '',
-      type_code: user?.type_code || 'U001',
+      type_code: user?.type_code || 'U0000001',
     });
     setIsEditing(false);
     setMessage(null);
@@ -161,13 +161,13 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
           {isEditing ? (
             <Select
               value={formData.type_code}
-              onChange={(val) => setFormData({ ...formData, type_code: val || 'U001' })}
+              onChange={(val) => setFormData({ ...formData, type_code: val || 'U0000001' })}
               className="!border-gray-300"
               labelProps={{ className: 'hidden' }}
             >
-              <Option value="U001">{USER_TYPE_NAMES['U001']}</Option>
-              <Option value="U002">{USER_TYPE_NAMES['U002']}</Option>
-              <Option value="U003">{USER_TYPE_NAMES['U003']}</Option>
+              <Option value="U0000001">{USER_TYPE_NAMES['U0000001']}</Option>
+              <Option value="U0000002">{USER_TYPE_NAMES['U0000002']}</Option>
+              <Option value="U0000003">{USER_TYPE_NAMES['U0000003']}</Option>
             </Select>
           ) : (
             <Input

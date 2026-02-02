@@ -18,6 +18,8 @@ backend/
 ├── config/
 │   ├── settings.py       # 환경 설정 (Pydantic BaseSettings)
 │   └── database.py       # SQLAlchemy 연결
+├── scripts/
+│   └── generate_code_sql.py  # KSIC 업종코드/지역코드 SQL+TS 생성 스크립트
 └── apps/
     ├── auth/             # Google OAuth2 인증
     ├── users/            # 사용자 관리
@@ -135,10 +137,10 @@ app.include_router({기능}_router)
 | schedule | 일정 | schedule_id, company_id, schedule_name, start_date |
 
 ### 코드 테이블 (main_code)
-- `U`: 사용자 유형 (U001: 관리자, U002: 예비창업자, U003: 사업자)
-- `B`: 업종 코드 (B001: 음식점업, B002: 소매업, ...)
-- `A`: 에이전트 코드 (A001: 창업, A002: 세무, A003: 지원사업, A004: 노무, A005: 법률, A006: 마케팅)
-- `H`: 주관기관 코드 (H001: 중소벤처기업부, ...)
+- `U`: 사용자 유형 (U0000001: 관리자, U0000002: 예비창업자, U0000003: 사업자)
+- `B`: 업종 코드 — KSIC(한국표준산업분류) 기반, 대분류 21개 + 소분류 232개 (예: BA000000: 농업, BC101000: 도축업)
+- `A`: 에이전트 코드 (A0000001~A0000005)
+- `H`: 주관기관 코드
 
 ---
 

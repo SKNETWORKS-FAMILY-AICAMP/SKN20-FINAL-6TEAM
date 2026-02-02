@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from config.database import get_db
-from apps.common.models import User
+from apps.common.models import User, Code
 from apps.common.deps import get_current_user
 from .schemas import UserResponse, UserUpdate, UserTypeUpdate
 
@@ -39,10 +40,13 @@ async def update_user_type(
     current_user: User = Depends(get_current_user)
 ):
     """사용자 유형 변경 (예비창업자/사업자)"""
-    if type_update.type_code not in ["U001", "U002"]:
+    valid_codes = db.execute(
+        select(Code.code).where(Code.main_code == "U", Code.use_yn == True)
+    ).scalars().all()
+    if type_update.type_code not in valid_codes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid type_code. Must be U001 or U002."
+            detail=f"Invalid type_code. Must be one of: {', '.join(valid_codes)}"
         )
 
     current_user.type_code = type_update.type_code

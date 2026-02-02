@@ -107,7 +107,7 @@ export const useCompanyForm = (initialData?: Partial<CompanyFormData>) => {
       biz_num: initialData?.biz_num || '',
       addr: initialData?.addr || '',
       open_date: initialData?.open_date || '',
-      biz_code: initialData?.biz_code || 'B001',
+      biz_code: initialData?.biz_code || 'BA000000',
     },
     errors: {},
     touched: {},
@@ -579,7 +579,7 @@ export function useCompanyForm(options: UseCompanyFormOptions = {}) {
       biz_num: initialData?.biz_num || '',
       addr: initialData?.addr || '',
       open_date: initialData?.open_date || '',
-      biz_code: initialData?.biz_code || 'B001',
+      biz_code: initialData?.biz_code || 'BA000000',
       file_path: initialData?.file_path || '',
     },
     validate: validateCompanyForm,
@@ -639,7 +639,7 @@ export function useCompanyFormWithQuery(companyId?: number) {
       biz_num: '',
       addr: '',
       open_date: '',
-      biz_code: 'B001',
+      biz_code: 'BA000000',
     },
     validate: validateCompanyForm,
     onSubmit: async (values) => {
@@ -940,7 +940,7 @@ import React from 'react';
 import { Card, CardBody, Button, Alert } from '@material-tailwind/react';
 import { useCompanyForm } from '@/hooks/forms/useCompanyForm';
 import { FormInput, FormSelect } from './common';
-import { INDUSTRY_CODES } from '@/utils/constants';
+import { INDUSTRY_MAJOR, INDUSTRY_MINOR } from '@/lib/constants';
 import type { Company } from '@/types';
 
 interface CompanyFormProps {
@@ -980,7 +980,7 @@ export const CompanyForm: React.FC<CompanyFormProps> = ({
   });
 
   // 업종 옵션 변환
-  const industryOptions = Object.entries(INDUSTRY_CODES).map(([code, name]) => ({
+  const industryOptions = Object.entries(INDUSTRY_MAJOR).map(([code, name]) => ({
     value: code,
     label: name,
   }));
@@ -1449,7 +1449,7 @@ const initialFormData: CompanyFormData = {
   biz_num: '',
   addr: '',
   open_date: '',
-  biz_code: 'B001',
+  biz_code: 'BA000000',
 };
 
 /**
@@ -1977,7 +1977,7 @@ export function useCompanyForm(options: UseCompanyFormOptions = {}) {
       biz_num: initialData?.biz_num || '',
       addr: initialData?.addr || '',
       open_date: initialData?.open_date || '',
-      biz_code: initialData?.biz_code || 'B001',
+      biz_code: initialData?.biz_code || 'BA000000',
       file_path: initialData?.file_path || '',
     },
     validate: validateCompanyForm,
@@ -1998,7 +1998,7 @@ import React, { useState } from 'react';
 import { Card, CardBody, Button, Alert } from '@material-tailwind/react';
 import { useCompanyForm } from '@/hooks/forms/useCompanyForm';
 import { FormInput, FormSelect, FormLiveRegion } from './common';
-import { INDUSTRY_CODES } from '@/utils/constants';
+import { INDUSTRY_MAJOR, INDUSTRY_MINOR } from '@/lib/constants';
 import type { Company } from '@/types';
 
 interface CompanyFormProps {
@@ -2042,7 +2042,7 @@ export const CompanyForm: React.FC<CompanyFormProps> = ({
     },
   });
 
-  const industryOptions = Object.entries(INDUSTRY_CODES).map(([code, name]) => ({
+  const industryOptions = Object.entries(INDUSTRY_MAJOR).map(([code, name]) => ({
     value: code,
     label: name,
   }));

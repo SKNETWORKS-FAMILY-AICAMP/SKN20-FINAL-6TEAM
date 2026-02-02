@@ -52,7 +52,7 @@ const MainPage: React.FC = () => {
   };
 
   // Dynamic quick questions based on display user type
-  const quickQuestions = USER_QUICK_QUESTIONS[displayUserType] || USER_QUICK_QUESTIONS['U002'];
+  const quickQuestions = USER_QUICK_QUESTIONS[displayUserType] || USER_QUICK_QUESTIONS['U0000002'];
 
   return (
     <div className="flex flex-col h-full">

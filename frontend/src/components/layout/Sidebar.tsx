@@ -60,7 +60,7 @@ export const Sidebar: React.FC = () => {
   };
 
   const visibleMenuItems = menuItems.filter((item) => {
-    if (item.adminOnly && user?.type_code !== 'U001') {
+    if (item.adminOnly && user?.type_code !== 'U0000001') {
       return false;
     }
     return true;

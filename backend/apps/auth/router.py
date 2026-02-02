@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from jose import jwt
 
 from config.database import get_db
@@ -14,9 +14,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
@@ -49,7 +49,7 @@ async def test_login(db: Session = Depends(get_db)):
         user = User(
             google_email=test_email,
             username=test_username,
-            type_code="U001",  # 예비창업자
+            type_code="U0000002",  # 예비창업자
             birth=datetime(1990, 1, 1)
         )
         db.add(user)

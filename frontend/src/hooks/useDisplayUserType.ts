@@ -3,7 +3,7 @@ import type { User } from '../types';
 
 type UserTypeCode = User['type_code'];
 
-const DEFAULT_USER_TYPE: UserTypeCode = 'U002';
+const DEFAULT_USER_TYPE: UserTypeCode = 'U0000002';
 
 /**
  * Returns the display user type code.

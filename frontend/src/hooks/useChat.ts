@@ -26,7 +26,7 @@ export const useChat = () => {
           id: Date.now().toString(),
           type: 'assistant',
           content: GUEST_LIMIT_MESSAGE,
-          agent_code: 'A001',
+          agent_code: 'A0000001',
           timestamp: new Date(),
         };
         addMessage(limitMessage);
@@ -91,7 +91,7 @@ export const useChat = () => {
           id: (Date.now() + 1).toString(),
           type: 'assistant',
           content: ERROR_MESSAGE,
-          agent_code: 'A001',
+          agent_code: 'A0000001',
           timestamp: new Date(),
         };
         addMessage(errorMessage);
@@ -115,43 +115,43 @@ async function getMockResponse(
   if (question.includes('사업자') || question.includes('창업') || question.includes('법인')) {
     return {
       response: generateStartupResponse(question),
-      agent_code: 'A001',
+      agent_code: 'A0000001',
     };
   }
   if (question.includes('세금') || question.includes('세무') || question.includes('부가세') || question.includes('신고') || question.includes('회계')) {
     return {
       response: generateTaxResponse(question),
-      agent_code: 'A002',
+      agent_code: 'A0000002',
     };
   }
   if (question.includes('법률') || question.includes('계약') || question.includes('법') || question.includes('분쟁')) {
     return {
       response: generateLegalResponse(question),
-      agent_code: 'A003',
+      agent_code: 'A0000003',
     };
   }
   if (question.includes('직원') || question.includes('채용') || question.includes('노무') || question.includes('근로') || question.includes('퇴직')) {
     return {
       response: generateHRResponse(question),
-      agent_code: 'A004',
+      agent_code: 'A0000004',
     };
   }
   if (question.includes('지원') || question.includes('정부') || question.includes('보조금') || question.includes('정책')) {
     return {
       response: generateFundingResponse(question),
-      agent_code: 'A005',
+      agent_code: 'A0000005',
     };
   }
   if (question.includes('마케팅') || question.includes('홍보') || question.includes('브랜드') || question.includes('고객')) {
     return {
       response: generateMarketingResponse(question),
-      agent_code: 'A006',
+      agent_code: 'A0000006',
     };
   }
 
   return {
     response: '질문해 주셔서 감사합니다.\n\n해당 내용에 대해 분석 중입니다. Bizi는 창업, 세무, 노무, 법률, 지원사업, 마케팅 분야의 상담을 제공합니다.\n\n더 구체적인 질문을 해주시면 더욱 정확한 답변을 드릴 수 있습니다.',
-    agent_code: 'A001',
+    agent_code: 'A0000001',
   };
 }
 

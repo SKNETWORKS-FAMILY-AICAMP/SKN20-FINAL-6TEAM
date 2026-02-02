@@ -15,12 +15,65 @@ import {
   Alert,
 } from '@material-tailwind/react';
 import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { INDUSTRY_CODES, COMPANY_STATUS } from '../../lib/constants';
+import { INDUSTRY_MAJOR, INDUSTRY_MINOR, INDUSTRY_ALL, COMPANY_STATUS, REGION_SIDO, REGION_SIGUNGU, PROVINCES } from '../../lib/constants';
 import type { CompanyStatusKey } from '../../lib/constants';
 import { RegionSelect } from '../common/RegionSelect';
 import api from '../../lib/api';
 import { useAuthStore } from '../../stores/authStore';
 import type { Company } from '../../types';
+
+/** Convert R-code to human-readable address (e.g. "서울특별시 강남구") */
+const regionCodeToDisplayName = (code: string): string => {
+  if (!code) return '';
+
+  // Check if it's a sido-level code
+  if (code in REGION_SIDO) {
+    return REGION_SIDO[code];
+  }
+
+  // Find the parent sido for this sigungu code
+  for (const sidoCode of PROVINCES) {
+    const sigungus = REGION_SIGUNGU[sidoCode] || {};
+    if (code in sigungus) {
+      return `${REGION_SIDO[sidoCode]} ${sigungus[code]}`;
+    }
+  }
+
+  return code;
+};
+
+/** Find R-code from a display name (reverse lookup) */
+const displayNameToRegionCode = (name: string): string => {
+  if (!name) return '';
+
+  // Check if it's already an R-code
+  if (name.startsWith('R') && /^R\d{7}$/.test(name)) {
+    return name;
+  }
+
+  // Try to match as "시도 시군구" format
+  const parts = name.split(' ');
+  if (parts.length >= 2) {
+    const sidoName = parts[0];
+    const sigunguName = parts.slice(1).join(' ');
+    for (const sidoCode of PROVINCES) {
+      if (REGION_SIDO[sidoCode] === sidoName) {
+        const sigungus = REGION_SIGUNGU[sidoCode] || {};
+        for (const [code, sgName] of Object.entries(sigungus)) {
+          if (sgName === sigunguName) return code;
+        }
+        return sidoCode;
+      }
+    }
+  }
+
+  // Try to match as sido-only
+  for (const sidoCode of PROVINCES) {
+    if (REGION_SIDO[sidoCode] === name) return sidoCode;
+  }
+
+  return '';
+};
 
 interface CompanyFormData {
   status: CompanyStatusKey;
@@ -28,6 +81,7 @@ interface CompanyFormData {
   biz_num: string;
   biz_code: string;
   addr: string;
+  region_code: string;
   open_date: string;
 }
 
@@ -35,8 +89,9 @@ const INITIAL_FORM_DATA: CompanyFormData = {
   status: 'PREPARING',
   com_name: '(예비) 창업 준비',
   biz_num: '',
-  biz_code: 'B001',
+  biz_code: 'BA000000',
   addr: '',
+  region_code: '',
   open_date: '',
 };
 
@@ -79,12 +134,14 @@ export const CompanyForm: React.FC = () => {
   const openEditDialog = (company: Company) => {
     setEditingCompany(company);
     const isOperating = Boolean(company.biz_num);
+    const existingAddr = company.addr || '';
     setFormData({
       status: isOperating ? 'OPERATING' : 'PREPARING',
       com_name: company.com_name,
       biz_num: company.biz_num || '',
-      biz_code: company.biz_code || 'B001',
-      addr: company.addr || '',
+      biz_code: company.biz_code || 'BA000000',
+      addr: existingAddr,
+      region_code: displayNameToRegionCode(existingAddr),
       open_date: company.open_date ? company.open_date.split('T')[0] : '',
     });
     setIsDialogOpen(true);
@@ -122,8 +179,8 @@ export const CompanyForm: React.FC = () => {
 
         // Update user type to 사업자 (U003) after successful company registration
         try {
-          await api.put('/users/me/type', { type_code: 'U003' });
-          updateUser({ type_code: 'U003' });
+          await api.put('/users/me/type', { type_code: 'U0000003' });
+          updateUser({ type_code: 'U0000003' });
         } catch {
           // Non-critical: company was saved, type update failure is acceptable
         }
@@ -228,7 +285,7 @@ export const CompanyForm: React.FC = () => {
                       </td>
                       <td className={rowClass}>
                         <Typography variant="small" color="gray">
-                          {INDUSTRY_CODES[company.biz_code || ''] || company.biz_code || '-'}
+                          {INDUSTRY_ALL[company.biz_code || ''] || company.biz_code || '-'}
                         </Typography>
                       </td>
                       <td className={rowClass}>
@@ -318,22 +375,75 @@ export const CompanyForm: React.FC = () => {
             />
           </div>
 
-          {/* Industry */}
+          {/* Industry - 2-tier (대분류 → 소분류) */}
           <div>
             <Typography variant="small" color="gray" className="mb-1">
-              업종
+              업종 (대분류)
             </Typography>
             <Select
-              value={formData.biz_code}
-              onChange={(val) => setFormData({ ...formData, biz_code: val || 'B001' })}
+              value={(() => {
+                // Find major code from current biz_code
+                for (const majorCode of Object.keys(INDUSTRY_MAJOR)) {
+                  const minors = INDUSTRY_MINOR[majorCode] || {};
+                  if (formData.biz_code === majorCode || formData.biz_code in minors) {
+                    return majorCode;
+                  }
+                }
+                return 'BA000000';
+              })()}
+              onChange={(val) => {
+                const majorCode = val || 'BA000000';
+                setFormData({ ...formData, biz_code: majorCode });
+              }}
               className="!border-gray-300"
               labelProps={{ className: 'hidden' }}
             >
-              {Object.entries(INDUSTRY_CODES).map(([code, name]) => (
+              {Object.entries(INDUSTRY_MAJOR).map(([code, name]) => (
                 <Option key={code} value={code}>
                   {name}
                 </Option>
               ))}
+            </Select>
+          </div>
+          <div>
+            <Typography variant="small" color="gray" className="mb-1">
+              업종 (소분류)
+            </Typography>
+            <Select
+              key={(() => {
+                for (const majorCode of Object.keys(INDUSTRY_MAJOR)) {
+                  const minors = INDUSTRY_MINOR[majorCode] || {};
+                  if (formData.biz_code === majorCode || formData.biz_code in minors) {
+                    return majorCode;
+                  }
+                }
+                return 'BA000000';
+              })()}
+              value={formData.biz_code in INDUSTRY_MAJOR ? '' : formData.biz_code}
+              onChange={(val) => {
+                if (val) {
+                  setFormData({ ...formData, biz_code: val });
+                }
+              }}
+              className="!border-gray-300"
+              labelProps={{ className: 'hidden' }}
+            >
+              {(() => {
+                let selectedMajor = 'BA000000';
+                for (const majorCode of Object.keys(INDUSTRY_MAJOR)) {
+                  const minors = INDUSTRY_MINOR[majorCode] || {};
+                  if (formData.biz_code === majorCode || formData.biz_code in minors) {
+                    selectedMajor = majorCode;
+                    break;
+                  }
+                }
+                const minors = INDUSTRY_MINOR[selectedMajor] || {};
+                return Object.entries(minors).map(([code, name]) => (
+                  <Option key={code} value={code}>
+                    {name}
+                  </Option>
+                ));
+              })()}
             </Select>
           </div>
 
@@ -343,8 +453,8 @@ export const CompanyForm: React.FC = () => {
               주소
             </Typography>
             <RegionSelect
-              value={formData.addr}
-              onChange={(val) => setFormData({ ...formData, addr: val })}
+              value={formData.region_code}
+              onChange={(val) => setFormData({ ...formData, region_code: val, addr: regionCodeToDisplayName(val) })}
             />
           </div>
 

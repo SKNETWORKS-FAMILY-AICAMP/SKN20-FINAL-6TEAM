@@ -1,17 +1,16 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr
 from datetime import datetime
 
 
 class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     user_id: int
     google_email: str
     username: str
     type_code: str
     birth: datetime | None = None
     create_date: datetime | None = None
-
-    class Config:
-        from_attributes = True
 
 
 class UserUpdate(BaseModel):
@@ -20,4 +19,4 @@ class UserUpdate(BaseModel):
 
 
 class UserTypeUpdate(BaseModel):
-    type_code: str  # U001: 예비창업자, U002: 사업자
+    type_code: str  # U0000001: 관리자, U0000002: 예비창업자, U0000003: 사업자
