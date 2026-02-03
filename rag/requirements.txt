@@ -16,6 +16,7 @@ langgraph>=0.0.20
 
 # LLM & Embeddings
 openai>=1.6.0
+langchain-groq>=0.1.0
 sentence-transformers>=2.2.0
 torch>=2.0.0
 
