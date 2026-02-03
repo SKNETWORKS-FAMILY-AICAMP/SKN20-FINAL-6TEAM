@@ -33,9 +33,9 @@ backend/
 
 ## 실행 방법
 ```bash
+# 프로젝트 루트에서
 cd backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+source ../.venv/bin/activate  # Windows: ..\.venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
