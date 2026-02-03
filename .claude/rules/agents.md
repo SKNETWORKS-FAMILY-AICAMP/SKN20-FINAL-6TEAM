@@ -1,6 +1,6 @@
 # Agent Routing Rules
 
-## Project Agents (5)
+## Project Agents (6)
 
 | Agent | Trigger Conditions | Model |
 |-------|-------------------|-------|
@@ -9,6 +9,7 @@
 | `rag-specialist` | "RAG 에이전트", "벡터DB", "프롬프트", rag/ 작업 | sonnet |
 | `tdd-guide` | "테스트 작성", "TDD", test 파일 작업 | sonnet |
 | `react-form-architect` | "폼 만들어줘", form component 작업 | sonnet |
+| `docker-tester` | "Docker 테스트", "컨테이너 확인", Docker 빌드/디버깅 | sonnet |
 
 ## Plugin Agents (Active - 6)
 
@@ -27,7 +28,7 @@
 |-------|--------|
 | `everything-claude-code:go-*` | Go 미사용 프로젝트 |
 | `everything-claude-code:database-reviewer` | PostgreSQL 전용, MySQL 사용 중 |
-| `everything-claude-code:e2e-runner` | E2E 테스트 미구축 |
+| `everything-claude-code:e2e-runner` | Playwright 직접 설정 완료, docker-tester 에이전트 사용 |
 | `everything-claude-code:doc-updater` | `/update-docs` 커맨드로 대체 |
 | `feature-dev:*` | 비활성화된 플러그인 |
 | `hookify:*` | 비활성화된 플러그인 |
@@ -42,3 +43,4 @@
 6. **Test writing** → `tdd-guide`
 7. **Form components** → `react-form-architect`
 8. **Complex planning** → `planner`
+9. **Docker testing/debugging** → `docker-tester`

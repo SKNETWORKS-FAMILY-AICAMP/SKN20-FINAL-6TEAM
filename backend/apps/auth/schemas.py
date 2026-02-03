@@ -11,6 +11,12 @@ class GoogleLoginRequest(BaseModel):
     code: str
 
 
+class TestLoginRequest(BaseModel):
+    email: str | None = None
+    username: str | None = None
+    type_code: str | None = None
+
+
 class TestLoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

@@ -6,7 +6,7 @@ from jose import jwt
 from config.database import get_db
 from config.settings import settings
 from apps.common.models import User
-from .schemas import TokenResponse, TestLoginResponse, UserInfo
+from .schemas import TokenResponse, TestLoginRequest, TestLoginResponse, UserInfo
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -35,13 +35,17 @@ async def login_google():
 
 
 @router.post("/test-login", response_model=TestLoginResponse)
-async def test_login(db: Session = Depends(get_db)):
+async def test_login(
+    request: TestLoginRequest | None = None,
+    db: Session = Depends(get_db),
+):
     """
     테스트 로그인 - Google 로그인 구현 전까지 사용
-    자동으로 test@bizmate.com 계정으로 로그인
+    기본: test@bizmate.com 계정 / request body로 이메일·이름·유형 지정 가능
     """
-    test_email = "test@bizmate.com"
-    test_username = "테스트 사용자"
+    test_email = request.email if request and request.email else "test@bizmate.com"
+    test_username = request.username if request and request.username else "테스트 사용자"
+    test_type_code = request.type_code if request and request.type_code else "U0000002"
 
     # 테스트 사용자 조회 또는 생성
     user = db.query(User).filter(User.google_email == test_email).first()
@@ -49,8 +53,8 @@ async def test_login(db: Session = Depends(get_db)):
         user = User(
             google_email=test_email,
             username=test_username,
-            type_code="U0000002",  # 예비창업자
-            birth=datetime(1990, 1, 1)
+            type_code=test_type_code,
+            birth=datetime(1990, 1, 1),
         )
         db.add(user)
         db.commit()

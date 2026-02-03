@@ -155,7 +155,7 @@ export const useChatStore = create<ChatState>()(
           if (!assistantMsg || assistantMsg.type !== 'assistant') continue;
 
           try {
-            const res = await api.post('/histories', {
+            const res: { data: { history_id: number } } = await api.post('/histories', {
               agent_code: assistantMsg.agent_code || 'A0000001',
               question: msg.content,
               answer: assistantMsg.content,

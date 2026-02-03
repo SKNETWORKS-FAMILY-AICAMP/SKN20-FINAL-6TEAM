@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.10",
@@ -24,6 +27,7 @@
     "zustand": "^4.5.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.40.0",
     "@types/react": "18.2.45",
     "@types/react-dom": "18.2.18",
     "@vitejs/plugin-react": "4.2.1",

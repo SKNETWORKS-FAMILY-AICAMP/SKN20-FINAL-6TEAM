@@ -92,7 +92,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
       await api.delete('/users/me');
       logout();
       onClose();
-      navigate('/guest');
+      navigate('/login');
     } catch (err: unknown) {
       const error = err as { response?: { data?: { detail?: string } } };
       setMessage({
@@ -161,7 +161,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
           {isEditing ? (
             <Select
               value={formData.type_code}
-              onChange={(val) => setFormData({ ...formData, type_code: val || 'U0000001' })}
+              onChange={(val: string | undefined) => setFormData({ ...formData, type_code: (val || 'U0000001') as typeof formData.type_code })}
               className="!border-gray-300"
               labelProps={{ className: 'hidden' }}
             >

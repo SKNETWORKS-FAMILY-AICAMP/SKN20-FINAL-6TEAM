@@ -35,7 +35,6 @@ async def create_company(
     current_user: User = Depends(get_current_user)
 ):
     """기업 정보 등록"""
-    print(f"[DEBUG] create_company - company_data: {company_data.model_dump()}")
     company = Company(
         user_id=current_user.user_id,
         com_name=company_data.com_name,
@@ -92,7 +91,6 @@ async def update_company(
         )
 
     update_data = company_data.model_dump(exclude_unset=True)
-    print(f"[DEBUG] update_company - update_data: {update_data}")
     for key, value in update_data.items():
         setattr(company, key, value)
 

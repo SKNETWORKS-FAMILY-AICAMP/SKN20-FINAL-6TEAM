@@ -1,20 +1,61 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Typography, IconButton } from '@material-tailwind/react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Typography, IconButton, Tooltip } from '@material-tailwind/react';
 import { TrashIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline';
 import { useChatStore } from '../../stores/chatStore';
 import type { ChatSession } from '../../types';
 
-export const ChatHistoryPanel: React.FC = () => {
+interface ChatHistoryPanelProps {
+  collapsed?: boolean;
+}
+
+export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({ collapsed = false }) => {
   const navigate = useNavigate();
-  const { sessions, currentSessionId, switchSession, deleteSession } = useChatStore();
+  const location = useLocation();
+  const { sessions: allSessions, currentSessionId, switchSession, deleteSession } = useChatStore();
+
+  // Filter out empty sessions (except current session)
+  const sessions = allSessions.filter(
+    (s) => s.messages.length > 0 || s.id === currentSessionId
+  );
+
+  // Don't highlight session when not on chat page
+  const isOnChatPage = location.pathname === '/';
+  const effectiveCurrentId = isOnChatPage ? currentSessionId : null;
 
   if (sessions.length === 0) {
+    if (collapsed) {
+      return <div className="flex-1" />;
+    }
     return (
       <div className="px-3 py-4 text-center">
         <Typography variant="small" color="gray" className="text-xs">
           채팅 내역이 없습니다.
         </Typography>
+      </div>
+    );
+  }
+
+  if (collapsed) {
+    return (
+      <div className="flex flex-col items-center gap-1 px-1 overflow-auto">
+        {sessions.map((session) => (
+          <Tooltip key={session.id} content={session.title} placement="right">
+            <button
+              className={`p-2 rounded-lg transition-colors ${
+                session.id === effectiveCurrentId
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'hover:bg-gray-100 text-gray-500'
+              }`}
+              onClick={() => {
+                switchSession(session.id);
+                navigate('/');
+              }}
+            >
+              <ChatBubbleLeftIcon className="h-5 w-5" />
+            </button>
+          </Tooltip>
+        ))}
       </div>
     );
   }
@@ -32,7 +73,7 @@ export const ChatHistoryPanel: React.FC = () => {
             <div
               key={session.id}
               className={`group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
-                session.id === currentSessionId
+                session.id === effectiveCurrentId
                   ? 'bg-blue-50 text-blue-700'
                   : 'hover:bg-gray-100 text-gray-700'
               }`}

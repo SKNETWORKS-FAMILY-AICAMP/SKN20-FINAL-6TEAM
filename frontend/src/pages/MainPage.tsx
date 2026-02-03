@@ -5,19 +5,19 @@ import {
   Card,
   CardBody,
   Typography,
-  Input,
   IconButton,
   Chip,
-  Spinner,
 } from '@material-tailwind/react';
 import { PaperAirplaneIcon, PlusIcon } from '@heroicons/react/24/solid';
 import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
 import { useChat } from '../hooks/useChat';
 import { useDisplayUserType } from '../hooks/useDisplayUserType';
-import { AGENT_NAMES, AGENT_COLORS, USER_TYPE_NAMES } from '../types';
+import { AGENT_NAMES, AGENT_COLORS } from '../types';
 import { USER_QUICK_QUESTIONS } from '../lib/constants';
+import { getSeasonalQuestions } from '../lib/seasonalQuestions';
 import { NotificationBell } from '../components/layout/NotificationBell';
+import { ResponseProgress } from '../components/chat/ResponseProgress';
 
 const MainPage: React.FC = () => {
   const { isAuthenticated, user } = useAuthStore();
@@ -53,8 +53,10 @@ const MainPage: React.FC = () => {
     createSession();
   };
 
-  // Dynamic quick questions based on display user type
-  const quickQuestions = USER_QUICK_QUESTIONS[displayUserType] || USER_QUICK_QUESTIONS['U0000002'];
+  // Dynamic quick questions based on display user type + seasonal questions
+  const seasonalQuestions = getSeasonalQuestions();
+  const baseQuestions = USER_QUICK_QUESTIONS[displayUserType] || USER_QUICK_QUESTIONS['U0000002'];
+  const quickQuestions = [...baseQuestions.slice(0, 4), ...seasonalQuestions.slice(0, 2)];
 
   return (
     <div className="flex flex-col h-full">
@@ -70,11 +72,6 @@ const MainPage: React.FC = () => {
             </Typography>
           </div>
           <div className="flex items-center gap-3">
-            <Chip
-              value={USER_TYPE_NAMES[displayUserType] || displayUserType}
-              color="blue"
-              variant="ghost"
-            />
             {isAuthenticated && <NotificationBell />}
           </div>
         </div>
@@ -175,44 +172,40 @@ const MainPage: React.FC = () => {
             </div>
           ))
         )}
-        {isLoading && (
-          <div className="flex justify-start">
-            <Card className="bg-white">
-              <CardBody className="p-3 flex items-center gap-2">
-                <Spinner className="h-4 w-4" />
-                <Typography variant="small" color="gray">
-                  답변을 생성하고 있습니다...
-                </Typography>
-              </CardBody>
-            </Card>
-          </div>
-        )}
+        <ResponseProgress isLoading={isLoading} />
         <div ref={messagesEndRef} />
       </div>
 
       {/* Input area */}
-      <div className="p-4 border-t bg-white">
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <div className="flex-1">
-            <Input
-              type="text"
-              placeholder="메시지를 입력하세요..."
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              disabled={isLoading}
-              className="!border-gray-300 focus:!border-blue-500"
-              labelProps={{ className: 'hidden' }}
-              containerProps={{ className: 'min-w-0' }}
-            />
-          </div>
-          <IconButton
-            type="submit"
-            color="blue"
-            disabled={!inputValue.trim() || isLoading}
+      <div className="p-6 pt-4 pb-4 bg-transparent">
+        <div className="max-w-4xl mx-auto">
+          <form
+            onSubmit={handleSubmit}
+            className="flex gap-2 p-3 bg-white rounded-2xl shadow-lg border border-gray-200"
           >
-            <PaperAirplaneIcon className="h-5 w-5" />
-          </IconButton>
-        </form>
+            <div className="flex-1">
+              <input
+                type="text"
+                placeholder="메시지를 입력하세요..."
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                disabled={isLoading}
+                className="w-full px-3 py-2 text-sm border-0 focus:outline-none focus:ring-0 bg-transparent placeholder-gray-400"
+              />
+            </div>
+            <IconButton
+              type="submit"
+              color="blue"
+              disabled={!inputValue.trim() || isLoading}
+              className="rounded-xl"
+            >
+              <PaperAirplaneIcon className="h-5 w-5" />
+            </IconButton>
+          </form>
+          <Typography variant="small" color="gray" className="text-center mt-3 mb-2 text-xs">
+            Bizi는 AI 기반 상담 서비스로, 법적 조언이 아닙니다. 중요한 결정은 전문가와 상담하세요.
+          </Typography>
+        </div>
       </div>
     </div>
   );
