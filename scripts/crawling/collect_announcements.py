@@ -48,13 +48,17 @@ APPLICATION_FORM_KEYWORDS = [
     "사업계획서", "자기소개서", "추천서",
 ]
 
-# PDF 페이지 내 신청서/양식 감지 키워드
-PDF_FORM_PAGE_KEYWORDS = [
-    "신청서", "지원서", "신청양식", "지원양식",
-    "작 성 요 령", "작성요령", "기재요령",
-    "서식", "양식", "별지", "별첨",
-    "(앞쪽)", "(뒷쪽)", "(앞 쪽)", "(뒷 쪽)",
-]
+
+# gpt-4o-mini 가격 (USD per 1M tokens)
+OPENAI_PRICING = {
+    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
+}
+
+
+def _calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
+    """OpenAI API 호출 비용 계산"""
+    pricing = OPENAI_PRICING.get(model, {"input": 0.15, "output": 0.60})
+    return (input_tokens / 1_000_000) * pricing["input"] + (output_tokens / 1_000_000) * pricing["output"]
 
 
 def _is_application_form(filename: str) -> bool:
@@ -1017,6 +1021,13 @@ class OpenAIAnalyzer:
         self.logger = logger
         self.client = None
 
+        # 토큰 사용량 누적
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
+        self.total_tokens = 0
+        self.total_cost = 0.0
+        self.call_count = 0
+
         if api_key:
             try:
                 from openai import OpenAI
@@ -1059,6 +1070,24 @@ class OpenAIAnalyzer:
                 max_tokens=2000
             )
 
+            # 토큰 사용량 추출 및 로깅
+            if response.usage:
+                input_t = response.usage.prompt_tokens
+                output_t = response.usage.completion_tokens
+                total_t = response.usage.total_tokens
+                cost = _calculate_cost("gpt-4o-mini", input_t, output_t)
+
+                self.total_input_tokens += input_t
+                self.total_output_tokens += output_t
+                self.total_tokens += total_t
+                self.total_cost += cost
+                self.call_count += 1
+
+                self.logger.info(
+                    "  [토큰] 입력=%s / 출력=%s / 합계=%s / 비용=$%.6f",
+                    f"{input_t:,}", f"{output_t:,}", f"{total_t:,}", cost,
+                )
+
             result = json.loads(response.choices[0].message.content)
             self.logger.info("  OpenAI 분석 완료")
 
@@ -1077,6 +1106,19 @@ class OpenAIAnalyzer:
         except Exception as e:
             self.logger.error(f"  OpenAI API 호출 실패: {e}")
             return self.DEFAULT_RESULT.copy()
+
+    def log_total_usage(self) -> None:
+        """토큰 사용량 총합 로깅"""
+        if self.call_count == 0:
+            return
+        self.logger.info(
+            "[토큰 총합] %d회 호출 / 입력=%s / 출력=%s / 합계=%s / 비용=$%.6f",
+            self.call_count,
+            f"{self.total_input_tokens:,}",
+            f"{self.total_output_tokens:,}",
+            f"{self.total_tokens:,}",
+            self.total_cost,
+        )
 
 
 # =============================================================================
@@ -1145,6 +1187,8 @@ class AnnouncementProcessor:
         self.logger.info(f"기업마당: {len(results['bizinfo'])}개, K-Startup: {len(results['kstartup'])}개")
         self.logger.info(f"결과 파일: {self.config.output_dir}")
         self.logger.info("=" * 60)
+
+        self.analyzer.log_total_usage()
 
         return results
 

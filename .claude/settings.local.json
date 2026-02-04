@@ -24,7 +24,16 @@
       "Bash(pip3 list:*)",
       "Bash(/Users/backgold/WorkSpace/SKN20-FINAL-6TEAM/backend/venv/bin/python3:*)",
       "Bash(pip3 install:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(test:*)",
+      "Bash(for port in 3306 8000 8001 5173)",
+      "Bash(do lsof -i :$port)",
+      "Bash(echo:*)",
+      "Bash(done)",
+      "Bash(brew services stop:*)",
+      "Bash(sudo mysqladmin:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs:*)"
     ]
   }
 }

@@ -17,6 +17,7 @@ from langchain_openai import ChatOpenAI
 
 from schemas.response import SourceDocument
 from utils.config import get_settings
+from utils.token_tracker import TokenUsageCallbackHandler
 from vectorstores.chroma import ChromaVectorStore
 
 if TYPE_CHECKING:
@@ -58,6 +59,7 @@ class RAGChain:
             temperature=self.settings.openai_temperature,
             api_key=self.settings.openai_api_key,
             request_timeout=self.settings.llm_timeout,
+            callbacks=[TokenUsageCallbackHandler("생성")],
         )
 
         # 고급 기능 초기화 (지연 로딩)

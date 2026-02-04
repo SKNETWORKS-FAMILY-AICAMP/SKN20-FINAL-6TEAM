@@ -26,6 +26,7 @@ const MainPage: React.FC = () => {
   const { sendMessage, isLoading } = useChat();
   const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const currentSession = sessions.find((s) => s.id === currentSessionId);
   const messages = currentSession?.messages || [];
@@ -47,10 +48,18 @@ const MainPage: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     handleSendMessage(inputValue);
+    // submit 후 focus 유지
+    inputRef.current?.focus();
   };
 
   const handleNewChat = () => {
     createSession();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      inputRef.current?.blur();
+    }
   };
 
   // Dynamic quick questions based on display user type + seasonal questions
@@ -192,10 +201,12 @@ const MainPage: React.FC = () => {
           >
             <div className="flex-1">
               <input
+                ref={inputRef}
                 type="text"
                 placeholder="메시지를 입력하세요..."
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
                 disabled={isLoading}
                 className="w-full px-3 py-2 text-sm border-0 focus:outline-none focus:ring-0 bg-transparent placeholder-gray-400"
               />

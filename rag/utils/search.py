@@ -17,6 +17,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from utils.config import get_settings
+from utils.token_tracker import TokenUsageCallbackHandler
 
 logger = logging.getLogger(__name__)
 
@@ -224,6 +225,7 @@ class LLMReranker:
             model="gpt-4o-mini",  # 빠른 모델 사용
             temperature=0.0,
             api_key=self.settings.openai_api_key,
+            callbacks=[TokenUsageCallbackHandler("리랭킹")],
         )
         self._chain = self._build_chain()
 

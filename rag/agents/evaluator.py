@@ -14,6 +14,7 @@ from langchain_openai import ChatOpenAI
 
 from schemas.response import EvaluationResult
 from utils.config import get_settings
+from utils.token_tracker import TokenUsageCallbackHandler
 from utils.prompts import EVALUATOR_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ class EvaluatorAgent:
             model=self.settings.openai_model,
             temperature=0.0,  # 평가는 일관성을 위해 낮은 temperature 사용
             api_key=self.settings.openai_api_key,
+            callbacks=[TokenUsageCallbackHandler("평가")],
         )
         self.threshold = self.settings.evaluation_threshold
 

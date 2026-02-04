@@ -57,6 +57,7 @@ from utils.middleware import (
     get_metrics_collector,
 )
 from utils.cache import get_response_cache
+from utils.token_tracker import RequestTokenTracker
 from vectorstores.chroma import ChromaVectorStore
 
 
@@ -74,6 +75,7 @@ def log_chat_interaction(
     domains: list[str],
     response_time: float,
     evaluation: Any = None,
+    token_usage: dict[str, Any] | None = None,
 ) -> None:
     """채팅 상호작용을 로그 파일에 기록합니다.
 
@@ -84,6 +86,7 @@ def log_chat_interaction(
         domains: 처리된 도메인 리스트
         response_time: 응답 시간 (초)
         evaluation: 평가 결과 (선택)
+        token_usage: 토큰 사용량 (선택)
     """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -131,6 +134,24 @@ def log_chat_interaction(
 
     if evaluation:
         log_entry += f"\n[평가] 점수: {evaluation.total_score}, 통과: {evaluation.passed}\n"
+
+    if token_usage and token_usage.get("total_tokens", 0) > 0:
+        log_entry += f"""
+[토큰 사용량]
+  입력 토큰: {token_usage['input_tokens']:,}
+  출력 토큰: {token_usage['output_tokens']:,}
+  합계: {token_usage['total_tokens']:,}
+  비용: ${token_usage['cost']:.6f}
+"""
+        components = token_usage.get("components", {})
+        if components:
+            log_entry += "\n  [컴포넌트별 상세]\n"
+            for name, comp in components.items():
+                log_entry += (
+                    f"    {name}: {comp['call_count']}회 호출, "
+                    f"{comp['total_tokens']:,} 토큰, "
+                    f"${comp['cost']:.6f}\n"
+                )
 
     log_entry += "\n"
 
@@ -326,11 +347,13 @@ async def chat(request: ChatRequest) -> ChatResponse:
         # 시작 시간 기록
         start_time = time.time()
 
-        response = await router_agent.aprocess(
-            query=request.message,
-            user_context=request.user_context,
-        )
-        response.session_id = request.session_id
+        async with RequestTokenTracker() as tracker:
+            response = await router_agent.aprocess(
+                query=request.message,
+                user_context=request.user_context,
+            )
+            response.session_id = request.session_id
+            token_usage = tracker.get_usage()
 
         # 응답 시간 계산
         response_time = time.time() - start_time
@@ -343,6 +366,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             domains=response.domains,
             response_time=response_time,
             evaluation=response.evaluation,
+            token_usage=token_usage,
         )
 
         # RAGAS 정량 평가 (설정 활성화 시)
@@ -408,26 +432,29 @@ async def chat_stream(request: ChatRequest):
             final_sources = []
             final_domains = []
             final_actions = []
+            token_usage = None
 
             # 진정한 스트리밍 (MainRouter.astream 사용)
-            token_index = 0
-            async for chunk in router_agent.astream(
-                query=request.message,
-                user_context=request.user_context,
-            ):
-                if chunk["type"] == "token":
-                    stream_chunk = StreamResponse(
-                        type="token",
-                        content=chunk["content"],
-                        metadata={"index": token_index},
-                    )
-                    yield f"data: {stream_chunk.model_dump_json()}\n\n"
-                    token_index += 1
-                elif chunk["type"] == "done":
-                    final_content = chunk["content"]
-                    final_sources = chunk.get("sources", [])
-                    final_domains = chunk.get("domains", [])
-                    final_actions = chunk.get("actions", [])
+            async with RequestTokenTracker() as tracker:
+                token_index = 0
+                async for chunk in router_agent.astream(
+                    query=request.message,
+                    user_context=request.user_context,
+                ):
+                    if chunk["type"] == "token":
+                        stream_chunk = StreamResponse(
+                            type="token",
+                            content=chunk["content"],
+                            metadata={"index": token_index},
+                        )
+                        yield f"data: {stream_chunk.model_dump_json()}\n\n"
+                        token_index += 1
+                    elif chunk["type"] == "done":
+                        final_content = chunk["content"]
+                        final_sources = chunk.get("sources", [])
+                        final_domains = chunk.get("domains", [])
+                        final_actions = chunk.get("actions", [])
+                token_usage = tracker.get_usage()
 
             # 응답 시간 계산
             response_time = time.time() - start_time
@@ -440,6 +467,7 @@ async def chat_stream(request: ChatRequest):
                 domains=final_domains,
                 response_time=response_time,
                 evaluation=chunk.get("evaluation"),
+                token_usage=token_usage,
             )
 
             # 출처 정보

@@ -15,6 +15,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from utils.config import get_settings
+from utils.token_tracker import TokenUsageCallbackHandler
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,7 @@ class QueryProcessor:
             model=self.settings.openai_model,
             temperature=0.0,  # 일관된 결과를 위해 낮은 temperature
             api_key=self.settings.openai_api_key,
+            callbacks=[TokenUsageCallbackHandler("쿼리재작성")],
         )
         self._rewrite_chain = self._build_rewrite_chain()
         self._compression_chain = self._build_compression_chain()
