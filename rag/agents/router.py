@@ -27,7 +27,7 @@ from schemas.response import (
 )
 from chains.rag_chain import RAGChain
 from utils.config import get_settings
-from utils.prompts import DOMAIN_KEYWORDS, ROUTER_SYSTEM_PROMPT
+from utils.prompts import DOMAIN_KEYWORDS, REJECTION_RESPONSE, ROUTER_SYSTEM_PROMPT
 from utils.feedback import FeedbackAnalyzer, SearchStrategy, get_feedback_analyzer
 from vectorstores.chroma import ChromaVectorStore
 from agents.evaluator import EvaluatorAgent
@@ -176,8 +176,8 @@ class MainRouter:
 
         return workflow.compile()
 
-    def _classify_domains(self, query: str) -> list[str]:
-        """질문을 분류하여 관련 도메인을 반환합니다.
+    def _classify_domains(self, query: str) -> tuple[list[str], bool]:
+        """질문을 분류하여 관련 도메인과 관련성 여부를 반환합니다.
 
         1차: 키워드 기반 분류
         2차: LLM 기반 분류 (키워드로 분류되지 않은 경우)
@@ -186,7 +186,7 @@ class MainRouter:
             query: 사용자 질문
 
         Returns:
-            관련 도메인 리스트
+            (관련 도메인 리스트, 관련 질문 여부)
         """
         # 1차: 키워드 기반 분류
         detected_domains = []
@@ -200,10 +200,23 @@ class MainRouter:
         if detected_domains:
             logger.info("[분류] 키워드 매칭 성공: %s", detected_domains)
             logger.info("[분류] 매칭 키워드: %s", matched_keywords)
-            return detected_domains
+            return detected_domains, True
 
-        # 2차: LLM 기반 분류
+        # 2차: LLM 기반 분류 (신뢰도 포함)
         logger.info("[분류] 키워드 매칭 실패, LLM 분류 사용")
+
+        # 도메인 외 질문 거부 기능이 활성화된 경우 신뢰도 판단
+        if self.settings.enable_domain_rejection:
+            domains, confidence, is_relevant = self._llm_classify_with_confidence(query)
+
+            if not is_relevant:
+                logger.info("[분류] 도메인 외 질문으로 판단됨 (신뢰도: %.2f)", confidence)
+                return [], False
+
+            logger.info("[분류] LLM 분류 결과: %s (신뢰도: %.2f)", domains, confidence)
+            return domains, True
+
+        # 기존 로직 (거부 기능 비활성화 시)
         prompt = ChatPromptTemplate.from_messages([
             ("system", ROUTER_SYSTEM_PROMPT),
             ("human", "질문: {query}"),
@@ -219,22 +232,108 @@ class MainRouter:
                 result = json.loads(json_match.group(1))
             else:
                 result = json.loads(response)
-            return result.get("domains", ["startup_funding"])
+            return result.get("domains", ["startup_funding"]), True
         except json.JSONDecodeError:
-            return ["startup_funding"]  # 기본값
+            return ["startup_funding"], True  # 기본값
+
+    def _llm_classify_with_confidence(self, query: str) -> tuple[list[str], float, bool]:
+        """LLM을 사용하여 도메인 분류와 신뢰도를 함께 판단합니다.
+
+        Args:
+            query: 사용자 질문
+
+        Returns:
+            (도메인 리스트, 신뢰도, 관련 질문 여부)
+        """
+        classification_prompt = """당신은 Bizi의 메인 라우터입니다.
+사용자 질문이 Bizi의 상담 범위에 해당하는지 판단하고, 적절한 도메인으로 분류하세요.
+
+## Bizi 상담 범위
+
+1. **startup_funding**: 창업, 사업자등록, 법인설립, 지원사업, 보조금, 마케팅
+2. **finance_tax**: 세금, 회계, 세무, 재무
+3. **hr_labor**: 근로, 채용, 급여, 노무, 계약, 지식재산권
+
+## 상담 범위 외 질문 예시
+
+- 일상 대화: "안녕", "뭐해?", "심심해"
+- 일반 상식: "날씨 어때?", "맛집 추천해줘"
+- 게임/엔터: "게임 추천", "영화 뭐 볼까"
+- 기타 무관: "두쫀쿠가 뭐야?", "인공지능이란?"
+
+## 응답 형식
+
+반드시 JSON 형식으로 응답하세요:
+```json
+{{
+    "domains": ["도메인1"],
+    "confidence": 0.0~1.0,
+    "is_relevant": true/false,
+    "reasoning": "판단 이유"
+}}
+```
+
+- confidence: 이 질문이 Bizi 상담 범위에 해당한다는 확신 (0.0=확실히 아님, 1.0=확실히 해당)
+- is_relevant: 상담 범위 내 질문이면 true, 아니면 false
+"""
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", classification_prompt),
+            ("human", "질문: {query}"),
+        ])
+
+        chain = prompt | self.llm | StrOutputParser()
+        response = chain.invoke({"query": query})
+
+        try:
+            json_match = re.search(r"```json\s*(.*?)\s*```", response, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group(1))
+            else:
+                result = json.loads(response)
+
+            domains = result.get("domains", ["startup_funding"])
+            confidence = float(result.get("confidence", 0.5))
+            is_relevant = result.get("is_relevant", True)
+
+            # 신뢰도 임계값 확인
+            if confidence < self.settings.domain_confidence_threshold:
+                is_relevant = False
+
+            return domains, confidence, is_relevant
+
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning("[분류] LLM 응답 파싱 실패: %s", e)
+            # 파싱 실패 시 기본적으로 관련 질문으로 처리
+            return ["startup_funding"], 0.5, True
 
     def _classify_node(self, state: RouterState) -> RouterState:
         """분류 노드: 질문을 분석하여 도메인을 식별합니다."""
         start = time.time()
-        domains = self._classify_domains(state["query"])
-        state["domains"] = domains
+        domains, is_relevant = self._classify_domains(state["query"])
+
+        if not is_relevant:
+            # 도메인 외 질문: 거부 응답 설정
+            state["domains"] = []
+            state["final_response"] = REJECTION_RESPONSE
+            state["sources"] = []
+            state["actions"] = []
+            logger.info("[분류] 도메인 외 질문 거부")
+        else:
+            state["domains"] = domains
+
         classify_time = time.time() - start
         state["timing_metrics"]["classify_time"] = classify_time
-        logger.info("[분류] 도메인=%s (%.3fs)", domains, classify_time)
+        logger.info("[분류] 도메인=%s, 관련=%s (%.3fs)", domains, is_relevant, classify_time)
         return state
 
     def _route_node(self, state: RouterState) -> RouterState:
         """라우팅 노드: 해당 에이전트를 호출합니다."""
+        # 도메인 외 질문으로 이미 거부된 경우 스킵
+        if not state["domains"] and state.get("final_response"):
+            logger.info("[라우팅] 도메인 외 질문 - 에이전트 호출 스킵")
+            return state
+
         responses = {}
         agent_timings = []
         feedback = state.get("feedback")
@@ -274,6 +373,11 @@ class MainRouter:
 
     async def _aroute_node(self, state: RouterState) -> RouterState:
         """라우팅 노드 (비동기 병렬 처리): 해당 에이전트를 병렬로 호출합니다."""
+        # 도메인 외 질문으로 이미 거부된 경우 스킵
+        if not state["domains"] and state.get("final_response"):
+            logger.info("[라우팅] 도메인 외 질문 - 에이전트 호출 스킵")
+            return state
+
         feedback = state.get("feedback")
         search_strategy = state.get("search_strategy")
         query = state["query"]
@@ -321,6 +425,12 @@ class MainRouter:
 
     def _integrate_node(self, state: RouterState) -> RouterState:
         """통합 노드: 여러 에이전트의 응답을 통합합니다."""
+        # 도메인 외 질문으로 이미 거부된 경우 스킵
+        if not state["domains"] and state.get("final_response"):
+            logger.info("[통합] 도메인 외 질문 - 통합 스킵")
+            state["timing_metrics"]["integrate_time"] = 0.0
+            return state
+
         start = time.time()
         responses = state["responses"]
         all_sources = []
@@ -358,6 +468,13 @@ class MainRouter:
 
     def _evaluate_node(self, state: RouterState) -> RouterState:
         """평가 노드: 응답 품질을 평가합니다."""
+        # 도메인 외 질문으로 이미 거부된 경우 평가 스킵
+        if not state["domains"] and state.get("final_response"):
+            logger.info("[평가] 도메인 외 질문 - 평가 스킵 (자동 PASS)")
+            state["evaluation"] = None
+            state["timing_metrics"]["evaluate_time"] = 0.0
+            return state
+
         start = time.time()
         # 컨텍스트 생성
         context = "\n".join([s.content for s in state["sources"][:5]])
@@ -397,6 +514,13 @@ class MainRouter:
 
     async def _aevaluate_node(self, state: RouterState) -> RouterState:
         """비동기 평가 노드: 응답 품질을 비동기로 평가합니다."""
+        # 도메인 외 질문으로 이미 거부된 경우 평가 스킵
+        if not state["domains"] and state.get("final_response"):
+            logger.info("[평가] 도메인 외 질문 - 평가 스킵 (자동 PASS)")
+            state["evaluation"] = None
+            state["timing_metrics"]["evaluate_time"] = 0.0
+            return state
+
         start = time.time()
         # 컨텍스트 생성
         context = "\n".join([s.content for s in state["sources"][:5]])
@@ -606,7 +730,23 @@ class MainRouter:
             스트리밍 응답 딕셔너리
         """
         # 도메인 분류
-        domains = self._classify_domains(query)
+        domains, is_relevant = self._classify_domains(query)
+
+        # 도메인 외 질문 거부
+        if not is_relevant:
+            logger.info("[스트리밍] 도메인 외 질문 - 거부 응답 반환")
+            # 거부 응답을 토큰 단위로 스트리밍
+            for char in REJECTION_RESPONSE:
+                yield {"type": "token", "content": char}
+            yield {
+                "type": "done",
+                "content": REJECTION_RESPONSE,
+                "domain": "general",
+                "domains": [],
+                "sources": [],
+                "actions": [],
+            }
+            return
 
         if len(domains) == 1 and domains[0] in self.agents:
             # 단일 도메인: 진정한 스트리밍

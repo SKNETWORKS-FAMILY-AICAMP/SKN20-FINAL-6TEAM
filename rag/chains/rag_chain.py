@@ -110,6 +110,7 @@ class RAGChain:
         use_mmr: bool = True,
         use_query_rewrite: bool | None = None,
         use_rerank: bool | None = None,
+        use_hybrid: bool | None = None,
         search_strategy: "SearchStrategy | None" = None,
     ) -> list[Document]:
         """벡터 스토어에서 관련 문서를 검색합니다.
@@ -125,6 +126,7 @@ class RAGChain:
             use_mmr: MMR 검색 사용 여부 (다양성 확보)
             use_query_rewrite: 쿼리 재작성 사용 여부 (None이면 설정값)
             use_rerank: Re-ranking 사용 여부 (None이면 설정값)
+            use_hybrid: Hybrid Search 사용 여부 (None이면 설정값)
             search_strategy: 피드백 기반 검색 전략 (재시도 시 사용)
 
         Returns:
@@ -148,7 +150,8 @@ class RAGChain:
 
         documents: list[Document] = []
 
-        logger.info("[검색] 도메인=%s, 쿼리='%s'", domain, query[:50])
+        logger.info("=" * 60)
+        logger.info("[검색 시작] 도메인=%s, 쿼리='%s'", domain, query[:50])
 
         # 쿼리 재작성 (설정에 따라)
         search_query = query
@@ -156,20 +159,69 @@ class RAGChain:
             use_query_rewrite = self.settings.enable_query_rewrite
 
         if use_query_rewrite and self.query_processor:
+            logger.info("[쿼리 재작성] 활성화 (ENABLE_QUERY_REWRITE=true)")
+            logger.info("[쿼리 재작성] 원본: %s", query)
             try:
                 rewrite_start = time.time()
                 search_query = self.query_processor.rewrite_query(query)
                 rewrite_time = time.time() - rewrite_start
-                logger.info("[검색] 쿼리 재작성: '%s' → '%s' (%.3fs)", query[:30], search_query[:30], rewrite_time)
+                logger.info("[쿼리 재작성] 재작성: %s", search_query)
+                logger.info("[쿼리 재작성] 소요 시간: %.3fs", rewrite_time)
             except Exception as e:
-                logger.warning(f"쿼리 재작성 실패: {e}")
+                logger.warning("[쿼리 재작성] 실패: %s (원본 쿼리 사용)", e)
                 search_query = query
+        elif use_query_rewrite and not self.query_processor:
+            logger.info("[쿼리 재작성] 비활성화 (QueryProcessor 미초기화)")
         else:
-            logger.info("[검색] 쿼리 재작성: 비활성화")
+            logger.info("[쿼리 재작성] 비활성화 (ENABLE_QUERY_REWRITE=false)")
 
-        # Re-ranking 사용 시 더 많이 검색
+        # Re-ranking 사용 여부 결정
         if use_rerank is None:
             use_rerank = self.settings.enable_reranking
+
+        # Hybrid Search 사용 여부 결정
+        if use_hybrid is None:
+            use_hybrid = self.settings.enable_hybrid_search
+
+        # Hybrid Search 모드
+        if use_hybrid and self.hybrid_searcher:
+            logger.info("[검색] Hybrid Search 모드 (BM25+Vector+RRF)")
+
+            # 도메인별 Hybrid Search
+            try:
+                domain_search_start = time.time()
+                domain_docs = self.hybrid_searcher.search(
+                    query=search_query,
+                    domain=domain,
+                    k=k,
+                    use_rerank=use_rerank,  # HybridSearcher 내부에서 rerank 처리
+                )
+                domain_search_time = time.time() - domain_search_start
+                documents.extend(domain_docs)
+                logger.info("[검색] 도메인 DB (Hybrid): %d건 (%.3fs)", len(domain_docs), domain_search_time)
+            except Exception as e:
+                logger.error(f"Hybrid Search 실패 ({domain}): {e}")
+
+            # 공통 법령 DB 검색 (Vector Search만 사용, rerank 생략)
+            if include_common and domain != "law_common":
+                try:
+                    common_search_start = time.time()
+                    common_docs = self.vector_store.max_marginal_relevance_search(
+                        query=search_query,
+                        domain="law_common",
+                        k=k_common,
+                        fetch_k=k_common * fetch_k_mult,
+                        lambda_mult=lambda_mult,
+                    )
+                    common_search_time = time.time() - common_search_start
+                    documents.extend(common_docs)
+                    logger.info("[검색] 공통 법령 DB: %d건 (%.3fs)", len(common_docs), common_search_time)
+                except Exception as e:
+                    logger.error(f"공통 법령 DB 검색 실패: {e}")
+
+            return documents
+
+        # 기존 로직 (MMR/similarity search + separate rerank)
         fetch_k = k * 3 if use_rerank else k
 
         logger.info(
@@ -239,6 +291,16 @@ class RAGChain:
                 documents = documents[:k]
         elif len(documents) > k:
             documents = documents[:k]
+
+        # 최종 검색 결과 로깅 (제목 및 출처)
+        logger.info("[검색 완료] 총 %d건 검색됨", len(documents))
+        for idx, doc in enumerate(documents):
+            title = doc.metadata.get("title", "제목 없음")[:50]
+            source = doc.metadata.get("source_name") or doc.metadata.get("source_file") or "출처 없음"
+            score = doc.metadata.get("score")
+            score_str = f"{score:.4f}" if score is not None else "N/A"
+            logger.info("  [%d] %s (score: %s, 출처: %s)", idx + 1, title, score_str, source[:30])
+        logger.info("=" * 60)
 
         return documents
 

@@ -273,9 +273,38 @@ class ChromaVectorStore:
         logger.info("[벡터검색] similarity_search_with_score: 컬렉션=%s, k=%d", collection_name, k)
         results = store.similarity_search_with_score(query, k=k, filter=filter)
         logger.info("[벡터검색] similarity_search_with_score 결과: %d건", len(results))
-        titles = [doc.metadata.get("title", "제목없음") for doc, _ in results]
-        logger.info("[벡터검색] 검색 문서: %s", titles)
+        for idx, (doc, score) in enumerate(results):
+            title = doc.metadata.get("title", "제목없음")[:40]
+            logger.info("  [%d] %s (distance: %.4f)", idx + 1, title, score)
         return results
+
+    def similarity_search_with_score_and_embed(
+        self,
+        query: str,
+        domain: str,
+        k: int = 5,
+        filter: dict[str, Any] | None = None,
+    ) -> list[Document]:
+        """유사도 점수를 메타데이터에 포함하여 검색합니다.
+
+        일반 similarity_search 대신 사용하면 각 문서의 metadata["score"]에
+        유사도 점수가 저장됩니다 (낮을수록 유사).
+
+        Args:
+            query: 검색 쿼리 텍스트
+            domain: 검색할 도메인 키
+            k: 반환할 결과 수
+            filter: 메타데이터 필터 (선택)
+
+        Returns:
+            유사도 점수가 메타데이터에 포함된 문서 리스트
+        """
+        results_with_score = self.similarity_search_with_score(query, domain, k, filter)
+        documents = []
+        for doc, score in results_with_score:
+            doc.metadata["score"] = round(score, 4)
+            documents.append(doc)
+        return documents
 
     def max_marginal_relevance_search(
         self,

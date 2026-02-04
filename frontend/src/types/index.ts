@@ -115,6 +115,22 @@ export interface RagChatResponse {
   ragas_metrics: Record<string, unknown> | null;
 }
 
+// RAG Streaming Response (SSE events)
+export interface RagStreamResponse {
+  type: 'token' | 'source' | 'action' | 'done' | 'error';
+  content?: string;
+  metadata?: {
+    index?: number;
+    title?: string;
+    source?: string;
+    type?: string;
+    params?: Record<string, unknown>;
+    domain?: string;
+    domains?: string[];
+    response_time?: number;
+  };
+}
+
 export interface RagSourceDocument {
   title: string | null;
   content: string;

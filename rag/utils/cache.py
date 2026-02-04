@@ -262,10 +262,17 @@ class ResponseCache:
         key = self._generate_key(query, domain)
         result = self._cache.get(key)
 
+        stats = self._cache.get_stats()
         if result:
-            logger.debug(f"캐시 히트: {query[:50]}...")
+            logger.info(
+                "[캐시] ✓ 히트 - '%s...' (도메인: %s, 히트율: %.1f%%)",
+                query[:30], domain or "전체", stats["hit_rate"] * 100
+            )
         else:
-            logger.debug(f"캐시 미스: {query[:50]}...")
+            logger.info(
+                "[캐시] ✗ 미스 - '%s...' (도메인: %s)",
+                query[:30], domain or "전체"
+            )
 
         return result
 
@@ -286,7 +293,11 @@ class ResponseCache:
         """
         key = self._generate_key(query, domain)
         self._cache.set(key, response, ttl)
-        logger.debug(f"캐시 저장: {query[:50]}...")
+        stats = self._cache.get_stats()
+        logger.info(
+            "[캐시] + 저장 - '%s...' (도메인: %s, 현재 크기: %d/%d)",
+            query[:30], domain or "전체", stats["size"], stats["max_size"]
+        )
 
     def invalidate(
         self,

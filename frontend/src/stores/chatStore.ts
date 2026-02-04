@@ -7,6 +7,7 @@ interface ChatState {
   sessions: ChatSession[];
   currentSessionId: string | null;
   isLoading: boolean;
+  isStreaming: boolean;
   lastHistoryId: number | null;
   guestMessageCount: number;
 
@@ -18,7 +19,9 @@ interface ChatState {
 
   // Message management
   addMessage: (message: ChatMessage) => void;
+  updateMessage: (messageId: string, updates: Partial<ChatMessage>) => void;
   setLoading: (loading: boolean) => void;
+  setStreaming: (streaming: boolean) => void;
   clearMessages: () => void;
 
   // History linking
@@ -37,7 +40,7 @@ interface ChatState {
 }
 
 const createNewSession = (title?: string): ChatSession => ({
-  id: Date.now().toString(),
+  id: crypto.randomUUID(),
   title: title || '새 채팅',
   messages: [],
   created_at: new Date().toISOString(),
@@ -50,6 +53,7 @@ export const useChatStore = create<ChatState>()(
       sessions: [],
       currentSessionId: null,
       isLoading: false,
+      isStreaming: false,
       lastHistoryId: null,
       guestMessageCount: 0,
 
@@ -120,7 +124,28 @@ export const useChatStore = create<ChatState>()(
         }));
       },
 
+      updateMessage: (messageId: string, updates: Partial<ChatMessage>) => {
+        const state = get();
+        const sessionId = state.currentSessionId;
+        if (!sessionId) return;
+
+        set((prev) => ({
+          sessions: prev.sessions.map((s) => {
+            if (s.id !== sessionId) return s;
+            return {
+              ...s,
+              messages: s.messages.map((m) =>
+                m.id === messageId ? { ...m, ...updates } : m
+              ),
+              updated_at: new Date().toISOString(),
+            };
+          }),
+        }));
+      },
+
       setLoading: (loading: boolean) => set({ isLoading: loading }),
+
+      setStreaming: (streaming: boolean) => set({ isStreaming: streaming }),
 
       clearMessages: () => {
         const state = get();

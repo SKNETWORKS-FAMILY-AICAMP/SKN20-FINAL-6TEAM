@@ -146,6 +146,24 @@ Agentic RAG 구조로 5개 에이전트 운영:
 
 상세 아키텍처는 [rag/ARCHITECTURE.md](./rag/ARCHITECTURE.md) 참조
 
+### RAG 품질 기능
+
+| 기능 | 환경변수 | 기본값 | 설명 |
+|------|---------|--------|------|
+| Hybrid Search | `ENABLE_HYBRID_SEARCH` | true | BM25 + Vector + RRF 앙상블 검색 |
+| Re-ranking | `ENABLE_RERANKING` | true | Cross-encoder 기반 재정렬 |
+| Query Rewriting | `ENABLE_QUERY_REWRITE` | true | LLM 기반 쿼리 확장 |
+| Domain Rejection | `ENABLE_DOMAIN_REJECTION` | true | 도메인 외 질문 거부 |
+| Response Caching | 항상 활성화 | - | LRU 캐시 (500건, 1시간 TTL) |
+| LLM Evaluation | `ENABLE_LLM_EVALUATION` | true | 답변 품질 평가 |
+
+### Frontend 스트리밍
+
+- SSE(Server-Sent Events) 기반 실시간 스트리밍
+- `isStreaming` 상태로 로딩 UI와 스트리밍 UI 분리
+- 스트리밍 시작 시 "답변 생성중" 메시지 자동 숨김
+- 스트리밍 완료 후 에이전트 태그 표시
+
 ### API 통신 흐름
 - **인증/데이터 관리**: Frontend (axios) → Backend → MySQL
 - **AI 채팅**: Frontend (axios) → RAG Service (직접 통신) → Vector DB

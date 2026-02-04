@@ -186,6 +186,25 @@ DOMAIN_KEYWORDS = {
 }
 ```
 
+## 도메인 외 질문 거부
+
+Bizi 상담 범위에 포함되지 않는 질문은 자동으로 거부됩니다.
+
+### 동작 방식
+1. 키워드 매칭으로 1차 분류
+2. 키워드 매칭 실패 시 LLM 분류 + 신뢰도 판단
+3. 신뢰도가 `DOMAIN_CONFIDENCE_THRESHOLD` 미만이면 거부 응답 반환
+
+### 거부 응답
+```
+죄송합니다. 해당 질문은 Bizi의 상담 범위에 포함되지 않습니다.
+
+Bizi는 다음 분야의 전문 상담을 제공합니다:
+- 창업/지원사업: 사업자등록, 법인설립, 정부 지원사업, 마케팅
+- 세무/회계: 부가세, 법인세, 회계 처리
+- 인사/노무: 근로계약, 급여, 퇴직금, 4대보험
+```
+
 ## 에이전트 상세
 
 ### 1. 메인 라우터
@@ -341,10 +360,22 @@ class EvaluationResult(BaseModel):
 
 ## 환경 변수
 
+### 필수
 ```
 OPENAI_API_KEY=
 CHROMA_HOST=localhost
 CHROMA_PORT=8002
+```
+
+### 품질 기능 토글
+```
+ENABLE_HYBRID_SEARCH=true        # Hybrid Search (BM25+Vector+RRF)
+ENABLE_RERANKING=true            # Cross-encoder Re-ranking
+ENABLE_QUERY_REWRITE=true        # LLM 쿼리 재작성
+ENABLE_LLM_EVALUATION=true       # LLM 답변 평가
+ENABLE_DOMAIN_REJECTION=true     # 도메인 외 질문 거부
+DOMAIN_CONFIDENCE_THRESHOLD=0.5  # 거부 임계값
+ENABLE_RAGAS_EVALUATION=false    # RAGAS 정량 평가
 ```
 
 ## 프롬프트 설계
@@ -504,6 +535,18 @@ RAGAS 메트릭은 `logs/ragas.log`에 JSON Lines 형식으로 기록됩니다:
 pytest tests/
 pytest tests/ -v --cov=.
 ```
+
+## 로깅 정보
+
+RAG 파이프라인 실행 시 다음 로그가 INFO 레벨로 출력됩니다:
+
+| 단계 | 로그 형식 | 예시 |
+|------|----------|------|
+| 캐시 | `[캐시] ✓ 히트` / `[캐시] ✗ 미스` | `[캐시] ✗ 미스 - '창업 절차...'` |
+| 쿼리 재작성 | `[ainvoke] 쿼리 재작성: 원본 → 재작성` | `'창업' → '창업 절차 사업자등록...'` |
+| 검색 완료 | `[검색 완료] 총 N건 검색됨` | 각 문서의 제목, score, 출처 포함 |
+| 리랭킹 | `[리랭킹] 시작: N건 → top_K` | `13건 → top_3` |
+| 평가 | `[평가] 총점=N/100` | 기준별 점수 상세 |
 
 ## 성능 목표
 

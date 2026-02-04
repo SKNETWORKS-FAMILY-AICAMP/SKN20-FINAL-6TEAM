@@ -59,6 +59,8 @@ services:
     environment:
       - VITE_API_URL=http://localhost:8000
       - VITE_RAG_URL=http://localhost:8001
+      - VITE_RAG_ENABLED=${RAG_ENABLED:-true}
+      - VITE_RAG_STREAMING=${VITE_RAG_STREAMING:-true}
     depends_on:
       - backend
     command: npm run dev -- --host
@@ -77,6 +79,10 @@ services:
       - BIZINFO_API_KEY=${BIZINFO_API_KEY:-}
       - KSTARTUP_API_KEY=${KSTARTUP_API_KEY:-}
       - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      # RAG 고급 검색 설정
+      - ENABLE_HYBRID_SEARCH=${ENABLE_HYBRID_SEARCH:-true}
+      - ENABLE_RERANKING=${ENABLE_RERANKING:-true}
+      - ENABLE_QUERY_REWRITE=${ENABLE_QUERY_REWRITE:-true}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
       interval: 30s

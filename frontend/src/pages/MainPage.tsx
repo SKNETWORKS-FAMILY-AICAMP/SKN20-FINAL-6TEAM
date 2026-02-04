@@ -22,7 +22,7 @@ import { ResponseProgress } from '../components/chat/ResponseProgress';
 const MainPage: React.FC = () => {
   const { isAuthenticated, user } = useAuthStore();
   const displayUserType = useDisplayUserType();
-  const { sessions, currentSessionId, createSession } = useChatStore();
+  const { sessions, currentSessionId, createSession, isStreaming } = useChatStore();
   const { sendMessage, isLoading } = useChat();
   const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -120,59 +120,66 @@ const MainPage: React.FC = () => {
             </div>
           </div>
         ) : (
-          messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <Card
-                className={`max-w-[70%] ${
-                  msg.type === 'user' ? 'bg-blue-500 text-white' : 'bg-white'
-                }`}
+          messages.map((msg) => {
+            // 빈 어시스턴트 메시지 숨김 (스트리밍 시작 전 placeholder)
+            if (msg.type === 'assistant' && msg.content === '') return null;
+            return (
+              <div
+                key={msg.id}
+                className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                <CardBody className="p-3">
-                  {msg.type === 'assistant' && msg.agent_code && (
-                    <div className="mb-2">
-                      <Chip
-                        size="sm"
-                        value={AGENT_NAMES[msg.agent_code]}
-                        className={`${AGENT_COLORS[msg.agent_code]} text-white`}
-                      />
-                    </div>
-                  )}
-                  {msg.type === 'assistant' ? (
-                    <div className="markdown-body text-sm text-gray-800">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {msg.content}
-                      </ReactMarkdown>
-                    </div>
-                  ) : (
-                    <Typography variant="small" className="text-white">
-                      {msg.content.split('\n').map((line, i) => (
-                        <React.Fragment key={i}>
-                          {line}
-                          {i < msg.content.split('\n').length - 1 && <br />}
-                        </React.Fragment>
-                      ))}
+                <Card
+                  className={`max-w-[70%] ${
+                    msg.type === 'user' ? 'bg-blue-500 text-white' : 'bg-white'
+                  }`}
+                >
+                  <CardBody className="p-3">
+                    {msg.type === 'assistant' && msg.agent_code && (
+                      <div className="mb-2">
+                        <Chip
+                          size="sm"
+                          value={AGENT_NAMES[msg.agent_code]}
+                          className={`${AGENT_COLORS[msg.agent_code]} text-white`}
+                        />
+                      </div>
+                    )}
+                    {msg.type === 'assistant' ? (
+                      <div className="markdown-body text-sm text-gray-800">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {msg.content}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      <Typography variant="small" className="text-white">
+                        {(() => {
+                          const lines = msg.content.split('\n');
+                          return lines.map((line, i) => (
+                            <React.Fragment key={i}>
+                              {line}
+                              {i < lines.length - 1 && <br />}
+                            </React.Fragment>
+                          ));
+                        })()}
+                      </Typography>
+                    )}
+                    <Typography
+                      variant="small"
+                      className={`text-xs mt-1 ${
+                        msg.type === 'user' ? 'text-blue-100' : 'text-gray-400'
+                      }`}
+                    >
+                      {new Date(msg.timestamp).toLocaleTimeString('ko-KR', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
                     </Typography>
-                  )}
-                  <Typography
-                    variant="small"
-                    className={`text-xs mt-1 ${
-                      msg.type === 'user' ? 'text-blue-100' : 'text-gray-400'
-                    }`}
-                  >
-                    {new Date(msg.timestamp).toLocaleTimeString('ko-KR', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </Typography>
-                </CardBody>
-              </Card>
-            </div>
-          ))
+                  </CardBody>
+                </Card>
+              </div>
+            );
+          })
         )}
-        <ResponseProgress isLoading={isLoading} />
+        <ResponseProgress isLoading={isLoading} isStreaming={isStreaming} />
         <div ref={messagesEndRef} />
       </div>
 

@@ -3,6 +3,7 @@ import { Card, CardBody, Typography } from '@material-tailwind/react';
 
 interface ResponseProgressProps {
   isLoading: boolean;
+  isStreaming?: boolean;
 }
 
 const PROGRESS_STAGES = [
@@ -11,12 +12,16 @@ const PROGRESS_STAGES = [
   { text: '답변을 생성하고 있습니다', duration: Infinity },
 ];
 
-export const ResponseProgress: React.FC<ResponseProgressProps> = ({ isLoading }) => {
+export const ResponseProgress: React.FC<ResponseProgressProps> = ({ isLoading, isStreaming = false }) => {
   const [stageIndex, setStageIndex] = useState(0);
   const [dots, setDots] = useState('');
 
+  // Determine if we should show the progress indicator
+  // Hide when not loading OR when streaming has started (response is being received)
+  const shouldShow = isLoading && !isStreaming;
+
   useEffect(() => {
-    if (!isLoading) {
+    if (!shouldShow) {
       setStageIndex(0);
       setDots('');
       return;
@@ -34,20 +39,20 @@ export const ResponseProgress: React.FC<ResponseProgressProps> = ({ isLoading })
     }, 100);
 
     return () => clearInterval(stageTimer);
-  }, [isLoading, stageIndex]);
+  }, [shouldShow, stageIndex]);
 
   // Animate dots
   useEffect(() => {
-    if (!isLoading) return;
+    if (!shouldShow) return;
 
     const dotsTimer = setInterval(() => {
       setDots((prev) => (prev.length >= 3 ? '' : prev + '.'));
     }, 400);
 
     return () => clearInterval(dotsTimer);
-  }, [isLoading]);
+  }, [shouldShow]);
 
-  if (!isLoading) return null;
+  if (!shouldShow) return null;
 
   const currentStage = PROGRESS_STAGES[stageIndex];
 

@@ -79,6 +79,16 @@ class Settings(BaseSettings):
     evaluation_threshold: int = Field(default=70, description="평가 통과 임계값 (100점 만점)")
     max_retry_count: int = Field(default=2, description="최대 재시도 횟수")
 
+    # 도메인 분류 설정
+    domain_confidence_threshold: float = Field(
+        default=0.5,
+        description="도메인 분류 신뢰도 임계값 (미만 시 도메인 외 질문으로 판단)"
+    )
+    enable_domain_rejection: bool = Field(
+        default=True,
+        description="도메인 외 질문 거부 기능 활성화"
+    )
+
     # RAG 설정
     retrieval_k: int = Field(default=3, description="도메인별 검색 결과 개수")
     retrieval_k_common: int = Field(default=2, description="공통 법령 DB 검색 결과 개수")
