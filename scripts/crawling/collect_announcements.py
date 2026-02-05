@@ -17,6 +17,7 @@ Usage:
 
 import os
 import re
+import io
 import json
 import time
 import logging
@@ -37,8 +38,8 @@ import olefile
 # 설정
 # =============================================================================
 
-# 스킵할 파일명 키워드 (신청서류, 양식 등 공고문이 아닌 파일)
-SKIP_KEYWORDS = [
+# 신청서/양식 파일 키워드 (공고문 정보 추출에서는 제외하지만 별도 저장)
+APPLICATION_FORM_KEYWORDS = [
     "신청서", "지원서", "신청양식", "지원양식",
     "신청서류", "지원서류", "제출서류",
     "접수서", "참가신청", "응모신청",
@@ -47,14 +48,27 @@ SKIP_KEYWORDS = [
     "사업계획서", "자기소개서", "추천서",
 ]
 
+# PDF 페이지 내 신청서/양식 감지 키워드
+PDF_FORM_PAGE_KEYWORDS = [
+    "신청서", "지원서", "신청양식", "지원양식",
+    "작 성 요 령", "작성요령", "기재요령",
+    "서식", "양식", "별지", "별첨",
+    "(앞쪽)", "(뒷쪽)", "(앞 쪽)", "(뒷 쪽)",
+]
 
-def _should_skip_file(filename: str) -> bool:
-    """스킵해야 할 파일인지 확인"""
+
+def _is_application_form(filename: str) -> bool:
+    """신청서/양식 파일인지 확인"""
     filename_lower = filename.lower()
-    for keyword in SKIP_KEYWORDS:
+    for keyword in APPLICATION_FORM_KEYWORDS:
         if keyword in filename_lower:
             return True
     return False
+
+
+def _should_skip_file(filename: str) -> bool:
+    """정보 추출에서 스킵해야 할 파일인지 확인 (신청서/양식)"""
+    return _is_application_form(filename)
 
 
 @dataclass
@@ -63,6 +77,7 @@ class Config:
     base_dir: Path = field(default_factory=lambda: Path(__file__).parent)
     output_dir: Path = field(default=None)
     temp_dir: Path = field(default=None)
+    forms_dir: Path = field(default=None)  # 신청서/양식 저장 디렉토리
 
     # API 키
     kstartup_api_key: str = ""
@@ -81,9 +96,12 @@ class Config:
             self.output_dir = self.base_dir / "output"
         if self.temp_dir is None:
             self.temp_dir = self.base_dir / "temp"
+        if self.forms_dir is None:
+            self.forms_dir = self.base_dir / "forms"  # 신청서/양식 저장
 
         self.output_dir.mkdir(exist_ok=True)
         self.temp_dir.mkdir(exist_ok=True)
+        self.forms_dir.mkdir(exist_ok=True)
 
         # .env 파일 로드
         self._load_env()
@@ -320,10 +338,11 @@ class KstartupClient:
 # HWP 다운로더
 # =============================================================================
 
-class HWPDownloader:
-    """HWP 파일 다운로더"""
+class FileDownloader:
+    """문서 파일 다운로더 (HWP/HWPX/PPT/PPTX 지원)"""
 
-    HWP_MAGIC = b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'
+    # OLE Compound Document 매직 바이트 (HWP, PPT 등)
+    OLE_MAGIC = b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'
 
     def __init__(self, config: Config, logger: logging.Logger):
         self.config = config
@@ -331,15 +350,63 @@ class HWPDownloader:
         self.session = requests.Session()
         self.session.headers.update(config.headers)
 
-    def _is_hwp(self, content: bytes) -> tuple[bool, str]:
-        """HWP/HWPX 파일 여부 확인"""
+    def _detect_file_type(self, content: bytes, filename: str = "") -> tuple[bool, str]:
+        """
+        파일 타입 감지 (HWP/HWPX/PPT/PPTX)
+
+        Returns:
+            tuple[bool, str]: (지원 파일 여부, 확장자)
+        """
         if not content:
             return False, ""
-        if content[:8] == self.HWP_MAGIC:
-            return True, ".hwp"
+
+        filename_lower = filename.lower()
+
+        # ZIP 기반 파일 (HWPX, PPTX, DOCX 등)
         if content[:2] == b'PK':
-            return True, ".hwpx"
+            # 파일명으로 타입 판별
+            if filename_lower.endswith('.pptx'):
+                return True, ".pptx"
+            elif filename_lower.endswith('.hwpx'):
+                return True, ".hwpx"
+            # 파일명이 없으면 내부 구조로 판별
+            try:
+                import io
+                with zipfile.ZipFile(io.BytesIO(content), 'r') as zf:
+                    namelist = zf.namelist()
+                    if any(name.startswith('ppt/') for name in namelist):
+                        return True, ".pptx"
+                    elif any(name.startswith('Contents/') for name in namelist):
+                        return True, ".hwpx"
+                    # 일반 ZIP (내부에 문서 파일 있을 수 있음)
+                    return True, ".zip"
+            except:
+                return True, ".hwpx"  # 기본값
+
+        # OLE 기반 파일 (HWP, PPT)
+        if content[:8] == self.OLE_MAGIC:
+            # 파일명으로 타입 판별
+            if filename_lower.endswith('.ppt'):
+                return True, ".ppt"
+            elif filename_lower.endswith('.hwp'):
+                return True, ".hwp"
+            # 파일명이 없으면 내부 구조로 판별
+            try:
+                ole = olefile.OleFileIO(io.BytesIO(content))
+                entries = ['/'.join(e) for e in ole.listdir()]
+                ole.close()
+                if any('PowerPoint' in e for e in entries):
+                    return True, ".ppt"
+                else:
+                    return True, ".hwp"  # 기본값
+            except:
+                return True, ".hwp"  # 기본값
+
         return False, ""
+
+    def _is_hwp(self, content: bytes) -> tuple[bool, str]:
+        """하위 호환성을 위한 래퍼 (deprecated)"""
+        return self._detect_file_type(content)
 
     def _safe_filename(self, filename: str, ann_id: str, ext: str) -> str:
         """안전한 파일명 생성"""
@@ -347,8 +414,40 @@ class HWPDownloader:
         base = safe.rsplit('.', 1)[0] if '.' in safe else safe
         return f"{ann_id}_{base}{ext}"
 
-    def download_bizinfo(self, ann_id: str, ann_data: dict = None) -> Path | None:
-        """기업마당 HWP 다운로드 (공고문 우선)"""
+    def save_form_file(self, content: bytes, filename: str, ann_id: str, ext: str) -> Path:
+        """
+        신청서/양식 파일을 forms_dir에 저장
+
+        Args:
+            content: 파일 내용
+            filename: 원본 파일명
+            ann_id: 공고 ID
+            ext: 확장자
+
+        Returns:
+            Path: 저장된 파일 경로
+        """
+        safe_filename = self._safe_filename(filename, ann_id, ext)
+        output_path = self.config.forms_dir / safe_filename
+        output_path.write_bytes(content)
+        self.logger.info(f"  📋 신청양식 저장: {output_path.name}")
+        return output_path
+
+    def iter_files_bizinfo(self, ann_id: str, ann_data: dict = None, form_files: list = None):
+        """
+        기업마당 문서 파일들을 순회하는 제너레이터
+
+        Args:
+            ann_id: 공고 ID
+            ann_data: API 응답 데이터
+            form_files: 신청서/양식 파일 경로를 저장할 리스트 (외부에서 전달)
+
+        Yields:
+            Path: 다운로드된 파일 경로 (정보 추출용, 신청서/양식 제외)
+        """
+        if form_files is None:
+            form_files = []
+
         try:
             # 1. API 데이터에서 파일 URL 사용
             if ann_data:
@@ -362,57 +461,108 @@ class HWPDownloader:
                     if not url:
                         continue
 
-                    resp = self.session.get(url, timeout=self.config.timeout)
-                    is_hwp, ext = self._is_hwp(resp.content)
+                    try:
+                        resp = self.session.get(url, timeout=self.config.timeout)
+                        is_valid, ext = self._detect_file_type(resp.content, display_name)
 
-                    if is_hwp:
-                        filename = self._safe_filename(display_name or f"{file_type}", ann_id, ext)
-                        output_path = self.config.temp_dir / filename
-                        output_path.write_bytes(resp.content)
-                        self.logger.info(f"  HWP 다운로드 ({file_type}): {output_path.name}")
-                        return output_path
+                        if is_valid:
+                            # 신청서/양식 파일인지 확인
+                            if _is_application_form(display_name):
+                                form_path = self.save_form_file(resp.content, display_name, ann_id, ext)
+                                form_files.append(str(form_path))
+                                continue  # 정보 추출에서는 스킵
 
-            # 2. 웹페이지에서 다운로드 (폴백)
-            return self._download_bizinfo_from_web(ann_id)
+                            filename = self._safe_filename(display_name or f"{file_type}", ann_id, ext)
+                            output_path = self.config.temp_dir / filename
+                            output_path.write_bytes(resp.content)
+                            self.logger.info(f"  문서 다운로드 ({file_type}): {output_path.name}")
+                            yield output_path
+                    except Exception as e:
+                        self.logger.warning(f"  파일 다운로드 실패 ({file_type}): {e}")
+                        continue
+
+            # 2. 웹페이지에서 추가 파일 다운로드
+            yield from self._iter_files_bizinfo_from_web(ann_id, form_files)
 
         except Exception as e:
-            self.logger.error(f"  HWP 다운로드 실패 [{ann_id}]: {e}")
-            return None
+            self.logger.error(f"  문서 다운로드 실패 [{ann_id}]: {e}")
 
-    def _download_bizinfo_from_web(self, ann_id: str) -> Path | None:
-        """기업마당 웹페이지에서 HWP 다운로드"""
+    def download_bizinfo(self, ann_id: str, ann_data: dict = None) -> Path | None:
+        """기업마당 문서 다운로드 (첫 번째 파일만 반환, 하위 호환성)"""
+        for file_path in self.iter_files_bizinfo(ann_id, ann_data):
+            return file_path
+        return None
+
+    def _iter_files_bizinfo_from_web(self, ann_id: str, form_files: list = None):
+        """기업마당 웹페이지에서 문서 파일들을 순회하는 제너레이터"""
+        if form_files is None:
+            form_files = []
+
         view_url = "https://www.bizinfo.go.kr/web/lay1/bbs/S1T122C128/AS/74/view.do"
         file_url = "https://www.bizinfo.go.kr/cmm/fms/getImageFile.do"
 
-        resp = self.session.get(view_url, params={"pblancId": ann_id}, timeout=self.config.timeout)
-        soup = BeautifulSoup(resp.text, 'html.parser')
+        try:
+            resp = self.session.get(view_url, params={"pblancId": ann_id}, timeout=self.config.timeout)
+            soup = BeautifulSoup(resp.text, 'html.parser')
 
-        for a in soup.select("a[href*='getImageFile.do']"):
-            href = a.get("href", "")
-            file_id_match = re.search(r"atchFileId=([A-Z_0-9]+)", href)
-            file_sn_match = re.search(r"fileSn=(\d+)", href)
+            file_idx = 0
+            for a in soup.select("a[href*='getImageFile.do']"):
+                href = a.get("href", "")
+                link_text = a.get_text(strip=True)
+                file_id_match = re.search(r"atchFileId=([A-Z_0-9]+)", href)
+                file_sn_match = re.search(r"fileSn=(\d+)", href)
 
-            if file_id_match:
-                file_resp = self.session.get(
-                    file_url,
-                    params={
-                        "atchFileId": file_id_match.group(1),
-                        "fileSn": file_sn_match.group(1) if file_sn_match else "0"
-                    },
-                    timeout=self.config.timeout
-                )
+                if file_id_match:
+                    try:
+                        file_resp = self.session.get(
+                            file_url,
+                            params={
+                                "atchFileId": file_id_match.group(1),
+                                "fileSn": file_sn_match.group(1) if file_sn_match else "0"
+                            },
+                            timeout=self.config.timeout
+                        )
 
-                is_hwp, ext = self._is_hwp(file_resp.content)
-                if is_hwp:
-                    output_path = self.config.temp_dir / f"{ann_id}_file{ext}"
-                    output_path.write_bytes(file_resp.content)
-                    self.logger.info(f"  HWP 다운로드: {output_path.name}")
-                    return output_path
+                        is_valid, ext = self._detect_file_type(file_resp.content, link_text)
+                        if is_valid:
+                            # 신청서/양식 파일인지 확인
+                            if _is_application_form(link_text):
+                                form_path = self.save_form_file(file_resp.content, link_text, ann_id, ext)
+                                form_files.append(str(form_path))
+                                continue  # 정보 추출에서는 스킵
 
+                            output_path = self.config.temp_dir / f"{ann_id}_file{file_idx}{ext}"
+                            output_path.write_bytes(file_resp.content)
+                            self.logger.info(f"  문서 다운로드: {output_path.name}")
+                            file_idx += 1
+                            yield output_path
+                    except Exception as e:
+                        self.logger.warning(f"  파일 다운로드 실패: {e}")
+                        continue
+        except Exception as e:
+            self.logger.error(f"  웹페이지 접근 실패 [{ann_id}]: {e}")
+
+    def _download_bizinfo_from_web(self, ann_id: str) -> Path | None:
+        """기업마당 웹페이지에서 문서 다운로드 (첫 번째 파일만, 하위 호환성)"""
+        for file_path in self._iter_files_bizinfo_from_web(ann_id):
+            return file_path
         return None
 
-    def download_kstartup(self, ann_id: str, ann_data: dict = None) -> Path | None:
-        """K-Startup HWP 다운로드"""
+    def iter_files_kstartup(self, ann_id: str, ann_data: dict = None, form_files: list = None):
+        """
+        K-Startup 문서 파일들을 순회하는 제너레이터
+
+        Args:
+            ann_id: 공고 ID
+            ann_data: API 응답 데이터
+            form_files: 신청서/양식 파일 경로를 저장할 리스트 (외부에서 전달)
+
+        Yields:
+            Path: 다운로드된 파일 경로 (정보 추출용, 신청서/양식 제외)
+        """
+        if form_files is None:
+            form_files = []
+
         self.session.headers["Referer"] = "https://www.k-startup.go.kr/"
         list_url = "https://www.k-startup.go.kr/web/contents/bizpbanc-ongoing.do"
 
@@ -425,30 +575,48 @@ class HWPDownloader:
                 match = re.search(r"/afile/fileDownload/([A-Za-z0-9]+)", href)
 
                 if match:
-                    file_code = match.group(1)
-                    download_url = f"https://www.k-startup.go.kr/afile/fileDownload/{file_code}"
-                    file_resp = self.session.get(download_url, timeout=self.config.timeout)
+                    try:
+                        file_code = match.group(1)
+                        download_url = f"https://www.k-startup.go.kr/afile/fileDownload/{file_code}"
+                        file_resp = self.session.get(download_url, timeout=self.config.timeout)
 
-                    # 파일명 추출
-                    filename = a.get_text(strip=True) or f"file_{file_code}"
-                    content_disp = file_resp.headers.get("Content-Disposition", "")
-                    if "filename" in content_disp:
-                        fn_match = re.search(r"filename\*=(?:UTF-8''|utf-8'')([^;\n]+)", content_disp)
-                        if fn_match:
-                            filename = unquote(fn_match.group(1))
+                        # 파일명 추출
+                        filename = a.get_text(strip=True) or f"file_{file_code}"
+                        content_disp = file_resp.headers.get("Content-Disposition", "")
+                        if "filename" in content_disp:
+                            fn_match = re.search(r"filename\*=(?:UTF-8''|utf-8'')([^;\n]+)", content_disp)
+                            if fn_match:
+                                filename = unquote(fn_match.group(1))
 
-                    is_hwp, ext = self._is_hwp(file_resp.content)
-                    if is_hwp:
-                        safe_filename = self._safe_filename(filename, ann_id, ext)
-                        output_path = self.config.temp_dir / safe_filename
-                        output_path.write_bytes(file_resp.content)
-                        self.logger.info(f"  HWP 다운로드: {output_path.name}")
-                        return output_path
+                        is_valid, ext = self._detect_file_type(file_resp.content, filename)
+                        if is_valid:
+                            # 신청서/양식 파일인지 확인
+                            if _is_application_form(filename):
+                                form_path = self.save_form_file(file_resp.content, filename, ann_id, ext)
+                                form_files.append(str(form_path))
+                                continue  # 정보 추출에서는 스킵
+
+                            safe_filename = self._safe_filename(filename, ann_id, ext)
+                            output_path = self.config.temp_dir / safe_filename
+                            output_path.write_bytes(file_resp.content)
+                            self.logger.info(f"  문서 다운로드: {output_path.name}")
+                            yield output_path
+                    except Exception as e:
+                        self.logger.warning(f"  파일 다운로드 실패: {e}")
+                        continue
 
         except Exception as e:
-            self.logger.error(f"  HWP 다운로드 실패 [{ann_id}]: {e}")
+            self.logger.error(f"  문서 다운로드 실패 [{ann_id}]: {e}")
 
+    def download_kstartup(self, ann_id: str, ann_data: dict = None) -> Path | None:
+        """K-Startup 문서 다운로드 (첫 번째 파일만 반환, 하위 호환성)"""
+        for file_path in self.iter_files_kstartup(ann_id, ann_data):
+            return file_path
         return None
+
+
+# 하위 호환성을 위한 별칭
+HWPDownloader = FileDownloader
 
 
 # =============================================================================
@@ -456,7 +624,7 @@ class HWPDownloader:
 # =============================================================================
 
 class TextExtractor:
-    """HWP/HWPX/PDF 텍스트 추출기"""
+    """HWP/HWPX/PPT/PPTX/PDF/ZIP 텍스트 추출기"""
 
     def __init__(self, logger: logging.Logger):
         self.logger = logger
@@ -469,8 +637,14 @@ class TextExtractor:
             text = self._extract_hwp(file_path)
         elif suffix == '.hwpx':
             text = self._extract_hwpx(file_path)
+        elif suffix == '.pptx':
+            text = self._extract_pptx(file_path)
+        elif suffix == '.ppt':
+            text = self._extract_ppt(file_path)
         elif suffix == '.pdf':
             text = self._extract_pdf(file_path)
+        elif suffix == '.zip':
+            text = self._extract_zip(file_path)
         else:
             self.logger.warning(f"  지원하지 않는 파일 형식: {suffix}")
             return ""
@@ -548,12 +722,14 @@ class TextExtractor:
                             except:
                                 continue
                 else:
-                    # ZIP 압축 파일: 내부 HWP/HWPX 파일들에서 텍스트 추출
-                    self.logger.info("  ZIP 압축 파일 감지, 내부 HWP 추출 시도")
+                    # ZIP 압축 파일: 내부 문서 파일들에서 텍스트 추출
+                    self.logger.info("  ZIP 압축 파일 감지, 내부 문서 추출 시도")
                     import tempfile
+                    supported_extensions = ('.hwp', '.hwpx', '.ppt', '.pptx', '.pdf')
+
                     for name in namelist:
                         name_lower = name.lower()
-                        if not (name_lower.endswith('.hwp') or name_lower.endswith('.hwpx')):
+                        if not any(name_lower.endswith(ext) for ext in supported_extensions):
                             continue
 
                         # 파일명만 추출 (경로 제외)
@@ -567,17 +743,23 @@ class TextExtractor:
                         try:
                             # 임시 파일로 추출
                             file_data = zf.read(name)
-                            suffix = '.hwpx' if name_lower.endswith('.hwpx') else '.hwp'
+                            suffix = Path(name_lower).suffix
                             with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
                                 tmp.write(file_data)
                                 tmp_path = Path(tmp.name)
 
-                            # 텍스트 추출
+                            # 파일 타입에 따라 텍스트 추출
+                            extracted_text = ""
                             if suffix == '.hwp':
                                 extracted_text = self._extract_hwp(tmp_path)
-                            else:
-                                # 내부 HWPX는 재귀 호출 (진짜 HWPX일 수 있음)
+                            elif suffix == '.hwpx':
                                 extracted_text = self._extract_hwpx(tmp_path)
+                            elif suffix == '.pptx':
+                                extracted_text = self._extract_pptx(tmp_path)
+                            elif suffix == '.ppt':
+                                extracted_text = self._extract_ppt(tmp_path)
+                            elif suffix == '.pdf':
+                                extracted_text = self._extract_pdf(tmp_path)
 
                             if extracted_text:
                                 text_parts.append(extracted_text)
@@ -605,6 +787,198 @@ class TextExtractor:
             return text.strip()
         except Exception as e:
             self.logger.warning(f"  PDF 추출 오류: {e}")
+            return ""
+
+    def extract_form_pages_from_pdf(self, pdf_path: Path, output_dir: Path, ann_id: str) -> Path | None:
+        """
+        PDF에서 신청서/양식 페이지를 감지하고 분리하여 별도 PDF로 저장
+
+        Args:
+            pdf_path: 원본 PDF 경로
+            output_dir: 출력 디렉토리
+            ann_id: 공고 ID (파일명에 사용)
+
+        Returns:
+            Path | None: 분리된 신청서 PDF 경로 (없으면 None)
+        """
+        try:
+            import fitz
+            doc = fitz.open(pdf_path)
+            form_pages = []
+
+            # 각 페이지에서 신청서/양식 키워드 검색
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                text = page.get_text()
+
+                # 신청서/양식 페이지인지 확인
+                is_form_page = False
+                for keyword in PDF_FORM_PAGE_KEYWORDS:
+                    if keyword in text:
+                        is_form_page = True
+                        break
+
+                if is_form_page:
+                    form_pages.append(page_num)
+
+            # 신청서/양식 페이지가 있으면 별도 PDF로 저장
+            if form_pages:
+                output_path = output_dir / f"{ann_id}_신청양식.pdf"
+                form_doc = fitz.open()
+
+                for page_num in form_pages:
+                    form_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
+
+                form_doc.save(output_path)
+                form_doc.close()
+                doc.close()
+
+                self.logger.info(f"  신청양식 분리: {len(form_pages)}페이지 → {output_path.name}")
+                return output_path
+
+            doc.close()
+            return None
+
+        except Exception as e:
+            self.logger.warning(f"  PDF 신청양식 분리 오류: {e}")
+            return None
+
+    def _extract_pptx(self, pptx_path: Path) -> str:
+        """PPTX에서 텍스트 추출 (ZIP/XML 기반)"""
+        try:
+            text_parts = []
+            with zipfile.ZipFile(pptx_path, 'r') as zf:
+                namelist = zf.namelist()
+
+                # ppt/slides/slide*.xml 에서 텍스트 추출
+                slide_files = sorted([
+                    name for name in namelist
+                    if name.startswith('ppt/slides/slide') and name.endswith('.xml')
+                ])
+
+                for slide_file in slide_files:
+                    try:
+                        content = zf.read(slide_file).decode('utf-8')
+                        root = ET.fromstring(content)
+
+                        # DrawingML 네임스페이스의 텍스트 요소 추출
+                        # a:t 태그 (텍스트 내용)
+                        ns = {'a': 'http://schemas.openxmlformats.org/drawingml/2006/main'}
+                        for text_elem in root.findall('.//a:t', ns):
+                            if text_elem.text and text_elem.text.strip():
+                                text_parts.append(text_elem.text.strip())
+                    except Exception as e:
+                        self.logger.warning(f"  슬라이드 파싱 오류 ({slide_file}): {e}")
+                        continue
+
+            combined = ' '.join(text_parts)
+            return re.sub(r'\s+', ' ', combined).strip()
+
+        except Exception as e:
+            self.logger.warning(f"  PPTX 추출 오류: {e}")
+            return ""
+
+    def _extract_ppt(self, ppt_path: Path) -> str:
+        """PPT에서 텍스트 추출 (OLE Compound 기반)"""
+        try:
+            ole = olefile.OleFileIO(str(ppt_path))
+            text_parts = []
+
+            # PowerPoint Document 스트림에서 텍스트 추출
+            if ole.exists('PowerPoint Document'):
+                try:
+                    ppt_stream = ole.openstream('PowerPoint Document').read()
+                    # 텍스트 레코드 패턴 찾기 (간단한 방식)
+                    # PPT 바이너리에서 유니코드 텍스트 추출
+                    text = ppt_stream.decode('utf-16le', errors='ignore')
+                    # 출력 가능한 문자만 필터링
+                    text = ''.join(c for c in text if c.isprintable() or c in '\n\r\t ')
+                    if text.strip():
+                        text_parts.append(text)
+                except Exception as e:
+                    self.logger.warning(f"  PPT Document 스트림 추출 오류: {e}")
+
+            # Current User 등 다른 스트림에서도 텍스트 시도
+            for entry in ole.listdir():
+                entry_name = '/'.join(entry)
+                if 'Text' in entry_name or 'text' in entry_name:
+                    try:
+                        stream_data = ole.openstream(entry).read()
+                        text = stream_data.decode('utf-16le', errors='ignore')
+                        text = ''.join(c for c in text if c.isprintable() or c in '\n\r\t ')
+                        if text.strip() and len(text) > 10:
+                            text_parts.append(text)
+                    except:
+                        continue
+
+            ole.close()
+            combined = '\n'.join(text_parts)
+            return re.sub(r'\s+', ' ', combined).strip()
+
+        except Exception as e:
+            self.logger.warning(f"  PPT 추출 오류: {e}")
+            return ""
+
+    def _extract_zip(self, zip_path: Path) -> str:
+        """ZIP 파일 내부의 문서 파일들에서 텍스트 추출"""
+        try:
+            text_parts = []
+            import tempfile
+
+            with zipfile.ZipFile(zip_path, 'r') as zf:
+                namelist = zf.namelist()
+                self.logger.info(f"  ZIP 파일 내부 탐색: {len(namelist)}개 파일")
+
+                for name in namelist:
+                    name_lower = name.lower()
+                    filename = Path(name).name
+
+                    # 지원하는 파일 형식 확인
+                    supported_extensions = ('.hwp', '.hwpx', '.ppt', '.pptx', '.pdf')
+                    if not any(name_lower.endswith(ext) for ext in supported_extensions):
+                        continue
+
+                    # 신청서/양식 등 스킵
+                    if _should_skip_file(filename):
+                        self.logger.info(f"    스킵 (양식/서식): {filename}")
+                        continue
+
+                    try:
+                        # 임시 파일로 추출
+                        file_data = zf.read(name)
+                        suffix = Path(name_lower).suffix
+                        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+                            tmp.write(file_data)
+                            tmp_path = Path(tmp.name)
+
+                        # 파일 타입에 따라 텍스트 추출
+                        extracted_text = ""
+                        if suffix == '.hwp':
+                            extracted_text = self._extract_hwp(tmp_path)
+                        elif suffix == '.hwpx':
+                            extracted_text = self._extract_hwpx(tmp_path)
+                        elif suffix == '.pptx':
+                            extracted_text = self._extract_pptx(tmp_path)
+                        elif suffix == '.ppt':
+                            extracted_text = self._extract_ppt(tmp_path)
+                        elif suffix == '.pdf':
+                            extracted_text = self._extract_pdf(tmp_path)
+
+                        if extracted_text:
+                            text_parts.append(extracted_text)
+                            self.logger.info(f"    추출 성공: {filename} ({len(extracted_text)}자)")
+
+                        # 임시 파일 삭제
+                        tmp_path.unlink(missing_ok=True)
+
+                    except Exception as e:
+                        self.logger.warning(f"  내부 파일 추출 실패 ({filename}): {e}")
+                        continue
+
+            return ' '.join(text_parts).strip()
+
+        except Exception as e:
+            self.logger.warning(f"  ZIP 추출 오류: {e}")
             return ""
 
 
@@ -719,7 +1093,7 @@ class AnnouncementProcessor:
         # 컴포넌트 초기화
         self.bizinfo_client = BizinfoClient(self.config.bizinfo_api_key, self.logger)
         self.kstartup_client = KstartupClient(self.config.kstartup_api_key, self.logger)
-        self.downloader = HWPDownloader(self.config, self.logger)
+        self.downloader = FileDownloader(self.config, self.logger)
         self.extractor = TextExtractor(self.logger)
         self.analyzer = OpenAIAnalyzer(self.config.openai_api_key, self.logger)
 
@@ -749,7 +1123,7 @@ class AnnouncementProcessor:
             if announcements:
                 results["bizinfo"] = self._process_announcements(
                     announcements,
-                    self.downloader.download_bizinfo,
+                    self.downloader.iter_files_bizinfo,
                     source="bizinfo"
                 )
                 self._save_results("bizinfo", results["bizinfo"], timestamp)
@@ -761,7 +1135,7 @@ class AnnouncementProcessor:
             if announcements:
                 results["kstartup"] = self._process_announcements(
                     announcements,
-                    self.downloader.download_kstartup,
+                    self.downloader.iter_files_kstartup,
                     source="kstartup"
                 )
                 self._save_results("kstartup", results["kstartup"], timestamp)
@@ -774,13 +1148,30 @@ class AnnouncementProcessor:
 
         return results
 
+    def _is_info_complete(self, 지원대상: str, 제외대상: str, 지원금액: str, is_kstartup: bool) -> bool:
+        """필요한 정보가 모두 추출되었는지 확인"""
+        no_info = "정보 없음"
+
+        if is_kstartup:
+            # K-Startup: 지원대상은 API에서 가져오므로, 제외대상과 지원금액만 확인
+            return 제외대상 != no_info and 지원금액 != no_info
+        else:
+            # 기업마당: 지원대상, 제외대상, 지원금액 모두 확인
+            return 지원대상 != no_info and 제외대상 != no_info and 지원금액 != no_info
+
+    def _merge_info(self, current: str, new: str) -> str:
+        """정보 병합 - 새 정보가 유효하면 사용"""
+        if new and new != "정보 없음":
+            return new
+        return current
+
     def _process_announcements(
         self,
         announcements: list[dict],
-        download_func: Callable,
+        iter_files_func: Callable,
         source: str = "bizinfo"
     ) -> list[dict]:
-        """공고 목록 처리"""
+        """공고 목록 처리 (여러 파일 순회, 정보 완성 시 중단, 신청양식 분리)"""
         results = []
         total = len(announcements)
         is_kstartup = source == "kstartup"
@@ -799,34 +1190,64 @@ class AnnouncementProcessor:
             else:
                 지원대상 = "정보 없음"
 
-            # 1. HWP 다운로드
-            hwp_path = download_func(ann_id, ann)
+            제외대상 = "정보 없음"
+            지원금액 = "정보 없음"
 
-            extracted_info = {"제외대상": "정보 없음", "지원금액": "정보 없음"}
+            # 신청서/양식 파일 경로 저장 리스트
+            form_files = []
 
-            if hwp_path and hwp_path.exists():
-                # 2. 텍스트 추출
-                text = self.extractor.extract(hwp_path)
+            # 파일들을 순회하면서 정보 추출
+            file_count = 0
+            for file_path in iter_files_func(ann_id, ann, form_files):
+                if not file_path or not file_path.exists():
+                    continue
+
+                file_count += 1
+
+                # PDF인 경우 신청서/양식 페이지 분리 시도
+                if file_path.suffix.lower() == '.pdf':
+                    form_pdf_path = self.extractor.extract_form_pages_from_pdf(
+                        file_path, self.config.forms_dir, ann_id
+                    )
+                    if form_pdf_path:
+                        form_files.append(str(form_pdf_path))
+
+                # 텍스트 추출
+                text = self.extractor.extract(file_path)
 
                 if text:
-                    # 3. OpenAI 분석 (K-Startup은 지원대상 제외)
+                    # OpenAI 분석 (K-Startup은 지원대상 제외)
                     extracted_info = self.analyzer.analyze(text, extract_target=not is_kstartup)
 
                     # 기업마당인 경우 지원대상도 LLM에서 추출
                     if not is_kstartup:
-                        지원대상 = extracted_info.get("지원대상", "정보 없음")
+                        지원대상 = self._merge_info(지원대상, extracted_info.get("지원대상", ""))
+
+                    제외대상 = self._merge_info(제외대상, extracted_info.get("제외대상", ""))
+                    지원금액 = self._merge_info(지원금액, extracted_info.get("지원금액", ""))
 
                 # 임시 파일 정리
-                self._cleanup_temp_files(hwp_path)
-            else:
-                self.logger.warning("  HWP 파일 없음")
+                self._cleanup_temp_files(file_path)
 
-            # 4. 결과 병합
+                # 필요한 정보가 모두 추출되면 나머지 파일은 스킵
+                if self._is_info_complete(지원대상, 제외대상, 지원금액, is_kstartup):
+                    self.logger.info(f"  ✓ 정보 추출 완료 (파일 {file_count}개 처리)")
+                    break
+
+            if file_count == 0:
+                self.logger.warning("  문서 파일 없음")
+
+            # 신청양식 파일 로그
+            if form_files:
+                self.logger.info(f"  📋 신청양식 {len(form_files)}개 저장됨")
+
+            # 결과 병합 (신청양식 파일 경로 포함)
             result = {
                 **ann,
                 "지원대상": 지원대상,
-                "제외대상": extracted_info.get("제외대상", "정보 없음"),
-                "지원금액": extracted_info.get("지원금액", "정보 없음"),
+                "제외대상": 제외대상,
+                "지원금액": 지원금액,
+                "신청양식_파일": form_files,  # 신청서/양식 파일 경로 리스트
             }
             results.append(result)
 
