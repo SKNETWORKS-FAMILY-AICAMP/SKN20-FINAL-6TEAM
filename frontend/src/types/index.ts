@@ -179,3 +179,94 @@ export interface LoginResponse {
   token_type: string;
   user: User;
 }
+
+// Admin types
+export interface RetrievalEvaluationData {
+  status: string | null;
+  doc_count: number | null;
+  keyword_match_ratio: number | null;
+  avg_similarity: number | null;
+  used_multi_query: boolean;
+}
+
+export interface EvaluationData {
+  faithfulness: number | null;
+  answer_relevancy: number | null;
+  context_precision: number | null;
+  llm_score: number | null;
+  llm_passed: boolean | null;
+  contexts: string[];
+  domains: string[];
+  retrieval_evaluation: RetrievalEvaluationData | null;
+  response_time: number | null;
+}
+
+export interface AdminHistoryListItem {
+  history_id: number;
+  user_id: number;
+  agent_code: string | null;
+  question: string | null;
+  answer_preview: string | null;
+  create_date: string | null;
+  faithfulness: number | null;
+  answer_relevancy: number | null;
+  llm_score: number | null;
+  llm_passed: boolean | null;
+  domains: string[];
+  user_email: string | null;
+  username: string | null;
+}
+
+export interface AdminHistoryListResponse {
+  items: AdminHistoryListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface AdminHistoryDetail {
+  history_id: number;
+  user_id: number;
+  agent_code: string | null;
+  question: string | null;
+  answer: string | null;
+  parent_history_id: number | null;
+  evaluation_data: EvaluationData | null;
+  create_date: string | null;
+  update_date: string | null;
+  user_email: string | null;
+  username: string | null;
+}
+
+export interface AdminEvaluationStats {
+  total_count: number;
+  evaluated_count: number;
+  passed_count: number;
+  failed_count: number;
+  avg_faithfulness: number | null;
+  avg_answer_relevancy: number | null;
+  avg_llm_score: number | null;
+  domain_counts: Record<string, number>;
+}
+
+export interface AdminHistoryFilters {
+  page?: number;
+  page_size?: number;
+  start_date?: string;
+  end_date?: string;
+  domain?: string;
+  agent_code?: string;
+  min_score?: number;
+  max_score?: number;
+  passed_only?: boolean;
+  user_id?: number;
+}
+
+// Domain names for display
+export const DOMAIN_NAMES: Record<string, string> = {
+  startup_funding: '창업/지원',
+  finance_tax: '재무/세무',
+  hr_labor: '인사/노무',
+  general: '일반',
+};

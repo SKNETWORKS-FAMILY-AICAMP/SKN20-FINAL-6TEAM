@@ -129,10 +129,12 @@ VITE_GOOGLE_CLIENT_ID=your-client-id
 - 서비스 사용법 안내
 
 ### 7. 관리자 페이지 (/admin)
-- 회원 관리
-- 상담 로그 조회
-- 통계 대시보드
-- `U001` (관리자) 타입 사용자만 메뉴 노출
+- **상담 로그 탭**: 전체 상담 이력 조회, 필터링 (도메인, LLM 점수, 통과 여부), 페이지네이션
+- **평가 통계 탭**: 전체/평가된/통과/실패 카운트, 평균 점수 (LLM, Faithfulness, Answer Relevancy), 도메인별 통계
+- **상세 조회 모달**: 질문/답변, RAGAS 평가 결과, 검색된 문서, 검색 평가 정보 표시
+- `U0000001` (관리자) 타입 사용자만 메뉴 노출
+
+**타입 정의**: `AdminHistoryListItem`, `AdminHistoryDetail`, `AdminEvaluationStats`, `DOMAIN_NAMES` 등 (`src/types/index.ts`)
 
 ---
 

@@ -78,6 +78,9 @@ class Settings(BaseSettings):
     # 평가 설정
     evaluation_threshold: int = Field(default=70, description="평가 통과 임계값 (100점 만점)")
     max_retry_count: int = Field(default=2, description="최대 재시도 횟수")
+    enable_llm_evaluation: bool = Field(
+        default=True, description="LLM 기반 답변 평가 활성화"
+    )
 
     # 도메인 분류 설정
     domain_confidence_threshold: float = Field(
@@ -137,6 +140,43 @@ class Settings(BaseSettings):
         default="ragas.log", description="RAGAS 메트릭 로그 파일명"
     )
 
+    # 도메인 분류 (벡터 유사도 기반) 설정
+    domain_classification_threshold: float = Field(
+        default=0.6, description="벡터 유사도 기반 도메인 분류 임계값"
+    )
+    enable_vector_domain_classification: bool = Field(
+        default=True, description="벡터 유사도 기반 도메인 분류 활성화"
+    )
+
+    # 검색 제한 설정
+    max_retrieval_docs: int = Field(
+        default=10, description="최대 검색 문서 수"
+    )
+
+    # 검색 평가 (규칙 기반) 설정
+    min_retrieval_doc_count: int = Field(
+        default=2, description="최소 검색 문서 수"
+    )
+    min_keyword_match_ratio: float = Field(
+        default=0.3, description="최소 키워드 매칭 비율"
+    )
+    min_avg_similarity_score: float = Field(
+        default=0.5, description="최소 평균 유사도 점수"
+    )
+
+    # Multi-Query 설정
+    enable_multi_query: bool = Field(
+        default=True, description="Multi-Query 재검색 활성화"
+    )
+    multi_query_count: int = Field(
+        default=3, description="Multi-Query 생성 개수"
+    )
+
+    # 평가 후 재시도 설정
+    enable_post_eval_retry: bool = Field(
+        default=False, description="평가 실패 시 재시도 활성화 (비활성화 시 로깅만)"
+    )
+
     # CORS 설정
     cors_origins: list[str] = Field(
         default=["http://localhost:5173", "http://localhost:3000"],
@@ -155,6 +195,10 @@ class Settings(BaseSettings):
         "enable_query_rewrite",
         "enable_context_compression",
         "enable_response_cache",
+        "enable_vector_domain_classification",
+        "enable_multi_query",
+        "enable_ragas_evaluation",
+        "enable_post_eval_retry",
         "debug",
     }
 

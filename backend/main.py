@@ -8,6 +8,7 @@ from apps.users.router import router as users_router
 from apps.companies.router import router as companies_router
 from apps.histories.router import router as histories_router
 from apps.schedules.router import router as schedules_router
+from apps.admin.router import router as admin_router
 
 app = FastAPI(
     title="Bizi API",
@@ -32,6 +33,7 @@ app.include_router(users_router)
 app.include_router(companies_router)
 app.include_router(histories_router)
 app.include_router(schedules_router)
+app.include_router(admin_router)
 
 
 @app.get("/")
