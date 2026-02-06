@@ -17,10 +17,16 @@ from utils.cache import LRUCache, ResponseCache, get_response_cache
 from utils.search import (
     BM25Index,
     HybridSearcher,
-    LLMReranker,
     SearchResult,
     reciprocal_rank_fusion,
     get_hybrid_searcher,
+)
+from utils.reranker import (
+    BaseReranker,
+    CrossEncoderReranker,
+    LLMReranker,
+    get_reranker,
+    reset_reranker,
 )
 from utils.middleware import (
     RateLimiter,
@@ -61,10 +67,15 @@ __all__ = [
     # Search
     "BM25Index",
     "HybridSearcher",
-    "LLMReranker",
     "SearchResult",
     "reciprocal_rank_fusion",
     "get_hybrid_searcher",
+    # Reranker
+    "BaseReranker",
+    "CrossEncoderReranker",
+    "LLMReranker",
+    "get_reranker",
+    "reset_reranker",
     # Middleware
     "RateLimiter",
     "RateLimitMiddleware",

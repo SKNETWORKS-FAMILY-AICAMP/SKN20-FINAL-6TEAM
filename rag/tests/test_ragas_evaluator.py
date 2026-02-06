@@ -1,7 +1,7 @@
 """RAGAS 평가 모듈 테스트."""
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from evaluation.ragas_evaluator import RagasMetrics, RagasEvaluator
 
@@ -116,10 +116,11 @@ class TestRagasEvaluator:
     def test_evaluator_disabled_when_config_disabled(self):
         """설정에서 비활성화 시 is_available=False."""
         with patch("evaluation.ragas_evaluator._RAGAS_AVAILABLE", True):
-            with patch(
-                "evaluation.ragas_evaluator.get_settings"
-            ) as mock_settings:
-                mock_settings.return_value.enable_ragas_evaluation = False
+            # 설정 모듈의 get_settings 패치 (utils.config에서 import됨)
+            with patch("utils.config.get_settings") as mock_get_settings:
+                mock_settings = MagicMock()
+                mock_settings.enable_ragas_evaluation = False
+                mock_get_settings.return_value = mock_settings
                 evaluator = RagasEvaluator()
                 assert evaluator.is_available is False
 

@@ -12,12 +12,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from langchain_core.documents import Document
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 
 from utils.config import get_settings
-from utils.token_tracker import TokenUsageCallbackHandler
+from utils.reranker import get_reranker
 
 logger = logging.getLogger(__name__)
 
@@ -192,153 +189,6 @@ def reciprocal_rank_fusion(
     return results
 
 
-# Re-ranking 프롬프트
-RERANK_PROMPT = """주어진 질문과 문서의 관련성을 0-10 점수로 평가하세요.
-
-## 평가 기준
-- 10점: 질문에 직접 답하는 핵심 정보 포함
-- 7-9점: 관련성 높은 정보 포함
-- 4-6점: 부분적으로 관련 있음
-- 1-3점: 약간의 연관성만 있음
-- 0점: 전혀 관련 없음
-
-## 질문
-{query}
-
-## 문서
-{document}
-
-## 응답 형식
-점수만 숫자로 출력하세요 (예: 8):"""
-
-
-class LLMReranker:
-    """LLM 기반 Re-ranker.
-
-    Cross-encoder 스타일의 LLM 기반 재정렬을 수행합니다.
-    """
-
-    def __init__(self):
-        """LLMReranker를 초기화합니다."""
-        self.settings = get_settings()
-        self.llm = ChatOpenAI(
-            model="gpt-4o-mini",  # 빠른 모델 사용
-            temperature=0.0,
-            api_key=self.settings.openai_api_key,
-            callbacks=[TokenUsageCallbackHandler("리랭킹")],
-        )
-        self._chain = self._build_chain()
-
-    def _build_chain(self):
-        """Re-ranking 체인을 빌드합니다."""
-        prompt = ChatPromptTemplate.from_template(RERANK_PROMPT)
-        return prompt | self.llm | StrOutputParser()
-
-    def _parse_score(self, response: str) -> float:
-        """응답에서 점수를 추출합니다."""
-        try:
-            # 숫자만 추출
-            numbers = re.findall(r'\d+(?:\.\d+)?', response)
-            if numbers:
-                score = float(numbers[0])
-                return min(10, max(0, score))  # 0-10 범위로 클램프
-        except ValueError:
-            pass
-        return 5.0  # 기본값
-
-    def rerank(
-        self,
-        query: str,
-        documents: list[Document],
-        top_k: int = 5,
-    ) -> list[Document]:
-        """문서를 재정렬합니다.
-
-        Args:
-            query: 검색 쿼리
-            documents: 문서 리스트
-            top_k: 반환할 문서 수
-
-        Returns:
-            재정렬된 문서 리스트
-        """
-        if len(documents) <= top_k:
-            return documents
-
-        logger.info("[리랭킹] 시작: %d건 → top_%d", len(documents), top_k)
-
-        scored_docs: list[tuple[Document, float]] = []
-
-        for doc in documents:
-            try:
-                response = self._chain.invoke({
-                    "query": query,
-                    "document": doc.page_content[:1000],
-                })
-                score = self._parse_score(response)
-                scored_docs.append((doc, score))
-            except Exception as e:
-                logger.warning(f"Re-ranking 실패: {e}")
-                scored_docs.append((doc, 5.0))
-
-        # 점수로 정렬
-        scored_docs.sort(key=lambda x: x[1], reverse=True)
-
-        scores_list = [s for _, s in scored_docs]
-        logger.info("[리랭킹] 완료: 점수 범위 %.1f~%.1f", min(scores_list), max(scores_list))
-
-        return [doc for doc, _ in scored_docs[:top_k]]
-
-    async def arerank(
-        self,
-        query: str,
-        documents: list[Document],
-        top_k: int = 5,
-        max_concurrent: int = 5,
-    ) -> list[Document]:
-        """문서를 비동기로 재정렬합니다.
-
-        Args:
-            query: 검색 쿼리
-            documents: 문서 리스트
-            top_k: 반환할 문서 수
-            max_concurrent: 최대 동시 처리 수
-
-        Returns:
-            재정렬된 문서 리스트
-        """
-        if len(documents) <= top_k:
-            return documents
-
-        logger.info("[리랭킹] 시작: %d건 → top_%d", len(documents), top_k)
-
-        semaphore = asyncio.Semaphore(max_concurrent)
-
-        async def score_one(doc: Document) -> tuple[Document, float]:
-            async with semaphore:
-                try:
-                    response = await self._chain.ainvoke({
-                        "query": query,
-                        "document": doc.page_content[:1000],
-                    })
-                    score = self._parse_score(response)
-                    return doc, score
-                except Exception as e:
-                    logger.warning(f"Re-ranking 실패: {e}")
-                    return doc, 5.0
-
-        tasks = [score_one(doc) for doc in documents]
-        results = await asyncio.gather(*tasks)
-
-        # 점수로 정렬
-        results = sorted(results, key=lambda x: x[1], reverse=True)
-
-        scores_list = [s for _, s in results]
-        logger.info("[리랭킹] 완료: 점수 범위 %.1f~%.1f", min(scores_list), max(scores_list))
-
-        return [doc for doc, _ in results[:top_k]]
-
-
 class HybridSearcher:
     """Hybrid Search 구현.
 
@@ -353,8 +203,15 @@ class HybridSearcher:
         """
         self.vector_store = vector_store
         self.bm25_indices: dict[str, BM25Index] = {}
-        self.reranker = LLMReranker()
+        self._reranker = None  # 지연 로딩
         self.settings = get_settings()
+
+    @property
+    def reranker(self):
+        """Reranker 인스턴스 (지연 로딩)."""
+        if self._reranker is None and self.settings.enable_reranking:
+            self._reranker = get_reranker()
+        return self._reranker
 
     def build_bm25_index(self, domain: str, documents: list[Document]) -> None:
         """도메인별 BM25 인덱스를 빌드합니다.

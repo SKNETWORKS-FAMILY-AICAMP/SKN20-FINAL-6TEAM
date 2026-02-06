@@ -180,8 +180,6 @@ class MainRouter:
 
     def _classify_domains(self, query: str) -> tuple[list[str], bool]:
         """질문을 분류하여 관련 도메인과 관련성 여부를 반환합니다.
-    def _classify_domains(self, query: str) -> tuple[list[str], bool]:
-        """질문을 분류하여 관련 도메인과 관련성 여부를 반환합니다.
 
         1차: 키워드 기반 분류
         2차: LLM 기반 분류 (키워드로 분류되지 않은 경우)

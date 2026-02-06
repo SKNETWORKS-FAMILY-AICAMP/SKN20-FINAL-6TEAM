@@ -32,11 +32,11 @@ class TestEvaluatorAgent:
     "feedback": null
 }
 ```"""
-        result = evaluator._parse_evaluation(response)
+        result, success = evaluator._parse_evaluation_response(response)
 
-        assert result.total_score == 85
-        assert result.passed is True
-        assert result.feedback is None
+        assert success is True
+        assert result["total_score"] == 85
+        assert result["passed"] is True
 
     def test_parse_evaluation_without_code_block(self, evaluator):
         """코드 블록 없는 JSON 응답 파싱 테스트."""
@@ -52,29 +52,30 @@ class TestEvaluatorAgent:
     "passed": false,
     "feedback": "정보가 부정확합니다."
 }"""
-        result = evaluator._parse_evaluation(response)
+        result, success = evaluator._parse_evaluation_response(response)
 
-        assert result.total_score == 50
-        assert result.passed is False
-        assert result.feedback == "정보가 부정확합니다."
+        assert success is True
+        assert result["total_score"] == 50
+        assert result["passed"] is False
+        assert result["feedback"] == "정보가 부정확합니다."
 
     def test_parse_evaluation_invalid_json(self, evaluator):
         """유효하지 않은 JSON 응답 처리 테스트."""
         response = "이것은 JSON이 아닙니다."
-        result = evaluator._parse_evaluation(response)
+        result, success = evaluator._parse_evaluation_response(response)
 
-        # 기본값 반환
-        assert result.total_score == 50
-        assert result.passed is False
-        assert "다시 검토" in result.feedback
+        # 파싱 실패 시 기본값 반환
+        assert success is False
+        assert result["total_score"] == 50
+        assert result["passed"] is False
 
     def test_parse_evaluation_missing_fields(self, evaluator):
         """필드가 누락된 JSON 응답 처리 테스트."""
         response = '{"total_score": 60}'
-        result = evaluator._parse_evaluation(response)
+        result, success = evaluator._parse_evaluation_response(response)
 
-        # 기본값으로 보완
-        assert result.total_score == 60
+        # scores 필드가 없으면 실패
+        assert success is False
 
     def test_evaluation_criteria_count(self, evaluator):
         """평가 기준 5개 확인 테스트."""

@@ -64,16 +64,21 @@ class TestRAGChainRetrieve:
             mmr_lambda=0.7,
         )
 
+        # settings에서 hybrid search 비활성화
+        rag_chain.settings.enable_hybrid_search = False
+
         docs = rag_chain.retrieve(
             query="테스트 쿼리",
             domain="finance_tax",
             search_strategy=strategy,
+            use_hybrid=False,  # Hybrid Search 비활성화하여 직접 벡터 검색
         )
 
-        # 검색 전략의 k 값이 적용되었는지 확인
-        call_args = mock_vector_store.max_marginal_relevance_search.call_args
-        assert call_args[1]["k"] == 5
-        assert call_args[1]["lambda_mult"] == 0.7
+        # 검색 전략의 k 값이 적용되었는지 확인 (첫 번째 호출 = 도메인 검색)
+        calls = mock_vector_store.max_marginal_relevance_search.call_args_list
+        domain_call = calls[0]  # 첫 번째 호출이 도메인 검색
+        assert domain_call[1]["k"] == 5
+        assert domain_call[1]["lambda_mult"] == 0.7
 
     def test_retrieve_no_mmr(self, rag_chain, mock_vector_store):
         """MMR 비활성화 검색 테스트."""
@@ -81,6 +86,7 @@ class TestRAGChainRetrieve:
             query="테스트 쿼리",
             domain="finance_tax",
             use_mmr=False,
+            use_hybrid=False,  # Hybrid Search 비활성화하여 similarity_search 호출
         )
 
         mock_vector_store.similarity_search.assert_called()
@@ -204,7 +210,7 @@ class TestRAGChainInvoke:
             return chain
 
     def test_invoke_with_search_strategy(self, rag_chain):
-        """검색 전략이 invoke에 전달되는지 테스트."""
+        """검색 전략이 invoke의 retrieve에 전달되는지 테스트."""
         from utils.feedback import SearchStrategy
 
         strategy = SearchStrategy(k=7, use_rerank=True)
@@ -214,10 +220,16 @@ class TestRAGChainInvoke:
             Document(page_content="결과", metadata={}),
         ])
 
-        with patch.object(rag_chain, "llm") as mock_llm:
+        # format_context도 mock
+        rag_chain.format_context = MagicMock(return_value="컨텍스트")
+
+        # LLM 체인을 직접 mock하여 Pydantic 검증 우회
+        with patch("chains.rag_chain.ChatPromptTemplate") as mock_prompt, \
+             patch("chains.rag_chain.StrOutputParser") as mock_parser:
+
             mock_chain = MagicMock()
             mock_chain.invoke.return_value = "응답"
-            mock_llm.__or__ = MagicMock(return_value=mock_chain)
+            mock_prompt.from_messages.return_value.__or__ = MagicMock(return_value=MagicMock(__or__=MagicMock(return_value=mock_chain)))
 
             result = rag_chain.invoke(
                 query="질문",

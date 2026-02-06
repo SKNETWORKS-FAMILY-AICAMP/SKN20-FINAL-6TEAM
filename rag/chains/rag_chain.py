@@ -97,10 +97,10 @@ class RAGChain:
 
     @property
     def reranker(self):
-        """LLMReranker 인스턴스 (지연 로딩)."""
+        """Reranker 인스턴스 (지연 로딩)."""
         if self._reranker is None and self.settings.enable_reranking:
-            from utils.search import LLMReranker
-            self._reranker = LLMReranker()
+            from utils.reranker import get_reranker
+            self._reranker = get_reranker()
         return self._reranker
 
     def retrieve(

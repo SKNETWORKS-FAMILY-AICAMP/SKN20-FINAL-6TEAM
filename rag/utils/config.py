@@ -107,6 +107,28 @@ class Settings(BaseSettings):
     enable_context_compression: bool = Field(default=False, description="컨텍스트 압축 활성화")
     rerank_top_k: int = Field(default=5, description="Re-ranking 후 반환할 문서 수")
 
+    # Reranker 설정
+    reranker_type: str = Field(
+        default="cross-encoder",
+        description="Reranker 타입 (cross-encoder, llm)"
+    )
+
+    @field_validator("reranker_type")
+    @classmethod
+    def validate_reranker_type(cls, v: str) -> str:
+        """Reranker 타입 검증."""
+        allowed_types = {"cross-encoder", "llm"}
+        if v not in allowed_types:
+            raise ValueError(
+                f"reranker_type은 {allowed_types} 중 하나여야 합니다 (입력: {v})"
+            )
+        return v
+
+    cross_encoder_model: str = Field(
+        default="BAAI/bge-reranker-base",
+        description="Cross-Encoder 모델명"
+    )
+
     # 캐싱 설정
     enable_response_cache: bool = Field(default=True, description="응답 캐싱 활성화")
     cache_max_size: int = Field(default=500, description="캐시 최대 크기")
@@ -155,6 +177,7 @@ class Settings(BaseSettings):
         "enable_query_rewrite",
         "enable_context_compression",
         "enable_response_cache",
+        "reranker_type",
         "debug",
     }
 
