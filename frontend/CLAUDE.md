@@ -39,6 +39,9 @@ npm install
 npm run dev      # localhost:5173
 npm run build
 npm run preview
+npm run test:e2e       # Playwright E2E 테스트
+npm run test:e2e:ui    # Playwright UI 모드
+npm run test:e2e:headed # Playwright headed 모드
 ```
 
 ## 환경 변수 (.env)
