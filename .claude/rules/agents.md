@@ -4,12 +4,12 @@
 
 | Agent | Trigger Conditions | Model |
 |-------|-------------------|-------|
-| `code-reviewer` | After writing/modifying code, before commits, "리뷰해줘" | sonnet |
-| `fastapi-architect` | "API 만들어줘", "엔드포인트 구현", backend/ 작업 | sonnet |
-| `rag-specialist` | "RAG 에이전트", "벡터DB", "프롬프트", rag/ 작업 | sonnet |
-| `tdd-guide` | "테스트 작성", "TDD", test 파일 작업 | sonnet |
-| `react-form-architect` | "폼 만들어줘", form component 작업 | sonnet |
-| `docker-tester` | "Docker 테스트", "컨테이너 확인", Docker 빌드/디버깅 | sonnet |
+| `code-reviewer` | After writing/modifying code, before commits, "리뷰해줘" | opus |
+| `fastapi-architect` | "API 만들어줘", "엔드포인트 구현", backend/ 작업 | opus |
+| `rag-specialist` | "RAG 에이전트", "벡터DB", "프롬프트", rag/ 작업 | opus |
+| `tdd-guide` | "테스트 작성", "TDD", test 파일 작업 | opus |
+| `react-form-architect` | "폼 만들어줘", form component 작업 | opus |
+| `docker-tester` | "Docker 테스트", "컨테이너 확인", Docker 빌드/디버깅 | opus |
 
 ## Plugin Agents (Active - 6)
 

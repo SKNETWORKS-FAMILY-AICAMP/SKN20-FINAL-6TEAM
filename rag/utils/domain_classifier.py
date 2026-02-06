@@ -1,10 +1,12 @@
 """벡터 유사도 기반 도메인 분류 모듈.
 
 LLM 호출 없이 임베딩 유사도로 도메인을 분류합니다.
-키워드 매칭 1차 시도 후 실패 시 벡터 유사도 기반 분류를 수행합니다.
+키워드 매칭과 벡터 유사도를 둘 다 실행하여 벡터가 최종 결정권을 가집니다.
+키워드 매칭은 신뢰도 보정용으로만 사용됩니다.
 """
 
 import logging
+import time as _time
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -80,8 +82,8 @@ class DomainClassificationResult:
 class VectorDomainClassifier:
     """벡터 유사도 기반 도메인 분류기 (LLM 미사용).
 
-    1차: 키워드 매칭 시도
-    2차: 실패 시 도메인 대표 쿼리와 임베딩 유사도 비교
+    키워드 매칭 + 벡터 유사도를 둘 다 실행하여 벡터가 최종 결정권을 가집니다.
+    키워드 매칭은 신뢰도 보정(+0.1)용으로만 사용됩니다.
 
     Attributes:
         embeddings: HuggingFace 임베딩 모델
@@ -114,7 +116,8 @@ class VectorDomainClassifier:
         if self._domain_vectors is not None:
             return self._domain_vectors
 
-        logger.info("[도메인 분류] 대표 쿼리 벡터 계산 중...")
+        logger.info("[도메인 분류] 대표 쿼리 벡터 계산 중... (첫 요청 시 지연 발생 가능)")
+        precompute_start = _time.time()
         domain_vectors: dict[str, np.ndarray] = {}
 
         for domain, queries in DOMAIN_REPRESENTATIVE_QUERIES.items():
@@ -129,7 +132,8 @@ class VectorDomainClassifier:
             )
 
         self._domain_vectors = domain_vectors
-        logger.info("[도메인 분류] 대표 쿼리 벡터 계산 완료")
+        elapsed = _time.time() - precompute_start
+        logger.info("[도메인 분류] 대표 쿼리 벡터 계산 완료 (%.2f초)", elapsed)
         return domain_vectors
 
     def _keyword_classify(self, query: str) -> DomainClassificationResult | None:
@@ -223,8 +227,8 @@ class VectorDomainClassifier:
     def classify(self, query: str) -> DomainClassificationResult:
         """질문을 분류하여 관련 도메인과 신뢰도를 반환합니다.
 
-        1. 키워드 매칭 시도
-        2. 실패 시: 임베딩 유사도 기반 분류
+        키워드 매칭과 벡터 유사도를 둘 다 실행하여 벡터가 최종 결정권을 가집니다.
+        키워드 매칭은 신뢰도 보정(+0.1)용으로만 사용됩니다.
 
         Args:
             query: 사용자 질문
@@ -232,25 +236,43 @@ class VectorDomainClassifier:
         Returns:
             도메인 분류 결과
         """
-        # 1차: 키워드 매칭
+        # 1. 키워드 매칭 (0ms, 즉시)
         keyword_result = self._keyword_classify(query)
-        if keyword_result:
-            logger.info(
-                "[도메인 분류] 키워드 매칭 성공: %s (신뢰도: %.2f)",
-                keyword_result.domains,
-                keyword_result.confidence,
-            )
-            return keyword_result
 
-        # 2차: 벡터 유사도 기반 분류
+        # 2. 벡터 유사도 분류 (항상 실행)
         if self.settings.enable_vector_domain_classification:
-            logger.info("[도메인 분류] 키워드 매칭 실패, 벡터 유사도 분류 사용")
             vector_result = self._vector_classify(query)
+        else:
+            vector_result = None
 
-            if vector_result.is_relevant:
+        # 3. 결과 조합: 벡터가 최종 결정권
+        if vector_result and vector_result.is_relevant:
+            # 벡터 통과 → 확정
+            if keyword_result:
+                # 키워드도 매칭됨 → 신뢰도 보정
+                vector_result.confidence = min(1.0, vector_result.confidence + 0.1)
+                vector_result.method = "keyword+vector"
+                vector_result.matched_keywords = keyword_result.matched_keywords
                 logger.info(
-                    "[도메인 분류] 벡터 유사도 분류: %s (신뢰도: %.2f)",
+                    "[도메인 분류] 키워드+벡터 확정: %s (신뢰도: %.2f, 키워드: %s)",
                     vector_result.domains,
+                    vector_result.confidence,
+                    keyword_result.matched_keywords,
+                )
+            else:
+                logger.info(
+                    "[도메인 분류] 벡터 유사도 확정: %s (신뢰도: %.2f)",
+                    vector_result.domains,
+                    vector_result.confidence,
+                )
+            return vector_result
+
+        if vector_result and not vector_result.is_relevant:
+            # 벡터 미통과 → 거부 (키워드 매칭과 무관)
+            if keyword_result:
+                logger.info(
+                    "[도메인 분류] 키워드 '%s' 매칭됐으나 벡터 유사도 %.2f로 거부",
+                    keyword_result.matched_keywords,
                     vector_result.confidence,
                 )
             else:
@@ -258,8 +280,16 @@ class VectorDomainClassifier:
                     "[도메인 분류] 도메인 외 질문으로 판단됨 (신뢰도: %.2f)",
                     vector_result.confidence,
                 )
-
             return vector_result
+
+        # 벡터 분류 비활성화 시 키워드 결과 또는 fallback
+        if keyword_result:
+            logger.info(
+                "[도메인 분류] 벡터 비활성화, 키워드 매칭: %s (신뢰도: %.2f)",
+                keyword_result.domains,
+                keyword_result.confidence,
+            )
+            return keyword_result
 
         # fallback: startup_funding 기본값
         logger.warning("[도메인 분류] 분류 실패, 기본값 사용")

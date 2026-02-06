@@ -209,12 +209,16 @@ class BaseAgent(ABC):
         start = time.time()
 
         # 1차 검색
-        documents = self.rag_chain.retrieve(
-            query=query,
-            domain=self.domain,
-            include_common=include_common,
-            search_strategy=search_strategy,
-        )
+        try:
+            documents = self.rag_chain.retrieve(
+                query=query,
+                domain=self.domain,
+                include_common=include_common,
+                search_strategy=search_strategy,
+            )
+        except Exception as e:
+            logger.error("[retrieve_only] 검색 실패: %s", e)
+            documents = []
 
         # 점수 추출 (메타데이터에서)
         scores = [doc.metadata.get("score", 0.0) for doc in documents]

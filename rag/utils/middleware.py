@@ -6,7 +6,7 @@ Rate Limiting, 타임아웃, 메트릭 수집 등의 기능을 제공합니다.
 import asyncio
 import logging
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from functools import wraps
 from typing import Any, Callable, TypeVar
@@ -50,16 +50,32 @@ class RateLimiter:
         self,
         rate: float = 10.0,
         capacity: float = 100.0,
+        cleanup_interval: float = 3600.0,
     ):
         """RateLimiter를 초기화합니다.
 
         Args:
             rate: 초당 토큰 충전 속도
             capacity: 최대 토큰 수 (버스트 허용량)
+            cleanup_interval: stale 상태 정리 주기 (초)
         """
         self.rate = rate
         self.capacity = capacity
         self._states: dict[str, RateLimitState] = {}
+        self._cleanup_interval = cleanup_interval
+        self._last_cleanup = time.time()
+
+    def _cleanup_stale_states(self, now: float) -> None:
+        """오래된 상태를 정리합니다."""
+        stale_keys = [
+            k for k, s in self._states.items()
+            if now - s.last_update > self._cleanup_interval
+        ]
+        for k in stale_keys:
+            del self._states[k]
+        if stale_keys:
+            logger.debug("Rate limiter cleanup: %d개 항목 제거", len(stale_keys))
+        self._last_cleanup = now
 
     def is_allowed(self, key: str, tokens: float = 1.0) -> bool:
         """요청이 허용되는지 확인합니다.
@@ -72,6 +88,10 @@ class RateLimiter:
             요청 허용 여부
         """
         now = time.time()
+
+        # 주기적 stale 상태 정리
+        if now - self._last_cleanup > self._cleanup_interval:
+            self._cleanup_stale_states(now)
 
         if key not in self._states:
             self._states[key] = RateLimitState(tokens=self.capacity)
@@ -200,7 +220,7 @@ class MetricsCollector:
             max_history: 최대 저장할 메트릭 수
         """
         self.max_history = max_history
-        self._metrics: list[RequestMetrics] = []
+        self._metrics: deque[RequestMetrics] = deque(maxlen=max_history)
         self._counters: dict[str, int] = defaultdict(int)
         self._gauges: dict[str, float] = {}
 
@@ -226,10 +246,6 @@ class MetricsCollector:
             duration=duration,
         )
         self._metrics.append(metric)
-
-        # 히스토리 크기 제한
-        if len(self._metrics) > self.max_history:
-            self._metrics = self._metrics[-self.max_history:]
 
         # 카운터 업데이트
         self._counters[f"{method}:{endpoint}:count"] += 1
@@ -274,8 +290,11 @@ class MetricsCollector:
         errors = sum(1 for m in recent if m.status_code >= 400)
 
         def percentile(data: list[float], p: float) -> float:
+            if not data:
+                return 0.0
+            p = max(0.0, min(100.0, p))
             idx = int(len(data) * p / 100)
-            return data[min(idx, len(data) - 1)]
+            return data[max(0, min(idx, len(data) - 1))]
 
         return {
             "request_count": len(recent),

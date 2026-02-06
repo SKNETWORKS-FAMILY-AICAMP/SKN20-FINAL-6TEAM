@@ -48,11 +48,10 @@ class Settings(BaseSettings):
     def validate_openai_api_key(cls, v: str) -> str:
         """OpenAI API 키 검증."""
         if not v or not v.strip():
-            logger.warning(
+            raise ValueError(
                 "OPENAI_API_KEY가 설정되지 않았습니다. "
-                "RAG 서비스가 정상 작동하지 않을 수 있습니다."
+                "RAG 서비스를 실행하려면 유효한 OpenAI API 키가 필요합니다."
             )
-            return v
         if not v.startswith("sk-"):
             logger.warning(
                 "OPENAI_API_KEY 형식이 올바르지 않습니다. "
@@ -76,15 +75,15 @@ class Settings(BaseSettings):
     kstartup_api_key: str = Field(default="", description="K-Startup API 키")
 
     # 평가 설정
-    evaluation_threshold: int = Field(default=70, description="평가 통과 임계값 (100점 만점)")
-    max_retry_count: int = Field(default=2, description="최대 재시도 횟수")
+    evaluation_threshold: int = Field(default=70, ge=0, le=100, description="평가 통과 임계값 (100점 만점)")
+    max_retry_count: int = Field(default=2, ge=0, description="최대 재시도 횟수")
     enable_llm_evaluation: bool = Field(
         default=True, description="LLM 기반 답변 평가 활성화"
     )
 
     # 도메인 분류 설정
     domain_confidence_threshold: float = Field(
-        default=0.5,
+        default=0.5, ge=0.0, le=1.0,
         description="도메인 분류 신뢰도 임계값 (미만 시 도메인 외 질문으로 판단)"
     )
     enable_domain_rejection: bool = Field(
@@ -93,10 +92,10 @@ class Settings(BaseSettings):
     )
 
     # RAG 설정
-    retrieval_k: int = Field(default=3, description="도메인별 검색 결과 개수")
-    retrieval_k_common: int = Field(default=2, description="공통 법령 DB 검색 결과 개수")
-    mmr_fetch_k_multiplier: int = Field(default=4, description="MMR 검색 시 초기 후보 배수")
-    mmr_lambda_mult: float = Field(default=0.6, description="MMR 다양성 파라미터 (0=최대 다양성, 1=최대 유사도)")
+    retrieval_k: int = Field(default=3, gt=0, description="도메인별 검색 결과 개수")
+    retrieval_k_common: int = Field(default=2, gt=0, description="공통 법령 DB 검색 결과 개수")
+    mmr_fetch_k_multiplier: int = Field(default=4, gt=0, description="MMR 검색 시 초기 후보 배수")
+    mmr_lambda_mult: float = Field(default=0.6, ge=0.0, le=1.0, description="MMR 다양성 파라미터 (0=최대 다양성, 1=최대 유사도)")
 
     # 컨텍스트 길이 설정
     format_context_length: int = Field(default=500, description="컨텍스트 포맷팅 시 문서 내용 최대 길이")
@@ -134,18 +133,23 @@ class Settings(BaseSettings):
 
     # 캐싱 설정
     enable_response_cache: bool = Field(default=True, description="응답 캐싱 활성화")
-    cache_max_size: int = Field(default=500, description="캐시 최대 크기")
-    cache_ttl: int = Field(default=3600, description="캐시 TTL (초)")
+    cache_max_size: int = Field(default=500, gt=0, description="캐시 최대 크기")
+    cache_ttl: int = Field(default=3600, gt=0, description="캐시 TTL (초)")
 
     # Rate Limiting 설정
     enable_rate_limit: bool = Field(default=True, description="Rate Limiting 활성화")
     rate_limit_rate: float = Field(default=10.0, description="초당 토큰 충전 속도")
     rate_limit_capacity: float = Field(default=100.0, description="최대 토큰 수 (버스트)")
 
+    # 관리자 인증 설정
+    admin_api_key: str = Field(
+        default="", description="관리자 API 키 (모니터링 엔드포인트 인증용, 비어있으면 인증 비활성화)"
+    )
+
     # 타임아웃 설정
-    llm_timeout: float = Field(default=30.0, description="LLM 호출 타임아웃 (초)")
-    search_timeout: float = Field(default=10.0, description="검색 타임아웃 (초)")
-    total_timeout: float = Field(default=60.0, description="전체 요청 타임아웃 (초)")
+    llm_timeout: float = Field(default=30.0, gt=0, description="LLM 호출 타임아웃 (초)")
+    search_timeout: float = Field(default=10.0, gt=0, description="검색 타임아웃 (초)")
+    total_timeout: float = Field(default=60.0, gt=0, description="전체 요청 타임아웃 (초)")
 
     # Fallback 설정
     enable_fallback: bool = Field(default=True, description="Fallback 응답 활성화")
@@ -164,7 +168,7 @@ class Settings(BaseSettings):
 
     # 도메인 분류 (벡터 유사도 기반) 설정
     domain_classification_threshold: float = Field(
-        default=0.6, description="벡터 유사도 기반 도메인 분류 임계값"
+        default=0.6, ge=0.0, le=1.0, description="벡터 유사도 기반 도메인 분류 임계값"
     )
     enable_vector_domain_classification: bool = Field(
         default=True, description="벡터 유사도 기반 도메인 분류 활성화"
@@ -180,10 +184,10 @@ class Settings(BaseSettings):
         default=2, description="최소 검색 문서 수"
     )
     min_keyword_match_ratio: float = Field(
-        default=0.3, description="최소 키워드 매칭 비율"
+        default=0.3, ge=0.0, le=1.0, description="최소 키워드 매칭 비율"
     )
     min_avg_similarity_score: float = Field(
-        default=0.5, description="최소 평균 유사도 점수"
+        default=0.5, ge=0.0, le=1.0, description="최소 평균 유사도 점수"
     )
 
     # Multi-Query 설정
@@ -209,6 +213,19 @@ class Settings(BaseSettings):
     host: str = Field(default="0.0.0.0", description="서버 호스트")
     port: int = Field(default=8001, description="서버 포트")
     debug: bool = Field(default=False, description="디버그 모드")
+
+    # 로그 레벨 설정
+    log_level: str = Field(default="INFO", description="로그 레벨 (DEBUG, INFO, WARNING, ERROR)")
+
+    @field_validator("log_level")
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
+        """로그 레벨 검증."""
+        allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+        upper = v.upper()
+        if upper not in allowed:
+            raise ValueError(f"log_level은 {allowed} 중 하나여야 합니다 (입력: {v})")
+        return upper
 
     # CLI에서 런타임 오버라이드 가능한 설정 키 (보안 관련 필드 제외)
     _ALLOWED_OVERRIDES: set[str] = {

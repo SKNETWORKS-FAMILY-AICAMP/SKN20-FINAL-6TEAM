@@ -75,14 +75,30 @@ class MultiQueryRetriever:
         try:
             response = chain.invoke({"query": query})
 
-            # JSON 파싱
+            # 1. JSON 블록 추출 시도
             json_match = re.search(r"```json\s*(.*?)\s*```", response, re.DOTALL)
             if json_match:
                 result = json.loads(json_match.group(1))
+                expanded_queries = result.get("queries", [])
             else:
-                result = json.loads(response)
+                try:
+                    # 2. 직접 JSON 파싱 시도
+                    result = json.loads(response)
+                    expanded_queries = result.get("queries", [])
+                except json.JSONDecodeError:
+                    # 3. 라인 기반 파싱 fallback ("1. 쿼리", "- 쿼리" 형식)
+                    lines = [line.strip() for line in response.split('\n') if line.strip()]
+                    expanded_queries = []
+                    for line in lines:
+                        cleaned = re.sub(r'^\d+[.)]\s*|-\s*|\*\s*', '', line).strip()
+                        if cleaned and cleaned != query and len(cleaned) >= 5:
+                            expanded_queries.append(cleaned)
 
-            expanded_queries = result.get("queries", [])
+                    if expanded_queries:
+                        logger.info("[Multi-Query] 라인 기반 파싱: %d개", len(expanded_queries))
+                    else:
+                        logger.warning("[Multi-Query] 모든 파싱 실패, 원본 쿼리만 사용")
+                        return [query]
 
             # 원본 쿼리 + 확장 쿼리
             all_queries = [query] + expanded_queries[:self.settings.multi_query_count]
@@ -97,7 +113,7 @@ class MultiQueryRetriever:
 
             return all_queries
 
-        except (json.JSONDecodeError, Exception) as e:
+        except Exception as e:
             logger.warning("[Multi-Query] 쿼리 확장 실패: %s", e)
             return [query]  # 원본 쿼리만 반환
 

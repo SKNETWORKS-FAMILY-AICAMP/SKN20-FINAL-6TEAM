@@ -143,20 +143,24 @@ class RuleBasedRetrievalEvaluator:
         if scores is None:
             scores = [doc.metadata.get("score", 0.0) for doc in documents]
 
-        # 점수가 없거나 0인 경우 기본값 사용
         valid_scores = [s for s in scores if s > 0]
-        avg_similarity = sum(valid_scores) / len(valid_scores) if valid_scores else 0.0
 
-        # 점수가 거리 기반(낮을수록 좋음)인 경우 변환
-        # ChromaDB는 거리를 반환하므로 1 - distance로 변환
-        if avg_similarity > 1.0:
-            # 거리 기반인 경우 (예: L2 distance)
-            avg_similarity = max(0, 1 - avg_similarity / 2)
+        if valid_scores:
+            avg_similarity = sum(valid_scores) / len(valid_scores)
 
-        if avg_similarity < self.min_avg_similarity:
-            reasons.append(
-                f"유사도 점수 낮음 ({avg_similarity:.2f} < {self.min_avg_similarity})"
-            )
+            # 점수가 거리 기반(낮을수록 좋음)인 경우 변환
+            # ChromaDB는 거리를 반환하므로 1 - distance로 변환
+            if avg_similarity > 1.0:
+                avg_similarity = max(0, 1 - avg_similarity / 2)
+
+            if avg_similarity < self.min_avg_similarity:
+                reasons.append(
+                    f"유사도 점수 낮음 ({avg_similarity:.2f} < {self.min_avg_similarity})"
+                )
+        else:
+            # score가 전혀 없으면 유사도 체크 스킵
+            avg_similarity = 0.0
+            logger.debug("[검색 평가] 유사도 점수 없음 - 유사도 체크 스킵")
 
         passed = len(reasons) == 0
         reason = "; ".join(reasons) if reasons else None

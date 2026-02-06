@@ -280,6 +280,9 @@ class RAGChain:
             except Exception as e:
                 logger.error(f"공통 법령 DB 검색 실패: {e}")
 
+        # 중복 문서 제거
+        documents = self._deduplicate_documents(documents)
+
         # Re-ranking (설정에 따라)
         if use_rerank and self.reranker and len(documents) > k:
             try:
@@ -530,18 +533,41 @@ class RAGChain:
             except Exception as e:
                 logger.warning(f"쿼리 재작성 실패: {e}")
 
-        # 문서 검색 (동기 호출을 스레드로 실행) - 시간 측정
+        # 문서 검색 (동기 호출을 스레드로 실행) - 시간 측정 + 타임아웃 적용
         retrieve_start = time.time()
-        documents = await asyncio.to_thread(
-            self._retrieve_with_rewritten_query,
-            search_query,
-            query,
-            domain,
-            None,
-            include_common,
-        )
+        try:
+            documents = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self._retrieve_with_rewritten_query,
+                    search_query,
+                    query,
+                    domain,
+                    None,
+                    include_common,
+                ),
+                timeout=self.settings.search_timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("[ainvoke] 검색 타임아웃 (%.1fs)", self.settings.search_timeout)
+            documents = []
         retrieve_time = time.time() - retrieve_start
         logger.info("[ainvoke] 검색 완료: %d건 (%.3fs)", len(documents), retrieve_time)
+
+        # 검색 결과 없으면 fallback 반환 (LLM 호출 스킵)
+        if not documents:
+            logger.warning("[ainvoke] 검색 결과 없음 - fallback 응답 반환")
+            fallback_content = (
+                self.settings.fallback_message
+                if self.settings.enable_fallback
+                else "검색 결과를 찾을 수 없습니다. 질문을 다시 작성해 주세요."
+            )
+            return {
+                "content": fallback_content,
+                "sources": [],
+                "documents": [],
+                "retrieve_time": retrieve_time,
+                "generate_time": 0.0,
+            }
 
         # 컨텍스트 압축 (설정에 따라)
         if self.settings.enable_context_compression and self.query_processor:
@@ -599,6 +625,27 @@ class RAGChain:
 
         return result
 
+    @staticmethod
+    def _deduplicate_documents(documents: list[Document]) -> list[Document]:
+        """중복 문서를 제거합니다 (page_content 기준).
+
+        Args:
+            documents: 문서 리스트
+
+        Returns:
+            중복 제거된 문서 리스트
+        """
+        seen: set[int] = set()
+        unique: list[Document] = []
+        for doc in documents:
+            content_hash = hash(doc.page_content)
+            if content_hash not in seen:
+                seen.add(content_hash)
+                unique.append(doc)
+        if len(unique) < len(documents):
+            logger.info("[중복 제거] %d건 → %d건", len(documents), len(unique))
+        return unique
+
     def _retrieve_with_rewritten_query(
         self,
         search_query: str,
@@ -646,6 +693,9 @@ class RAGChain:
             except Exception as e:
                 logger.error(f"공통 법령 DB 검색 실패: {e}")
 
+        # 중복 문서 제거
+        documents = self._deduplicate_documents(documents)
+
         # Re-ranking
         if use_rerank and self.reranker and len(documents) > k:
             try:
@@ -680,14 +730,32 @@ class RAGChain:
         Yields:
             응답 토큰
         """
-        # 문서 검색 (동기 호출을 스레드로 실행)
-        documents = await asyncio.to_thread(
-            self.retrieve,
-            query,
-            domain,
-            None,
-            include_common,
-        )
+        # 문서 검색 (동기 호출을 스레드로 실행 + 타임아웃 적용)
+        try:
+            documents = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self.retrieve,
+                    query,
+                    domain,
+                    None,
+                    include_common,
+                ),
+                timeout=self.settings.search_timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("[astream] 검색 타임아웃 (%.1fs)", self.settings.search_timeout)
+            documents = []
+
+        # 검색 결과 없으면 fallback 반환
+        if not documents:
+            logger.warning("[astream] 검색 결과 없음 - fallback 응답 반환")
+            fallback_content = (
+                self.settings.fallback_message
+                if self.settings.enable_fallback
+                else "검색 결과를 찾을 수 없습니다. 질문을 다시 작성해 주세요."
+            )
+            yield fallback_content
+            return
 
         # 컨텍스트 포맷팅
         context = self.format_context(documents)

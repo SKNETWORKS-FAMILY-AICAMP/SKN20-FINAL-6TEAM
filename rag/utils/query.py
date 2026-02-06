@@ -7,6 +7,7 @@ import asyncio
 import hashlib
 import logging
 import re
+from collections import OrderedDict
 from typing import Any
 
 from langchain_core.documents import Document
@@ -82,6 +83,8 @@ class QueryProcessor:
         )
         self._rewrite_chain = self._build_rewrite_chain()
         self._compression_chain = self._build_compression_chain()
+        self._rewrite_cache: OrderedDict[str, str] = OrderedDict()
+        self._rewrite_cache_max_size = 500
 
     def _build_rewrite_chain(self):
         """쿼리 재작성 체인을 빌드합니다."""
@@ -102,10 +105,21 @@ class QueryProcessor:
         Returns:
             재작성된 쿼리
         """
+        cache_key = query.strip().lower()
+        if cache_key in self._rewrite_cache:
+            self._rewrite_cache.move_to_end(cache_key)
+            logger.debug(f"쿼리 재작성 캐시 히트: '{query}'")
+            return self._rewrite_cache[cache_key]
+
         try:
             rewritten = self._rewrite_chain.invoke({"query": query})
             rewritten = rewritten.strip()
             logger.debug(f"쿼리 재작성: '{query}' -> '{rewritten}'")
+
+            if len(self._rewrite_cache) >= self._rewrite_cache_max_size:
+                self._rewrite_cache.popitem(last=False)
+            self._rewrite_cache[cache_key] = rewritten
+
             return rewritten
         except Exception as e:
             logger.warning(f"쿼리 재작성 실패, 원본 사용: {e}")
@@ -120,10 +134,21 @@ class QueryProcessor:
         Returns:
             재작성된 쿼리
         """
+        cache_key = query.strip().lower()
+        if cache_key in self._rewrite_cache:
+            self._rewrite_cache.move_to_end(cache_key)
+            logger.debug(f"쿼리 재작성 캐시 히트: '{query}'")
+            return self._rewrite_cache[cache_key]
+
         try:
             rewritten = await self._rewrite_chain.ainvoke({"query": query})
             rewritten = rewritten.strip()
             logger.debug(f"쿼리 재작성: '{query}' -> '{rewritten}'")
+
+            if len(self._rewrite_cache) >= self._rewrite_cache_max_size:
+                self._rewrite_cache.popitem(last=False)
+            self._rewrite_cache[cache_key] = rewritten
+
             return rewritten
         except Exception as e:
             logger.warning(f"쿼리 재작성 실패, 원본 사용: {e}")
@@ -207,13 +232,17 @@ class QueryProcessor:
 
         async def compress_one(doc: Document) -> Document:
             async with semaphore:
-                compressed_content = await self.acompress_context(
-                    query, doc.page_content
-                )
-                return Document(
-                    page_content=compressed_content,
-                    metadata=doc.metadata,
-                )
+                try:
+                    compressed_content = await self.acompress_context(
+                        query, doc.page_content
+                    )
+                    return Document(
+                        page_content=compressed_content,
+                        metadata=doc.metadata,
+                    )
+                except Exception as e:
+                    logger.warning(f"문서 압축 실패 (원본 사용): {e}")
+                    return doc
 
         tasks = [compress_one(doc) for doc in documents]
         return await asyncio.gather(*tasks)

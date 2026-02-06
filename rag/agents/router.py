@@ -202,225 +202,27 @@ class MainRouter:
 
         return workflow.compile()
 
-    def _classify_domains(self, query: str) -> tuple[list[str], bool]:
-        """질문을 분류하여 관련 도메인과 관련성 여부를 반환합니다.
-
-        1차: 키워드 기반 분류
-        2차: LLM 기반 분류 (키워드로 분류되지 않은 경우)
+    def _should_continue_after_classify(self, state: RouterState) -> str:
+        """분류 후 계속 진행할지 거부할지 결정합니다.
 
         Args:
-            query: 사용자 질문
+            state: 라우터 상태
 
         Returns:
-            (관련 도메인 리스트, 관련 질문 여부)
-            (관련 도메인 리스트, 관련 질문 여부)
+            "continue": 관련 질문이면 계속 진행
+            "reject": 도메인 외 질문이면 종료
         """
-        # 1차: 키워드 기반 분류
-        detected_domains = []
-        matched_keywords: dict[str, list[str]] = {}
-        for domain, keywords in DOMAIN_KEYWORDS.items():
-            hits = [kw for kw in keywords if kw in query]
-            if hits:
-                detected_domains.append(domain)
-                matched_keywords[domain] = hits
+        classification_result = state.get("classification_result")
 
-        if detected_domains:
-            logger.info("[분류] 키워드 매칭 성공: %s", detected_domains)
-            logger.info("[분류] 매칭 키워드: %s", matched_keywords)
-            return detected_domains, True
-            return detected_domains, True
+        if classification_result is None:
+            # 분류 결과가 없으면 기본적으로 계속 진행
+            return "continue"
 
-        # 2차: LLM 기반 분류 (신뢰도 포함)
-        # 2차: LLM 기반 분류 (신뢰도 포함)
-        logger.info("[분류] 키워드 매칭 실패, LLM 분류 사용")
+        if not classification_result.is_relevant:
+            logger.info("[라우터] 도메인 외 질문 - 거부 응답 반환")
+            return "reject"
 
-        # 도메인 외 질문 거부 기능이 활성화된 경우 신뢰도 판단
-        if self.settings.enable_domain_rejection:
-            domains, confidence, is_relevant = self._llm_classify_with_confidence(query)
-
-            if not is_relevant:
-                logger.info("[분류] 도메인 외 질문으로 판단됨 (신뢰도: %.2f)", confidence)
-                return [], False
-
-            logger.info("[분류] LLM 분류 결과: %s (신뢰도: %.2f)", domains, confidence)
-            return domains, True
-
-        # 기존 로직 (거부 기능 비활성화 시)
-
-        # 도메인 외 질문 거부 기능이 활성화된 경우 신뢰도 판단
-        if self.settings.enable_domain_rejection:
-            domains, confidence, is_relevant = self._llm_classify_with_confidence(query)
-
-            if not is_relevant:
-                logger.info("[분류] 도메인 외 질문으로 판단됨 (신뢰도: %.2f)", confidence)
-                return [], False
-
-            logger.info("[분류] LLM 분류 결과: %s (신뢰도: %.2f)", domains, confidence)
-            return domains, True
-
-        # 기존 로직 (거부 기능 비활성화 시)
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", ROUTER_SYSTEM_PROMPT),
-            ("human", "질문: {query}"),
-        ])
-
-        chain = prompt | self.llm | StrOutputParser()
-        response = chain.invoke({"query": query})
-
-        # JSON 파싱
-        try:
-            json_match = re.search(r"```json\s*(.*?)\s*```", response, re.DOTALL)
-            if json_match:
-                result = json.loads(json_match.group(1))
-            else:
-                result = json.loads(response)
-            return result.get("domains", ["startup_funding"]), True
-            return result.get("domains", ["startup_funding"]), True
-        except json.JSONDecodeError:
-            return ["startup_funding"], True  # 기본값
-
-    def _llm_classify_with_confidence(self, query: str) -> tuple[list[str], float, bool]:
-        """LLM을 사용하여 도메인 분류와 신뢰도를 함께 판단합니다.
-
-        Args:
-            query: 사용자 질문
-
-        Returns:
-            (도메인 리스트, 신뢰도, 관련 질문 여부)
-        """
-        classification_prompt = """당신은 Bizi의 메인 라우터입니다.
-사용자 질문이 Bizi의 상담 범위에 해당하는지 판단하고, 적절한 도메인으로 분류하세요.
-
-## Bizi 상담 범위
-
-1. **startup_funding**: 창업, 사업자등록, 법인설립, 지원사업, 보조금, 마케팅
-2. **finance_tax**: 세금, 회계, 세무, 재무
-3. **hr_labor**: 근로, 채용, 급여, 노무, 계약, 지식재산권
-
-## 상담 범위 외 질문 예시
-
-- 일상 대화: "안녕", "뭐해?", "심심해"
-- 일반 상식: "날씨 어때?", "맛집 추천해줘"
-- 게임/엔터: "게임 추천", "영화 뭐 볼까"
-- 기타 무관: "두쫀쿠가 뭐야?", "인공지능이란?"
-
-## 응답 형식
-
-반드시 JSON 형식으로 응답하세요:
-```json
-{{
-    "domains": ["도메인1"],
-    "confidence": 0.0~1.0,
-    "is_relevant": true/false,
-    "reasoning": "판단 이유"
-}}
-```
-
-- confidence: 이 질문이 Bizi 상담 범위에 해당한다는 확신 (0.0=확실히 아님, 1.0=확실히 해당)
-- is_relevant: 상담 범위 내 질문이면 true, 아니면 false
-"""
-
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", classification_prompt),
-            ("human", "질문: {query}"),
-        ])
-
-        chain = prompt | self.llm | StrOutputParser()
-        response = chain.invoke({"query": query})
-
-        try:
-            json_match = re.search(r"```json\s*(.*?)\s*```", response, re.DOTALL)
-            if json_match:
-                result = json.loads(json_match.group(1))
-            else:
-                result = json.loads(response)
-
-            domains = result.get("domains", ["startup_funding"])
-            confidence = float(result.get("confidence", 0.5))
-            is_relevant = result.get("is_relevant", True)
-
-            # 신뢰도 임계값 확인
-            if confidence < self.settings.domain_confidence_threshold:
-                is_relevant = False
-
-            return domains, confidence, is_relevant
-
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.warning("[분류] LLM 응답 파싱 실패: %s", e)
-            # 파싱 실패 시 기본적으로 관련 질문으로 처리
-            return ["startup_funding"], 0.5, True
-            return ["startup_funding"], True  # 기본값
-
-    def _llm_classify_with_confidence(self, query: str) -> tuple[list[str], float, bool]:
-        """LLM을 사용하여 도메인 분류와 신뢰도를 함께 판단합니다.
-
-        Args:
-            query: 사용자 질문
-
-        Returns:
-            (도메인 리스트, 신뢰도, 관련 질문 여부)
-        """
-        classification_prompt = """당신은 Bizi의 메인 라우터입니다.
-사용자 질문이 Bizi의 상담 범위에 해당하는지 판단하고, 적절한 도메인으로 분류하세요.
-
-## Bizi 상담 범위
-
-1. **startup_funding**: 창업, 사업자등록, 법인설립, 지원사업, 보조금, 마케팅
-2. **finance_tax**: 세금, 회계, 세무, 재무
-3. **hr_labor**: 근로, 채용, 급여, 노무, 계약, 지식재산권
-
-## 상담 범위 외 질문 예시
-
-- 일상 대화: "안녕", "뭐해?", "심심해"
-- 일반 상식: "날씨 어때?", "맛집 추천해줘"
-- 게임/엔터: "게임 추천", "영화 뭐 볼까"
-- 기타 무관: "두쫀쿠가 뭐야?", "인공지능이란?"
-
-## 응답 형식
-
-반드시 JSON 형식으로 응답하세요:
-```json
-{{
-    "domains": ["도메인1"],
-    "confidence": 0.0~1.0,
-    "is_relevant": true/false,
-    "reasoning": "판단 이유"
-}}
-```
-
-- confidence: 이 질문이 Bizi 상담 범위에 해당한다는 확신 (0.0=확실히 아님, 1.0=확실히 해당)
-- is_relevant: 상담 범위 내 질문이면 true, 아니면 false
-"""
-
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", classification_prompt),
-            ("human", "질문: {query}"),
-        ])
-
-        chain = prompt | self.llm | StrOutputParser()
-        response = chain.invoke({"query": query})
-
-        try:
-            json_match = re.search(r"```json\s*(.*?)\s*```", response, re.DOTALL)
-            if json_match:
-                result = json.loads(json_match.group(1))
-            else:
-                result = json.loads(response)
-
-            domains = result.get("domains", ["startup_funding"])
-            confidence = float(result.get("confidence", 0.5))
-            is_relevant = result.get("is_relevant", True)
-
-            # 신뢰도 임계값 확인
-            if confidence < self.settings.domain_confidence_threshold:
-                is_relevant = False
-
-            return domains, confidence, is_relevant
-
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.warning("[분류] LLM 응답 파싱 실패: %s", e)
-            # 파싱 실패 시 기본적으로 관련 질문으로 처리
-            return ["startup_funding"], 0.5, True
+        return "continue"
 
     def _classify_node(self, state: RouterState) -> RouterState:
         """분류 노드: 벡터 유사도 기반으로 도메인을 식별합니다."""
@@ -461,6 +263,15 @@ class MainRouter:
         query = state["query"]
         domains = state["domains"]
 
+        # 단일 도메인이면 QuestionDecomposer 초기화/호출 스킵
+        if len(domains) <= 1:
+            domain = domains[0] if domains else "startup_funding"
+            state["sub_queries"] = [SubQuery(domain=domain, query=query)]
+            decompose_time = time.time() - start
+            state["timing_metrics"]["decompose_time"] = decompose_time
+            logger.info("[분해] 단일 도메인 (%s) - 분해 스킵 (%.3fs)", domain, decompose_time)
+            return state
+
         # 복합 질문 분해
         sub_queries = self.question_decomposer.decompose(query, domains)
         state["sub_queries"] = sub_queries
@@ -481,6 +292,15 @@ class MainRouter:
         start = time.time()
         query = state["query"]
         domains = state["domains"]
+
+        # 단일 도메인이면 QuestionDecomposer 초기화/호출 스킵
+        if len(domains) <= 1:
+            domain = domains[0] if domains else "startup_funding"
+            state["sub_queries"] = [SubQuery(domain=domain, query=query)]
+            decompose_time = time.time() - start
+            state["timing_metrics"]["decompose_time"] = decompose_time
+            logger.info("[분해] 단일 도메인 (%s) - 분해 스킵 (%.3fs)", domain, decompose_time)
+            return state
 
         sub_queries = await self.question_decomposer.adecompose(query, domains)
         state["sub_queries"] = sub_queries
@@ -985,8 +805,29 @@ class MainRouter:
         total_start = time.time()
         initial_state = self._create_initial_state(query, user_context)
 
-        # 비동기 그래프 실행
-        final_state = await self.async_graph.ainvoke(initial_state)
+        # 비동기 그래프 실행 (전체 타임아웃 적용)
+        try:
+            final_state = await asyncio.wait_for(
+                self.async_graph.ainvoke(initial_state),
+                timeout=self.settings.total_timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.error(
+                "[aprocess] 전체 타임아웃 (%.1fs): '%s...'",
+                self.settings.total_timeout,
+                query[:30],
+            )
+            # 타임아웃 시 fallback 응답 생성
+            final_state = initial_state
+            final_state["final_response"] = self.settings.fallback_message
+            final_state["sources"] = []
+            final_state["actions"] = []
+            final_state["evaluation"] = EvaluationResult(
+                scores={},
+                total_score=0,
+                passed=False,
+                feedback="요청 처리 시간 초과",
+            )
 
         total_time = time.time() - total_start
         return self._create_response(final_state, total_time)

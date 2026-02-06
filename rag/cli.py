@@ -21,6 +21,7 @@ FastAPI 서버 없이 터미널에서 RAG 시스템을 직접 테스트합니다
 
 import argparse
 import asyncio
+import io
 import json
 import logging
 import sys
@@ -29,6 +30,11 @@ from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
+
+# Windows cp949 인코딩 이슈 방지 (이모지 등 유니코드 출력 지원)
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 # 프로젝트 루트를 sys.path에 추가
 sys.path.insert(0, str(Path(__file__).parent))

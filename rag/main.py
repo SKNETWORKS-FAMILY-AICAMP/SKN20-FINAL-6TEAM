@@ -4,7 +4,9 @@ Bizi의 RAG 서비스 API 서버를 구동합니다.
 프론트엔드와 직접 통신하여 채팅, 문서 생성 등의 기능을 제공합니다.
 """
 
+import asyncio
 import logging
+import re as _re
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -12,16 +14,22 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 
 # 로그 파일 설정
 LOG_DIR = Path(__file__).parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 LOG_FILE_PATH = LOG_DIR / "chat.log"
 
-# 로깅 설정 (로테이션 적용)
+# 로깅 설정 (환경변수 LOG_LEVEL로 제어 가능)
+def _get_log_level() -> int:
+    """환경변수에서 로그 레벨을 결정합니다."""
+    import os
+    level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+    return getattr(logging, level_name, logging.INFO)
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=_get_log_level(),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
@@ -61,11 +69,37 @@ from utils.token_tracker import RequestTokenTracker
 from vectorstores.chroma import ChromaVectorStore
 
 
-# 설정 로드
-settings = get_settings()
-
 # 메트릭 수집기 초기화
 metrics_collector = get_metrics_collector()
+
+
+def _mask_sensitive_info(text: str) -> str:
+    """민감 정보를 마스킹합니다 (주민번호, 사업자번호, 전화번호, 이메일)."""
+    # 주민등록번호 (000000-0000000)
+    text = _re.sub(r"\d{6}-[1-4]\d{6}", "******-*******", text)
+    # 사업자등록번호 (000-00-00000)
+    text = _re.sub(r"\d{3}-\d{2}-\d{5}", "***-**-*****", text)
+    # 전화번호 (010-0000-0000, 02-000-0000)
+    text = _re.sub(r"0\d{1,2}-\d{3,4}-\d{4}", "***-****-****", text)
+    # 이메일
+    text = _re.sub(
+        r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", "***@***.***", text
+    )
+    return text
+
+
+async def verify_admin_key(
+    x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+) -> None:
+    """관리자 API 키를 검증합니다.
+
+    ADMIN_API_KEY가 설정되어 있으면 X-Admin-Key 헤더와 비교합니다.
+    설정되지 않으면 인증을 건너뜁니다 (개발 모드).
+    """
+    settings = get_settings()
+    if settings.admin_api_key and settings.admin_api_key.strip():
+        if x_admin_key != settings.admin_api_key:
+            raise HTTPException(status_code=403, detail="관리자 인증이 필요합니다")
 
 
 def log_chat_interaction(
@@ -90,14 +124,18 @@ def log_chat_interaction(
     """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    # 민감 정보 마스킹 적용
+    masked_question = _mask_sensitive_info(question)
+    masked_answer = _mask_sensitive_info(answer)
+
     log_entry = f"""
 {'='*80}
 [{timestamp}] Response Time: {response_time:.2f}초
 {'='*80}
 
-[Q] {question}
+[Q] {masked_question}
 
-[A] {answer}
+[A] {masked_answer}
 
 [도메인] {', '.join(domains)}
 
@@ -169,7 +207,7 @@ def _get_ragas_logger() -> logging.Logger:
     if not ragas_log.handlers:
         ragas_log.setLevel(logging.INFO)
         ragas_handler = RotatingFileHandler(
-            LOG_DIR / settings.ragas_log_file,
+            LOG_DIR / get_settings().ragas_log_file,
             maxBytes=10 * 1024 * 1024,  # 10MB
             backupCount=5,
             encoding="utf-8",
@@ -249,9 +287,10 @@ app = FastAPI(
 )
 
 # CORS 미들웨어 설정
+_settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=_settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -261,13 +300,13 @@ app.add_middleware(
 app.add_middleware(MetricsMiddleware, collector=metrics_collector)
 
 # Rate Limiting 미들웨어 (설정에 따라)
-if settings.enable_rate_limit:
+if _settings.enable_rate_limit:
     app.add_middleware(
         RateLimitMiddleware,
-        rate=settings.rate_limit_rate,
-        capacity=settings.rate_limit_capacity,
+        rate=_settings.rate_limit_rate,
+        capacity=_settings.rate_limit_capacity,
     )
-    logger.info(f"Rate Limiting 활성화: rate={settings.rate_limit_rate}/s, capacity={settings.rate_limit_capacity}")
+    logger.info(f"Rate Limiting 활성화: rate={_settings.rate_limit_rate}/s, capacity={_settings.rate_limit_capacity}")
 
 
 # ============================================================
@@ -298,13 +337,16 @@ async def health_check() -> HealthResponse:
             vectordb_status = {"error": str(e)}
             overall_status = "degraded"
 
-    # OpenAI API 연결 상태 확인
+    # OpenAI API 연결 상태 확인 (비동기 + 타임아웃)
     try:
         import openai
-        client = openai.OpenAI(api_key=settings.openai_api_key)
-        # 간단한 모델 목록 조회로 연결 확인
-        client.models.list(limit=1)
+        settings = get_settings()
+        client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+        await asyncio.wait_for(client.models.list(limit=1), timeout=5.0)
         openai_status = {"status": "connected", "model": settings.openai_model}
+    except asyncio.TimeoutError:
+        openai_status = {"status": "error", "message": "OpenAI API 응답 타임아웃 (5초)"}
+        overall_status = "degraded"
     except openai.AuthenticationError:
         openai_status = {"status": "error", "message": "API 키가 유효하지 않습니다"}
         overall_status = "unhealthy"
@@ -370,7 +412,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         )
 
         # RAGAS 정량 평가 (설정 활성화 시)
-        if settings.enable_ragas_evaluation:
+        if get_settings().enable_ragas_evaluation:
             try:
                 from evaluation.ragas_evaluator import RagasEvaluator
 
@@ -428,6 +470,7 @@ async def chat_stream(request: ChatRequest):
         try:
             # 시작 시간 기록
             start_time = time.time()
+            stream_timeout = get_settings().total_timeout
             final_content = ""
             final_sources = []
             final_domains = []
@@ -441,6 +484,14 @@ async def chat_stream(request: ChatRequest):
                     query=request.message,
                     user_context=request.user_context,
                 ):
+                    # 전체 타임아웃 체크
+                    if time.time() - start_time > stream_timeout:
+                        error_chunk = StreamResponse(
+                            type="error",
+                            content="응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.",
+                        )
+                        yield f"data: {error_chunk.model_dump_json()}\n\n"
+                        return
                     if chunk["type"] == "token":
                         stream_chunk = StreamResponse(
                             type="token",
@@ -673,7 +724,7 @@ async def list_collections() -> dict[str, Any]:
 # ============================================================
 
 
-@app.get("/api/metrics", tags=["Monitoring"])
+@app.get("/api/metrics", tags=["Monitoring"], dependencies=[Depends(verify_admin_key)])
 async def get_metrics(
     window: int = Query(default=3600, description="통계 윈도우 (초)"),
 ) -> dict[str, Any]:
@@ -688,7 +739,7 @@ async def get_metrics(
     return metrics_collector.get_stats(window_seconds=window)
 
 
-@app.get("/api/metrics/endpoints", tags=["Monitoring"])
+@app.get("/api/metrics/endpoints", tags=["Monitoring"], dependencies=[Depends(verify_admin_key)])
 async def get_endpoint_metrics() -> dict[str, Any]:
     """엔드포인트별 메트릭 조회.
 
@@ -698,7 +749,7 @@ async def get_endpoint_metrics() -> dict[str, Any]:
     return metrics_collector.get_endpoint_stats()
 
 
-@app.get("/api/cache/stats", tags=["Monitoring"])
+@app.get("/api/cache/stats", tags=["Monitoring"], dependencies=[Depends(verify_admin_key)])
 async def get_cache_stats() -> dict[str, Any]:
     """캐시 통계 조회 엔드포인트.
 
@@ -713,7 +764,7 @@ async def get_cache_stats() -> dict[str, Any]:
         return {"error": "캐시 통계를 조회할 수 없습니다."}
 
 
-@app.post("/api/cache/clear", tags=["Monitoring"])
+@app.post("/api/cache/clear", tags=["Monitoring"], dependencies=[Depends(verify_admin_key)])
 async def clear_cache() -> dict[str, Any]:
     """캐시 전체 삭제 엔드포인트.
 
@@ -732,13 +783,14 @@ async def clear_cache() -> dict[str, Any]:
         )
 
 
-@app.get("/api/config", tags=["Monitoring"])
+@app.get("/api/config", tags=["Monitoring"], dependencies=[Depends(verify_admin_key)])
 async def get_config() -> dict[str, Any]:
     """현재 설정 조회 엔드포인트 (민감 정보 제외).
 
     Returns:
         현재 설정 값
     """
+    settings = get_settings()
     return {
         "openai_model": settings.openai_model,
         "openai_temperature": settings.openai_temperature,
@@ -768,6 +820,7 @@ async def get_config() -> dict[str, Any]:
 if __name__ == "__main__":
     import uvicorn
 
+    settings = get_settings()
     uvicorn.run(
         "main:app",
         host=settings.host,

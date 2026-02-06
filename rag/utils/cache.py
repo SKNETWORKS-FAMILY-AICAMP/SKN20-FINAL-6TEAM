@@ -241,8 +241,8 @@ class ResponseCache:
     def _generate_key(query: str, domain: str | None = None) -> str:
         """캐시 키를 생성합니다."""
         normalized = ResponseCache._normalize_query(query)
-        if domain:
-            normalized = f"{domain}:{normalized}"
+        domain_key = domain or "unknown"
+        normalized = f"{domain_key}:{normalized}"
         return hashlib.md5(normalized.encode()).hexdigest()
 
     def get(

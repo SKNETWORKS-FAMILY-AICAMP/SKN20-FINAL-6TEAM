@@ -220,10 +220,17 @@ class HybridSearcher:
             domain: 도메인 키
             documents: 문서 리스트
         """
-        index = BM25Index()
-        index.fit(documents)
-        self.bm25_indices[domain] = index
-        logger.info(f"BM25 인덱스 빌드 완료: {domain} ({len(documents)}개 문서)")
+        if not documents:
+            logger.warning(f"BM25 인덱스 빌드 스킵: {domain} (문서 없음)")
+            return
+
+        try:
+            index = BM25Index()
+            index.fit(documents)
+            self.bm25_indices[domain] = index
+            logger.info(f"BM25 인덱스 빌드 완료: {domain} ({len(documents)}개 문서)")
+        except Exception as e:
+            logger.error(f"BM25 인덱스 빌드 실패: {domain} - {e}")
 
     def search(
         self,
@@ -280,8 +287,11 @@ class HybridSearcher:
             combined = vector_results
         logger.info("[하이브리드] RRF 융합 완료: %d건", len(combined))
 
-        # 상위 결과 추출
-        documents = [r.document for r in combined[:fetch_k]]
+        # 상위 결과 추출 (score를 metadata에 주입)
+        documents = []
+        for r in combined[:fetch_k]:
+            r.document.metadata["score"] = r.score
+            documents.append(r.document)
 
         # Re-ranking (선택적)
         if use_rerank and len(documents) > k:
@@ -332,7 +342,11 @@ class HybridSearcher:
             combined = vector_results
         logger.info("[하이브리드] RRF 융합 완료: %d건", len(combined))
 
-        documents = [r.document for r in combined[:fetch_k]]
+        # score를 metadata에 주입
+        documents = []
+        for r in combined[:fetch_k]:
+            r.document.metadata["score"] = r.score
+            documents.append(r.document)
 
         # Re-ranking (비동기)
         if use_rerank and len(documents) > k:
