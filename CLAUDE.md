@@ -102,6 +102,7 @@ SKN20-FINAL-6TEAM/
 Docker: `docker-compose up --build`
 개별 서비스 실행은 각 서비스의 CLAUDE.md 참조.
 환경 변수는 `.env.example`을 복사하여 `.env`로 생성.
+E2E 테스트: `cd frontend && npm run test:e2e`
 
 ## 핵심 아키텍처
 

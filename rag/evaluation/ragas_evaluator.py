@@ -231,6 +231,114 @@ class RagasEvaluator:
             logger.error(f"RAGAS 배치 평가 실패: {e}", exc_info=True)
             return [RagasMetrics(error=str(e))] * len(questions)
 
+    def evaluate_context_precision(
+        self,
+        question: str,
+        contexts: list[str],
+    ) -> float | None:
+        """문서 평가용 - Context Precision만 측정합니다.
+
+        검색된 문서가 질문과 얼마나 관련있는지 평가합니다.
+        RAGAS가 비활성화되어 있거나 오류 발생 시 None을 반환합니다.
+
+        Args:
+            question: 사용자 질문
+            contexts: 검색된 컨텍스트 문자열 리스트
+
+        Returns:
+            Context Precision 점수 (0-1) 또는 None
+        """
+        if not self._enabled:
+            return None
+
+        try:
+            data = {
+                "question": [question],
+                "contexts": [contexts],
+                # context_precision은 answer 없이도 동작 가능
+                "answer": [""],  # 빈 답변
+            }
+
+            dataset = Dataset.from_dict(data)
+            result = ragas_evaluate(
+                dataset=dataset,
+                metrics=[context_precision],
+            )
+
+            scores = result.to_pandas().iloc[0]
+            return self._safe_float(scores.get("context_precision"))
+
+        except Exception as e:
+            logger.error(f"Context Precision 평가 실패: {e}", exc_info=True)
+            return None
+
+    def evaluate_answer_quality(
+        self,
+        question: str,
+        answer: str,
+        contexts: list[str],
+    ) -> dict[str, float | None]:
+        """답변 평가용 - Faithfulness + Answer Relevancy를 측정합니다.
+
+        Args:
+            question: 사용자 질문
+            answer: 생성된 답변
+            contexts: 검색된 컨텍스트 문자열 리스트
+
+        Returns:
+            {"faithfulness": float, "answer_relevancy": float} 또는 None 값 포함
+        """
+        if not self._enabled:
+            return {"faithfulness": None, "answer_relevancy": None}
+
+        try:
+            data = {
+                "question": [question],
+                "answer": [answer],
+                "contexts": [contexts],
+            }
+
+            dataset = Dataset.from_dict(data)
+            result = ragas_evaluate(
+                dataset=dataset,
+                metrics=[faithfulness, answer_relevancy],
+            )
+
+            scores = result.to_pandas().iloc[0]
+            return {
+                "faithfulness": self._safe_float(scores.get("faithfulness")),
+                "answer_relevancy": self._safe_float(scores.get("answer_relevancy")),
+            }
+
+        except Exception as e:
+            logger.error(f"Answer Quality 평가 실패: {e}", exc_info=True)
+            return {"faithfulness": None, "answer_relevancy": None, "error": str(e)}
+
+    async def aevaluate_answer_quality(
+        self,
+        question: str,
+        answer: str,
+        contexts: list[str],
+    ) -> dict[str, float | None]:
+        """답변 평가를 비동기로 수행합니다.
+
+        Args:
+            question: 사용자 질문
+            answer: 생성된 답변
+            contexts: 검색된 컨텍스트 문자열 리스트
+
+        Returns:
+            {"faithfulness": float, "answer_relevancy": float}
+        """
+        import asyncio
+
+        return await asyncio.to_thread(
+            self.evaluate_answer_quality,
+            question,
+            answer,
+            contexts,
+        )
+
     @staticmethod
     def _safe_float(value: Any) -> float | None:
         """값을 안전하게 float로 변환합니다."""

@@ -95,6 +95,56 @@ class SourceDocument(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict, description="메타데이터")
 
 
+class RetrievalEvaluationData(BaseModel):
+    """규칙 기반 검색 평가 결과 (Backend 저장용).
+
+    Attributes:
+        status: 평가 상태 (PASS/RETRY/FAIL)
+        doc_count: 검색된 문서 수
+        keyword_match_ratio: 키워드 매칭 비율
+        avg_similarity: 평균 유사도 점수
+        used_multi_query: Multi-Query 사용 여부
+    """
+
+    status: str | None = Field(default=None, description="PASS/RETRY/FAIL")
+    doc_count: int | None = Field(default=None, description="검색된 문서 수")
+    keyword_match_ratio: float | None = Field(default=None, description="키워드 매칭 비율")
+    avg_similarity: float | None = Field(default=None, description="평균 유사도 점수")
+    used_multi_query: bool = Field(default=False, description="Multi-Query 사용 여부")
+
+
+class EvaluationDataForDB(BaseModel):
+    """Backend DB 저장용 평가 데이터.
+
+    Attributes:
+        faithfulness: Faithfulness 점수
+        answer_relevancy: Answer Relevancy 점수
+        context_precision: Context Precision 점수
+        llm_score: LLM 평가 총점
+        llm_passed: LLM 평가 통과 여부
+        contexts: 검색된 문서 내용 (발췌)
+        domains: 질문 도메인
+        retrieval_evaluation: 규칙 기반 검색 평가 결과
+        response_time: 응답 시간 (초)
+    """
+
+    faithfulness: float | None = Field(default=None, description="Faithfulness 점수 (0-1)")
+    answer_relevancy: float | None = Field(
+        default=None, description="Answer Relevancy 점수 (0-1)"
+    )
+    context_precision: float | None = Field(
+        default=None, description="Context Precision 점수 (0-1)"
+    )
+    llm_score: int | None = Field(default=None, description="LLM 평가 점수 (0-100)")
+    llm_passed: bool | None = Field(default=None, description="LLM 평가 통과 여부")
+    contexts: list[str] = Field(default_factory=list, description="검색된 문서 내용 (발췌)")
+    domains: list[str] = Field(default_factory=list, description="질문 도메인")
+    retrieval_evaluation: RetrievalEvaluationData | None = Field(
+        default=None, description="규칙 기반 검색 평가 결과"
+    )
+    response_time: float | None = Field(default=None, description="응답 시간 (초)")
+
+
 class ChatResponse(BaseModel):
     """채팅 응답 스키마.
 
@@ -106,6 +156,7 @@ class ChatResponse(BaseModel):
         actions: 추천 액션
         evaluation: 평가 결과
         session_id: 세션 ID
+        evaluation_data: Backend DB 저장용 평가 데이터
     """
 
     content: str = Field(description="응답 내용")
@@ -121,6 +172,9 @@ class ChatResponse(BaseModel):
     )
     timing_metrics: TimingMetrics | None = Field(
         default=None, description="단계별 처리 시간 메트릭"
+    )
+    evaluation_data: EvaluationDataForDB | None = Field(
+        default=None, description="Backend DB 저장용 평가 데이터"
     )
 
 

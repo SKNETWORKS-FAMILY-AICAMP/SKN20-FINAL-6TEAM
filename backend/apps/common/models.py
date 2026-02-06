@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from config.database import Base
@@ -63,6 +63,7 @@ class History(Base):
     question = Column(Text, default="", comment="질문")
     answer = Column(Text, default="", comment="JSON 형태 저장 가능")
     parent_history_id = Column(Integer, ForeignKey("history.history_id", ondelete="SET NULL"), nullable=True, comment="부모 히스토리 ID")
+    evaluation_data = Column(JSON, nullable=True, comment="RAGAS 평가 결과 (faithfulness, answer_relevancy, context_precision, contexts)")
     create_date = Column(DateTime, default=datetime.now)
     update_date = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     use_yn = Column(Boolean, nullable=False, default=True, comment="0: 미사용, 1: 사용")

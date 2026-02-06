@@ -6,7 +6,8 @@
 ## 개요
 
 Bizi의 핵심 AI 서비스입니다. LangChain과 LangGraph를 사용하여
-Agentic RAG 시스템을 구현합니다. (5개 에이전트: 메인 라우터, 3개 전문 에이전트, 평가 에이전트)
+LangGraph 기반 5단계 파이프라인으로 구현합니다.
+(분류 → 분해 → 검색 → 생성 → 평가)
 
 아키텍처 상세는 [ARCHITECTURE.md](./ARCHITECTURE.md)를 참조하세요.
 
@@ -79,7 +80,12 @@ rag/
 │   ├── feedback.py           # 피드백 분석 및 검색 전략 조정
 │   ├── middleware.py         # 메트릭 수집, Rate Limiting 미들웨어
 │   ├── query.py              # 쿼리 재작성 및 처리
-│   └── search.py             # Hybrid Search, Re-ranking
+│   ├── search.py             # Hybrid Search, Re-ranking
+│   ├── domain_classifier.py  # 벡터 기반 도메인 분류
+│   ├── question_decomposer.py # LLM 기반 질문 분해
+│   ├── retrieval_evaluator.py # 규칙 기반 검색 평가
+│   ├── multi_query.py        # Multi-Query 재검색
+│   └── token_tracker.py      # 토큰 사용량 추적
 │
 ├── tests/                    # 테스트
 │   ├── conftest.py           # pytest 설정
@@ -142,6 +148,12 @@ python -m vectorstores.build_vectordb --stats
 
 ## API 엔드포인트
 
+### 헬스체크
+
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| GET | `/health` | 헬스체크 (VectorDB, OpenAI 상태) |
+
 ### 채팅
 
 | Method | Endpoint | 설명 |
@@ -154,7 +166,6 @@ python -m vectorstores.build_vectordb --stats
 | Method | Endpoint | 설명 |
 |--------|----------|------|
 | POST | `/api/documents/contract` | 근로계약서 생성 |
-| POST | `/api/documents/rules` | 취업규칙 생성 |
 | POST | `/api/documents/business-plan` | 사업계획서 생성 |
 
 ### 지원사업
@@ -162,8 +173,23 @@ python -m vectorstores.build_vectordb --stats
 | Method | Endpoint | 설명 |
 |--------|----------|------|
 | GET | `/api/funding/search` | 지원사업 검색 |
-| POST | `/api/funding/recommend` | 맞춤 지원사업 추천 |
-| POST | `/api/funding/sync` | 공고 데이터 동기화 |
+
+### VectorDB
+
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| GET | `/api/vectordb/stats` | VectorDB 통계 |
+| GET | `/api/vectordb/collections` | 컬렉션 목록 |
+
+### 모니터링
+
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| GET | `/api/metrics` | 메트릭 조회 |
+| GET | `/api/metrics/endpoints` | 엔드포인트별 메트릭 |
+| GET | `/api/cache/stats` | 캐시 통계 |
+| POST | `/api/cache/clear` | 캐시 삭제 |
+| GET | `/api/config` | 현재 설정 조회 |
 
 ## 도메인 분류 기준
 
@@ -191,9 +217,9 @@ DOMAIN_KEYWORDS = {
 Bizi 상담 범위에 포함되지 않는 질문은 자동으로 거부됩니다.
 
 ### 동작 방식
-1. 키워드 매칭으로 1차 분류
-2. 키워드 매칭 실패 시 LLM 분류 + 신뢰도 판단
-3. 신뢰도가 `DOMAIN_CONFIDENCE_THRESHOLD` 미만이면 거부 응답 반환
+1. 1차: 키워드 매칭 (DOMAIN_KEYWORDS 기반)
+2. 2차: 벡터 유사도 기반 분류 (LLM 미사용, `domain_classifier.py`)
+3. 신뢰도가 `DOMAIN_CLASSIFICATION_THRESHOLD` 미만이면 거부 응답 반환
 
 ### 거부 응답
 ```
@@ -205,19 +231,30 @@ Bizi는 다음 분야의 전문 상담을 제공합니다:
 - 인사/노무: 근로계약, 급여, 퇴직금, 4대보험
 ```
 
-## 에이전트 상세
+## 파이프라인 상세
 
-### 1. 메인 라우터
+### RAG Pipeline (LangGraph 기반)
 
-**역할**: 질문 분류, 에이전트 조율, 평가 결과에 따른 재요청
+**RouterState 상태 타입:**
+- `query`, `user_context`, `domains`
+- `classification_result`, `sub_queries`
+- `retrieval_results`, `documents`
+- `final_response`, `sources`, `actions`
+- `evaluation`, `ragas_metrics`, `timing_metrics`
 
-**주요 기능**:
-- 사용자 질문 분석 및 도메인 분류
-- 복합 질문 시 여러 에이전트 병렬 호출
-- 에이전트 응답 통합
-- 평가 에이전트의 피드백에 따라 재요청 처리
+**5단계 처리 흐름:**
 
-### 2. 창업 및 지원 에이전트
+| 단계 | 노드 | 설명 |
+|------|------|------|
+| 1 | **분류 (classify)** | VectorDomainClassifier로 도메인 식별 |
+| 2 | **분해 (decompose)** | 단일 도메인: 통과 / 복합 도메인: LLM 질문 분해 |
+| 3 | **검색 (retrieve)** | 도메인별 병렬 RAGChain + RuleBasedRetrievalEvaluator로 품질 평가 → 미달 시 Multi-Query 재검색 |
+| 4 | **생성 (generate)** | 검색 문서 기반 LLM 답변 생성 + 복수 도메인 응답 통합 |
+| 5 | **평가 (evaluate)** | LLM 평가 + RAGAS 평가 (로깅만, 재시도 없음) |
+
+### 벡터DB별 에이전트
+
+#### 1. 창업 및 지원 에이전트
 
 **담당 도메인**: 창업, 지원사업, 마케팅
 **데이터 소스**: 창업진흥원, 중소벤처기업부, 기업마당 API, K-Startup API
@@ -258,9 +295,9 @@ Bizi는 다음 분야의 전문 상담을 제공합니다:
 - 계약법 가이드
 - 지식재산권 안내
 
-### 5. 평가 에이전트
+### 5. 평가 모듈
 
-**역할**: 답변 품질 평가 및 재요청 판단
+**역할**: 답변 품질 평가 (로깅 목적, 재시도 비활성화 기본값)
 
 **평가 기준**:
 - 정확성: 제공된 정보가 사실에 부합하는지
@@ -268,7 +305,7 @@ Bizi는 다음 분야의 전문 상담을 제공합니다:
 - 관련성: 질문 의도에 맞는 답변인지
 - 출처 명시: 법령/규정 인용 시 출처가 있는지
 
-**재요청 기준**: 평가 점수가 threshold 미만일 경우 피드백과 함께 재요청
+**참고**: `ENABLE_POST_EVAL_RETRY=false`가 기본값이므로 RAGAS 평가는 로깅만 수행합니다. 재시도가 필요한 경우 환경 변수로 활성화할 수 있습니다.
 
 ### 6. Action Executor (문서 생성)
 
@@ -374,8 +411,31 @@ ENABLE_RERANKING=true            # Cross-encoder Re-ranking
 ENABLE_QUERY_REWRITE=true        # LLM 쿼리 재작성
 ENABLE_LLM_EVALUATION=true       # LLM 답변 평가
 ENABLE_DOMAIN_REJECTION=true     # 도메인 외 질문 거부
-DOMAIN_CONFIDENCE_THRESHOLD=0.5  # 거부 임계값
 ENABLE_RAGAS_EVALUATION=false    # RAGAS 정량 평가
+```
+
+### 도메인 분류 (벡터 기반)
+```
+DOMAIN_CLASSIFICATION_THRESHOLD=0.6    # 벡터 유사도 임계값
+ENABLE_VECTOR_DOMAIN_CLASSIFICATION=true
+```
+
+### 검색 평가 (규칙 기반)
+```
+MIN_RETRIEVAL_DOC_COUNT=2              # 최소 문서 수
+MIN_KEYWORD_MATCH_RATIO=0.3            # 최소 키워드 매칭 비율
+MIN_AVG_SIMILARITY_SCORE=0.5           # 최소 평균 유사도
+```
+
+### Multi-Query
+```
+ENABLE_MULTI_QUERY=true                # Multi-Query 재검색 활성화
+MULTI_QUERY_COUNT=3                    # 생성할 쿼리 수
+```
+
+### 재시도 설정
+```
+ENABLE_POST_EVAL_RETRY=false           # 평가 후 재시도 (기본 비활성화)
 ```
 
 ## 프롬프트 설계
@@ -554,7 +614,7 @@ RAG 파이프라인 실행 시 다음 로그가 INFO 레벨로 출력됩니다:
 - 공고 요약 정확도: 90%
 - 법령 답변 정확도: 90%
 - 응답 시간: 3초 이내
-- 평가 후 재요청 최대 횟수: 2회
+- Multi-Query 재검색 시 최대 추가 3회 쿼리
 
 ## 코드 품질
 `.claude/rules/coding-style.md`, `.claude/rules/security.md`, `.claude/rules/patterns.md` 참조

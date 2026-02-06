@@ -121,6 +121,22 @@ app.include_router({기능}_router)
 | PUT | `/schedules/{id}` | 일정 수정 |
 | DELETE | `/schedules/{id}` | 일정 삭제 |
 
+### 관리자 (admin) - 관리자 권한 필요 (type_code: U0000001)
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| GET | `/admin/histories` | 상담 이력 목록 (페이지네이션, 필터링) |
+| GET | `/admin/histories/stats` | 평가 통계 (평균 점수, 도메인별 통계) |
+| GET | `/admin/histories/{id}` | 상담 이력 상세 (evaluation_data 포함) |
+
+**필터 파라미터** (`/admin/histories`):
+- `page`, `page_size`: 페이지네이션
+- `start_date`, `end_date`: 날짜 범위
+- `domain`: 도메인 필터 (startup_funding, finance_tax, hr_labor)
+- `agent_code`: 에이전트 코드 필터
+- `min_score`, `max_score`: LLM 점수 범위
+- `passed_only`: 통과된 것만 (true/false)
+- `user_id`: 사용자 필터
+
 ---
 
 ## 데이터베이스 스키마
@@ -131,7 +147,7 @@ app.include_router({기능}_router)
 | code | 코드 마스터 | code_id, name, main_code, code |
 | user | 사용자 | user_id, google_email, username, type_code |
 | company | 기업 | company_id, user_id, com_name, biz_num, biz_code |
-| history | 상담 이력 | history_id, user_id, agent_code, question, answer |
+| history | 상담 이력 | history_id, user_id, agent_code, question, answer, evaluation_data (JSON) |
 | file | 파일 | file_id, file_name, file_path |
 | announce | 공고 | announce_id, ann_name, biz_code, host_gov_code |
 | schedule | 일정 | schedule_id, company_id, schedule_name, start_date |

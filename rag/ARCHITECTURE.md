@@ -3,60 +3,62 @@
 > **이 문서는 Bizi RAG 서비스의 상세 아키텍처를 설명합니다.**
 > 개발 가이드는 [CLAUDE.md](./CLAUDE.md)를 참조하세요.
 
-## Agentic RAG 흐름
+## LangGraph 파이프라인 흐름
 
 ```
 사용자 입력
     │
     ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                      메인 라우터                             │
-│  - 질문 분석 및 도메인 분류                                    │
-│  - 에이전트 조율 및 응답 통합                                  │
-│  - 평가 결과에 따른 재요청 처리                                │
+│                  1. 분류 (classify)                          │
+│  - 1차: 키워드 매칭                                          │
+│  - 2차: 벡터 유사도 기반 도메인 분류 (VectorDomainClassifier) │
+│  - 도메인 외 질문 시 거부 응답 반환                           │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ↓
+┌─────────────────────────────────────────────────────────────┐
+│                  2. 분해 (decompose)                         │
+│  - 단일 도메인: 분해 없이 통과                               │
+│  - 복합 도메인: LLM으로 도메인별 질문 분해 (QuestionDecomposer)│
 └────────────────────────┬────────────────────────────────────┘
                          │
         ┌────────────────┼────────────────┐
         ↓                ↓                ↓
 ┌───────────────┐ ┌───────────────┐ ┌───────────────┐
-│ 창업 및 지원   │ │ 재무 및 세무   │ │ 인사 및 노무   │
-│   에이전트     │ │   에이전트     │ │   에이전트     │
-│               │ │               │ │               │
-│ - 창업 절차    │ │ - 세금 안내    │ │ - 근로 상담    │
-│ - 지원사업    │ │ - 회계 가이드   │ │ - 채용/해고    │
-│ - 마케팅      │ │ - 재무 분석    │ │ - 법률 자문    │
+│ 창업/지원 DB   │ │ 재무/세무 DB   │ │ 인사/노무 DB   │
+│   검색         │ │   검색         │ │   검색         │
 └───────┬───────┘ └───────┬───────┘ └───────┬───────┘
         │                 │                 │
         └────────────────┬┴─────────────────┘
+                         │
                          ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                      평가 에이전트                           │
-│  - 답변 품질 평가 (정확성, 완성도, 관련성)                    │
-│  - 재요청 필요 여부 판단                                     │
-│  - 피드백 생성                                               │
+│                  3. 검색 (retrieve)                          │
+│  - 도메인별 병렬 검색 (RAGChain)                              │
+│  - 규칙 기반 검색 평가 (문서 수, 키워드, 유사도)              │
+│    → RuleBasedRetrievalEvaluator                             │
+│  - 평가 실패 시 Multi-Query 재검색 (MultiQueryRetriever)      │
 └────────────────────────┬────────────────────────────────────┘
                          │
-              ┌──────────┴──────────┐
-              │ 품질 충족?           │
-              │                     │
-         [Yes]│                [No] │
-              ↓                     ↓
-┌─────────────────────┐   ┌─────────────────────┐
-│  Action Executor    │   │ 메인 라우터로 재요청 │
-│  (필요시 문서 생성)  │   │  (피드백 포함)      │
-└──────────┬──────────┘   └─────────────────────┘
-           │
-           ↓
+                         ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                  RAGAS 정량 평가 (선택)                       │
-│  - Faithfulness (사실 일관성)                                │
-│  - Answer Relevancy (답변 관련성)                            │
-│  - Context Precision (컨텍스트 정밀도)                       │
+│                  4. 생성 (generate)                          │
+│  - 검색된 문서 기반 답변 생성                                │
+│  - 복수 도메인 시 응답 통합                                  │
+│  - 액션 제안 생성                                            │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ↓
+┌─────────────────────────────────────────────────────────────┐
+│                  5. 평가 (evaluate)                          │
+│  - LLM 평가 (선택적, ENABLE_LLM_EVALUATION)                  │
+│  - RAGAS 평가 (로깅만, 재시도 없음)                          │
 │  - 로그 기록 (logs/ragas.log)                               │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ↓
-                     최종 응답
+                 ChatResponse 반환
 ```
 
 ## 통신 아키텍처
@@ -73,9 +75,9 @@
 │   Backend (FastAPI)       │    │      RAG Service (FastAPI)      │
 │   localhost:8000          │    │      localhost:8001             │
 │                           │    │                                 │
-│ - Google OAuth2 인증      │    │ - 메인 라우터                    │
-│ - 사용자/기업 관리         │    │ - 3개 전문 에이전트              │
-│ - 상담 이력 저장           │    │ - 평가 에이전트                 │
+│ - Google OAuth2 인증      │    │ - LangGraph 5단계 파이프라인    │
+│ - 사용자/기업 관리         │    │ - 3개 도메인별 벡터DB           │
+│ - 상담 이력 저장           │    │ - 평가 모듈 (LLM + RAGAS)       │
 │ - 일정 관리               │    │ - Action Executor               │
 └───────────────┬───────────┘    └───────────┬─────────────────────┘
                 │                             │
@@ -115,31 +117,31 @@ ChromaDB
     └── 법령 해석례
 ```
 
-## 에이전트 상세
+## 파이프라인 상세
 
-### 1. 메인 라우터
+### 1. MainRouter (LangGraph StateGraph)
 
-**역할**: 질문 분류, 에이전트 조율, 평가 결과에 따른 재요청
+**역할**: LangGraph StateGraph를 사용한 5단계 파이프라인 조율
 
 ```python
 class MainRouter:
     """
-    사용자 질문을 분석하여 적절한 에이전트로 라우팅
-    복합 질문 시 여러 에이전트 병렬 호출 후 응답 통합
-    평가 에이전트의 피드백에 따라 재요청 처리
+    LangGraph StateGraph를 사용한 5단계 파이프라인
+
+    주요 속성:
+    - domain_classifier: VectorDomainClassifier (지연 로딩)
+    - question_decomposer: QuestionDecomposer (지연 로딩)
+    - ragas_evaluator: RagasEvaluator (지연 로딩)
+    - graph: 동기 StateGraph
+    - async_graph: 비동기 StateGraph
+
+    노드 메서드:
+    - _classify_node(): 도메인 분류
+    - _decompose_node(): 질문 분해
+    - _retrieve_node(): 문서 검색
+    - _generate_node(): 답변 생성
+    - _evaluate_node(): 품질 평가
     """
-
-    def route(self, query: str) -> list[str]:
-        """도메인 분류 후 담당 에이전트 목록 반환"""
-        pass
-
-    def aggregate(self, responses: list[AgentResponse]) -> str:
-        """여러 에이전트 응답 통합"""
-        pass
-
-    def retry_with_feedback(self, feedback: EvaluationFeedback) -> str:
-        """평가 피드백에 따른 재요청"""
-        pass
 ```
 
 ### 2. 창업 및 지원 에이전트
@@ -180,9 +182,9 @@ class MainRouter:
 - 계약법 가이드
 - 지식재산권 안내
 
-### 5. 평가 에이전트
+### 5. 평가 모듈
 
-**역할**: 답변 품질 평가 및 재요청 판단
+**역할**: 답변 품질 평가 (로깅 목적)
 
 **평가 기준**:
 - 정확성: 제공된 정보가 사실에 부합하는지
@@ -193,7 +195,8 @@ class MainRouter:
 ```python
 class Evaluator:
     """
-    답변 품질을 평가하고 재요청 여부를 판단
+    답변 품질을 평가 (재시도는 기본 비활성화)
+    ENABLE_POST_EVAL_RETRY=false가 기본값
     """
 
     def evaluate(self, query: str, response: str) -> EvaluationResult:
@@ -202,11 +205,17 @@ class Evaluator:
         Returns: EvaluationResult(score, passed, feedback)
         """
         pass
-
-    def should_retry(self, result: EvaluationResult) -> bool:
-        """재요청 필요 여부 판단 (threshold 기반)"""
-        pass
 ```
+
+### 핵심 유틸리티 모듈
+
+| 모듈 | 클래스 | 역할 |
+|------|--------|------|
+| `domain_classifier.py` | `VectorDomainClassifier` | 벡터 유사도 기반 도메인 분류 |
+| `question_decomposer.py` | `QuestionDecomposer` | LLM 기반 복합 질문 분해 |
+| `retrieval_evaluator.py` | `RuleBasedRetrievalEvaluator` | 규칙 기반 검색 품질 평가 |
+| `multi_query.py` | `MultiQueryRetriever` | Multi-Query 재검색 |
+| `token_tracker.py` | `TokenUsageCallbackHandler` | 토큰 사용량 추적 |
 
 ### 6. Action Executor
 
@@ -219,17 +228,17 @@ class Evaluator:
 - 급여명세서
 - 사업계획서 템플릿
 
-## 이중 평가 체계
+## 3중 평가 체계
 
-RAG 시스템은 두 가지 평가 방식을 지원합니다:
+RAG 시스템은 세 가지 평가 방식을 지원합니다:
 
-| 구분 | LLM 기반 평가 (evaluator.py) | RAGAS 정량 평가 (evaluation/) |
-|------|------------------------------|-------------------------------|
-| 방식 | LLM이 5개 기준으로 채점 | RAGAS 라이브러리 메트릭 |
-| 메트릭 | 검색품질, 정확성, 완성도, 관련성, 출처 (각 20점) | Faithfulness, Answer Relevancy, Context Precision, Context Recall |
-| 용도 | 실시간 품질 판단 및 재요청 | 정량적 품질 추적 및 분석 |
-| 실행 | 항상 실행 | 설정 활성화 시 (`ENABLE_RAGAS_EVALUATION=true`) |
-| 로그 | logs/chat.log | logs/ragas.log (JSON Lines) |
+| 구분 | 검색 평가 (retrieval_evaluator.py) | LLM 평가 (evaluator.py) | RAGAS 평가 (evaluation/) |
+|------|-----------------------------------|-------------------------|--------------------------|
+| 방식 | 규칙 기반 (문서 수, 키워드, 유사도) | LLM이 5개 기준으로 채점 | RAGAS 라이브러리 메트릭 |
+| 용도 | 검색 품질 판단 → Multi-Query 재검색 트리거 | 답변 품질 채점 | 정량적 품질 추적 및 분석 |
+| 실행 | 검색 단계에서 자동 실행 | `ENABLE_LLM_EVALUATION=true` | `ENABLE_RAGAS_EVALUATION=true` |
+| 재시도 | Multi-Query 재검색 | 기본 비활성화 (`ENABLE_POST_EVAL_RETRY=false`) | 없음 (로깅만) |
+| 로그 | 콘솔 | logs/chat.log | logs/ragas.log (JSON Lines) |
 
 ## 데이터 흐름 예시
 
@@ -237,34 +246,42 @@ RAG 시스템은 두 가지 평가 방식을 지원합니다:
 ```
 Q: "부가세 신고 기한이 언제인가요?"
 
-1. 메인 라우터 → 도메인 분류: finance_tax
-2. 재무 및 세무 에이전트 → RAG 검색 → 답변 생성
-3. 평가 에이전트 → 품질 평가 (PASS)
-4. 최종 응답 반환
+1. classify → 도메인 분류: [finance_tax]
+2. decompose → 단일 도메인이므로 분해 없이 통과
+3. retrieve → finance_tax_db 검색 → 문서 충분
+4. generate → 답변 생성
+5. evaluate → RAGAS 로깅
+6. ChatResponse 반환
 ```
 
 ### 복합 도메인 질문
 ```
 Q: "창업하려는데 사업자등록 방법과 초기 세무 처리 알려주세요"
 
-1. 메인 라우터 → 도메인 분류: [startup_funding, finance_tax]
-2. 병렬 처리:
-   - 창업 및 지원 에이전트 → 사업자등록 안내
-   - 재무 및 세무 에이전트 → 초기 세무 처리 안내
-3. 메인 라우터 → 응답 통합
-4. 평가 에이전트 → 품질 평가 (PASS)
-5. 최종 응답 반환
+1. classify → 도메인 분류: [startup_funding, finance_tax]
+2. decompose → 2개 SubQuery 생성
+   - startup_funding: "사업자등록 방법"
+   - finance_tax: "초기 세무 처리"
+3. retrieve → 병렬 검색
+   - startup_funding_db → 문서 4건
+   - finance_tax_db → 문서 3건
+4. generate → 통합 응답 생성
+5. evaluate → RAGAS 로깅
+6. ChatResponse 반환
 ```
 
-### 재요청 발생 케이스
+### Multi-Query 재검색 케이스
 ```
-Q: "직원 해고 시 퇴직금 계산법?"
+Q: "창업 절차와 초기 세무 처리"
 
-1. 메인 라우터 → 도메인 분류: hr_labor
-2. 인사 및 노무 에이전트 → 답변 생성 (불완전)
-3. 평가 에이전트 → 품질 평가 (FAIL: 완성도 부족)
-4. 메인 라우터 → 피드백과 함께 재요청
-5. 인사 및 노무 에이전트 → 보완된 답변 생성
-6. 평가 에이전트 → 품질 평가 (PASS)
-7. 최종 응답 반환
+1. classify → [startup_funding, finance_tax]
+2. decompose → 2개 SubQuery 생성
+3. retrieve (1차):
+   - startup_funding: 문서 1건 (MIN_RETRIEVAL_DOC_COUNT 미달)
+   - finance_tax: 문서 3건 (통과)
+4. retrieve (Multi-Query 재검색):
+   - startup_funding: 3개 변형 쿼리로 문서 4건 확보
+5. generate → 통합 응답 생성
+6. evaluate → RAGAS 로깅
+7. ChatResponse 반환
 ```

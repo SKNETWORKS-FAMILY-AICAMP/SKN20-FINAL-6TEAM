@@ -645,11 +645,12 @@ CREATE TABLE IF NOT EXISTS `history` (
     `question` LONGTEXT COMMENT '질문',
     `answer` LONGTEXT COMMENT 'JSON 형태 저장 가능',
     `parent_history_id` INT DEFAULT NULL COMMENT '부모 히스토리 ID (대화 연결)',
+    `evaluation_data` JSON DEFAULT NULL COMMENT 'RAGAS 평가 결과 (faithfulness, answer_relevancy, context_precision, contexts)',
     -- `sequence` INT NOT NULL DEFAULT 0 COMMENT '순서',
     `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `use_yn` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0: 미사용, 1: 사용',
-    
+
     FOREIGN KEY (`user_id`) REFERENCES `user`(`user_id`) ON DELETE CASCADE,
     FOREIGN KEY (`agent_code`) REFERENCES `code`(`code`) ON UPDATE CASCADE,
     FOREIGN KEY (`parent_history_id`) REFERENCES `history`(`history_id`) ON DELETE SET NULL,
