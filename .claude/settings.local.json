@@ -33,7 +33,9 @@
       "Bash(brew services stop:*)",
       "Bash(sudo mysqladmin:*)",
       "Bash(lsof:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(tree:*)",
+      "Bash(source:*)"
     ]
   }
 }

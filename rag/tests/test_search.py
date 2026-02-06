@@ -106,3 +106,65 @@ class TestReciprocalRankFusion:
 
         results = reciprocal_rank_fusion([single_list])
         assert len(results) == 1
+
+    def test_weighted_fusion(self):
+        """가중 RRF 테스트."""
+        doc1 = Document(page_content="문서 1 내용 - 벡터 1위")
+        doc2 = Document(page_content="문서 2 내용 - BM25 1위")
+        doc3 = Document(page_content="문서 3 내용 - 공통")
+
+        # 벡터: doc1 > doc3 > doc2
+        vector_list = [
+            SearchResult(doc1, 0.9, "vector"),
+            SearchResult(doc3, 0.7, "vector"),
+            SearchResult(doc2, 0.5, "vector"),
+        ]
+        # BM25: doc2 > doc3 > doc1
+        bm25_list = [
+            SearchResult(doc2, 0.9, "bm25"),
+            SearchResult(doc3, 0.7, "bm25"),
+            SearchResult(doc1, 0.5, "bm25"),
+        ]
+
+        # 벡터 가중치 0.8, BM25 가중치 0.2 (벡터 강조)
+        results = reciprocal_rank_fusion(
+            [vector_list, bm25_list],
+            weights=[0.8, 0.2],
+        )
+
+        assert len(results) == 3
+        # doc3이 양쪽 모두에서 중간 순위이므로 융합 후 상위
+        # doc1이 벡터에서 1위 + 높은 가중치
+        assert all(r.source == "hybrid" for r in results)
+
+    def test_weighted_fusion_equal_weights(self):
+        """동일 가중치 RRF 테스트 (기존 동작과 동일)."""
+        doc1 = Document(page_content="문서 A 내용")
+        doc2 = Document(page_content="문서 B 내용")
+
+        list1 = [SearchResult(doc1, 0.9, "vector")]
+        list2 = [SearchResult(doc2, 0.9, "bm25")]
+
+        # 동일 가중치
+        results_weighted = reciprocal_rank_fusion([list1, list2], weights=[1.0, 1.0])
+        results_default = reciprocal_rank_fusion([list1, list2])
+
+        assert len(results_weighted) == len(results_default)
+
+    def test_weighted_fusion_zero_weight(self):
+        """한쪽 가중치 0 테스트."""
+        doc1 = Document(page_content="벡터 문서")
+        doc2 = Document(page_content="BM25 문서")
+
+        vector_list = [SearchResult(doc1, 0.9, "vector")]
+        bm25_list = [SearchResult(doc2, 0.9, "bm25")]
+
+        # BM25 가중치 0
+        results = reciprocal_rank_fusion(
+            [vector_list, bm25_list],
+            weights=[1.0, 0.0],
+        )
+
+        assert len(results) == 2
+        # 벡터 결과가 더 높은 점수를 가져야 함
+        assert results[0].score > results[1].score

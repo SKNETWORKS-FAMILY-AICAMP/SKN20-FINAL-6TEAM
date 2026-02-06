@@ -40,6 +40,13 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # MySQL 설정 (Backend와 동일한 DB 사용)
+    mysql_host: str = Field(default="localhost", description="MySQL 호스트")
+    mysql_port: int = Field(default=3306, description="MySQL 포트")
+    mysql_database: str = Field(default="final_test", description="MySQL 데이터베이스명")
+    mysql_user: str = Field(default="root", description="MySQL 사용자")
+    mysql_password: str = Field(default="", description="MySQL 비밀번호")
+
     # OpenAI 설정
     openai_api_key: str = Field(default="", description="OpenAI API 키 (필수)")
 
@@ -102,9 +109,20 @@ class Settings(BaseSettings):
     source_content_length: int = Field(default=300, description="SourceDocument 변환 시 내용 최대 길이")
     evaluator_context_length: int = Field(default=2000, description="평가 시 컨텍스트 최대 길이")
 
-    # 고급 검색 설정
+    # ===== RAG Feature Flags =====
+    # 쿼리 처리
     enable_query_rewrite: bool = Field(default=True, description="쿼리 재작성 활성화")
+
+    # 검색 설정
     enable_hybrid_search: bool = Field(default=True, description="Hybrid Search (BM25+Vector) 활성화")
+    vector_search_weight: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="벡터 검색 가중치 (0.0=BM25만, 1.0=벡터만)"
+    )
+
+    # 후처리 설정
     enable_reranking: bool = Field(default=True, description="Re-ranking 활성화")
     enable_context_compression: bool = Field(default=False, description="컨텍스트 압축 활성화")
     rerank_top_k: int = Field(default=5, description="Re-ranking 후 반환할 문서 수")
@@ -166,12 +184,16 @@ class Settings(BaseSettings):
         default="ragas.log", description="RAGAS 메트릭 로그 파일명"
     )
 
-    # 도메인 분류 (벡터 유사도 기반) 설정
+    # 도메인 분류 설정
     domain_classification_threshold: float = Field(
         default=0.6, ge=0.0, le=1.0, description="벡터 유사도 기반 도메인 분류 임계값"
     )
     enable_vector_domain_classification: bool = Field(
         default=True, description="벡터 유사도 기반 도메인 분류 활성화"
+    )
+    enable_llm_domain_classification: bool = Field(
+        default=False,
+        description="LLM 기반 도메인 분류 활성화 (벡터 분류와 비교용, 추가 비용 발생)"
     )
 
     # 검색 제한 설정
@@ -230,12 +252,14 @@ class Settings(BaseSettings):
     # CLI에서 런타임 오버라이드 가능한 설정 키 (보안 관련 필드 제외)
     _ALLOWED_OVERRIDES: set[str] = {
         "enable_hybrid_search",
+        "vector_search_weight",
         "enable_reranking",
         "enable_query_rewrite",
         "enable_context_compression",
         "enable_response_cache",
         "reranker_type",
         "enable_vector_domain_classification",
+        "enable_llm_domain_classification",
         "enable_multi_query",
         "enable_ragas_evaluation",
         "enable_post_eval_retry",

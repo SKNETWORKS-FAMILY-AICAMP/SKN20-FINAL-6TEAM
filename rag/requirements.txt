@@ -33,6 +33,12 @@ aiohttp>=3.9.0
 beautifulsoup4>=4.12.0
 requests>=2.31.0
 
+# Korean NLP
+kiwipiepy>=0.22.0
+
+# MySQL
+pymysql>=1.1.0
+
 # Utilities
 python-dotenv>=1.0.0
 tqdm>=4.66.0

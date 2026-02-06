@@ -34,6 +34,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# 민감 정보 마스킹 필터 추가 (루트 로거에 적용하여 모든 모듈에 적용)
+from utils.logging_utils import SensitiveDataFilter
+root_logger = logging.getLogger()
+root_logger.addFilter(SensitiveDataFilter())
+
 # 채팅 로그용 별도 핸들러 (로테이션: 10MB, 최대 5개 파일)
 chat_logger = logging.getLogger("chat")
 chat_logger.setLevel(logging.INFO)
@@ -65,6 +70,7 @@ from utils.middleware import (
     get_metrics_collector,
 )
 from utils.cache import get_response_cache
+from utils.domain_config_db import init_db, load_domain_config, reload_domain_config
 from utils.token_tracker import RequestTokenTracker
 from vectorstores.chroma import ChromaVectorStore
 
@@ -263,6 +269,12 @@ async def lifespan(app: FastAPI):
 
     # 시작 시 초기화
     logger.info("RAG 서비스 초기화 중...")
+
+    # 도메인 설정 DB 초기화 + 로드
+    init_db()
+    load_domain_config()
+    logger.info("도메인 설정 DB 초기화 완료")
+
     # 공유 벡터 스토어 생성 후 MainRouter에 주입
     vector_store = ChromaVectorStore()
     router_agent = MainRouter(vector_store=vector_store)
@@ -720,6 +732,36 @@ async def list_collections() -> dict[str, Any]:
 
 
 # ============================================================
+# 도메인 설정 관리 엔드포인트
+# ============================================================
+
+
+@app.post("/api/domain-config/reload", tags=["DomainConfig"])
+async def reload_domain_config_endpoint() -> dict[str, Any]:
+    """도메인 설정을 MySQL DB에서 다시 로드합니다.
+
+    Returns:
+        리로드된 설정 요약
+    """
+    try:
+        config = reload_domain_config()
+        return {
+            "status": "reloaded",
+            "keywords_count": sum(len(kws) for kws in config.keywords.values()),
+            "compound_rules_count": len(config.compound_rules),
+            "representative_queries_count": sum(
+                len(qs) for qs in config.representative_queries.values()
+            ),
+        }
+    except Exception as e:
+        logger.error("도메인 설정 리로드 실패: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="도메인 설정 리로드 중 오류가 발생했습니다."
+        )
+
+
+# ============================================================
 # 메트릭 및 캐시 엔드포인트
 # ============================================================
 
@@ -801,6 +843,7 @@ async def get_config() -> dict[str, Any]:
         "max_retry_count": settings.max_retry_count,
         "enable_query_rewrite": settings.enable_query_rewrite,
         "enable_hybrid_search": settings.enable_hybrid_search,
+        "vector_search_weight": settings.vector_search_weight,
         "enable_reranking": settings.enable_reranking,
         "enable_context_compression": settings.enable_context_compression,
         "enable_response_cache": settings.enable_response_cache,
@@ -809,6 +852,8 @@ async def get_config() -> dict[str, Any]:
         "llm_timeout": settings.llm_timeout,
         "enable_fallback": settings.enable_fallback,
         "enable_ragas_evaluation": settings.enable_ragas_evaluation,
+        "enable_vector_domain_classification": settings.enable_vector_domain_classification,
+        "enable_llm_domain_classification": settings.enable_llm_domain_classification,
     }
 
 

@@ -149,28 +149,38 @@ class BM25Index:
 
 def reciprocal_rank_fusion(
     results_list: list[list[SearchResult]],
+    weights: list[float] | None = None,
     k: int = 60,
 ) -> list[SearchResult]:
-    """Reciprocal Rank Fusion으로 여러 검색 결과를 융합합니다.
+    """가중치를 적용한 Reciprocal Rank Fusion으로 여러 검색 결과를 융합합니다.
 
     Args:
         results_list: 여러 검색 결과 리스트
+        weights: 각 결과 리스트의 가중치 (예: [vector_weight, bm25_weight])
         k: RRF 파라미터 (기본 60)
 
     Returns:
         융합된 검색 결과
     """
-    # 문서별 RRF 점수 계산
-    doc_scores: dict[str, float] = {}
-    doc_map: dict[str, Document] = {}
+    if weights is None:
+        weights = [1.0] * len(results_list)
 
-    for results in results_list:
+    # 가중치 정규화
+    total_weight = sum(weights)
+    if total_weight > 0:
+        weights = [w / total_weight for w in weights]
+
+    # 문서별 RRF 점수 계산
+    doc_scores: dict[int, float] = {}
+    doc_map: dict[int, Document] = {}
+
+    for results, weight in zip(results_list, weights):
         for rank, result in enumerate(results):
             # 문서 ID 생성 (content hash)
             doc_id = hash(result.document.page_content[:200])
 
-            # RRF 점수 누적
-            rrf_score = 1 / (k + rank + 1)
+            # 가중 RRF 점수 누적
+            rrf_score = weight * (1 / (k + rank + 1))
             doc_scores[doc_id] = doc_scores.get(doc_id, 0) + rrf_score
             doc_map[doc_id] = result.document
 
@@ -232,13 +242,29 @@ class HybridSearcher:
         except Exception as e:
             logger.error(f"BM25 인덱스 빌드 실패: {domain} - {e}")
 
+    def _calculate_weights(
+        self, vector_weight: float | None
+    ) -> tuple[float, float]:
+        """벡터 및 BM25 가중치를 계산합니다.
+
+        Args:
+            vector_weight: 벡터 검색 가중치 (None이면 설정값 사용)
+
+        Returns:
+            (vector_weight, bm25_weight) 튜플
+        """
+        if vector_weight is None:
+            vector_weight = self.settings.vector_search_weight
+        bm25_weight = 1.0 - vector_weight
+        return vector_weight, bm25_weight
+
     def search(
         self,
         query: str,
         domain: str,
         k: int = 5,
         use_rerank: bool = True,
-        vector_weight: float = 0.5,
+        vector_weight: float | None = None,
     ) -> list[Document]:
         """Hybrid 검색을 수행합니다.
 
@@ -247,15 +273,42 @@ class HybridSearcher:
             domain: 도메인
             k: 반환할 결과 수
             use_rerank: Re-ranking 사용 여부
-            vector_weight: 벡터 검색 가중치 (0-1)
+            vector_weight: 벡터 검색 가중치 (0.0-1.0, None이면 설정값 사용)
 
         Returns:
             검색된 문서 리스트
         """
-        logger.info("[하이브리드] 검색 시작: 도메인=%s, k=%d", domain, k)
+        # 가중치 결정
+        vector_weight, bm25_weight = self._calculate_weights(vector_weight)
+
+        logger.info(
+            "[하이브리드] 검색 시작: 도메인=%s, k=%d, 벡터가중치=%.2f, BM25가중치=%.2f",
+            domain, k, vector_weight, bm25_weight
+        )
 
         fetch_k = k * 3  # 더 많이 가져와서 융합
 
+        # 벡터 전용 모드 (vector_weight > 0.99)
+        if vector_weight > 0.99:
+            logger.info("[하이브리드] 벡터 전용 모드")
+            documents = self._vector_only_search(query, domain, fetch_k)
+            if use_rerank and len(documents) > k:
+                documents = self.reranker.rerank(query, documents, top_k=k)
+            else:
+                documents = documents[:k]
+            return documents
+
+        # BM25 전용 모드 (vector_weight < 0.01)
+        if vector_weight < 0.01:
+            logger.info("[하이브리드] BM25 전용 모드")
+            documents = self._bm25_only_search(query, domain, fetch_k)
+            if use_rerank and len(documents) > k:
+                documents = self.reranker.rerank(query, documents, top_k=k)
+            else:
+                documents = documents[:k]
+            return documents
+
+        # Hybrid 모드
         # 벡터 검색
         vector_results = []
         try:
@@ -271,7 +324,7 @@ class HybridSearcher:
                 for i, doc in enumerate(vector_docs)
             ]
         except Exception as e:
-            logger.warning(f"벡터 검색 실패: {e}")
+            logger.warning("[하이브리드] 벡터 검색 실패: %s", e)
         logger.info("[하이브리드] 벡터 검색: %d건", len(vector_results))
 
         # BM25 검색 (인덱스가 있는 경우)
@@ -280,12 +333,15 @@ class HybridSearcher:
             bm25_results = self.bm25_indices[domain].search(query, k=fetch_k)
         logger.info("[하이브리드] BM25 검색: %d건", len(bm25_results))
 
-        # 결과 융합
+        # 가중 RRF 융합
         if bm25_results:
-            combined = reciprocal_rank_fusion([vector_results, bm25_results])
+            combined = reciprocal_rank_fusion(
+                [vector_results, bm25_results],
+                weights=[vector_weight, bm25_weight],
+            )
         else:
             combined = vector_results
-        logger.info("[하이브리드] RRF 융합 완료: %d건", len(combined))
+        logger.info("[하이브리드] 가중 RRF 융합 완료: %d건", len(combined))
 
         # 상위 결과 추출 (score를 metadata에 주입)
         documents = []
@@ -301,12 +357,48 @@ class HybridSearcher:
 
         return documents
 
+    def _vector_only_search(
+        self,
+        query: str,
+        domain: str,
+        k: int,
+    ) -> list[Document]:
+        """벡터 전용 검색을 수행합니다."""
+        try:
+            docs = self.vector_store.max_marginal_relevance_search(
+                query=query,
+                domain=domain,
+                k=k,
+                fetch_k=k * 2,
+                lambda_mult=self.settings.mmr_lambda_mult,
+            )
+            logger.info("[하이브리드] 벡터 전용 검색: %d건", len(docs))
+            return docs
+        except Exception as e:
+            logger.warning("[하이브리드] 벡터 전용 검색 실패: %s", e)
+            return []
+
+    def _bm25_only_search(
+        self,
+        query: str,
+        domain: str,
+        k: int,
+    ) -> list[Document]:
+        """BM25 전용 검색을 수행합니다."""
+        if domain not in self.bm25_indices:
+            logger.warning("[하이브리드] BM25 인덱스 없음: %s", domain)
+            return []
+        results = self.bm25_indices[domain].search(query, k=k)
+        logger.info("[하이브리드] BM25 전용 검색: %d건", len(results))
+        return [r.document for r in results]
+
     async def asearch(
         self,
         query: str,
         domain: str,
         k: int = 5,
         use_rerank: bool = True,
+        vector_weight: float | None = None,
     ) -> list[Document]:
         """Hybrid 검색을 비동기로 수행합니다.
 
@@ -315,14 +407,44 @@ class HybridSearcher:
             domain: 도메인
             k: 반환할 결과 수
             use_rerank: Re-ranking 사용 여부
+            vector_weight: 벡터 검색 가중치 (0.0-1.0, None이면 설정값 사용)
 
         Returns:
             검색된 문서 리스트
         """
-        logger.info("[하이브리드] 검색 시작: 도메인=%s, k=%d", domain, k)
+        # 가중치 결정
+        vector_weight, bm25_weight = self._calculate_weights(vector_weight)
+
+        logger.info(
+            "[하이브리드] 비동기 검색 시작: 도메인=%s, k=%d, 벡터가중치=%.2f, BM25가중치=%.2f",
+            domain, k, vector_weight, bm25_weight
+        )
 
         fetch_k = k * 3
 
+        # 벡터 전용 모드 (vector_weight > 0.99)
+        if vector_weight > 0.99:
+            logger.info("[하이브리드] 벡터 전용 모드")
+            documents = await asyncio.to_thread(
+                self._vector_only_search, query, domain, fetch_k
+            )
+            if use_rerank and len(documents) > k:
+                documents = await self.reranker.arerank(query, documents, top_k=k)
+            else:
+                documents = documents[:k]
+            return documents
+
+        # BM25 전용 모드 (vector_weight < 0.01)
+        if vector_weight < 0.01:
+            logger.info("[하이브리드] BM25 전용 모드")
+            documents = self._bm25_only_search(query, domain, fetch_k)
+            if use_rerank and len(documents) > k:
+                documents = await self.reranker.arerank(query, documents, top_k=k)
+            else:
+                documents = documents[:k]
+            return documents
+
+        # Hybrid 모드
         # 벡터 검색 (동기 -> 스레드)
         vector_results = await asyncio.to_thread(
             self._vector_search, query, domain, fetch_k
@@ -335,12 +457,15 @@ class HybridSearcher:
             bm25_results = self.bm25_indices[domain].search(query, k=fetch_k)
         logger.info("[하이브리드] BM25 검색: %d건", len(bm25_results))
 
-        # 결과 융합
+        # 가중 RRF 융합
         if bm25_results:
-            combined = reciprocal_rank_fusion([vector_results, bm25_results])
+            combined = reciprocal_rank_fusion(
+                [vector_results, bm25_results],
+                weights=[vector_weight, bm25_weight],
+            )
         else:
             combined = vector_results
-        logger.info("[하이브리드] RRF 융합 완료: %d건", len(combined))
+        logger.info("[하이브리드] 가중 RRF 융합 완료: %d건", len(combined))
 
         # score를 metadata에 주입
         documents = []

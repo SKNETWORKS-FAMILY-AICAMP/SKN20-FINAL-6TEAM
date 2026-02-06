@@ -1,0 +1,129 @@
+"""민감 정보 마스킹 유틸리티 모듈.
+
+로그에서 개인정보를 자동으로 마스킹하는 기능을 제공합니다.
+"""
+
+import logging
+import re
+from typing import Any
+
+
+# 민감 정보 패턴 및 마스킹 치환
+SENSITIVE_PATTERNS: dict[str, tuple[str, str]] = {
+    # 이메일 주소
+    "email": (
+        r"[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}",
+        "***@***.***",
+    ),
+    # 휴대폰 번호 (한국)
+    "phone": (
+        r"01[0-9]-?[0-9]{3,4}-?[0-9]{4}",
+        "010-****-****",
+    ),
+    # 주민등록번호
+    "resident_id": (
+        r"\d{6}-?[1-4]\d{6}",
+        "******-*******",
+    ),
+    # 사업자등록번호
+    "business_no": (
+        r"\d{3}-?\d{2}-?\d{5}",
+        "***-**-*****",
+    ),
+    # 신용카드 번호 (16자리)
+    "credit_card": (
+        r"\d{4}-?\d{4}-?\d{4}-?\d{4}",
+        "****-****-****-****",
+    ),
+    # 계좌번호 (10-14자리)
+    "bank_account": (
+        r"\d{2,3}-?\d{3,6}-?\d{2,6}",
+        "***-******-***",
+    ),
+}
+
+
+def mask_sensitive_data(text: str) -> str:
+    """텍스트에서 민감 정보를 마스킹합니다.
+
+    Args:
+        text: 마스킹할 텍스트
+
+    Returns:
+        민감 정보가 마스킹된 텍스트
+
+    Example:
+        >>> mask_sensitive_data("연락처: 010-1234-5678, 이메일: test@example.com")
+        '연락처: 010-****-****, 이메일: ***@***.***'
+    """
+    if not isinstance(text, str):
+        return text
+
+    result = text
+    for pattern, replacement in SENSITIVE_PATTERNS.values():
+        result = re.sub(pattern, replacement, result)
+
+    return result
+
+
+def mask_dict_values(data: dict[str, Any]) -> dict[str, Any]:
+    """딕셔너리의 모든 문자열 값에서 민감 정보를 마스킹합니다.
+
+    Args:
+        data: 마스킹할 딕셔너리
+
+    Returns:
+        마스킹된 딕셔너리 (원본 수정 안 함)
+    """
+    result = {}
+    for key, value in data.items():
+        if isinstance(value, str):
+            result[key] = mask_sensitive_data(value)
+        elif isinstance(value, dict):
+            result[key] = mask_dict_values(value)
+        elif isinstance(value, list):
+            result[key] = [
+                mask_sensitive_data(v) if isinstance(v, str) else v
+                for v in value
+            ]
+        else:
+            result[key] = value
+    return result
+
+
+class SensitiveDataFilter(logging.Filter):
+    """로그에서 민감 정보를 마스킹하는 필터.
+
+    로거에 추가하여 모든 로그 메시지에서 민감 정보를 자동으로 마스킹합니다.
+
+    Example:
+        >>> import logging
+        >>> logger = logging.getLogger("my_logger")
+        >>> logger.addFilter(SensitiveDataFilter())
+        >>> logger.info("사용자 전화번호: 010-1234-5678")
+        # 출력: 사용자 전화번호: 010-****-****
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """로그 레코드의 메시지를 마스킹합니다.
+
+        Args:
+            record: 로그 레코드
+
+        Returns:
+            항상 True (로그 기록 허용)
+        """
+        if isinstance(record.msg, str):
+            record.msg = mask_sensitive_data(record.msg)
+
+        # args가 있는 경우 (포맷 문자열)
+        if record.args:
+            if isinstance(record.args, dict):
+                record.args = mask_dict_values(record.args)
+            elif isinstance(record.args, tuple):
+                record.args = tuple(
+                    mask_sensitive_data(arg) if isinstance(arg, str) else arg
+                    for arg in record.args
+                )
+
+        return True

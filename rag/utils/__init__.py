@@ -5,7 +5,7 @@
 
 from utils.config import Settings, get_settings
 from utils.prompts import (
-    DOMAIN_KEYWORDS,
+    _DEFAULT_DOMAIN_KEYWORDS,
     ROUTER_SYSTEM_PROMPT,
     STARTUP_FUNDING_PROMPT,
     FINANCE_TAX_PROMPT,
@@ -51,7 +51,7 @@ __all__ = [
     "Settings",
     "get_settings",
     # Prompts
-    "DOMAIN_KEYWORDS",
+    "_DEFAULT_DOMAIN_KEYWORDS",
     "ROUTER_SYSTEM_PROMPT",
     "STARTUP_FUNDING_PROMPT",
     "FINANCE_TAX_PROMPT",

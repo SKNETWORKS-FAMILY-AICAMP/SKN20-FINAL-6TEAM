@@ -3,18 +3,23 @@
 LLM 호출 없이 임베딩 유사도로 도메인을 분류합니다.
 키워드 매칭과 벡터 유사도를 둘 다 실행하여 벡터가 최종 결정권을 가집니다.
 키워드 매칭은 신뢰도 보정용으로만 사용됩니다.
+
+키워드 매칭은 kiwipiepy 형태소 분석기를 사용하여 원형(lemma) 기반으로 수행합니다.
 """
 
+import json
 import logging
 import time as _time
 from dataclasses import dataclass
 from functools import lru_cache
 
 import numpy as np
+from kiwipiepy import Kiwi
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from utils.config import get_settings
-from utils.prompts import DOMAIN_KEYWORDS
+from utils.domain_config_db import get_domain_config
+from utils.prompts import LLM_DOMAIN_CLASSIFICATION_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +37,13 @@ DOMAIN_REPRESENTATIVE_QUERIES: dict[str, list[str]] = {
         "창업 아이템 검증 방법",
         "예비창업자 지원 프로그램",
         "소상공인 지원정책",
+        "가게 어떻게 차려요",
+        "카페 창업 비용이 얼마나 드나요",
+        "음식점 개업 절차 알려주세요",
+        "프랜차이즈 가맹점 열고 싶어요",
+        "헬스장 차리려면 뭐가 필요해요",
+        "우리 지역에 기업 지원해주는 사업 있나요",
+        "IT 기업 대상 정부 지원 프로그램 알려주세요",
     ],
     "finance_tax": [
         "부가세 신고 방법",
@@ -44,6 +56,11 @@ DOMAIN_REPRESENTATIVE_QUERIES: dict[str, list[str]] = {
         "종합소득세 신고 기한",
         "매입세액 공제 조건",
         "결산 절차가 궁금합니다",
+        "종소세 언제 내야 하나요",
+        "부가세 납부 기한이 언제예요",
+        "양도세 얼마나 나와요",
+        "연말정산 어떻게 해요",
+        "간이과세자 기준이 뭐예요",
     ],
     "hr_labor": [
         "퇴직금 계산 방법",
@@ -56,6 +73,11 @@ DOMAIN_REPRESENTATIVE_QUERIES: dict[str, list[str]] = {
         "취업규칙 작성 방법",
         "근로시간 단축 제도",
         "채용 공고 작성법",
+        "직원 짤랐는데 퇴직금 얼마 줘야 해요",
+        "월급에서 세금 얼마나 떼나요",
+        "주휴수당 계산법 알려주세요",
+        "권고사직 시 절차가 어떻게 되나요",
+        "알바 4대보험 가입해야 하나요",
     ],
 }
 
@@ -79,6 +101,36 @@ class DomainClassificationResult:
     matched_keywords: dict[str, list[str]] | None = None
 
 
+@lru_cache(maxsize=1)
+def _get_kiwi() -> Kiwi:
+    """Kiwi 형태소 분석기 싱글톤."""
+    return Kiwi()
+
+
+def extract_lemmas(query: str) -> set[str]:
+    """쿼리에서 명사와 동사/형용사 원형을 추출합니다.
+
+    Args:
+        query: 사용자 질문
+
+    Returns:
+        추출된 lemma 집합 (명사 원형 + 동사/형용사 '~다' 형태)
+    """
+    kiwi = _get_kiwi()
+    tokens = kiwi.tokenize(query)
+    lemmas: set[str] = set()
+
+    for token in tokens:
+        if token.tag.startswith("NN") or token.tag == "SL":
+            # 명사, 외래어 → 그대로
+            lemmas.add(token.form)
+        elif token.tag.startswith("VV") or token.tag.startswith("VA"):
+            # 동사/형용사 → 원형 + "다"
+            lemmas.add(token.form + "다")
+
+    return lemmas
+
+
 class VectorDomainClassifier:
     """벡터 유사도 기반 도메인 분류기 (LLM 미사용).
 
@@ -97,6 +149,9 @@ class VectorDomainClassifier:
         >>> print(result.domains)  # ['startup_funding']
     """
 
+    # 클래스 레벨 벡터 캐시 (모든 인스턴스에서 공유)
+    _DOMAIN_VECTORS_CACHE: dict[str, np.ndarray] | None = None
+
     def __init__(self, embeddings: HuggingFaceEmbeddings):
         """VectorDomainClassifier를 초기화합니다.
 
@@ -110,9 +165,16 @@ class VectorDomainClassifier:
     def _precompute_vectors(self) -> dict[str, np.ndarray]:
         """도메인별 대표 쿼리 벡터를 미리 계산합니다.
 
+        클래스 레벨 캐시를 사용하여 인스턴스 간 중복 계산을 방지합니다.
+
         Returns:
             도메인별 평균 임베딩 벡터
         """
+        # 1. 클래스 레벨 캐시 확인
+        if VectorDomainClassifier._DOMAIN_VECTORS_CACHE is not None:
+            return VectorDomainClassifier._DOMAIN_VECTORS_CACHE
+
+        # 2. 인스턴스 레벨 캐시 확인
         if self._domain_vectors is not None:
             return self._domain_vectors
 
@@ -120,7 +182,8 @@ class VectorDomainClassifier:
         precompute_start = _time.time()
         domain_vectors: dict[str, np.ndarray] = {}
 
-        for domain, queries in DOMAIN_REPRESENTATIVE_QUERIES.items():
+        config = get_domain_config()
+        for domain, queries in config.representative_queries.items():
             # 각 도메인의 대표 쿼리들 임베딩
             vectors = self.embeddings.embed_documents(queries)
             # 평균 벡터 계산 (centroid)
@@ -131,13 +194,18 @@ class VectorDomainClassifier:
                 len(queries),
             )
 
+        # 클래스 레벨 캐시에 저장
+        VectorDomainClassifier._DOMAIN_VECTORS_CACHE = domain_vectors
         self._domain_vectors = domain_vectors
         elapsed = _time.time() - precompute_start
         logger.info("[도메인 분류] 대표 쿼리 벡터 계산 완료 (%.2f초)", elapsed)
         return domain_vectors
 
     def _keyword_classify(self, query: str) -> DomainClassificationResult | None:
-        """키워드 기반 도메인 분류.
+        """형태소 분석 + 키워드 기반 도메인 분류.
+
+        kiwipiepy로 쿼리를 형태소 분석하여 원형(lemma)을 추출한 뒤,
+        DOMAIN_KEYWORDS의 원형 키워드와 매칭합니다.
 
         Args:
             query: 사용자 질문
@@ -145,17 +213,36 @@ class VectorDomainClassifier:
         Returns:
             분류 결과 (키워드 매칭 실패 시 None)
         """
+        lemmas = extract_lemmas(query)
         detected_domains: list[str] = []
         matched_keywords: dict[str, list[str]] = {}
 
-        for domain, keywords in DOMAIN_KEYWORDS.items():
-            hits = [kw for kw in keywords if kw in query]
+        config = get_domain_config()
+
+        for domain, keywords in config.keywords.items():
+            # lemma 집합과 키워드 집합의 교집합
+            keyword_set = set(keywords)
+            hits = list(lemmas & keyword_set)
+            # 원문 부분 문자열 매칭도 보조 (복합명사 대응: "사업자등록" in query)
+            for kw in keywords:
+                if len(kw) >= 2 and kw in query and kw not in hits:
+                    hits.append(kw)
             if hits:
                 detected_domains.append(domain)
                 matched_keywords[domain] = hits
 
+        # 복합 키워드 규칙 체크 (단일 키워드로 못 잡는 패턴)
+        if not detected_domains:
+            for domain, required_lemmas in config.compound_rules:
+                if required_lemmas.issubset(lemmas):
+                    if domain not in detected_domains:
+                        detected_domains.append(domain)
+                    matched_keywords.setdefault(domain, []).append(
+                        "+".join(sorted(required_lemmas))
+                    )
+                    break  # 첫 매칭 규칙만 적용
+
         if detected_domains:
-            # 매칭된 키워드 수에 따른 신뢰도 계산
             total_matches = sum(len(kws) for kws in matched_keywords.values())
             confidence = min(1.0, 0.5 + (total_matches * 0.1))
 
@@ -224,6 +311,93 @@ class VectorDomainClassifier:
             method="vector",
         )
 
+    def _llm_classify(self, query: str) -> DomainClassificationResult:
+        """LLM 기반 도메인 분류.
+
+        벡터 분류와 비교하기 위한 참조 분류입니다.
+
+        Args:
+            query: 사용자 질문
+
+        Returns:
+            분류 결과
+        """
+        try:
+            from langchain_core.output_parsers import StrOutputParser
+            from langchain_core.prompts import ChatPromptTemplate
+            from langchain_openai import ChatOpenAI
+
+            llm = ChatOpenAI(
+                model="gpt-4o-mini",
+                temperature=0.0,
+                api_key=self.settings.openai_api_key,
+            )
+            prompt = ChatPromptTemplate.from_messages([
+                ("human", LLM_DOMAIN_CLASSIFICATION_PROMPT),
+            ])
+            chain = prompt | llm | StrOutputParser()
+
+            response = chain.invoke({"query": query})
+
+            # JSON 파싱
+            # 코드 블록 제거
+            cleaned = response.strip()
+            if cleaned.startswith("```"):
+                lines = cleaned.split("\n")
+                # 첫 줄 (```json) 과 마지막 줄 (```) 제거
+                lines = [l for l in lines if not l.strip().startswith("```")]
+                cleaned = "\n".join(lines)
+
+            result = json.loads(cleaned)
+
+            return DomainClassificationResult(
+                domains=result.get("domains", []),
+                confidence=float(result.get("confidence", 0.5)),
+                is_relevant=result.get("is_relevant", True),
+                method="llm",
+            )
+
+        except Exception as e:
+            logger.warning("[도메인 분류] LLM 분류 실패: %s", e)
+            return DomainClassificationResult(
+                domains=[],
+                confidence=0.0,
+                is_relevant=False,
+                method="llm_error",
+            )
+
+    def _log_classification_comparison(
+        self,
+        primary_result: DomainClassificationResult,
+        llm_result: DomainClassificationResult,
+    ) -> None:
+        """벡터 vs LLM 분류 비교 로깅.
+
+        Args:
+            primary_result: 1차 분류 결과 (키워드 또는 벡터)
+            llm_result: LLM 분류 결과
+        """
+        primary_domains = set(primary_result.domains)
+        llm_domains = set(llm_result.domains)
+        match = primary_domains == llm_domains
+
+        logger.info(
+            "[도메인 비교] %s=%s (%.2f) | LLM=%s (%.2f) | 일치=%s",
+            primary_result.method.upper(),
+            list(primary_result.domains),
+            primary_result.confidence,
+            list(llm_result.domains),
+            llm_result.confidence,
+            "YES" if match else "NO",
+        )
+
+        if not match:
+            logger.debug(
+                "[도메인 비교] 불일치 상세 - 1차만: %s, LLM만: %s",
+                list(primary_domains - llm_domains),
+                list(llm_domains - primary_domains),
+            )
+
     def classify(self, query: str) -> DomainClassificationResult:
         """질문을 분류하여 관련 도메인과 신뢰도를 반환합니다.
 
@@ -273,11 +447,6 @@ class VectorDomainClassifier:
                 logger.info(
                     "[도메인 분류] 키워드 '%s' 매칭됐으나 벡터 유사도 %.2f로 거부",
                     keyword_result.matched_keywords,
-                    vector_result.confidence,
-                )
-            else:
-                logger.info(
-                    "[도메인 분류] 도메인 외 질문으로 판단됨 (신뢰도: %.2f)",
                     vector_result.confidence,
                 )
             return vector_result

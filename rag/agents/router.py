@@ -224,6 +224,13 @@ class MainRouter:
 
         return "continue"
 
+    def _should_continue_after_classify(self, state: RouterState) -> str:
+        """분류 후 계속 진행할지 거부할지 판단합니다."""
+        classification = state.get("classification_result")
+        if classification and not classification.is_relevant:
+            return "reject"
+        return "continue"
+
     def _classify_node(self, state: RouterState) -> RouterState:
         """분류 노드: 벡터 유사도 기반으로 도메인을 식별합니다."""
         start = time.time()

@@ -43,6 +43,16 @@ from agents.router import MainRouter
 from schemas.request import UserContext
 from schemas.response import SourceDocument, TimingMetrics
 from utils.config import get_settings
+from utils.domain_config_db import init_db, load_domain_config
+from utils.exceptions import (
+    DomainClassificationError,
+    EmbeddingError,
+    LLMInvocationError,
+    RAGError,
+    VectorSearchError,
+)
+from utils.logging_utils import SensitiveDataFilter
+from utils.token_tracker import RequestTokenTracker
 from vectorstores.chroma import ChromaVectorStore
 
 logger = logging.getLogger(__name__)
@@ -94,6 +104,10 @@ def setup_logging(quiet: bool = False, debug: bool = False) -> None:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
+
+    # 민감 정보 마스킹 필터 추가 (루트 로거에 적용하여 모든 모듈에 적용)
+    root_logger = logging.getLogger()
+    root_logger.addFilter(SensitiveDataFilter())
 
 
 def print_separator(char: str = "=") -> None:
@@ -219,7 +233,35 @@ async def process_query(
     print_separator("-")
 
     start_time = time.time()
-    response = await router.aprocess(query=query, user_context=user_context)
+
+    try:
+        async with RequestTokenTracker() as tracker:
+            response = await router.aprocess(query=query, user_context=user_context)
+            token_usage = tracker.get_usage()
+    except VectorSearchError as e:
+        print(f"\n[오류] 벡터 검색 중 문제가 발생했습니다: {e}")
+        print("ChromaDB 연결 상태를 확인해주세요.")
+        print_separator()
+        return
+    except LLMInvocationError as e:
+        print(f"\n[오류] LLM 호출에 실패했습니다: {e}")
+        print("OpenAI API 키와 네트워크 상태를 확인해주세요.")
+        print_separator()
+        return
+    except DomainClassificationError as e:
+        print(f"\n[오류] 도메인 분류 중 문제가 발생했습니다: {e}")
+        print_separator()
+        return
+    except EmbeddingError as e:
+        print(f"\n[오류] 임베딩 생성에 실패했습니다: {e}")
+        print("임베딩 모델 상태를 확인해주세요.")
+        print_separator()
+        return
+    except RAGError as e:
+        print(f"\n[오류] RAG 처리 중 문제가 발생했습니다: {e}")
+        print_separator()
+        return
+
     response_time = time.time() - start_time
 
     # 응답 출력
@@ -278,6 +320,22 @@ async def process_query(
                 print("  (RAGAS 비활성화 - .env에서 ENABLE_RAGAS_EVALUATION=true 설정 필요)")
         except ImportError:
             print("  (RAGAS 라이브러리 미설치 - pip install ragas datasets)")
+
+    # 토큰 사용량 (verbose 모드)
+    if verbose and token_usage and token_usage["total_tokens"] > 0:
+        print("\n[토큰 사용량]")
+        print(f"  입력: {token_usage['input_tokens']:,} tokens")
+        print(f"  출력: {token_usage['output_tokens']:,} tokens")
+        print(f"  합계: {token_usage['total_tokens']:,} tokens")
+        print(f"  비용: ${token_usage['cost']:.6f}")
+
+        if token_usage.get("components"):
+            print("  컴포넌트별:")
+            for name, comp in token_usage["components"].items():
+                print(
+                    f"    - {name}: {comp['total_tokens']:,} tokens "
+                    f"(${comp['cost']:.6f})"
+                )
 
     print_separator()
 
@@ -411,6 +469,12 @@ async def main() -> None:
 
     # 초기화
     print("RAG 서비스 초기화 중...")
+
+    # 도메인 설정 DB 초기화 + 로드
+    init_db()
+    load_domain_config()
+    print("  도메인 설정 DB 초기화 완료")
+
     vector_store = ChromaVectorStore()
     router = MainRouter(vector_store=vector_store)
 
@@ -422,7 +486,8 @@ async def main() -> None:
 
     # 검색 기능 상태 출력
     print(f"  Hybrid Search (BM25+RRF): {'ON' if settings.enable_hybrid_search else 'OFF'}")
-    print(f"  Re-ranking: {'ON' if settings.enable_reranking else 'OFF'}")
+    rerank_label = settings.reranker_type if settings.enable_reranking else "OFF"
+    print(f"  Re-ranking: {rerank_label}")
     print(f"  Query Rewrite: {'ON' if settings.enable_query_rewrite else 'OFF'}")
     print("초기화 완료.\n")
 

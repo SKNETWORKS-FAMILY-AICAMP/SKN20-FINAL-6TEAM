@@ -65,6 +65,13 @@ class TestDomainClassificationResult:
 class TestVectorDomainClassifier:
     """VectorDomainClassifier 클래스 테스트."""
 
+    @pytest.fixture(autouse=True)
+    def _clear_vector_cache(self):
+        """테스트 간 클래스 레벨 벡터 캐시를 초기화합니다."""
+        VectorDomainClassifier._DOMAIN_VECTORS_CACHE = None
+        yield
+        VectorDomainClassifier._DOMAIN_VECTORS_CACHE = None
+
     @pytest.fixture
     def mock_embeddings(self):
         """Mock HuggingFaceEmbeddings."""
@@ -139,7 +146,8 @@ class TestVectorDomainClassifier:
         assert result_single.confidence == pytest.approx(0.6)
 
         # 3개 매칭: 0.5 + 0.3 = 0.8
-        query_multiple = "창업 사업자등록 법인설립"
+        # kiwipiepy: "사업자등록" → lemma "사업자"+"등록" + 원문 부분매칭 "사업자등록"
+        query_multiple = "창업 사업자등록"
         result_multiple = classifier._keyword_classify(query_multiple)
         assert result_multiple.confidence == pytest.approx(0.8)
 

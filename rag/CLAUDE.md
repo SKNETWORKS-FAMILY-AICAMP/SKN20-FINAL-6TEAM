@@ -82,6 +82,8 @@ rag/
 │   ├── query.py              # 쿼리 재작성 및 처리
 │   ├── search.py             # Hybrid Search, Re-ranking
 │   ├── domain_classifier.py  # 벡터 기반 도메인 분류
+│   ├── exceptions.py         # 커스텀 예외 클래스
+│   ├── logging_utils.py      # 민감 정보 마스킹
 │   ├── question_decomposer.py # LLM 기반 질문 분해
 │   ├── retrieval_evaluator.py # 규칙 기반 검색 평가
 │   ├── multi_query.py        # Multi-Query 재검색
@@ -97,7 +99,10 @@ rag/
 │   ├── test_search.py        # 검색 테스트
 │   ├── test_cache.py         # 캐시 테스트
 │   ├── test_feedback.py      # 피드백 테스트
-│   └── test_middleware.py    # 미들웨어 테스트
+│   ├── test_middleware.py    # 미들웨어 테스트
+│   ├── test_domain_classifier.py  # 도메인 분류기 테스트
+│   ├── test_logging_utils.py      # 민감 정보 마스킹 테스트
+│   └── test_exceptions.py         # 커스텀 예외 테스트
 │
 └── logs/                     # 로그 (런타임 생성)
     ├── chat.log              # 채팅 로그 (10MB, 5 로테이션)
@@ -407,6 +412,7 @@ CHROMA_PORT=8002
 ### 품질 기능 토글
 ```
 ENABLE_HYBRID_SEARCH=true        # Hybrid Search (BM25+Vector+RRF)
+VECTOR_SEARCH_WEIGHT=0.7         # 벡터 검색 가중치 (0.0=BM25만, 1.0=벡터만)
 ENABLE_RERANKING=true            # Cross-encoder Re-ranking
 ENABLE_QUERY_REWRITE=true        # LLM 쿼리 재작성
 ENABLE_LLM_EVALUATION=true       # LLM 답변 평가
@@ -418,6 +424,7 @@ ENABLE_RAGAS_EVALUATION=false    # RAGAS 정량 평가
 ```
 DOMAIN_CLASSIFICATION_THRESHOLD=0.6    # 벡터 유사도 임계값
 ENABLE_VECTOR_DOMAIN_CLASSIFICATION=true
+ENABLE_LLM_DOMAIN_CLASSIFICATION=false # LLM 분류 비교 (추가 비용 발생)
 ```
 
 ### 검색 평가 (규칙 기반)
