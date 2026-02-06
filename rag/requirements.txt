@@ -38,6 +38,7 @@ kiwipiepy>=0.22.0
 
 # MySQL
 pymysql>=1.1.0
+cryptography>=42.0.0
 
 # Utilities
 python-dotenv>=1.0.0

@@ -947,7 +947,11 @@ CROSS JOIN (
     UNION ALL SELECT 'IT 기업 대상 정부 지원 프로그램 알려주세요'
 ) rq
 WHERE d.domain_key = 'startup_funding'
-AND NOT EXISTS (SELECT 1 FROM `domain_representative_query` LIMIT 1);
+AND NOT EXISTS (
+    SELECT 1 FROM `domain_representative_query` q
+    JOIN `domain` d2 ON q.domain_id = d2.domain_id
+    WHERE d2.domain_key = 'startup_funding' LIMIT 1
+);
 
 INSERT INTO `domain_representative_query` (`domain_id`, `query_text`)
 SELECT d.domain_id, rq.query_text
@@ -970,7 +974,11 @@ CROSS JOIN (
     UNION ALL SELECT '간이과세자 기준이 뭐예요'
 ) rq
 WHERE d.domain_key = 'finance_tax'
-AND NOT EXISTS (SELECT 1 FROM `domain_representative_query` LIMIT 1);
+AND NOT EXISTS (
+    SELECT 1 FROM `domain_representative_query` q
+    JOIN `domain` d2 ON q.domain_id = d2.domain_id
+    WHERE d2.domain_key = 'finance_tax' LIMIT 1
+);
 
 INSERT INTO `domain_representative_query` (`domain_id`, `query_text`)
 SELECT d.domain_id, rq.query_text
@@ -993,4 +1001,8 @@ CROSS JOIN (
     UNION ALL SELECT '알바 4대보험 가입해야 하나요'
 ) rq
 WHERE d.domain_key = 'hr_labor'
-AND NOT EXISTS (SELECT 1 FROM `domain_representative_query` LIMIT 1);
+AND NOT EXISTS (
+    SELECT 1 FROM `domain_representative_query` q
+    JOIN `domain` d2 ON q.domain_id = d2.domain_id
+    WHERE d2.domain_key = 'hr_labor' LIMIT 1
+);
