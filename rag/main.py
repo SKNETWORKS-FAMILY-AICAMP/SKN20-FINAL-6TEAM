@@ -405,6 +405,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             response = await router_agent.aprocess(
                 query=request.message,
                 user_context=request.user_context,
+                history=[msg.model_dump() for msg in request.history],
             )
             response.session_id = request.session_id
             token_usage = tracker.get_usage()
@@ -495,6 +496,7 @@ async def chat_stream(request: ChatRequest):
                 async for chunk in router_agent.astream(
                     query=request.message,
                     user_context=request.user_context,
+                    history=[msg.model_dump() for msg in request.history],
                 ):
                     # 전체 타임아웃 체크
                     if time.time() - start_time > stream_timeout:

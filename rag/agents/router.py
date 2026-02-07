@@ -49,6 +49,7 @@ class RouterState(TypedDict):
     """라우터 상태 타입."""
 
     query: str
+    history: list[dict]
     user_context: UserContext | None
     domains: list[str]
     classification_result: DomainClassificationResult | None
@@ -231,13 +232,44 @@ class MainRouter:
             return "reject"
         return "continue"
 
+    def _augment_query_for_classification(self, query: str, history: list[dict]) -> str:
+        """분류 전 대명사/지시어 질문을 history로 보강합니다.
+
+        짧은 후속 질문("그럼 세금은요?")에 이전 사용자 메시지를 접두사로 붙여
+        도메인 분류 정확도를 높입니다. LLM 호출 없이 휴리스틱으로 동작합니다.
+
+        Args:
+            query: 현재 사용자 질문
+            history: 대화 이력 (role/content dict 리스트)
+
+        Returns:
+            보강된 쿼리 (조건 불충족 시 원본 그대로 반환)
+        """
+        if not history or len(query) > 30:
+            return query
+
+        pronouns = ["그럼", "그거", "그건", "그러면", "이거", "저거", "거기", "이건"]
+        if not any(p in query for p in pronouns):
+            return query
+
+        for msg in reversed(history):
+            if msg.get("role") == "user":
+                logger.info("[분류 보강] '%s' → '%s %s'", query, msg["content"][:30], query)
+                return f"{msg['content']} {query}"
+
+        return query
+
     def _classify_node(self, state: RouterState) -> RouterState:
         """분류 노드: 벡터 유사도 기반으로 도메인을 식별합니다."""
         start = time.time()
         query = state["query"]
+        history = state.get("history", [])
+
+        # 대명사/지시어 질문 보강 (분류용, 원본 query는 유지)
+        augmented_query = self._augment_query_for_classification(query, history)
 
         # 벡터 유사도 기반 도메인 분류
-        classification = self.domain_classifier.classify(query)
+        classification = self.domain_classifier.classify(augmented_query)
         state["classification_result"] = classification
         state["domains"] = classification.domains
 
@@ -269,6 +301,7 @@ class MainRouter:
         start = time.time()
         query = state["query"]
         domains = state["domains"]
+        history = state.get("history", [])
 
         # 단일 도메인이면 QuestionDecomposer 초기화/호출 스킵
         if len(domains) <= 1:
@@ -279,8 +312,8 @@ class MainRouter:
             logger.info("[분해] 단일 도메인 (%s) - 분해 스킵 (%.3fs)", domain, decompose_time)
             return state
 
-        # 복합 질문 분해
-        sub_queries = self.question_decomposer.decompose(query, domains)
+        # 복합 질문 분해 (대화 이력 전달)
+        sub_queries = self.question_decomposer.decompose(query, domains, history)
         state["sub_queries"] = sub_queries
 
         decompose_time = time.time() - start
@@ -299,6 +332,7 @@ class MainRouter:
         start = time.time()
         query = state["query"]
         domains = state["domains"]
+        history = state.get("history", [])
 
         # 단일 도메인이면 QuestionDecomposer 초기화/호출 스킵
         if len(domains) <= 1:
@@ -309,7 +343,7 @@ class MainRouter:
             logger.info("[분해] 단일 도메인 (%s) - 분해 스킵 (%.3fs)", domain, decompose_time)
             return state
 
-        sub_queries = await self.question_decomposer.adecompose(query, domains)
+        sub_queries = await self.question_decomposer.adecompose(query, domains, history)
         state["sub_queries"] = sub_queries
 
         decompose_time = time.time() - start
@@ -659,10 +693,12 @@ class MainRouter:
         self,
         query: str,
         user_context: UserContext | None,
+        history: list[dict] | None = None,
     ) -> RouterState:
         """초기 상태를 생성합니다."""
         return {
             "query": query,
+            "history": history or [],
             "user_context": user_context,
             "domains": [],
             "classification_result": None,
@@ -776,18 +812,20 @@ class MainRouter:
         self,
         query: str,
         user_context: UserContext | None = None,
+        history: list[dict] | None = None,
     ) -> ChatResponse:
         """질문을 처리하고 응답을 생성합니다.
 
         Args:
             query: 사용자 질문
             user_context: 사용자 컨텍스트
+            history: 대화 이력
 
         Returns:
             채팅 응답
         """
         total_start = time.time()
-        initial_state = self._create_initial_state(query, user_context)
+        initial_state = self._create_initial_state(query, user_context, history)
 
         # 그래프 실행
         final_state = self.graph.invoke(initial_state)
@@ -799,18 +837,20 @@ class MainRouter:
         self,
         query: str,
         user_context: UserContext | None = None,
+        history: list[dict] | None = None,
     ) -> ChatResponse:
         """질문을 비동기로 처리합니다.
 
         Args:
             query: 사용자 질문
             user_context: 사용자 컨텍스트
+            history: 대화 이력
 
         Returns:
             채팅 응답
         """
         total_start = time.time()
-        initial_state = self._create_initial_state(query, user_context)
+        initial_state = self._create_initial_state(query, user_context, history)
 
         # 비동기 그래프 실행 (전체 타임아웃 적용)
         try:
@@ -843,6 +883,7 @@ class MainRouter:
         self,
         query: str,
         user_context: UserContext | None = None,
+        history: list[dict] | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """질문을 스트리밍으로 처리합니다.
 
@@ -852,12 +893,16 @@ class MainRouter:
         Args:
             query: 사용자 질문
             user_context: 사용자 컨텍스트
+            history: 대화 이력
 
         Yields:
             스트리밍 응답 딕셔너리
         """
+        # 대명사/지시어 질문 보강 (분류용)
+        augmented_query = self._augment_query_for_classification(query, history or [])
+
         # 도메인 분류
-        classification = self.domain_classifier.classify(query)
+        classification = self.domain_classifier.classify(augmented_query)
 
         # 도메인 외 질문 거부
         if not classification.is_relevant:
@@ -901,7 +946,7 @@ class MainRouter:
             }
         else:
             # 복합 도메인: 기존 방식 후 스트리밍
-            response = await self.aprocess(query, user_context)
+            response = await self.aprocess(query, user_context, history)
 
             for char in response.content:
                 yield {"type": "token", "content": char}

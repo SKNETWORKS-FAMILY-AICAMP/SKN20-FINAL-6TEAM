@@ -27,7 +27,7 @@
           "tool": "Bash",
           "command_pattern": "git push*"
         },
-        "reminder": "push 전 확인: 1) 모든 테스트 통과 여부 2) 코드 리뷰 완료 여부 3) CLAUDE.md/AGENTS.md 동기화 여부"
+        "reminder": "push 전 확인: 1) 모든 테스트 통과 여부 2) 코드 리뷰 완료 여부 3) CLAUDE.md/AGENTS.md 동기화 여부 4) README.md/RELEASE.md 갱신 여부 (`/update-release`)"
       }
     ],
     "PostToolUse": [
@@ -56,7 +56,7 @@
           "tool": "Bash",
           "command_pattern": "git commit*"
         },
-        "reminder": "커밋 완료. 새 파일/엔드포인트/모듈을 추가했다면 해당 서비스의 CLAUDE.md와 AGENTS.md가 최신 상태인지 확인하세요. `/update-docs`로 자동 갱신할 수 있습니다."
+        "reminder": "커밋 완료. 새 파일/엔드포인트/모듈을 추가했다면: 1) CLAUDE.md/AGENTS.md → `/update-docs` 2) README.md/RELEASE.md → `/update-release`"
       },
       {
         "name": "console-log-warning",
