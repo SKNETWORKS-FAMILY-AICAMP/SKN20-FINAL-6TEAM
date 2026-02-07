@@ -24,18 +24,20 @@ data/
 │   └── labor/                 # 노동/인사 원본
 │
 └── preprocessed/              # 전처리된 데이터 (JSONL)
-    ├── law/                   # 법령, 해석례, 판례
-    │   ├── laws_full.jsonl
-    │   ├── law_lookup.json
-    │   ├── interpretations.jsonl
-    │   └── court_cases_*.jsonl
-    ├── labor/                 # 노동 질의회시
-    │   └── labor_qa.jsonl
-    ├── finance/               # 세무일정, 세제지원
-    │   └── tax_schedule.jsonl
-    └── startup_support/       # 창업 가이드
-        ├── industries.jsonl
-        └── startup_procedures.jsonl
+    ├── law/                   # 법령, 해석례
+    │   ├── laws_full.jsonl           # 법령 전문 (5,539건)
+    │   └── interpretations.jsonl     # 법령해석례 (8,604건)
+    ├── finance/               # 세무 판례, 세제지원 가이드
+    │   ├── court_cases_tax.jsonl            # 세무 판례 (1,949건)
+    │   └── extracted_documents_final.jsonl  # 세제지원 가이드 (124건)
+    ├── labor/                 # 노동 판례, 질의회시, 4대보험
+    │   ├── court_cases_labor.jsonl      # 노동 판례 (981건)
+    │   ├── labor_interpretation.jsonl   # 질의회시 (399건)
+    │   └── hr_major_insurance.jsonl     # 4대보험 가이드 (5건)
+    └── startup_support/       # 공고, 창업 가이드
+        ├── announcements.jsonl                    # 지원사업 공고 (510건)
+        ├── industry_startup_guide_filtered.jsonl  # 업종별 창업 가이드 (1,589건)
+        └── startup_procedures_filtered.jsonl      # 창업 절차 (10건)
 ```
 
 ## 데이터 흐름
@@ -75,116 +77,189 @@ RAG 시스템에 입력되는 통합 스키마 형식의 JSONL 파일입니다.
 
 **필수 필드**: `id`, `type`, `domain`, `title`, `content`, `source`
 
+**핵심 규칙**:
+- `type`은 문서 형식 (law, court_case, guide, announce 등)
+- `domain`은 주제 분류 (**4개**: `startup_funding | finance_tax | hr_labor | legal`)
+- `content`가 벡터 검색의 **유일한 대상** — 검색에 필요한 정보는 반드시 content에 포함
+- `related_laws`는 `string[]` 형식 (예: `["근로기준법 제56조"]`), optional
+- `metadata`는 타입별 최소 필드만 포함 (ChromaDB 호환 타입만)
+
+### domain-컬렉션 매핑
+
+| domain | 컬렉션 | 에이전트 |
+|--------|--------|---------|
+| `startup_funding` | startup_funding_db | StartupFundingAgent |
+| `finance_tax` | finance_tax_db | FinanceTaxAgent |
+| `hr_labor` | hr_labor_db | HRLaborAgent |
+| `legal` | law_common_db | 모든 에이전트 (공유) |
+
 ---
 
 ## 출력 파일 상세
 
 ### law/laws_full.jsonl
 
-법령 전문 (법률 + 조문)
+법령 전문 (법률 + 조문). 컬렉션: `law_common_db`
 
 ```json
 {
   "id": "LAW_010719",
   "type": "law",
-  "domain": "labor",
+  "domain": "legal",
   "title": "근로기준법",
-  "content": "제1조(목적) 이 법은 헌법에 따라...\n제2조(정의)...",
+  "content": "[근로기준법]\n\n제1조(목적) 이 법은 헌법에 따라...\n\n제2조(정의)...",
   "metadata": {
-    "ministry": "고용노동부",
-    "enforcement_date": "20240209",
-    "article_count": 116
+    "law_id": "010719"
   }
-}
-```
-
-### law/law_lookup.json
-
-법령명 → law_id 매핑 (참조 연결용)
-
-```json
-{
-  "근로기준법": "LAW_010719",
-  "최저임금법": "LAW_012345",
-  ...
 }
 ```
 
 ### law/interpretations.jsonl
 
-법령해석례
+법령해석례 (법제처, 국세청 등). 컬렉션: `law_common_db`
 
 ```json
 {
-  "id": "INTERP_LABOR_123456",
+  "id": "INTERP_313107",
   "type": "interpretation",
-  "domain": "labor",
+  "domain": "legal",
   "title": "연장근로수당 산정 기준",
-  "content": "질의: ... 회신: ...",
-  "related_laws": [
-    {"law_id": "LAW_010719", "law_name": "근로기준법", "article_ref": "제56조"}
-  ],
+  "content": "[연장근로수당 산정 기준]\n\n[질의]\n통상임금에 포함되는 수당의 범위는?\n\n[회시]\n통상임금이란...",
+  "related_laws": ["근로기준법 제56조"],
   "metadata": {
-    "organization": "고용노동부",
     "case_no": "근로기준정책과-5076"
   }
 }
 ```
 
-### labor/labor_qa.jsonl
+### finance/court_cases_tax.jsonl
 
-노동 질의회시 (PDF 추출)
+세무 판례. 컬렉션: `finance_tax_db`
 
 ```json
 {
-  "id": "LABOR_QA_1_15_001",
-  "type": "labor_qa",
-  "domain": "labor",
-  "title": "연장근로 계산 방법",
-  "content": "[질의] 연장근로수당은 어떻게 계산하나요?\n[회시] 연장근로수당은...",
+  "id": "CASE_613209",
+  "type": "court_case",
+  "domain": "finance_tax",
+  "title": "양도소득세 부과처분 취소",
+  "content": "[사건번호] 2023두12345\n[법원] 대법원\n[판결일] 2024-03-15\n\n[주문]\n...\n\n[이유]\n...",
   "metadata": {
-    "chapter": "1",
-    "section": "근로시간",
-    "admin_no": "근로기준정책과-5076",
-    "admin_date": "2018.8.1"
+    "case_no": "2023두12345",
+    "court_name": "대법원"
   }
 }
 ```
 
-### startup_support/industries.jsonl
+### finance/extracted_documents_final.jsonl
 
-업종별 창업 가이드
+세제지원 가이드 (PDF 추출). 컬렉션: `finance_tax_db`
 
 ```json
 {
-  "id": "GUIDE_011000",
+  "id": "TAX_GUIDE_001",
   "type": "guide",
-  "domain": "startup",
-  "title": "음식점업 창업 가이드",
-  "content": "[개요] 음식점업은...\n[인허가] 영업신고...",
+  "domain": "finance_tax",
+  "title": "중소기업 세제 지원 안내",
+  "content": "[중소기업 세제 지원 안내]\n\n..."
+}
+```
+
+### labor/court_cases_labor.jsonl
+
+노동 판례. 컬렉션: `hr_labor_db`
+
+```json
+{
+  "id": "CASE_612991",
+  "type": "court_case",
+  "domain": "hr_labor",
+  "title": "부당해고 무효 확인",
+  "content": "[사건번호] 2023다12345\n[법원] 대법원\n\n[주문]\n...\n\n[이유]\n...",
   "metadata": {
-    "industry_code": "011000",
-    "category": "음식점업"
+    "case_no": "2023다12345",
+    "court_name": "대법원"
   }
 }
 ```
 
-### finance/tax_schedule.jsonl
+### labor/labor_interpretation.jsonl
 
-세무 신고 일정
+노동 질의회시 (PDF 추출). 컬렉션: `hr_labor_db`
 
 ```json
 {
-  "id": "SCHEDULE_TAX_20260126_001",
-  "type": "schedule",
-  "domain": "tax",
-  "title": "법인세 신고",
-  "content": "법인세 신고 및 납부 마감일입니다.",
-  "effective_date": "2026-01-26",
+  "id": "INTER_C01_S01_01",
+  "type": "labor_qa",
+  "domain": "hr_labor",
+  "title": "연장근로 계산 방법",
+  "content": "[연장근로 계산 방법]\n\n[질의]\n연장근로수당은 어떻게 계산하나요?\n\n[회시]\n연장근로수당은...",
+  "metadata": {}
+}
+```
+
+### labor/hr_major_insurance.jsonl
+
+4대보험 가이드 (PDF 추출). 컬렉션: `hr_labor_db`
+
+```json
+{
+  "id": "MAJOR_INSURANCE_HR_1",
+  "type": "guide",
+  "domain": "hr_labor",
+  "title": "4대보험 신고 가이드",
+  "content": "[4대보험 신고 가이드]\n\n..."
+}
+```
+
+### startup_support/announcements.jsonl
+
+지원사업 공고. 컬렉션: `startup_funding_db`. 청킹 안 함.
+
+```json
+{
+  "id": "ANNOUNCE_BIZINFO_PBLN_000000000117858",
+  "type": "announce",
+  "domain": "startup_funding",
+  "title": "2026년 창업성장기술개발사업",
+  "content": "[공고명] 2026년 창업성장기술개발사업\n[주관기관] 중소벤처기업부\n[지역] 전국\n[지원대상] 창업 7년 이내 중소기업\n[지원금액] 최대 3억원\n\n사업 개요: ...",
+  "effective_date": "2026-02-28",
   "metadata": {
-    "tax_type": "법인세",
-    "deadline_type": "신고"
+    "region": "전국",
+    "support_type": "기술개발"
   }
+}
+```
+
+> 지원사업 공고는 content에 지역/대상/금액 등 핵심 메타데이터를 포함해야 벡터 검색으로 찾을 수 있습니다.
+
+### startup_support/industry_startup_guide_filtered.jsonl
+
+업종별 창업 가이드. 컬렉션: `startup_funding_db`. 청킹 안 함.
+
+```json
+{
+  "id": "STARTUP_GUIDE_011000",
+  "type": "guide",
+  "domain": "startup_funding",
+  "title": "음식점업 창업 가이드",
+  "content": "[음식점업 창업 가이드]\n\n[개요]\n음식점업은...\n\n[인허가]\n영업신고...",
+  "metadata": {
+    "industry_code": "011000"
+  }
+}
+```
+
+### startup_support/startup_procedures_filtered.jsonl
+
+창업 절차 가이드. 컬렉션: `startup_funding_db`
+
+```json
+{
+  "id": "STARTUP_PROCEDURES_1009",
+  "type": "guide",
+  "domain": "startup_funding",
+  "title": "법인설립 절차 가이드",
+  "content": "[법인설립 절차 가이드]\n\n..."
 }
 ```
 
@@ -195,21 +270,33 @@ RAG 시스템에 입력되는 통합 스키마 형식의 JSONL 파일입니다.
 ### 검증 체크리스트
 
 - [ ] 모든 JSONL 레코드가 통합 스키마 준수
-- [ ] 필수 필드 (id, type, domain, title, content) 존재
-- [ ] ID 형식 규칙 준수
-- [ ] `related_laws[].law_id`가 `law_lookup.json`에 존재
+- [ ] 필수 필드 (id, type, domain, title, content, source) 존재
+- [ ] ID 형식 규칙 준수 (중복 없음)
+- [ ] type은 문서 형식, domain은 주제 분류 (혼동 없음)
+- [ ] domain이 4개 값 중 하나 (`startup_funding | finance_tax | hr_labor | legal`)
+- [ ] content에 title 포함 (벡터 검색 시 제목으로 검색 가능하도록)
+- [ ] content에 검색 키워드 포함 (공고의 지역/대상/금액 등)
+- [ ] `related_laws`가 `string[]` 형식 (object[] 아님)
 - [ ] 한글 인코딩 정상 (깨짐 없음)
+- [ ] metadata에 타입별 허용 필드만 포함 (불필요 필드 없음)
+- [ ] metadata 값이 기본 타입만 포함 (list/dict는 ChromaDB 미저장)
+- [ ] `title`, `source.name` 비어있지 않음
 
-### 예상 레코드 수
+### 실제 레코드 수
 
-| 파일 | 예상 수 |
-|------|---------|
-| laws_full.jsonl | ~5,500 |
-| interpretations.jsonl | ~8,600 |
-| court_cases_*.jsonl | ~3,000 |
-| labor_qa.jsonl | ~500 |
-| industries.jsonl | ~1,600 |
-| tax_schedule.jsonl | ~240 |
+| 파일 | 레코드 수 |
+|------|-----------|
+| laws_full.jsonl | 5,539 |
+| interpretations.jsonl | 8,604 |
+| court_cases_tax.jsonl | 1,949 |
+| court_cases_labor.jsonl | 981 |
+| announcements.jsonl | 510 |
+| labor_interpretation.jsonl | 399 |
+| extracted_documents_final.jsonl | 124 |
+| startup_procedures_filtered.jsonl | 10 |
+| hr_major_insurance.jsonl | 5 |
+| industry_startup_guide_filtered.jsonl | 1,589 |
+| **합계** | **19,710** |
 
 ---
 
@@ -235,14 +322,15 @@ origin/**/*.csv
 
 - `origin/law/01_laws_full.json`: 304MB
 - 전체 origin: ~500MB
-- 전체 preprocessed: ~50MB
+- 전체 preprocessed: ~300MB
 
 ---
 
 ## 참고 문서
 
-- [docs/DATA_SCHEMA.md](../docs/DATA_SCHEMA.md) - 통합 스키마 정의
+- [docs/DATA_SCHEMA.md](../docs/DATA_SCHEMA.md) - 통합 스키마 정의 (4-domain 규칙, metadata 최소화, content 구조 가이드)
 - [scripts/CLAUDE.md](../scripts/CLAUDE.md) - 크롤링/전처리 스크립트 가이드
 - [scripts/data_pipeline.md](../scripts/data_pipeline.md) - 전처리 파이프라인 상세 설명
 - [rag/CLAUDE.md](../rag/CLAUDE.md) - RAG 시스템 가이드
+- [rag/vectorstores/config.py](../rag/vectorstores/config.py) - 벡터DB 설정 (컬렉션 매핑, 청킹)
 - [CLAUDE.md](../CLAUDE.md) - 프로젝트 전체 가이드
