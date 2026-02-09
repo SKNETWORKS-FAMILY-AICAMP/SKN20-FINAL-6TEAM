@@ -1,9 +1,10 @@
 # Agent Routing Rules
 
-## Project Agents (6)
+## Project Agents (7)
 
 | Agent | Trigger Conditions | Model |
 |-------|-------------------|-------|
+| `pm-orchestrator` | "기능 구현해줘", "이거 만들어줘", 복합 요구사항, 멀티서비스 작업 | opus |
 | `code-reviewer` | After writing/modifying code, before commits, "리뷰해줘" | opus |
 | `fastapi-architect` | "API 만들어줘", "엔드포인트 구현", backend/ 작업 | opus |
 | `rag-specialist` | "RAG 에이전트", "벡터DB", "프롬프트", rag/ 작업 | opus |
@@ -35,6 +36,7 @@
 
 ## Routing Priority
 
+0. **Feature request / 복합 작업 / 멀티서비스** → `pm-orchestrator` (최상위)
 1. **Build error** → `build-error-resolver` (즉시)
 2. **Security-sensitive code** → `security-reviewer` (자동)
 3. **Code written/modified** → `code-reviewer` (프로액티브)
