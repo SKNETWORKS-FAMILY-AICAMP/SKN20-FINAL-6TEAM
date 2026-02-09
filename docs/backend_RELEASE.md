@@ -1,5 +1,11 @@
 # Release Notes
 
+## [2026-02-09] - 프로젝트 이름 통일
+
+### Chores
+- 프로젝트 이름 bizmate → bizi 통일 (테스트 이메일, DB seed 데이터)
+- RELEASE.md 경로 변경에 따른 hooks/commands 업데이트
+
 ## [2026-02-08] - 초기 릴리즈
 
 ### 핵심 기능
