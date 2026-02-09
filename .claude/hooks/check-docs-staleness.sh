@@ -16,7 +16,7 @@ STALE_DIRS=""
 TOTAL_NEW=0
 
 for dir in backend frontend rag scripts; do
-  RELEASE_FILE="$PROJECT_DIR/$dir/RELEASE.md"
+  RELEASE_FILE="$PROJECT_DIR/docs/${dir}_RELEASE.md"
   [ ! -f "$RELEASE_FILE" ] && continue
 
   # RELEASE.md에서 가장 최근 날짜 추출 (## [YYYY-MM-DD] 형식)
@@ -24,10 +24,10 @@ for dir in backend frontend rag scripts; do
   [ -z "$LAST_DATE" ] && continue
 
   # 해당 날짜 이후 해당 디렉토리의 커밋 수 (RELEASE.md 자체 변경은 제외)
-  COMMIT_COUNT=$(git -C "$PROJECT_DIR" log --oneline --after="$LAST_DATE" -- "$dir/" ':!'"$dir/RELEASE.md" ':!'"$dir/README.md" 2>/dev/null | wc -l | tr -d ' ')
+  COMMIT_COUNT=$(git -C "$PROJECT_DIR" log --oneline --after="$LAST_DATE" -- "$dir/" ':!'"docs/${dir}_RELEASE.md" ':!'"$dir/README.md" 2>/dev/null | wc -l | tr -d ' ')
 
   if [ "$COMMIT_COUNT" -gt 0 ]; then
-    STALE_DIRS="${STALE_DIRS}- ${dir}/RELEASE.md: ${COMMIT_COUNT}개 새 커밋 (마지막 기록: ${LAST_DATE})\n"
+    STALE_DIRS="${STALE_DIRS}- docs/${dir}_RELEASE.md: ${COMMIT_COUNT}개 새 커밋 (마지막 기록: ${LAST_DATE})\n"
     TOTAL_NEW=$((TOTAL_NEW + COMMIT_COUNT))
   fi
 done

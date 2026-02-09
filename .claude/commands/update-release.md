@@ -8,7 +8,7 @@ backend, frontend, rag, scripts
 
 ### 1. 변경 분석
 
-각 디렉토리의 RELEASE.md에서 최근 날짜(`## [YYYY-MM-DD]`)를 추출합니다.
+각 디렉토리의 `docs/{dir}_RELEASE.md`에서 최근 날짜(`## [YYYY-MM-DD]`)를 추출합니다.
 해당 날짜 이후의 커밋을 수집합니다:
 
 ```
@@ -66,8 +66,8 @@ git log --oneline --after="YYYY-MM-DD" -- <dir>/
 
 ```
 === RELEASE.md 갱신 결과 ===
-- backend/RELEASE.md: [N]개 커밋 추가
-- rag/RELEASE.md: 변경 없음
+- docs/backend_RELEASE.md: [N]개 커밋 추가
+- docs/rag_RELEASE.md: 변경 없음
 - ...
 
 === README.md 갱신 결과 ===

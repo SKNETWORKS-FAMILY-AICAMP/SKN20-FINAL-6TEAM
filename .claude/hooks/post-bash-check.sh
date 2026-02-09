@@ -27,7 +27,7 @@ fi
 # git commit 후 문서 갱신 리마인더
 if echo "$COMMAND" | grep -qE '^git commit'; then
   if [ "$EXIT_CODE" = "0" ]; then
-    CONTEXT="커밋 완료. 새 파일/엔드포인트/모듈을 추가했다면: 1) CLAUDE.md/AGENTS.md → /update-docs 2) README.md/RELEASE.md → /update-release"
+    CONTEXT="커밋 완료. 새 파일/엔드포인트/모듈을 추가했다면: 1) CLAUDE.md/AGENTS.md → /update-docs 2) README.md/docs/*_RELEASE.md → /update-release"
   fi
 fi
 

@@ -25,9 +25,9 @@ Claude Code 공식 hooks 시스템을 사용하여 도구 실행 전후에 자�
 
 `check-docs-staleness.sh`는 `git push` 명령 감지 시:
 
-1. 각 서비스 디렉토리(`backend/`, `frontend/`, `rag/`, `scripts/`)의 RELEASE.md 확인
-2. RELEASE.md 마지막 기록 날짜 이후 새 커밋이 있는지 비교
-3. 미갱신 디렉토리가 있으면 `permissionDecision: "deny"` 반환으로 push 차단
+1. `docs/` 디렉토리의 `{dir}_RELEASE.md` 파일 확인 (backend, frontend, rag, scripts)
+2. RELEASE.md 마지막 기록 날짜 이후 해당 서비스 디렉토리에 새 커밋이 있는지 비교
+3. 미갱신 파일이 있으면 `permissionDecision: "deny"` 반환으로 push 차단
 4. 사용자에게 `/update-release` 실행을 안내
 
 ```
