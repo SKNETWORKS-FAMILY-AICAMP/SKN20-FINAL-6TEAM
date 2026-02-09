@@ -94,7 +94,7 @@ docker compose ps
 
 | 항목 | 값 |
 |------|-----|
-| 이메일 | test@bizmate.com |
+| 이메일 | test@bizi.com |
 | 사용자명 | 테스트 사용자 |
 | 사용자 유형 | 예비창업자 (U002) |
 

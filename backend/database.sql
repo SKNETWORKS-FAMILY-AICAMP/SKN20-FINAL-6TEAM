@@ -607,7 +607,7 @@ CREATE TABLE IF NOT EXISTS `user` (
 -- Test용 User 데이터 추가 (테이블이 비어있을 때만)
 -- ============================================
 INSERT INTO `user` (`google_email`, `username`, `birth`, `type_code`)
-SELECT 'test@bizmate.com', '테스트 사용자', '1990-01-01', 'U0000002'
+SELECT 'test@bizi.com', '테스트 사용자', '1990-01-01', 'U0000002'
 WHERE NOT EXISTS (SELECT 1 FROM `user` LIMIT 1);	
 
 

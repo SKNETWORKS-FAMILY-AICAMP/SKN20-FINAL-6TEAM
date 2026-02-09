@@ -57,7 +57,7 @@ echo "Waiting for MySQL to be healthy..."
 timeout=60
 elapsed=0
 while [ $elapsed -lt $timeout ]; do
-  status=$(docker inspect --format='{{.State.Health.Status}}' bizmate-db 2>/dev/null)
+  status=$(docker inspect --format='{{.State.Health.Status}}' bizi-db 2>/dev/null)
   if [ "$status" = "healthy" ]; then
     echo "✅ MySQL is healthy"
     break
@@ -100,7 +100,7 @@ curl -sf http://localhost:5173 > /dev/null && echo "✅ Frontend healthy" || ech
 curl -sf http://localhost:8000/docs > /dev/null && echo "✅ API docs accessible" || echo "❌ API docs failed"
 
 # RAG 모듈 임포트 확인
-docker exec bizmate-rag python -c "from agents import master_router; print('✅ RAG imports OK')" 2>&1 || echo "❌ RAG import failed"
+docker exec bizi-rag python -c "from agents import master_router; print('✅ RAG imports OK')" 2>&1 || echo "❌ RAG import failed"
 
 # Frontend 에셋 확인
 curl -sf http://localhost:5173 | grep -q "script" && echo "✅ Frontend assets OK" || echo "❌ Frontend assets failed"
@@ -125,16 +125,16 @@ cd frontend && npx playwright test e2e/docker-smoke.spec.ts
 
 ```bash
 echo "=== Backend Errors ==="
-docker logs bizmate-backend 2>&1 | grep -i "error\|traceback\|exception" | tail -10
+docker logs bizi-backend 2>&1 | grep -i "error\|traceback\|exception" | tail -10
 
 echo "=== RAG Errors ==="
-docker logs bizmate-rag 2>&1 | grep -i "error\|traceback\|exception" | tail -10
+docker logs bizi-rag 2>&1 | grep -i "error\|traceback\|exception" | tail -10
 
 echo "=== Frontend Errors ==="
-docker logs bizmate-frontend 2>&1 | grep -i "error\|ERR!" | tail -10
+docker logs bizi-frontend 2>&1 | grep -i "error\|ERR!" | tail -10
 
 echo "=== DB Errors ==="
-docker logs bizmate-db 2>&1 | grep -i "error" | tail -5
+docker logs bizi-db 2>&1 | grep -i "error" | tail -5
 ```
 
 에러가 발견되면 원인과 해결방안 분석.

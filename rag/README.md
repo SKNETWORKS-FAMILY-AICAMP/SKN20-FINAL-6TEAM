@@ -43,8 +43,8 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 ### Docker
 
 ```bash
-docker build -t bizmate-rag .
-docker run -p 8001:8001 bizmate-rag
+docker build -t bizi-rag .
+docker run -p 8001:8001 bizi-rag
 ```
 
 ### VectorDB 빌드

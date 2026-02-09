@@ -14,10 +14,10 @@ color: cyan
 ### 서비스 구성
 | 서비스 | 컨테이너명 | 포트 | 헬스체크 |
 |--------|-----------|------|----------|
-| MySQL 8.0 | bizmate-db | 3306 | `mysqladmin ping` |
-| FastAPI Backend | bizmate-backend | 8000 | `GET /health` |
-| RAG Service | bizmate-rag | 8001 | `GET /health` |
-| React Frontend | bizmate-frontend | 5173 | HTTP 응답 확인 |
+| MySQL 8.0 | bizi-db | 3306 | `mysqladmin ping` |
+| FastAPI Backend | bizi-backend | 8000 | `GET /health` |
+| RAG Service | bizi-rag | 8001 | `GET /health` |
+| React Frontend | bizi-frontend | 5173 | HTTP 응답 확인 |
 
 ### 의존성 체인
 ```
@@ -67,7 +67,7 @@ docker-compose up -d
 ### 4단계: 헬스체크
 ```bash
 # DB
-docker exec bizmate-db mysqladmin ping -h localhost -u root --password=$MYSQL_ROOT_PASSWORD
+docker exec bizi-db mysqladmin ping -h localhost -u root --password=$MYSQL_ROOT_PASSWORD
 
 # Backend
 curl -sf http://localhost:8000/health
@@ -87,7 +87,7 @@ curl -sf http://localhost:5173
 curl -sf http://localhost:8000/docs
 
 # RAG 모듈 임포트 확인
-docker exec bizmate-rag python -c "from agents import master_router; print('OK')"
+docker exec bizi-rag python -c "from agents import master_router; print('OK')"
 
 # Frontend 빌드 에셋 확인
 curl -sf http://localhost:5173 | grep -q "script"
@@ -104,10 +104,10 @@ cd frontend && npx playwright test e2e/docker-smoke.spec.ts
 ### 7단계: 로그 분석
 ```bash
 # 각 서비스별 에러 로그 검색
-docker logs bizmate-backend 2>&1 | grep -i "error\|traceback\|exception" | tail -20
-docker logs bizmate-rag 2>&1 | grep -i "error\|traceback\|exception" | tail -20
-docker logs bizmate-frontend 2>&1 | grep -i "error\|ERR!" | tail -20
-docker logs bizmate-db 2>&1 | grep -i "error" | tail -10
+docker logs bizi-backend 2>&1 | grep -i "error\|traceback\|exception" | tail -20
+docker logs bizi-rag 2>&1 | grep -i "error\|traceback\|exception" | tail -20
+docker logs bizi-frontend 2>&1 | grep -i "error\|ERR!" | tail -20
+docker logs bizi-db 2>&1 | grep -i "error" | tail -10
 ```
 
 ### 8단계: 정리
@@ -140,7 +140,7 @@ lsof -i :3306 -i :8000 -i :8001 -i :5173
 ### 볼륨 문제
 ```bash
 # 볼륨 목록 확인
-docker volume ls | grep bizmate
+docker volume ls | grep bizi
 # 볼륨 삭제 후 재시작
 docker-compose down -v && docker-compose up -d
 ```
@@ -148,8 +148,8 @@ docker-compose down -v && docker-compose up -d
 ### 환경 변수 문제
 ```bash
 # 컨테이너 내 환경 변수 확인
-docker exec bizmate-backend env | grep MYSQL
-docker exec bizmate-rag env | grep OPENAI
+docker exec bizi-backend env | grep MYSQL
+docker exec bizi-rag env | grep OPENAI
 ```
 
 ### 네트워크 문제
@@ -158,7 +158,7 @@ docker exec bizmate-rag env | grep OPENAI
 docker network ls
 docker network inspect <network_name>
 # 컨테이너 간 통신 확인
-docker exec bizmate-backend curl -sf http://db:3306
+docker exec bizi-backend curl -sf http://db:3306
 ```
 
 ---

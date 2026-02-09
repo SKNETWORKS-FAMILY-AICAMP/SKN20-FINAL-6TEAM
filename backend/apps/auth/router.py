@@ -41,9 +41,9 @@ async def test_login(
 ):
     """
     테스트 로그인 - Google 로그인 구현 전까지 사용
-    기본: test@bizmate.com 계정 / request body로 이메일·이름·유형 지정 가능
+    기본: test@bizi.com 계정 / request body로 이메일·이름·유형 지정 가능
     """
-    test_email = request.email if request and request.email else "test@bizmate.com"
+    test_email = request.email if request and request.email else "test@bizi.com"
     test_username = request.username if request and request.username else "테스트 사용자"
     test_type_code = request.type_code if request and request.type_code else "U0000002"
 

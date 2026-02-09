@@ -2,13 +2,13 @@ services:
   # MySQL Database
   db:
     image: mysql:8.0
-    container_name: bizmate-db
+    container_name: bizi-db
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-bizmate123}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-bizi123}
       MYSQL_DATABASE: final_test
-      MYSQL_USER: ${MYSQL_USER:-bizmate}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-bizmate123}
+      MYSQL_USER: ${MYSQL_USER:-bizi}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-bizi123}
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
@@ -26,7 +26,7 @@ services:
   # FastAPI Backend
   backend:
     build: ./backend
-    container_name: bizmate-backend
+    container_name: bizi-backend
     restart: unless-stopped
     volumes:
       - ./backend:/app
@@ -36,8 +36,8 @@ services:
       - MYSQL_HOST=db
       - MYSQL_PORT=3306
       - MYSQL_DATABASE=final_test
-      - MYSQL_USER=${MYSQL_USER:-bizmate}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-bizmate123}
+      - MYSQL_USER=${MYSQL_USER:-bizi}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-bizi123}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-key-change-in-production}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
@@ -49,7 +49,7 @@ services:
   # React Frontend (Vite)
   frontend:
     build: ./frontend
-    container_name: bizmate-frontend
+    container_name: bizi-frontend
     restart: unless-stopped
     volumes:
       - ./frontend:/app
@@ -68,7 +68,7 @@ services:
   # RAG Service (LangChain/FastAPI)
   rag:
     build: ./rag
-    container_name: bizmate-rag
+    container_name: bizi-rag
     restart: unless-stopped
     volumes:
       - ./rag:/app
@@ -83,8 +83,8 @@ services:
       - MYSQL_HOST=db
       - MYSQL_PORT=3306
       - MYSQL_DATABASE=final_test
-      - MYSQL_USER=${MYSQL_USER:-bizmate}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-bizmate123}
+      - MYSQL_USER=${MYSQL_USER:-bizi}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-bizi123}
       # RAG 고급 검색 설정
       - ENABLE_HYBRID_SEARCH=${ENABLE_HYBRID_SEARCH:-true}
       - ENABLE_RERANKING=${ENABLE_RERANKING:-true}
