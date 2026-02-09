@@ -233,6 +233,29 @@ class Settings(BaseSettings):
         default=3, gt=0, description="법률 보충 검색 시 가져올 문서 수"
     )
 
+    # RetrievalAgent 설정
+    enable_adaptive_search: bool = Field(
+        default=True, description="검색 전략 자동 선택 (쿼리 특성 기반)"
+    )
+    enable_dynamic_k: bool = Field(
+        default=True, description="동적 K값 (쿼리 특성에 따라 검색 문서 수 자동 조절)"
+    )
+    dynamic_k_min: int = Field(
+        default=3, gt=0, description="동적 K 최소값"
+    )
+    dynamic_k_max: int = Field(
+        default=8, gt=0, description="동적 K 최대값"
+    )
+    primary_domain_budget_ratio: float = Field(
+        default=0.6, ge=0.0, le=1.0, description="복합 도메인 시 주 도메인 예산 비율"
+    )
+    enable_graduated_retry: bool = Field(
+        default=True, description="단계적 재시도 활성화 (검색 평가 실패 시)"
+    )
+    max_retry_level: int = Field(
+        default=2, ge=0, le=4, description="최대 재시도 단계 (0=없음, 1=파라미터 완화, 2=Multi-Query, 3=인접 도메인, 4=부분 답변)"
+    )
+
     # CORS 설정
     cors_origins: list[str] = Field(
         default=["http://localhost:5173", "http://localhost:3000"],
@@ -272,6 +295,11 @@ class Settings(BaseSettings):
         "enable_ragas_evaluation",
         "enable_post_eval_retry",
         "enable_legal_supplement",
+        "enable_adaptive_search",
+        "enable_dynamic_k",
+        "enable_graduated_retry",
+        "max_retry_level",
+        "primary_domain_budget_ratio",
         "debug",
     }
 

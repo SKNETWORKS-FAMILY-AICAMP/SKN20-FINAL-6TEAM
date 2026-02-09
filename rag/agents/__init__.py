@@ -11,6 +11,7 @@
 """
 
 from agents.base import BaseAgent, AgentResponse
+from agents.retrieval_agent import RetrievalAgent
 from agents.router import MainRouter
 from agents.startup_funding import StartupFundingAgent
 from agents.finance_tax import FinanceTaxAgent
@@ -21,6 +22,7 @@ from agents.executor import ActionExecutor
 __all__ = [
     "BaseAgent",
     "AgentResponse",
+    "RetrievalAgent",
     "MainRouter",
     "StartupFundingAgent",
     "FinanceTaxAgent",

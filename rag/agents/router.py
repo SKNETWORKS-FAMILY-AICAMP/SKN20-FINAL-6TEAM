@@ -24,6 +24,7 @@ from agents.evaluator import EvaluatorAgent
 from agents.finance_tax import FinanceTaxAgent
 from agents.hr_labor import HRLaborAgent
 from agents.legal import LegalAgent
+from agents.retrieval_agent import RetrievalAgent
 from agents.startup_funding import StartupFundingAgent
 from chains.rag_chain import RAGChain
 from schemas.request import UserContext
@@ -101,6 +102,13 @@ class MainRouter:
             "law_common": LegalAgent(rag_chain=shared_rag_chain),
         }
         self.evaluator = EvaluatorAgent()
+
+        # 검색 에이전트 (3번 retrieve 파트 전담)
+        self.retrieval_agent = RetrievalAgent(
+            agents=self.agents,
+            rag_chain=shared_rag_chain,
+            vector_store=self.vector_store,
+        )
 
         # 도메인 분류기 (벡터 유사도 기반)
         self._domain_classifier = None
@@ -386,235 +394,12 @@ class MainRouter:
         return state
 
     def _retrieve_node(self, state: RouterState) -> RouterState:
-        """검색 노드: 도메인별 문서를 검색합니다."""
-        start = time.time()
-        sub_queries = state["sub_queries"]
-
-        retrieval_results: dict[str, RetrievalResult] = {}
-        all_documents: list[Document] = []
-        agent_timings: list[dict] = []
-
-        for sq in sub_queries:
-            if sq.domain in self.agents:
-                agent = self.agents[sq.domain]
-                logger.info("[검색] 에이전트 [%s] 검색 시작", sq.domain)
-
-                agent_start = time.time()
-                result = agent.retrieve_only(sq.query)
-                agent_elapsed = time.time() - agent_start
-
-                retrieval_results[sq.domain] = result
-                all_documents.extend(result.documents)
-                agent_timings.append({
-                    "domain": sq.domain,
-                    "retrieve_time": result.retrieve_time,
-                    "doc_count": len(result.documents),
-                    "total_time": agent_elapsed,
-                })
-
-                logger.info(
-                    "[검색] 에이전트 [%s] 완료: %d건, 평가=%s (%.3fs)",
-                    sq.domain,
-                    len(result.documents),
-                    "PASS" if result.evaluation.passed else "FAIL",
-                    agent_elapsed,
-                )
-
-        # 법률 보충 검색
-        self._perform_legal_supplement(
-            query=state["query"],
-            documents=all_documents,
-            domains=state["domains"],
-            retrieval_results=retrieval_results,
-            all_documents=all_documents,
-            agent_timings=agent_timings,
-        )
-
-        state["retrieval_results"] = retrieval_results
-        state["documents"] = all_documents
-
-        retrieve_time = time.time() - start
-        state["timing_metrics"]["retrieve_time"] = retrieve_time
-        state["timing_metrics"]["agents"] = agent_timings
-
-        return state
+        """검색 노드: RetrievalAgent에 위임합니다."""
+        return self.retrieval_agent.retrieve(state)
 
     async def _aretrieve_node(self, state: RouterState) -> RouterState:
-        """비동기 검색 노드: 도메인별 병렬 검색."""
-        start = time.time()
-        sub_queries = state["sub_queries"]
-
-        async def retrieve_for_domain(sq: SubQuery):
-            if sq.domain in self.agents:
-                agent = self.agents[sq.domain]
-                logger.info("[검색] 에이전트 [%s] 비동기 검색 시작", sq.domain)
-                agent_start = time.time()
-                result = await agent.aretrieve_only(sq.query)
-                agent_elapsed = time.time() - agent_start
-                return sq.domain, result, agent_elapsed
-            return None
-
-        tasks = [retrieve_for_domain(sq) for sq in sub_queries]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        retrieval_results: dict[str, RetrievalResult] = {}
-        all_documents: list[Document] = []
-        agent_timings: list[dict] = []
-
-        for result in results:
-            if isinstance(result, Exception):
-                logger.error("[검색] 도메인 에이전트 실패: %s", result)
-                continue
-            if result is not None:
-                domain, retrieval_result, elapsed = result
-                retrieval_results[domain] = retrieval_result
-                all_documents.extend(retrieval_result.documents)
-                agent_timings.append({
-                    "domain": domain,
-                    "retrieve_time": retrieval_result.retrieve_time,
-                    "doc_count": len(retrieval_result.documents),
-                    "total_time": elapsed,
-                })
-
-                logger.info(
-                    "[검색] 에이전트 [%s] 완료: %d건, 평가=%s (%.3fs)",
-                    domain,
-                    len(retrieval_result.documents),
-                    "PASS" if retrieval_result.evaluation.passed else "FAIL",
-                    elapsed,
-                )
-
-        # 법률 보충 검색 (비동기)
-        await self._aperform_legal_supplement(
-            query=state["query"],
-            documents=all_documents,
-            domains=state["domains"],
-            retrieval_results=retrieval_results,
-            all_documents=all_documents,
-            agent_timings=agent_timings,
-        )
-
-        state["retrieval_results"] = retrieval_results
-        state["documents"] = all_documents
-
-        retrieve_time = time.time() - start
-        state["timing_metrics"]["retrieve_time"] = retrieve_time
-        state["timing_metrics"]["agents"] = agent_timings
-
-        return state
-
-    def _perform_legal_supplement(
-        self,
-        query: str,
-        documents: list[Document],
-        domains: list[str],
-        retrieval_results: dict[str, RetrievalResult],
-        all_documents: list[Document],
-        agent_timings: list[dict],
-    ) -> None:
-        """법률 보충 검색을 수행합니다 (동기).
-
-        조건 충족 시 law_common 에이전트로 보충 검색하여
-        retrieval_results와 all_documents에 결과를 추가합니다.
-
-        Args:
-            query: 사용자 질문
-            documents: 도메인 에이전트가 검색한 전체 문서
-            domains: 분류된 도메인 리스트
-            retrieval_results: 검색 결과 딕셔너리 (in-place 수정)
-            all_documents: 전체 문서 리스트 (in-place 수정)
-            agent_timings: 에이전트 타이밍 리스트 (in-place 수정)
-        """
-        if not self.settings.enable_legal_supplement:
-            return
-
-        if not needs_legal_supplement(query, documents, domains):
-            return
-
-        logger.info("[법률 보충] 법률 보충 검색 시작")
-        legal_agent = self.agents["law_common"]
-        agent_start = time.time()
-
-        try:
-            result = legal_agent.retrieve_only(query)
-            # 설정된 k만큼만 사용
-            if len(result.documents) > self.settings.legal_supplement_k:
-                result.documents = result.documents[:self.settings.legal_supplement_k]
-                result.sources = result.sources[:self.settings.legal_supplement_k]
-
-            retrieval_results["law_common_supplement"] = result
-            all_documents.extend(result.documents)
-
-            agent_elapsed = time.time() - agent_start
-            agent_timings.append({
-                "domain": "law_common_supplement",
-                "retrieve_time": result.retrieve_time,
-                "doc_count": len(result.documents),
-                "total_time": agent_elapsed,
-            })
-
-            logger.info(
-                "[법률 보충] 완료: %d건 (%.3fs)",
-                len(result.documents),
-                agent_elapsed,
-            )
-        except Exception as e:
-            logger.warning("[법률 보충] 검색 실패: %s", e)
-
-    async def _aperform_legal_supplement(
-        self,
-        query: str,
-        documents: list[Document],
-        domains: list[str],
-        retrieval_results: dict[str, RetrievalResult],
-        all_documents: list[Document],
-        agent_timings: list[dict],
-    ) -> None:
-        """법률 보충 검색을 수행합니다 (비동기).
-
-        Args:
-            query: 사용자 질문
-            documents: 도메인 에이전트가 검색한 전체 문서
-            domains: 분류된 도메인 리스트
-            retrieval_results: 검색 결과 딕셔너리 (in-place 수정)
-            all_documents: 전체 문서 리스트 (in-place 수정)
-            agent_timings: 에이전트 타이밍 리스트 (in-place 수정)
-        """
-        if not self.settings.enable_legal_supplement:
-            return
-
-        if not needs_legal_supplement(query, documents, domains):
-            return
-
-        logger.info("[법률 보충] 법률 보충 검색 시작 (비동기)")
-        legal_agent = self.agents["law_common"]
-        agent_start = time.time()
-
-        try:
-            result = await legal_agent.aretrieve_only(query)
-            # 설정된 k만큼만 사용
-            if len(result.documents) > self.settings.legal_supplement_k:
-                result.documents = result.documents[:self.settings.legal_supplement_k]
-                result.sources = result.sources[:self.settings.legal_supplement_k]
-
-            retrieval_results["law_common_supplement"] = result
-            all_documents.extend(result.documents)
-
-            agent_elapsed = time.time() - agent_start
-            agent_timings.append({
-                "domain": "law_common_supplement",
-                "retrieve_time": result.retrieve_time,
-                "doc_count": len(result.documents),
-                "total_time": agent_elapsed,
-            })
-
-            logger.info(
-                "[법률 보충] 완료: %d건 (%.3fs)",
-                len(result.documents),
-                agent_elapsed,
-            )
-        except Exception as e:
-            logger.warning("[법률 보충] 검색 실패: %s", e)
+        """비동기 검색 노드: RetrievalAgent에 위임합니다."""
+        return await self.retrieval_agent.aretrieve(state)
 
     def _generate_node(self, state: RouterState) -> RouterState:
         """생성 노드: 검색된 문서 기반으로 답변을 생성합니다."""
