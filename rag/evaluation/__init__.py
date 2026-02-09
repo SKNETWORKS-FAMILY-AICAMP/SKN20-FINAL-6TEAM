@@ -1,9 +1,20 @@
-"""RAGAS 기반 정량 평가 모듈.
+"""RAG 평가 모듈.
 
-RAG 시스템의 정량적 평가를 위한 RAGAS 메트릭을 제공합니다.
-Faithfulness, Answer Relevancy, Context Precision, Context Recall 평가를 지원합니다.
+RAGAS 기반 정량 평가와 5단계 검색 품질 평가 시스템을 제공합니다.
+
+- RagasEvaluator: RAGAS 메트릭 (Faithfulness, Answer Relevancy, Context Precision)
+- SearchQualityEvaluator: 5단계 통합 검색 품질 평가
 """
 
 from evaluation.ragas_evaluator import RagasEvaluator, RagasMetrics
 
-__all__ = ["RagasEvaluator", "RagasMetrics"]
+
+def __getattr__(name: str):
+    """SearchQualityEvaluator를 lazy import합니다."""
+    if name == "SearchQualityEvaluator":
+        from evaluation.search_quality_eval import SearchQualityEvaluator
+        return SearchQualityEvaluator
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+__all__ = ["RagasEvaluator", "RagasMetrics", "SearchQualityEvaluator"]

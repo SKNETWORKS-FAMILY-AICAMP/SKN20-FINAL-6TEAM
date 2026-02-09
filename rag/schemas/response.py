@@ -86,12 +86,14 @@ class SourceDocument(BaseModel):
         title: 문서 제목
         content: 문서 내용 (발췌)
         source: 출처
+        url: 출처 URL
         metadata: 메타데이터
     """
 
     title: str | None = Field(default=None, description="문서 제목")
     content: str = Field(description="문서 내용")
     source: str | None = Field(default=None, description="출처")
+    url: str = Field(default="https://law.go.kr/", description="출처 URL")
     metadata: dict[str, Any] = Field(default_factory=dict, description="메타데이터")
 
 

@@ -414,6 +414,7 @@ class RAGChain:
                     title=doc.metadata.get("title"),
                     content=doc.page_content[:self.settings.source_content_length],
                     source=source,
+                    url=doc.metadata.get("source_url") or "https://law.go.kr/",
                     metadata=doc.metadata,
                 )
             )
