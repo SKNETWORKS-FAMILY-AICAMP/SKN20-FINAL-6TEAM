@@ -111,9 +111,21 @@ export const useChat = () => {
                 setStreaming(false);
                 finalDomain = metadata?.domain || 'general';
                 const finalAgentCode = domainToAgentCode(finalDomain);
+
+                // Build multi-domain agent_codes from metadata.domains
+                const domains = metadata?.domains;
+                let agentCodes: AgentCode[] | undefined;
+                if (domains && domains.length > 1) {
+                  const codes = [...new Set(domains.map(domainToAgentCode))];
+                  if (codes.length > 1) {
+                    agentCodes = codes;
+                  }
+                }
+
                 updateMessage(assistantMessageId, {
                   content: streamingContentRef.current,
                   agent_code: finalAgentCode,
+                  ...(agentCodes ? { agent_codes: agentCodes } : {}),
                 });
               },
               onError: (error) => {
@@ -139,11 +151,22 @@ export const useChat = () => {
             response = ragResponse.data.content;
             agentCode = domainToAgentCode(ragResponse.data.domain);
 
+            // Build multi-domain agent_codes
+            const ragDomains = ragResponse.data.domains;
+            let nonStreamAgentCodes: AgentCode[] | undefined;
+            if (ragDomains && ragDomains.length > 1) {
+              const codes = [...new Set(ragDomains.map(domainToAgentCode))];
+              if (codes.length > 1) {
+                nonStreamAgentCodes = codes;
+              }
+            }
+
             const assistantMessage: ChatMessage = {
               id: crypto.randomUUID(),
               type: 'assistant',
               content: response,
               agent_code: agentCode,
+              ...(nonStreamAgentCodes ? { agent_codes: nonStreamAgentCodes } : {}),
               timestamp: new Date(),
             };
             addMessage(assistantMessage);

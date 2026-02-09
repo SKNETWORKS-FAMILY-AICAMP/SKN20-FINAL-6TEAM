@@ -144,12 +144,23 @@ const MainPage: React.FC = () => {
                 >
                   <CardBody className="p-3">
                     {msg.type === 'assistant' && msg.agent_code && (
-                      <div className="mb-2">
-                        <Chip
-                          size="sm"
-                          value={AGENT_NAMES[msg.agent_code]}
-                          className={`${AGENT_COLORS[msg.agent_code]} text-white`}
-                        />
+                      <div className="mb-2 flex flex-wrap gap-1">
+                        {msg.agent_codes && msg.agent_codes.length > 1 ? (
+                          msg.agent_codes.map((code) => (
+                            <Chip
+                              key={code}
+                              size="sm"
+                              value={AGENT_NAMES[code]}
+                              className={`${AGENT_COLORS[code]} text-white`}
+                            />
+                          ))
+                        ) : (
+                          <Chip
+                            size="sm"
+                            value={AGENT_NAMES[msg.agent_code]}
+                            className={`${AGENT_COLORS[msg.agent_code]} text-white`}
+                          />
+                        )}
                       </div>
                     )}
                     {msg.type === 'assistant' ? (

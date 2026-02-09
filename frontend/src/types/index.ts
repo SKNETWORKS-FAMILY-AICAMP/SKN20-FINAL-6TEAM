@@ -46,7 +46,7 @@ export interface Schedule {
 }
 
 // Agent codes
-export type AgentCode = 'A0000001' | 'A0000002' | 'A0000003' | 'A0000004' | 'A0000005' | 'A0000006';
+export type AgentCode = 'A0000001' | 'A0000002' | 'A0000003' | 'A0000004' | 'A0000005' | 'A0000006' | 'A0000007';
 
 export const AGENT_NAMES: Record<AgentCode, string> = {
   A0000001: '메인',
@@ -55,6 +55,7 @@ export const AGENT_NAMES: Record<AgentCode, string> = {
   A0000004: '인사·노무',
   A0000005: '평가·검증',
   A0000006: '마케팅',
+  A0000007: '법률',
 };
 
 export const AGENT_COLORS: Record<AgentCode, string> = {
@@ -64,6 +65,7 @@ export const AGENT_COLORS: Record<AgentCode, string> = {
   A0000004: 'bg-orange-500',
   A0000005: 'bg-cyan-500',
   A0000006: 'bg-pink-500',
+  A0000007: 'bg-red-500',
 };
 
 // User type codes
@@ -79,6 +81,7 @@ export interface ChatMessage {
   type: 'user' | 'assistant';
   content: string;
   agent_code?: AgentCode;
+  agent_codes?: AgentCode[];
   timestamp: Date;
 }
 
@@ -150,34 +153,6 @@ export interface RagEvaluationResult {
   total_score: number;
   passed: boolean;
   feedback: string | null;
-}
-
-// Calendar Event (for FullCalendar)
-export interface CalendarEvent {
-  id: string;
-  title: string;
-  start: string;
-  end: string;
-  backgroundColor?: string;
-  borderColor?: string;
-  extendedProps?: {
-    schedule_id: number;
-    company_id: number;
-    memo?: string;
-  };
-}
-
-// API Response
-export interface ApiResponse<T> {
-  data: T;
-  message?: string;
-}
-
-// Auth
-export interface LoginResponse {
-  access_token: string;
-  token_type: string;
-  user: User;
 }
 
 // Admin types
@@ -268,5 +243,6 @@ export const DOMAIN_NAMES: Record<string, string> = {
   startup_funding: '창업/지원',
   finance_tax: '재무/세무',
   hr_labor: '인사/노무',
+  law_common: '법률',
   general: '일반',
 };
