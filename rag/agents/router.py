@@ -3,12 +3,12 @@
 LangGraph 기반 멀티에이전트 라우터를 구현합니다.
 질문을 분류하고 적절한 에이전트로 라우팅하며 응답을 통합합니다.
 
-새로운 아키텍처 (3단계 분리):
+워크플로우 (5단계):
 1. 분류 (classify) → 벡터 유사도 기반 도메인 분류
 2. 분해 (decompose) → 복합 질문을 단일 도메인 질문으로 분해
 3. 검색 (retrieve) → 도메인별 병렬 검색 + 규칙 기반 평가 + Multi-Query 재검색
 4. 생성 (generate) → 검색된 문서 기반 답변 생성
-5. 평가 (evaluate) → RAGAS 평가 (로깅만, 재시도 없음)
+5. 평가 (evaluate) → LLM 평가 (FAIL 시 재시도) + RAGAS 평가 (최종 시도에서만, 로깅용)
 """
 
 import asyncio
@@ -73,12 +73,12 @@ class MainRouter:
 
     LangGraph StateGraph를 사용하여 멀티에이전트 파이프라인을 구현합니다.
 
-    새로운 워크플로우 (3단계 분리):
+    워크플로우:
     1. 질문 분류 (classify) → 벡터 유사도 기반 도메인 식별
     2. 질문 분해 (decompose) → 복합 질문을 단일 도메인 질문으로 분해
     3. 문서 검색 (retrieve) → 도메인별 병렬 검색
     4. 답변 생성 (generate) → 검색된 문서 기반 답변 생성
-    5. 답변 평가 (evaluate) → RAGAS 평가 (로깅만)
+    5. 답변 평가 (evaluate) → LLM 평가 (FAIL 시 generate 재실행) + RAGAS 평가 (최종 시도)
     """
 
     def __init__(self, vector_store: ChromaVectorStore | None = None):
@@ -168,7 +168,11 @@ class MainRouter:
         workflow.add_edge("decompose", "retrieve")
         workflow.add_edge("retrieve", "generate")
         workflow.add_edge("generate", "evaluate")
-        workflow.add_edge("evaluate", END)
+        workflow.add_conditional_edges(
+            "evaluate",
+            self._should_retry_after_evaluate,
+            {"generate": "generate", "__end__": END},
+        )
 
         return workflow.compile()
 
@@ -202,7 +206,11 @@ class MainRouter:
         workflow.add_edge("decompose", "retrieve")
         workflow.add_edge("retrieve", "generate")
         workflow.add_edge("generate", "evaluate")
-        workflow.add_edge("evaluate", END)
+        workflow.add_conditional_edges(
+            "evaluate",
+            self._should_retry_after_evaluate,
+            {"generate": "generate", "__end__": END},
+        )
 
         return workflow.compile()
 
@@ -220,6 +228,37 @@ class MainRouter:
         if classification and not classification.is_relevant:
             return "reject"
         return "continue"
+
+    def _should_retry_after_evaluate(self, state: RouterState) -> str:
+        """평가 결과에 따라 재시도 여부를 결정합니다.
+
+        LLM 평가 실패 시 generate 노드로 돌아가 피드백 기반 재생성을 시도합니다.
+        PASS이거나 최대 재시도 횟수에 도달하면 종료합니다.
+
+        Args:
+            state: 라우터 상태
+
+        Returns:
+            "generate": 재시도 필요
+            "__end__": 종료
+        """
+        evaluation = state.get("evaluation")
+        retry_count = state.get("retry_count", 0)
+
+        if (
+            self.settings.enable_post_eval_retry
+            and evaluation
+            and not evaluation.passed
+            and retry_count < self.settings.max_retry_count
+        ):
+            logger.info(
+                "[평가→재시도] FAIL (점수=%d, retry=%d/%d) → generate 재실행",
+                evaluation.total_score,
+                retry_count,
+                self.settings.max_retry_count,
+            )
+            return "generate"
+        return "__end__"
 
     def _augment_query_for_classification(self, query: str, history: list[dict]) -> str:
         """분류 전 대명사/지시어 질문을 history로 보강합니다.
@@ -584,6 +623,16 @@ class MainRouter:
         retrieval_results = state["retrieval_results"]
         user_context = state.get("user_context")
 
+        # 재시도 시 이전 평가 피드백 추출
+        evaluation_feedback = None
+        if state.get("retry_count", 0) > 0 and state.get("evaluation"):
+            evaluation_feedback = state["evaluation"].feedback
+            logger.info(
+                "[생성] 재시도 %d회차 - 피드백: %s",
+                state["retry_count"],
+                (evaluation_feedback or "")[:100],
+            )
+
         responses: dict[str, Any] = {}
         all_sources: list[SourceDocument] = []
         all_actions: list[ActionSuggestion] = []
@@ -609,6 +658,7 @@ class MainRouter:
                     query=sq.query,
                     documents=merged_documents,
                     user_context=user_context,
+                    evaluation_feedback=evaluation_feedback,
                 )
 
                 # 액션 제안
@@ -674,6 +724,16 @@ class MainRouter:
         retrieval_results = state["retrieval_results"]
         user_context = state.get("user_context")
 
+        # 재시도 시 이전 평가 피드백 추출
+        evaluation_feedback = None
+        if state.get("retry_count", 0) > 0 and state.get("evaluation"):
+            evaluation_feedback = state["evaluation"].feedback
+            logger.info(
+                "[생성] 재시도 %d회차 - 피드백: %s",
+                state["retry_count"],
+                (evaluation_feedback or "")[:100],
+            )
+
         # 법률 보충 문서 가져오기
         legal_supplement_result = retrieval_results.get("law_common_supplement")
         legal_supplement_docs = legal_supplement_result.documents if legal_supplement_result else []
@@ -692,6 +752,7 @@ class MainRouter:
                     query=sq.query,
                     documents=merged_documents,
                     user_context=user_context,
+                    evaluation_feedback=evaluation_feedback,
                 )
 
                 actions = agent.suggest_actions(sq.query, content)
@@ -761,13 +822,13 @@ class MainRouter:
         return state
 
     def _evaluate_node(self, state: RouterState) -> RouterState:
-        """평가 노드: LLM 평가 + RAGAS 평가 (로깅만)."""
+        """평가 노드: LLM 평가 (FAIL 시 재시도) + RAGAS 평가 (항상 로깅용)."""
         start = time.time()
 
         # 컨텍스트 생성
         context = "\n".join([s.content for s in state["sources"][:5]])
 
-        # 기존 LLM 평가 수행
+        # LLM 평가 수행
         if self.settings.enable_llm_evaluation:
             evaluation = self.evaluator.evaluate(
                 question=state["query"],
@@ -777,14 +838,16 @@ class MainRouter:
             state["evaluation"] = evaluation
 
             logger.info(
-                "[LLM 평가] 점수=%d/100, %s",
+                "[LLM 평가] 점수=%d/100, %s (retry=%d/%d)",
                 evaluation.total_score,
                 "PASS" if evaluation.passed else "FAIL",
+                state.get("retry_count", 0),
+                self.settings.max_retry_count,
             )
         else:
             state["evaluation"] = None
 
-        # RAGAS 평가 (로깅만, 재시도 없음)
+        # RAGAS 평가 (항상 실행, 로깅/모니터링용)
         if self.settings.enable_ragas_evaluation and self.ragas_evaluator:
             contexts = [s.content for s in state["sources"]]
             ragas_metrics = self.ragas_evaluator.evaluate_answer_quality(
@@ -802,19 +865,44 @@ class MainRouter:
         else:
             state["ragas_metrics"] = None
 
+        # 재시도 판단: FAIL이고 재시도 가능하면 retry_count 증가
+        if (
+            self.settings.enable_post_eval_retry
+            and state.get("evaluation")
+            and not state["evaluation"].passed
+            and state.get("retry_count", 0) < self.settings.max_retry_count
+        ):
+            state["retry_count"] = state.get("retry_count", 0) + 1
+        elif (
+            self.settings.enable_post_eval_retry
+            and state.get("evaluation")
+            and not state["evaluation"].passed
+            and state.get("retry_count", 0) >= self.settings.max_retry_count
+        ):
+            # 최대 재시도 후에도 FAIL → 사과 메시지로 교체
+            logger.warning(
+                "[평가] 최대 재시도(%d회) 후에도 FAIL (점수=%d) → 사과 응답",
+                self.settings.max_retry_count,
+                state["evaluation"].total_score,
+            )
+            state["final_response"] = (
+                "죄송합니다. 질문에 대한 충분한 품질의 답변을 생성하지 못했습니다. "
+                "질문을 다른 방식으로 다시 해주시면 더 나은 답변을 드리겠습니다."
+            )
+
         evaluate_time = time.time() - start
         state["timing_metrics"]["evaluate_time"] = evaluate_time
 
         return state
 
     async def _aevaluate_node(self, state: RouterState) -> RouterState:
-        """비동기 평가 노드."""
+        """비동기 평가 노드: LLM 평가 (FAIL 시 재시도) + RAGAS 평가 (항상 로깅용)."""
         start = time.time()
 
         # 컨텍스트 생성
         context = "\n".join([s.content for s in state["sources"][:5]])
 
-        # 기존 LLM 평가 수행
+        # LLM 평가 수행
         if self.settings.enable_llm_evaluation:
             evaluation = await self.evaluator.aevaluate(
                 question=state["query"],
@@ -824,14 +912,16 @@ class MainRouter:
             state["evaluation"] = evaluation
 
             logger.info(
-                "[LLM 평가] 점수=%d/100, %s",
+                "[LLM 평가] 점수=%d/100, %s (retry=%d/%d)",
                 evaluation.total_score,
                 "PASS" if evaluation.passed else "FAIL",
+                state.get("retry_count", 0),
+                self.settings.max_retry_count,
             )
         else:
             state["evaluation"] = None
 
-        # RAGAS 평가 (비동기)
+        # RAGAS 평가 (항상 실행, 로깅/모니터링용)
         if self.settings.enable_ragas_evaluation and self.ragas_evaluator:
             contexts = [s.content for s in state["sources"]]
             ragas_metrics = await self.ragas_evaluator.aevaluate_answer_quality(
@@ -848,6 +938,31 @@ class MainRouter:
             )
         else:
             state["ragas_metrics"] = None
+
+        # 재시도 판단: FAIL이고 재시도 가능하면 retry_count 증가
+        if (
+            self.settings.enable_post_eval_retry
+            and state.get("evaluation")
+            and not state["evaluation"].passed
+            and state.get("retry_count", 0) < self.settings.max_retry_count
+        ):
+            state["retry_count"] = state.get("retry_count", 0) + 1
+        elif (
+            self.settings.enable_post_eval_retry
+            and state.get("evaluation")
+            and not state["evaluation"].passed
+            and state.get("retry_count", 0) >= self.settings.max_retry_count
+        ):
+            # 최대 재시도 후에도 FAIL → 사과 메시지로 교체
+            logger.warning(
+                "[평가] 최대 재시도(%d회) 후에도 FAIL (점수=%d) → 사과 응답",
+                self.settings.max_retry_count,
+                state["evaluation"].total_score,
+            )
+            state["final_response"] = (
+                "죄송합니다. 질문에 대한 충분한 품질의 답변을 생성하지 못했습니다. "
+                "질문을 다른 방식으로 다시 해주시면 더 나은 답변을 드리겠습니다."
+            )
 
         evaluate_time = time.time() - start
         state["timing_metrics"]["evaluate_time"] = evaluate_time

@@ -222,7 +222,7 @@ class Settings(BaseSettings):
 
     # 평가 후 재시도 설정
     enable_post_eval_retry: bool = Field(
-        default=False, description="평가 실패 시 재시도 활성화 (비활성화 시 로깅만)"
+        default=True, description="평가 실패 시 재시도 활성화 (비활성화 시 로깅만)"
     )
 
     # 법률 보충 검색 설정

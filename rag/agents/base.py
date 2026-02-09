@@ -323,6 +323,7 @@ class BaseAgent(ABC):
         query: str,
         documents: list[Document],
         user_context: UserContext | None = None,
+        evaluation_feedback: str | None = None,
     ) -> str:
         """주어진 문서로 답변만 생성합니다 (검색 없음).
 
@@ -332,6 +333,7 @@ class BaseAgent(ABC):
             query: 사용자 질문
             documents: 검색된 문서 리스트
             user_context: 사용자 컨텍스트
+            evaluation_feedback: 이전 평가 피드백 (재시도 시)
 
         Returns:
             생성된 답변 문자열
@@ -351,10 +353,17 @@ class BaseAgent(ABC):
         context = self.rag_chain.format_context(documents)
 
         # 프롬프트 구성
-        prompt = ChatPromptTemplate.from_messages([
+        messages = [
             ("system", self.get_system_prompt()),
             ("human", "{query}"),
-        ])
+        ]
+        if evaluation_feedback:
+            messages.append((
+                "system",
+                "이전 답변이 품질 평가를 통과하지 못했습니다. "
+                "다음 피드백을 반영하여 답변을 개선하세요:\n{evaluation_feedback}",
+            ))
+        prompt = ChatPromptTemplate.from_messages(messages)
 
         # LLM 호출
         llm = ChatOpenAI(
@@ -365,12 +374,16 @@ class BaseAgent(ABC):
         )
 
         chain = prompt | llm | StrOutputParser()
-        response = chain.invoke({
+        invoke_params: dict = {
             "query": query,
             "context": context,
             "user_type": user_type,
             "company_context": company_context,
-        })
+        }
+        if evaluation_feedback:
+            invoke_params["evaluation_feedback"] = evaluation_feedback
+
+        response = chain.invoke(invoke_params)
 
         elapsed = time.time() - start
         logger.info("[generate_only] %s 완료 (%.3fs, %d자)", self.domain, elapsed, len(response))
@@ -382,6 +395,7 @@ class BaseAgent(ABC):
         query: str,
         documents: list[Document],
         user_context: UserContext | None = None,
+        evaluation_feedback: str | None = None,
     ) -> str:
         """주어진 문서로 답변만 비동기로 생성합니다.
 
@@ -389,6 +403,7 @@ class BaseAgent(ABC):
             query: 사용자 질문
             documents: 검색된 문서 리스트
             user_context: 사용자 컨텍스트
+            evaluation_feedback: 이전 평가 피드백 (재시도 시)
 
         Returns:
             생성된 답변 문자열
@@ -408,10 +423,17 @@ class BaseAgent(ABC):
         context = self.rag_chain.format_context(documents)
 
         # 프롬프트 구성
-        prompt = ChatPromptTemplate.from_messages([
+        messages = [
             ("system", self.get_system_prompt()),
             ("human", "{query}"),
-        ])
+        ]
+        if evaluation_feedback:
+            messages.append((
+                "system",
+                "이전 답변이 품질 평가를 통과하지 못했습니다. "
+                "다음 피드백을 반영하여 답변을 개선하세요:\n{evaluation_feedback}",
+            ))
+        prompt = ChatPromptTemplate.from_messages(messages)
 
         # LLM 호출
         llm = ChatOpenAI(
@@ -422,15 +444,18 @@ class BaseAgent(ABC):
         )
 
         chain = prompt | llm | StrOutputParser()
+        invoke_params: dict = {
+            "query": query,
+            "context": context,
+            "user_type": user_type,
+            "company_context": company_context,
+        }
+        if evaluation_feedback:
+            invoke_params["evaluation_feedback"] = evaluation_feedback
 
         try:
             response = await asyncio.wait_for(
-                chain.ainvoke({
-                    "query": query,
-                    "context": context,
-                    "user_type": user_type,
-                    "company_context": company_context,
-                }),
+                chain.ainvoke(invoke_params),
                 timeout=self.settings.llm_timeout,
             )
         except asyncio.TimeoutError:
