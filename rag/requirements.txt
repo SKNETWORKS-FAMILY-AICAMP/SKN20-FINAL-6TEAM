@@ -17,7 +17,6 @@ langgraph>=0.0.20
 
 # LLM & Embeddings
 openai>=1.6.0
-langchain-groq>=0.1.0
 sentence-transformers>=2.2.0
 torch>=2.0.0
 
@@ -26,12 +25,6 @@ chromadb>=0.4.0
 
 # RAG Components
 rank-bm25>=0.2.2
-
-# Web & HTTP
-httpx>=0.26.0
-aiohttp>=3.9.0
-beautifulsoup4>=4.12.0
-requests>=2.31.0
 
 # Korean NLP
 kiwipiepy>=0.22.0
@@ -43,9 +36,6 @@ cryptography>=42.0.0
 # Utilities
 python-dotenv>=1.0.0
 tqdm>=4.66.0
-
-# Search
-tavily-python>=0.3.0
 
 # Document Generation
 reportlab>=4.0.0

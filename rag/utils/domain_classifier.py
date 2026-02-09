@@ -78,6 +78,11 @@ DOMAIN_REPRESENTATIVE_QUERIES: dict[str, list[str]] = {
         "주휴수당 계산법 알려주세요",
         "권고사직 시 절차가 어떻게 되나요",
         "알바 4대보험 가입해야 하나요",
+        "주 52시간 근무제 위반 시 처벌이 어떻게 되나요",
+        "연장근로 한도와 수당 계산법을 알려주세요",
+        "육아휴직 신청 조건과 급여 기준",
+        "직장내 괴롭힘 신고 방법이 궁금합니다",
+        "출산휴가 기간과 급여는 어떻게 되나요",
     ],
     "law_common": [
         "소송 절차가 어떻게 되나요",
@@ -434,30 +439,45 @@ class VectorDomainClassifier:
         else:
             vector_result = None
 
-        # 3. 결과 조합: 벡터가 최종 결정권
-        if vector_result and vector_result.is_relevant:
-            # 벡터 통과 → 확정
+        # 3. 결과 조합: 벡터 + 키워드 보정 후 최종 판정
+        if vector_result:
+            threshold = self.settings.domain_classification_threshold
+
+            # 키워드 매칭 시 벡터 유사도에 보정 적용 (threshold 판정 전)
             if keyword_result:
-                # 키워드도 매칭됨 → 신뢰도 보정
-                vector_result.confidence = min(1.0, vector_result.confidence + 0.1)
-                vector_result.method = "keyword+vector"
-                vector_result.matched_keywords = keyword_result.matched_keywords
-                logger.info(
-                    "[도메인 분류] 키워드+벡터 확정: %s (신뢰도: %.2f, 키워드: %s)",
-                    vector_result.domains,
-                    vector_result.confidence,
-                    keyword_result.matched_keywords,
-                )
-            else:
+                boosted_confidence = min(1.0, vector_result.confidence + 0.1)
+                keyword_domains = set(keyword_result.domains)
+                vector_best = vector_result.domains[0] if vector_result.domains else None
+
+                # 키워드 매칭 도메인 중 벡터 최고 도메인이 포함되거나,
+                # 벡터가 거부 상태일 때 키워드 도메인으로 재판정
+                if vector_result.is_relevant or boosted_confidence >= threshold:
+                    # 보정된 신뢰도로 재판정
+                    if boosted_confidence >= threshold:
+                        # 키워드 도메인 기준으로 결과 생성
+                        final_domains = keyword_result.domains if not vector_result.is_relevant else vector_result.domains
+                        vector_result.domains = final_domains
+                        vector_result.confidence = boosted_confidence
+                        vector_result.is_relevant = True
+                        vector_result.method = "keyword+vector"
+                        vector_result.matched_keywords = keyword_result.matched_keywords
+                        logger.info(
+                            "[도메인 분류] 키워드+벡터 확정: %s (신뢰도: %.2f, 키워드: %s)",
+                            vector_result.domains,
+                            vector_result.confidence,
+                            keyword_result.matched_keywords,
+                        )
+                        return vector_result
+
+            if vector_result.is_relevant:
                 logger.info(
                     "[도메인 분류] 벡터 유사도 확정: %s (신뢰도: %.2f)",
                     vector_result.domains,
                     vector_result.confidence,
                 )
-            return vector_result
+                return vector_result
 
-        if vector_result and not vector_result.is_relevant:
-            # 벡터 미통과 → 거부 (키워드 매칭과 무관)
+            # 벡터 미통과 + 키워드 보정 없음 → 거부
             if keyword_result:
                 logger.info(
                     "[도메인 분류] 키워드 '%s' 매칭됐으나 벡터 유사도 %.2f로 거부",
