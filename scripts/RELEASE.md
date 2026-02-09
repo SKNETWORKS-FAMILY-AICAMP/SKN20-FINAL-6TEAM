@@ -1,5 +1,12 @@
 # Release Notes
 
+## [2026-02-09] - 전처리 스크립트 추가 및 개선
+
+### Features
+- 세정세제 전처리 스크립트 추가 (preprocess_tax.py)
+- 법령 전처리 스크립트 개선 (preprocess_laws.py 리팩토링)
+- 추출 문서 정제 데이터 추가 (extracted_documents_cleaned.jsonl)
+
 ## [2026-02-08] - 초기 릴리즈
 
 ### 핵심 기능

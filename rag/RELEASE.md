@@ -1,5 +1,15 @@
 # Release Notes
 
+## [2026-02-09] - RAG 품질 개선
+
+### Features
+- 법령 필터링 기능 추가
+- 5단계 평가 시스템 도입 (search_quality_eval)
+- 출처 URL 응답 필드 추가
+- RAGAS 평가기 추가 (ragas_evaluator.py)
+- 네거티브 테스트 케이스 추가 (negative_test_cases.py)
+- 검색 품질 리포트 생성 기능
+
 ## [2026-02-08] - 초기 릴리즈
 
 ### 핵심 기능
