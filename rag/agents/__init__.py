@@ -7,6 +7,7 @@
 - FinanceTaxAgent: 재무/세무 에이전트
 - HRLaborAgent: 인사/노무 에이전트
 - EvaluatorAgent: 평가 에이전트
+- ResponseGeneratorAgent: 응답 생성 전담 에이전트
 - ActionExecutor: 문서 생성 실행기
 """
 
@@ -17,6 +18,7 @@ from agents.startup_funding import StartupFundingAgent
 from agents.finance_tax import FinanceTaxAgent
 from agents.hr_labor import HRLaborAgent
 from agents.evaluator import EvaluatorAgent
+from agents.generator import ResponseGeneratorAgent
 from agents.executor import ActionExecutor
 
 __all__ = [
@@ -28,5 +30,6 @@ __all__ = [
     "FinanceTaxAgent",
     "HRLaborAgent",
     "EvaluatorAgent",
+    "ResponseGeneratorAgent",
     "ActionExecutor",
 ]

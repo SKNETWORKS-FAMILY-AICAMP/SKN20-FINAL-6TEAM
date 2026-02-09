@@ -225,6 +225,16 @@ class Settings(BaseSettings):
         default=True, description="평가 실패 시 재시도 활성화 (비활성화 시 로깅만)"
     )
 
+    # 통합 생성 에이전트 설정
+    enable_integrated_generation: bool = Field(
+        default=True,
+        description="통합 생성 에이전트 활성화 (False이면 기존 방식 유지)"
+    )
+    enable_action_aware_generation: bool = Field(
+        default=True,
+        description="액션 인식 생성 활성화 (액션을 생성 전에 결정하여 답변에 반영)"
+    )
+
     # 법률 보충 검색 설정
     enable_legal_supplement: bool = Field(
         default=True, description="법률 보충 검색 활성화 (주 도메인 검색 후 법률 키워드 발견 시 법률DB 추가 검색)"
@@ -300,6 +310,8 @@ class Settings(BaseSettings):
         "enable_graduated_retry",
         "max_retry_level",
         "primary_domain_budget_ratio",
+        "enable_integrated_generation",
+        "enable_action_aware_generation",
         "debug",
     }
 
