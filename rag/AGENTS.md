@@ -10,12 +10,12 @@ Python 3.10+ / FastAPI / LangChain / LangGraph / OpenAI GPT-4o-mini / ChromaDB /
 rag/
 ├── main.py                  # FastAPI 진입점
 ├── cli.py                   # CLI 테스트 모드
-├── agents/                  # Agentic RAG (router, base, 3 domain, evaluator, executor)
+├── agents/                  # Agentic RAG (router, base, 4 domain, evaluator, executor)
 ├── chains/                  # LangChain 체인 (rag_chain.py)
 ├── evaluation/              # RAGAS 정량 평가
 ├── vectorstores/            # VectorDB 관리 (config, chroma, embeddings, loader, build)
 ├── schemas/                 # Pydantic 스키마 (request, response)
-├── utils/                   # config, prompts, cache, feedback, middleware, query, search
+├── utils/                   # config, prompts, cache, feedback, middleware, query, search, legal_supplement
 └── tests/                   # pytest 테스트
 ```
 
@@ -32,18 +32,19 @@ rag/
 | POST | `/api/funding/recommend` | 맞춤 지원사업 추천 |
 | POST | `/api/funding/sync` | 공고 데이터 동기화 |
 
-## Agents (5+1)
+## Agents (6+1)
 
 | Agent | Role | VectorDB |
 |-------|------|----------|
-| Router | 질문 분류, 에이전트 조율, 재요청 | - |
+| Router | 질문 분류, 에이전트 조율, 법률 보충 검색 판단 | - |
 | Startup & Funding | 창업/지원사업/마케팅 | startup_funding_db |
 | Finance & Tax | 세무/회계/재무 | finance_tax_db |
-| HR & Labor | 노무/인사/법률 | hr_labor_db |
+| HR & Labor | 노무/인사 | hr_labor_db |
+| Legal | 법률/소송/지식재산권 (단독 처리 + 보충 검색) | law_common_db |
 | Evaluator | 답변 품질 평가 (70점 기준) | - |
 | Action Executor | 문서 생성 (PDF/HWP) | - |
 
-**공통 VectorDB**: `law_common_db` (법령/해석례, 모든 에이전트 공유)
+**법률 보충 검색**: 3개 주 도메인 검색 후 법률 키워드 감지 시 `law_common_db`에서 추가 검색 (`utils/legal_supplement.py`)
 
 ## MUST NOT
 

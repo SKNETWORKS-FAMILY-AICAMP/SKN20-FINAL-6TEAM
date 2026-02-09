@@ -1,8 +1,15 @@
 # Release Notes
 
-## [2026-02-09] - RAG 품질 개선
+## [2026-02-09] - RAG 품질 개선 및 법률 에이전트 추가
 
 ### Features
+- 법률 에이전트 추가 (LegalAgent, law_common 도메인) — 법률/소송/지식재산권 단독 처리
+- 법률 보충 검색 기능 (legal_supplement.py) — 주 도메인 검색 후 법률 키워드 감지 시 법률DB 추가 검색
+- 법률 보충 검색 설정 추가 (ENABLE_LEGAL_SUPPLEMENT, LEGAL_SUPPLEMENT_K)
+- BaseAgent.astream()에 supplementary_documents 파라미터 추가
+- RAGChain.astream()에 context_override 파라미터 추가
+- 도메인 분류기에 law_common 키워드 추가
+- 법률 보충 검색 단위 테스트 11건 추가 (test_legal_supplement.py)
 - 법령 필터링 기능 추가
 - 5단계 평가 시스템 도입 (search_quality_eval)
 - 출처 URL 응답 필드 추가

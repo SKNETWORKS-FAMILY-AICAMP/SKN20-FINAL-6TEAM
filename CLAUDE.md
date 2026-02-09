@@ -2,7 +2,7 @@
 
 ## 프로젝트 개요
 Bizi는 예비 창업자, 스타트업 CEO, 중소기업 대표를 위한 AI 기반 통합 경영 상담 챗봇입니다.
-3개 전문 도메인(창업·지원사업 / 재무·세무 / 인사·노무)에 대한 맞춤형 상담을 제공합니다.
+4개 전문 도메인(창업·지원사업 / 재무·세무 / 인사·노무 / 법률)에 대한 맞춤형 상담을 제공합니다.
 
 ## 프로젝트 목표
 - 창업 절차, 세무, 노무, 법률, 지원사업, 마케팅 통합 상담
@@ -68,7 +68,7 @@ SKN20-FINAL-6TEAM/
 │   ├── ARCHITECTURE.md    # RAG 아키텍처 (다이어그램)
 │   ├── AGENTS.md          # RAG AI 에이전트 가이드
 │   ├── main.py            # FastAPI 진입점
-│   ├── agents/            # Agentic RAG (5개 에이전트)
+│   ├── agents/            # Agentic RAG (6개 에이전트)
 │   ├── chains/            # LangChain 체인
 │   ├── vectorstores/      # 벡터 DB 관리
 │   ├── schemas/           # Pydantic 스키마
@@ -120,7 +120,7 @@ E2E 테스트: `cd frontend && npm run test:e2e`
 │   localhost:8000          │    │      localhost:8001             │
 │                           │    │                                 │
 │ - Google OAuth2 인증       │    │ - Master Router                 │
-│ - 사용자/기업 관리          │    │ - 3개 도메인 에이전트             │
+│ - 사용자/기업 관리          │    │ - 4개 도메인 에이전트             │
 │ - 상담 이력 저장            │    │ - Action Executor               │
 │ - 일정 관리               │    │ - RAG 체인                       │
 └───────────────┬───────────┘    └───────────┬─────────────────────┘
@@ -134,14 +134,15 @@ E2E 테스트: `cd frontend && npm run test:e2e`
 
 ### 멀티에이전트 시스템
 
-Agentic RAG 구조로 5개 에이전트 운영:
+Agentic RAG 구조로 6개 에이전트 운영:
 
 | 에이전트 | 역할 |
 |---------|------|
-| 메인 라우터 | 질문 분류, 에이전트 조율, 평가 결과에 따른 재요청 |
+| 메인 라우터 | 질문 분류, 에이전트 조율, 법률 보충 검색 판단 |
 | 창업 및 지원 에이전트 | 창업절차, 지원사업, 마케팅 상담 |
 | 재무 및 세무 에이전트 | 세금, 회계, 재무 상담 |
-| 인사 및 노무 에이전트 | 근로, 채용, 법률 상담 |
+| 인사 및 노무 에이전트 | 근로, 채용, 인사 상담 |
+| 법률 에이전트 | 법률, 소송/분쟁, 지식재산권 (단독 처리 + 보충 검색) |
 | 평가 에이전트 | 답변 품질 평가, 재요청 판단 |
 | Action Executor | 문서 생성 (근로계약서, 사업계획서 등) |
 
@@ -159,6 +160,7 @@ Agentic RAG 구조로 5개 에이전트 운영:
 | LLM Domain Classification | `ENABLE_LLM_DOMAIN_CLASSIFICATION` | false | LLM 기반 도메인 분류 비교 (추가 비용) |
 | Response Caching | 항상 활성화 | - | LRU 캐시 (500건, 1시간 TTL) |
 | LLM Evaluation | `ENABLE_LLM_EVALUATION` | true | 답변 품질 평가 |
+| Legal Supplement | `ENABLE_LEGAL_SUPPLEMENT` | true | 주 도메인 검색 후 법률 키워드 감지 시 법률DB 보충 검색 |
 
 ### Frontend 스트리밍
 
