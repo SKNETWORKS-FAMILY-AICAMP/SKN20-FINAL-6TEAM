@@ -66,6 +66,7 @@ class TestMainRouterInit:
              patch("agents.router.StartupFundingAgent") as mock_startup, \
              patch("agents.router.FinanceTaxAgent") as mock_finance, \
              patch("agents.router.HRLaborAgent") as mock_hr, \
+             patch("agents.router.LegalAgent") as mock_legal, \
              patch("agents.router.EvaluatorAgent") as mock_evaluator, \
              patch("agents.router.get_settings") as mock_get_settings:
 
@@ -73,6 +74,7 @@ class TestMainRouterInit:
             mock_startup.return_value = Mock(name="startup_agent")
             mock_finance.return_value = Mock(name="finance_agent")
             mock_hr.return_value = Mock(name="hr_agent")
+            mock_legal.return_value = Mock(name="legal_agent")
             mock_evaluator.return_value = Mock(name="evaluator")
 
             mock_settings = Mock()
@@ -84,6 +86,7 @@ class TestMainRouterInit:
                 "startup": mock_startup,
                 "finance": mock_finance,
                 "hr": mock_hr,
+                "legal": mock_legal,
                 "evaluator": mock_evaluator,
                 "settings": mock_settings,
             }
@@ -110,19 +113,21 @@ class TestMainRouterInit:
     def test_mainrouter_init_creates_all_agents(
         self, mock_vector_store, mock_dependencies
     ):
-        """3개 도메인 에이전트 생성 확인."""
+        """4개 도메인 에이전트 생성 확인."""
         router = MainRouter(vector_store=mock_vector_store)
 
         assert "startup_funding" in router.agents
         assert "finance_tax" in router.agents
         assert "hr_labor" in router.agents
-        assert len(router.agents) == 3
+        assert "law_common" in router.agents
+        assert len(router.agents) == 4
 
         # 각 에이전트가 같은 RAG 체인을 공유하는지 확인
         rag_chain_instance = mock_dependencies["chain"].return_value
         mock_dependencies["startup"].assert_called_once_with(rag_chain=rag_chain_instance)
         mock_dependencies["finance"].assert_called_once_with(rag_chain=rag_chain_instance)
         mock_dependencies["hr"].assert_called_once_with(rag_chain=rag_chain_instance)
+        mock_dependencies["legal"].assert_called_once_with(rag_chain=rag_chain_instance)
 
     def test_mainrouter_init_creates_evaluator(
         self, mock_vector_store, mock_dependencies

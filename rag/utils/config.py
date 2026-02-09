@@ -225,6 +225,14 @@ class Settings(BaseSettings):
         default=False, description="평가 실패 시 재시도 활성화 (비활성화 시 로깅만)"
     )
 
+    # 법률 보충 검색 설정
+    enable_legal_supplement: bool = Field(
+        default=True, description="법률 보충 검색 활성화 (주 도메인 검색 후 법률 키워드 발견 시 법률DB 추가 검색)"
+    )
+    legal_supplement_k: int = Field(
+        default=3, gt=0, description="법률 보충 검색 시 가져올 문서 수"
+    )
+
     # CORS 설정
     cors_origins: list[str] = Field(
         default=["http://localhost:5173", "http://localhost:3000"],
@@ -263,6 +271,7 @@ class Settings(BaseSettings):
         "enable_multi_query",
         "enable_ragas_evaluation",
         "enable_post_eval_retry",
+        "enable_legal_supplement",
         "debug",
     }
 

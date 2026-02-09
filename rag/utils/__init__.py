@@ -6,7 +6,6 @@
 from utils.config import Settings, get_settings
 from utils.prompts import (
     _DEFAULT_DOMAIN_KEYWORDS,
-    ROUTER_SYSTEM_PROMPT,
     STARTUP_FUNDING_PROMPT,
     FINANCE_TAX_PROMPT,
     HR_LABOR_PROMPT,
@@ -45,6 +44,7 @@ from utils.feedback import (
     SearchStrategy,
     get_feedback_analyzer,
 )
+from utils.legal_supplement import needs_legal_supplement
 
 __all__ = [
     # Config
@@ -52,7 +52,6 @@ __all__ = [
     "get_settings",
     # Prompts
     "_DEFAULT_DOMAIN_KEYWORDS",
-    "ROUTER_SYSTEM_PROMPT",
     "STARTUP_FUNDING_PROMPT",
     "FINANCE_TAX_PROMPT",
     "HR_LABOR_PROMPT",
@@ -91,4 +90,6 @@ __all__ = [
     "FeedbackType",
     "SearchStrategy",
     "get_feedback_analyzer",
+    # Legal Supplement
+    "needs_legal_supplement",
 ]

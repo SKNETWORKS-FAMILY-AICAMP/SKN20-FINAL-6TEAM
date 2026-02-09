@@ -398,6 +398,17 @@ async def chat(request: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=503, detail="서비스가 초기화되지 않았습니다")
 
     try:
+        # 캐시 조회
+        settings = get_settings()
+        cache = get_response_cache() if settings.enable_response_cache else None
+        if cache:
+            cached = cache.get(request.message)
+            if cached:
+                logger.info("[chat] 캐시 히트: '%s...'", request.message[:30])
+                cached_response = ChatResponse(**cached)
+                cached_response.session_id = request.session_id
+                return cached_response
+
         # 시작 시간 기록
         start_time = time.time()
 
@@ -425,7 +436,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         )
 
         # RAGAS 정량 평가 (설정 활성화 시)
-        if get_settings().enable_ragas_evaluation:
+        if settings.enable_ragas_evaluation:
             try:
                 from evaluation.ragas_evaluator import RagasEvaluator
 
@@ -454,6 +465,11 @@ async def chat(request: ChatRequest) -> ChatResponse:
             except Exception as e:
                 logger.warning(f"RAGAS 평가 실패 (무시됨): {e}")
 
+        # 캐시 저장 (fallback 응답은 캐싱하지 않음)
+        if cache and response.content != settings.fallback_message:
+            domain = response.domains[0] if response.domains else None
+            cache.set(request.message, response.model_dump(mode="json"), domain)
+
         return response
     except Exception as e:
         logger.error(f"채팅 처리 실패: {e}", exc_info=True)
@@ -481,9 +497,56 @@ async def chat_stream(request: ChatRequest):
 
     async def generate():
         try:
+            # 캐시 조회
+            settings = get_settings()
+            cache = get_response_cache() if settings.enable_response_cache else None
+            if cache:
+                cached = cache.get(request.message)
+                if cached:
+                    logger.info("[stream] 캐시 히트: '%s...'", request.message[:30])
+                    # 캐시된 content를 빠른 청크로 emit
+                    cached_content = cached.get("content", "")
+                    chunk_size = 4
+                    token_index = 0
+                    for i in range(0, len(cached_content), chunk_size):
+                        text_chunk = cached_content[i:i + chunk_size]
+                        stream_chunk = StreamResponse(
+                            type="token",
+                            content=text_chunk,
+                            metadata={"index": token_index},
+                        )
+                        yield f"data: {stream_chunk.model_dump_json()}\n\n"
+                        token_index += 1
+
+                    # 출처 정보
+                    for src in cached.get("sources", []):
+                        source_chunk = StreamResponse(
+                            type="source",
+                            content=(src.get("content", "") or "")[:100],
+                            metadata={
+                                "title": src.get("title", ""),
+                                "source": src.get("source", ""),
+                            },
+                        )
+                        yield f"data: {source_chunk.model_dump_json()}\n\n"
+
+                    # 완료
+                    cached_domains = cached.get("domains", [])
+                    done_chunk = StreamResponse(
+                        type="done",
+                        metadata={
+                            "domain": cached_domains[0] if cached_domains else "general",
+                            "domains": cached_domains,
+                            "response_time": 0.0,
+                            "cached": True,
+                        },
+                    )
+                    yield f"data: {done_chunk.model_dump_json()}\n\n"
+                    return
+
             # 시작 시간 기록
             start_time = time.time()
-            stream_timeout = get_settings().total_timeout
+            stream_timeout = settings.total_timeout
             final_content = ""
             final_sources = []
             final_domains = []
@@ -558,6 +621,23 @@ async def chat_stream(request: ChatRequest):
                     },
                 )
                 yield f"data: {action_chunk.model_dump_json()}\n\n"
+
+            # 캐시 저장 (fallback 응답은 캐싱하지 않음)
+            if cache and final_content and final_content != settings.fallback_message:
+                cache_domain = final_domains[0] if final_domains else None
+                cache_data = {
+                    "content": final_content,
+                    "domains": final_domains,
+                    "sources": [
+                        {
+                            "content": s.content if hasattr(s, 'content') else "",
+                            "title": s.title if hasattr(s, 'title') else "",
+                            "source": s.source if hasattr(s, 'source') else "",
+                        }
+                        for s in final_sources
+                    ],
+                }
+                cache.set(request.message, cache_data, cache_domain)
 
             # 완료
             done_chunk = StreamResponse(

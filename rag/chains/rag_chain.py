@@ -108,7 +108,7 @@ class RAGChain:
         query: str,
         domain: str,
         k: int | None = None,
-        include_common: bool = True,
+        include_common: bool = False,
         use_mmr: bool = True,
         use_query_rewrite: bool | None = None,
         use_rerank: bool | None = None,
@@ -221,6 +221,7 @@ class RAGChain:
                 except Exception as e:
                     logger.error(f"공통 법령 DB 검색 실패: {e}")
 
+            documents = self._deduplicate_documents(documents)
             return documents
 
         # 기존 로직 (MMR/similarity search + separate rerank)
@@ -314,7 +315,7 @@ class RAGChain:
         query: str,
         domain: str,
         k: int | None = None,
-        include_common: bool = True,
+        include_common: bool = False,
     ) -> list[tuple[Document, float]]:
         """유사도 점수와 함께 문서를 검색합니다.
 
@@ -427,7 +428,7 @@ class RAGChain:
         system_prompt: str,
         user_type: str = "prospective",
         company_context: str = "정보 없음",
-        include_common: bool = True,
+        include_common: bool = False,
         search_strategy: "SearchStrategy | None" = None,
     ) -> dict[str, Any]:
         """RAG 체인을 실행하여 응답을 생성합니다.
@@ -492,7 +493,7 @@ class RAGChain:
         system_prompt: str,
         user_type: str = "prospective",
         company_context: str = "정보 없음",
-        include_common: bool = True,
+        include_common: bool = False,
         use_cache: bool | None = None,
         search_strategy: "SearchStrategy | None" = None,
     ) -> dict[str, Any]:
@@ -716,7 +717,8 @@ class RAGChain:
         system_prompt: str,
         user_type: str = "prospective",
         company_context: str = "정보 없음",
-        include_common: bool = True,
+        include_common: bool = False,
+        context_override: str | None = None,
     ):
         """RAG 체인을 스트리밍으로 실행합니다.
 
@@ -727,39 +729,44 @@ class RAGChain:
             user_type: 사용자 유형
             company_context: 기업 정보 컨텍스트
             include_common: 공통 법령 DB 포함 여부
+            context_override: 외부에서 전달된 컨텍스트 (None이면 내부 검색 사용)
 
         Yields:
             응답 토큰
         """
-        # 문서 검색 (동기 호출을 스레드로 실행 + 타임아웃 적용)
-        try:
-            documents = await asyncio.wait_for(
-                asyncio.to_thread(
-                    self.retrieve,
-                    query,
-                    domain,
-                    None,
-                    include_common,
-                ),
-                timeout=self.settings.search_timeout,
-            )
-        except asyncio.TimeoutError:
-            logger.warning("[astream] 검색 타임아웃 (%.1fs)", self.settings.search_timeout)
-            documents = []
+        if context_override is not None:
+            # 외부에서 컨텍스트를 직접 전달한 경우 (보충 문서 병합 등)
+            context = context_override
+        else:
+            # 문서 검색 (동기 호출을 스레드로 실행 + 타임아웃 적용)
+            try:
+                documents = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        self.retrieve,
+                        query,
+                        domain,
+                        None,
+                        include_common,
+                    ),
+                    timeout=self.settings.search_timeout,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("[astream] 검색 타임아웃 (%.1fs)", self.settings.search_timeout)
+                documents = []
 
-        # 검색 결과 없으면 fallback 반환
-        if not documents:
-            logger.warning("[astream] 검색 결과 없음 - fallback 응답 반환")
-            fallback_content = (
-                self.settings.fallback_message
-                if self.settings.enable_fallback
-                else "검색 결과를 찾을 수 없습니다. 질문을 다시 작성해 주세요."
-            )
-            yield fallback_content
-            return
+            # 검색 결과 없으면 fallback 반환
+            if not documents:
+                logger.warning("[astream] 검색 결과 없음 - fallback 응답 반환")
+                fallback_content = (
+                    self.settings.fallback_message
+                    if self.settings.enable_fallback
+                    else "검색 결과를 찾을 수 없습니다. 질문을 다시 작성해 주세요."
+                )
+                yield fallback_content
+                return
 
-        # 컨텍스트 포맷팅
-        context = self.format_context(documents)
+            # 컨텍스트 포맷팅
+            context = self.format_context(documents)
 
         # 프롬프트 구성
         prompt = ChatPromptTemplate.from_messages([

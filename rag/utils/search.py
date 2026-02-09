@@ -312,16 +312,14 @@ class HybridSearcher:
         # 벡터 검색
         vector_results = []
         try:
-            vector_docs = self.vector_store.max_marginal_relevance_search(
+            raw_results = self.vector_store.similarity_search_with_score(
                 query=query,
                 domain=domain,
                 k=fetch_k,
-                fetch_k=fetch_k * 2,
-                lambda_mult=self.settings.mmr_lambda_mult,
             )
             vector_results = [
-                SearchResult(doc, 1.0 - (i / fetch_k), "vector")
-                for i, doc in enumerate(vector_docs)
+                SearchResult(doc, 1.0 / (1.0 + distance), "vector")
+                for doc, distance in raw_results
             ]
         except Exception as e:
             logger.warning("[하이브리드] 벡터 검색 실패: %s", e)

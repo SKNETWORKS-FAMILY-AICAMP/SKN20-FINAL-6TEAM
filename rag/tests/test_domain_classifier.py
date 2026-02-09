@@ -103,7 +103,7 @@ class TestVectorDomainClassifier:
 
     def test_keyword_classify_single_domain(self, classifier):
         """단일 도메인 키워드 매칭."""
-        query = "창업할 때 사업자등록 절차가 궁금합니다"
+        query = "창업할 때 마케팅 전략이 궁금합니다"
 
         result = classifier._keyword_classify(query)
 
@@ -114,7 +114,7 @@ class TestVectorDomainClassifier:
         assert result.method == "keyword"
         assert "startup_funding" in result.matched_keywords
         assert "창업" in result.matched_keywords["startup_funding"]
-        assert "사업자등록" in result.matched_keywords["startup_funding"]
+        assert "마케팅" in result.matched_keywords["startup_funding"]
 
     def test_keyword_classify_multiple_domains(self, classifier):
         """복수 도메인 키워드 매칭."""
@@ -145,11 +145,10 @@ class TestVectorDomainClassifier:
         result_single = classifier._keyword_classify(query_single)
         assert result_single.confidence == pytest.approx(0.6)
 
-        # 3개 매칭: 0.5 + 0.3 = 0.8
-        # kiwipiepy: "사업자등록" → lemma "사업자"+"등록" + 원문 부분매칭 "사업자등록"
-        query_multiple = "창업 사업자등록"
+        # 2개 매칭: 0.5 + 0.2 = 0.7
+        query_multiple = "창업 마케팅"
         result_multiple = classifier._keyword_classify(query_multiple)
-        assert result_multiple.confidence == pytest.approx(0.8)
+        assert result_multiple.confidence == pytest.approx(0.7)
 
         # 5개 이상 매칭: max 1.0
         query_many = "창업 사업자등록 법인설립 지원사업 보조금 마케팅"
@@ -166,6 +165,7 @@ class TestVectorDomainClassifier:
         assert "startup_funding" in domain_vectors
         assert "finance_tax" in domain_vectors
         assert "hr_labor" in domain_vectors
+        assert "law_common" in domain_vectors
 
         # 각 도메인 벡터가 1024 차원인지 확인
         for domain, vector in domain_vectors.items():
@@ -206,6 +206,18 @@ class TestVectorDomainClassifier:
 
     # ========== _vector_classify 테스트 ==========
 
+    def test_keyword_classify_law_common_domain(self, classifier):
+        """법률 도메인 키워드 매칭."""
+        query = "특허 출원 절차와 소송 방법이 궁금합니다"
+
+        result = classifier._keyword_classify(query)
+
+        assert result is not None
+        assert "law_common" in result.domains
+        assert result.is_relevant is True
+        assert result.method == "keyword"
+        assert "law_common" in result.matched_keywords
+
     def test_vector_classify_above_threshold(
         self, classifier, mock_embeddings, mock_settings_with_vector_enabled
     ):
@@ -231,6 +243,7 @@ class TestVectorDomainClassifier:
             "startup_funding": domain_vec_high,
             "finance_tax": domain_vec_low,
             "hr_labor": domain_vec_low,
+            "law_common": domain_vec_low,
         }
 
         result = classifier._vector_classify("사업자등록 방법")
@@ -257,6 +270,7 @@ class TestVectorDomainClassifier:
             "startup_funding": domain_vec_low,
             "finance_tax": domain_vec_low,
             "hr_labor": domain_vec_low,
+            "law_common": domain_vec_low,
         }
 
         result = classifier._vector_classify("오늘 날씨가 어떤가요")
@@ -292,10 +306,17 @@ class TestVectorDomainClassifier:
         vec_hl[3] = np.sqrt(1 - 0.25)
         vec_hl = vec_hl / np.linalg.norm(vec_hl)
 
+        # law_common: cos ≈ 0.5 (차이 0.4 > 0.1)
+        vec_lc = np.zeros(1024)
+        vec_lc[0] = 0.5
+        vec_lc[4] = np.sqrt(1 - 0.25)
+        vec_lc = vec_lc / np.linalg.norm(vec_lc)
+
         classifier._domain_vectors = {
             "startup_funding": vec_sf,
             "finance_tax": vec_ft,
             "hr_labor": vec_hl,
+            "law_common": vec_lc,
         }
 
         mock_embeddings.embed_query.return_value = query_vec
@@ -331,6 +352,7 @@ class TestVectorDomainClassifier:
             "startup_funding": vec_high,
             "finance_tax": vec_low,
             "hr_labor": vec_low,
+            "law_common": vec_low,
         }
 
     def _setup_low_similarity_vectors(self, classifier, mock_embeddings):
@@ -344,12 +366,15 @@ class TestVectorDomainClassifier:
         domain_vec_2[2] = 1.0
         domain_vec_3 = np.zeros(1024)
         domain_vec_3[3] = 1.0
+        domain_vec_4 = np.zeros(1024)
+        domain_vec_4[4] = 1.0
 
         mock_embeddings.embed_query.return_value = query_vec
         classifier._domain_vectors = {
             "startup_funding": domain_vec_1,
             "finance_tax": domain_vec_2,
             "hr_labor": domain_vec_3,
+            "law_common": domain_vec_4,
         }
 
     def test_classify_keyword_and_vector_both_pass(self, classifier, mock_embeddings):
@@ -429,6 +454,7 @@ class TestVectorDomainClassifier:
             "startup_funding": vec_very_high,
             "finance_tax": vec_low,
             "hr_labor": vec_low,
+            "law_common": vec_low,
         }
 
         result = classifier.classify(query)
@@ -467,10 +493,10 @@ class TestVectorDomainClassifier:
             assert result.is_relevant is True
             mock_embeddings.embed_query.assert_not_called()
 
-    def test_classify_fallback_to_default_when_vector_disabled_no_keyword(
+    def test_classify_fallback_to_rejection_when_vector_disabled_no_keyword(
         self, mock_embeddings
     ):
-        """벡터 분류 비활성화 + 키워드 미매칭 시 기본값 사용."""
+        """벡터 분류 비활성화 + 키워드 미매칭 시 도메인 외 질문으로 거부."""
         mock_settings = Mock()
         mock_settings.enable_vector_domain_classification = False
 
@@ -481,10 +507,10 @@ class TestVectorDomainClassifier:
             query = "알 수 없는 질문"
             result = classifier.classify(query)
 
-            assert result.method == "fallback"
-            assert result.domains == ["startup_funding"]
-            assert result.confidence == 0.3
-            assert result.is_relevant is True
+            assert result.method == "fallback_rejected"
+            assert result.domains == []
+            assert result.confidence == 0.0
+            assert result.is_relevant is False
 
 
 class TestGetDomainClassifier:

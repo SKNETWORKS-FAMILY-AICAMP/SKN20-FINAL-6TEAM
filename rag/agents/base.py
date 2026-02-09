@@ -135,6 +135,24 @@ class BaseAgent(ABC):
         self.settings = get_settings()
         self.rag_chain = rag_chain or RAGChain()
 
+    @staticmethod
+    def _extract_user_context(user_context: UserContext | None) -> tuple[str, str]:
+        """UserContext에서 user_type과 company_context 문자열을 추출합니다.
+
+        Args:
+            user_context: 사용자 컨텍스트 (None 가능)
+
+        Returns:
+            (user_type, company_context) 튜플
+        """
+        user_type = "예비 창업자"
+        company_context = "정보 없음"
+        if user_context:
+            user_type = user_context.get_user_type_label()
+            if user_context.company:
+                company_context = user_context.company.to_context_string()
+        return user_type, company_context
+
     @abstractmethod
     def get_system_prompt(self) -> str:
         """시스템 프롬프트를 반환합니다.
@@ -165,7 +183,7 @@ class BaseAgent(ABC):
         self,
         query: str,
         k: int | None = None,
-        include_common: bool = True,
+        include_common: bool = False,
     ) -> list[Document]:
         """컨텍스트 문서를 검색합니다.
 
@@ -188,7 +206,7 @@ class BaseAgent(ABC):
         self,
         query: str,
         search_strategy: "SearchStrategy | None" = None,
-        include_common: bool = True,
+        include_common: bool = False,
     ) -> RetrievalResult:
         """문서 검색만 수행합니다 (생성 없음).
 
@@ -281,7 +299,7 @@ class BaseAgent(ABC):
         self,
         query: str,
         search_strategy: "SearchStrategy | None" = None,
-        include_common: bool = True,
+        include_common: bool = False,
     ) -> RetrievalResult:
         """문서 검색만 비동기로 수행합니다.
 
@@ -327,14 +345,7 @@ class BaseAgent(ABC):
         logger.info("[generate_only] %s 생성 시작: '%s'", self.domain, query[:50])
         start = time.time()
 
-        # 사용자 컨텍스트 처리
-        user_type = "예비 창업자"
-        company_context = "정보 없음"
-
-        if user_context:
-            user_type = user_context.get_user_type_label()
-            if user_context.company:
-                company_context = user_context.company.to_context_string()
+        user_type, company_context = self._extract_user_context(user_context)
 
         # 컨텍스트 포맷팅
         context = self.rag_chain.format_context(documents)
@@ -391,14 +402,7 @@ class BaseAgent(ABC):
         logger.info("[agenerate_only] %s 생성 시작: '%s'", self.domain, query[:50])
         start = time.time()
 
-        # 사용자 컨텍스트 처리
-        user_type = "예비 창업자"
-        company_context = "정보 없음"
-
-        if user_context:
-            user_type = user_context.get_user_type_label()
-            if user_context.company:
-                company_context = user_context.company.to_context_string()
+        user_type, company_context = self._extract_user_context(user_context)
 
         # 컨텍스트 포맷팅
         context = self.rag_chain.format_context(documents)
@@ -460,14 +464,7 @@ class BaseAgent(ABC):
         logger.info("[에이전트] %s process 시작: '%s'", self.domain, query[:50])
         start = time.time()
 
-        # 사용자 컨텍스트 처리
-        user_type = "예비 창업자"
-        company_context = "정보 없음"
-
-        if user_context:
-            user_type = user_context.get_user_type_label()
-            if user_context.company:
-                company_context = user_context.company.to_context_string()
+        user_type, company_context = self._extract_user_context(user_context)
 
         # RAG 체인 실행
         result = self.rag_chain.invoke(
@@ -522,14 +519,7 @@ class BaseAgent(ABC):
         logger.info("[에이전트] %s aprocess 시작: '%s'", self.domain, query[:50])
         start = time.time()
 
-        # 사용자 컨텍스트 처리
-        user_type = "예비 창업자"
-        company_context = "정보 없음"
-
-        if user_context:
-            user_type = user_context.get_user_type_label()
-            if user_context.company:
-                company_context = user_context.company.to_context_string()
+        user_type, company_context = self._extract_user_context(user_context)
 
         # RAG 체인 실행
         result = await self.rag_chain.ainvoke(
@@ -569,34 +559,51 @@ class BaseAgent(ABC):
         self,
         query: str,
         user_context: UserContext | None = None,
+        supplementary_documents: list[Document] | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """질문을 스트리밍으로 처리합니다.
 
         Args:
             query: 사용자 질문
             user_context: 사용자 컨텍스트
+            supplementary_documents: 보충 문서 리스트 (법률 보충 검색 등)
 
         Yields:
             스트리밍 응답 (token, sources, actions, done)
         """
-        # 사용자 컨텍스트 처리
-        user_type = "예비 창업자"
-        company_context = "정보 없음"
-
-        if user_context:
-            user_type = user_context.get_user_type_label()
-            if user_context.company:
-                company_context = user_context.company.to_context_string()
+        user_type, company_context = self._extract_user_context(user_context)
 
         # 문서 검색 (스트리밍 전에 수행)
-        documents = await asyncio.to_thread(
-            self.rag_chain.retrieve,
-            query,
-            self.domain,
-            None,
-            True,
-        )
+        try:
+            documents = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self.rag_chain.retrieve,
+                    query,
+                    self.domain,
+                    None,
+                    False,
+                ),
+                timeout=30.0,
+            )
+        except (TimeoutError, Exception) as e:
+            logger.error("[스트리밍] 검색 실패 (%s): %s", self.domain, e)
+            documents = []
+
+        # 보충 문서 병합
+        if supplementary_documents:
+            documents = documents + supplementary_documents
+            logger.info(
+                "[스트리밍] 보충 문서 %d건 병합 (총 %d건)",
+                len(supplementary_documents),
+                len(documents),
+            )
+
         sources = self.rag_chain.documents_to_sources(documents)
+
+        # 보충 문서가 있으면 병합된 문서로 컨텍스트 직접 포맷팅
+        context_override: str | None = None
+        if supplementary_documents:
+            context_override = self.rag_chain.format_context(documents)
 
         # 토큰 스트리밍
         content_buffer = ""
@@ -606,6 +613,7 @@ class BaseAgent(ABC):
             system_prompt=self.get_system_prompt(),
             user_type=user_type,
             company_context=company_context,
+            context_override=context_override,
         ):
             content_buffer += token
             yield {"type": "token", "content": token}

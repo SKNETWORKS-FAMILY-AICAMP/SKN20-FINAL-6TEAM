@@ -176,13 +176,14 @@ def _seed_data(conn: pymysql.Connection) -> None:
         "startup_funding": "창업/지원사업",
         "finance_tax": "재무/세무",
         "hr_labor": "인사/노무",
+        "law_common": "법률",
     }
 
     domain_ids: dict[str, int] = {}
 
     with conn.cursor() as cursor:
         # 도메인 삽입
-        for i, domain_key in enumerate(["startup_funding", "finance_tax", "hr_labor"]):
+        for i, domain_key in enumerate(["startup_funding", "finance_tax", "hr_labor", "law_common"]):
             name = domain_names[domain_key]
             cursor.execute(
                 "INSERT INTO domain (domain_key, name, sort_order) VALUES (%s, %s, %s)",

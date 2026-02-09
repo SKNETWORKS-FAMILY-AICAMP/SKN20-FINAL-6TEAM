@@ -79,6 +79,21 @@ DOMAIN_REPRESENTATIVE_QUERIES: dict[str, list[str]] = {
         "권고사직 시 절차가 어떻게 되나요",
         "알바 4대보험 가입해야 하나요",
     ],
+    "law_common": [
+        "소송 절차가 어떻게 되나요",
+        "분쟁 해결 방법 알려주세요",
+        "특허 출원 방법이 궁금합니다",
+        "상표 등록 절차 안내해주세요",
+        "저작권 침해 시 대응 방법",
+        "상법에서 이사의 의무는 무엇인가요",
+        "민법상 계약 해제 요건",
+        "손해배상 청구 방법",
+        "지식재산권 보호 방법",
+        "법인 이사의 책임에 대해 알려주세요",
+        "계약서 분쟁 시 어떻게 해야 하나요",
+        "특허 침해 소송 절차가 궁금합니다",
+        "회사 관련 법적 분쟁 해결",
+    ],
 }
 
 
@@ -460,13 +475,13 @@ class VectorDomainClassifier:
             )
             return keyword_result
 
-        # fallback: startup_funding 기본값
-        logger.warning("[도메인 분류] 분류 실패, 기본값 사용")
+        # fallback: 분류 불가 → 도메인 외 질문으로 처리
+        logger.warning("[도메인 분류] 분류 실패, 도메인 외 질문으로 거부")
         return DomainClassificationResult(
-            domains=["startup_funding"],
-            confidence=0.3,
-            is_relevant=True,
-            method="fallback",
+            domains=[],
+            confidence=0.0,
+            is_relevant=False,
+            method="fallback_rejected",
         )
 
 

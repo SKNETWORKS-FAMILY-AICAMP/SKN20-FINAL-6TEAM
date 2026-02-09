@@ -23,6 +23,7 @@ from agents.base import RetrievalResult
 from agents.evaluator import EvaluatorAgent
 from agents.finance_tax import FinanceTaxAgent
 from agents.hr_labor import HRLaborAgent
+from agents.legal import LegalAgent
 from agents.startup_funding import StartupFundingAgent
 from chains.rag_chain import RAGChain
 from schemas.request import UserContext
@@ -38,6 +39,7 @@ from schemas.response import (
 )
 from utils.config import get_settings
 from utils.domain_classifier import DomainClassificationResult, get_domain_classifier
+from utils.legal_supplement import needs_legal_supplement
 from utils.prompts import REJECTION_RESPONSE
 from utils.question_decomposer import SubQuery, get_question_decomposer
 from vectorstores.chroma import ChromaVectorStore
@@ -96,6 +98,7 @@ class MainRouter:
             "startup_funding": StartupFundingAgent(rag_chain=shared_rag_chain),
             "finance_tax": FinanceTaxAgent(rag_chain=shared_rag_chain),
             "hr_labor": HRLaborAgent(rag_chain=shared_rag_chain),
+            "law_common": LegalAgent(rag_chain=shared_rag_chain),
         }
         self.evaluator = EvaluatorAgent()
 
@@ -204,7 +207,7 @@ class MainRouter:
         return workflow.compile()
 
     def _should_continue_after_classify(self, state: RouterState) -> str:
-        """분류 후 계속 진행할지 거부할지 결정합니다.
+        """분류 후 계속 진행할지 거부할지 판단합니다.
 
         Args:
             state: 라우터 상태
@@ -213,20 +216,6 @@ class MainRouter:
             "continue": 관련 질문이면 계속 진행
             "reject": 도메인 외 질문이면 종료
         """
-        classification_result = state.get("classification_result")
-
-        if classification_result is None:
-            # 분류 결과가 없으면 기본적으로 계속 진행
-            return "continue"
-
-        if not classification_result.is_relevant:
-            logger.info("[라우터] 도메인 외 질문 - 거부 응답 반환")
-            return "reject"
-
-        return "continue"
-
-    def _should_continue_after_classify(self, state: RouterState) -> str:
-        """분류 후 계속 진행할지 거부할지 판단합니다."""
         classification = state.get("classification_result")
         if classification and not classification.is_relevant:
             return "reject"
@@ -392,6 +381,16 @@ class MainRouter:
                     agent_elapsed,
                 )
 
+        # 법률 보충 검색
+        self._perform_legal_supplement(
+            query=state["query"],
+            documents=all_documents,
+            domains=state["domains"],
+            retrieval_results=retrieval_results,
+            all_documents=all_documents,
+            agent_timings=agent_timings,
+        )
+
         state["retrieval_results"] = retrieval_results
         state["documents"] = all_documents
 
@@ -417,13 +416,16 @@ class MainRouter:
             return None
 
         tasks = [retrieve_for_domain(sq) for sq in sub_queries]
-        results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
         retrieval_results: dict[str, RetrievalResult] = {}
         all_documents: list[Document] = []
         agent_timings: list[dict] = []
 
         for result in results:
+            if isinstance(result, Exception):
+                logger.error("[검색] 도메인 에이전트 실패: %s", result)
+                continue
             if result is not None:
                 domain, retrieval_result, elapsed = result
                 retrieval_results[domain] = retrieval_result
@@ -443,6 +445,16 @@ class MainRouter:
                     elapsed,
                 )
 
+        # 법률 보충 검색 (비동기)
+        await self._aperform_legal_supplement(
+            query=state["query"],
+            documents=all_documents,
+            domains=state["domains"],
+            retrieval_results=retrieval_results,
+            all_documents=all_documents,
+            agent_timings=agent_timings,
+        )
+
         state["retrieval_results"] = retrieval_results
         state["documents"] = all_documents
 
@@ -451,6 +463,119 @@ class MainRouter:
         state["timing_metrics"]["agents"] = agent_timings
 
         return state
+
+    def _perform_legal_supplement(
+        self,
+        query: str,
+        documents: list[Document],
+        domains: list[str],
+        retrieval_results: dict[str, RetrievalResult],
+        all_documents: list[Document],
+        agent_timings: list[dict],
+    ) -> None:
+        """법률 보충 검색을 수행합니다 (동기).
+
+        조건 충족 시 law_common 에이전트로 보충 검색하여
+        retrieval_results와 all_documents에 결과를 추가합니다.
+
+        Args:
+            query: 사용자 질문
+            documents: 도메인 에이전트가 검색한 전체 문서
+            domains: 분류된 도메인 리스트
+            retrieval_results: 검색 결과 딕셔너리 (in-place 수정)
+            all_documents: 전체 문서 리스트 (in-place 수정)
+            agent_timings: 에이전트 타이밍 리스트 (in-place 수정)
+        """
+        if not self.settings.enable_legal_supplement:
+            return
+
+        if not needs_legal_supplement(query, documents, domains):
+            return
+
+        logger.info("[법률 보충] 법률 보충 검색 시작")
+        legal_agent = self.agents["law_common"]
+        agent_start = time.time()
+
+        try:
+            result = legal_agent.retrieve_only(query)
+            # 설정된 k만큼만 사용
+            if len(result.documents) > self.settings.legal_supplement_k:
+                result.documents = result.documents[:self.settings.legal_supplement_k]
+                result.sources = result.sources[:self.settings.legal_supplement_k]
+
+            retrieval_results["law_common_supplement"] = result
+            all_documents.extend(result.documents)
+
+            agent_elapsed = time.time() - agent_start
+            agent_timings.append({
+                "domain": "law_common_supplement",
+                "retrieve_time": result.retrieve_time,
+                "doc_count": len(result.documents),
+                "total_time": agent_elapsed,
+            })
+
+            logger.info(
+                "[법률 보충] 완료: %d건 (%.3fs)",
+                len(result.documents),
+                agent_elapsed,
+            )
+        except Exception as e:
+            logger.warning("[법률 보충] 검색 실패: %s", e)
+
+    async def _aperform_legal_supplement(
+        self,
+        query: str,
+        documents: list[Document],
+        domains: list[str],
+        retrieval_results: dict[str, RetrievalResult],
+        all_documents: list[Document],
+        agent_timings: list[dict],
+    ) -> None:
+        """법률 보충 검색을 수행합니다 (비동기).
+
+        Args:
+            query: 사용자 질문
+            documents: 도메인 에이전트가 검색한 전체 문서
+            domains: 분류된 도메인 리스트
+            retrieval_results: 검색 결과 딕셔너리 (in-place 수정)
+            all_documents: 전체 문서 리스트 (in-place 수정)
+            agent_timings: 에이전트 타이밍 리스트 (in-place 수정)
+        """
+        if not self.settings.enable_legal_supplement:
+            return
+
+        if not needs_legal_supplement(query, documents, domains):
+            return
+
+        logger.info("[법률 보충] 법률 보충 검색 시작 (비동기)")
+        legal_agent = self.agents["law_common"]
+        agent_start = time.time()
+
+        try:
+            result = await legal_agent.aretrieve_only(query)
+            # 설정된 k만큼만 사용
+            if len(result.documents) > self.settings.legal_supplement_k:
+                result.documents = result.documents[:self.settings.legal_supplement_k]
+                result.sources = result.sources[:self.settings.legal_supplement_k]
+
+            retrieval_results["law_common_supplement"] = result
+            all_documents.extend(result.documents)
+
+            agent_elapsed = time.time() - agent_start
+            agent_timings.append({
+                "domain": "law_common_supplement",
+                "retrieve_time": result.retrieve_time,
+                "doc_count": len(result.documents),
+                "total_time": agent_elapsed,
+            })
+
+            logger.info(
+                "[법률 보충] 완료: %d건 (%.3fs)",
+                len(result.documents),
+                agent_elapsed,
+            )
+        except Exception as e:
+            logger.warning("[법률 보충] 검색 실패: %s", e)
 
     def _generate_node(self, state: RouterState) -> RouterState:
         """생성 노드: 검색된 문서 기반으로 답변을 생성합니다."""
@@ -463,6 +588,10 @@ class MainRouter:
         all_sources: list[SourceDocument] = []
         all_actions: list[ActionSuggestion] = []
 
+        # 법률 보충 문서 가져오기
+        legal_supplement_result = retrieval_results.get("law_common_supplement")
+        legal_supplement_docs = legal_supplement_result.documents if legal_supplement_result else []
+
         for sq in sub_queries:
             if sq.domain in self.agents and sq.domain in retrieval_results:
                 agent = self.agents[sq.domain]
@@ -470,15 +599,26 @@ class MainRouter:
 
                 logger.info("[생성] 에이전트 [%s] 생성 시작", sq.domain)
 
+                # 법률 보충 문서 병합
+                merged_documents = result.documents
+                if legal_supplement_docs and sq.domain != "law_common":
+                    merged_documents = result.documents + legal_supplement_docs
+
                 # 검색된 문서로 답변 생성
                 content = agent.generate_only(
                     query=sq.query,
-                    documents=result.documents,
+                    documents=merged_documents,
                     user_context=user_context,
                 )
 
                 # 액션 제안
                 actions = agent.suggest_actions(sq.query, content)
+
+                # 법률 보충 검색이 있으면 법률 에이전트의 액션도 추가
+                if legal_supplement_docs and sq.domain != "law_common":
+                    legal_agent = self.agents["law_common"]
+                    legal_actions = legal_agent.suggest_actions(sq.query, content)
+                    actions.extend(legal_actions)
 
                 responses[sq.domain] = {
                     "content": content,
@@ -488,6 +628,10 @@ class MainRouter:
 
                 all_sources.extend(result.sources)
                 all_actions.extend(actions)
+
+        # 법률 보충 소스 추가
+        if legal_supplement_result:
+            all_sources.extend(legal_supplement_result.sources)
 
         # 응답 통합
         if len(responses) == 1:
@@ -499,6 +643,7 @@ class MainRouter:
                 "startup_funding": "창업/지원",
                 "finance_tax": "재무/세무",
                 "hr_labor": "인사/노무",
+                "law_common": "법률",
             }
             parts = []
             for domain, resp in responses.items():
@@ -529,18 +674,33 @@ class MainRouter:
         retrieval_results = state["retrieval_results"]
         user_context = state.get("user_context")
 
-        async def generate_for_domain(sq: SubQuery):
+        # 법률 보충 문서 가져오기
+        legal_supplement_result = retrieval_results.get("law_common_supplement")
+        legal_supplement_docs = legal_supplement_result.documents if legal_supplement_result else []
+
+        async def generate_for_domain(sq: SubQuery) -> tuple[str, dict[str, Any]] | None:
             if sq.domain in self.agents and sq.domain in retrieval_results:
                 agent = self.agents[sq.domain]
                 result = retrieval_results[sq.domain]
 
+                # 법률 보충 문서 병합
+                merged_documents = result.documents
+                if legal_supplement_docs and sq.domain != "law_common":
+                    merged_documents = result.documents + legal_supplement_docs
+
                 content = await agent.agenerate_only(
                     query=sq.query,
-                    documents=result.documents,
+                    documents=merged_documents,
                     user_context=user_context,
                 )
 
                 actions = agent.suggest_actions(sq.query, content)
+
+                # 법률 보충 검색이 있으면 법률 에이전트의 액션도 추가
+                if legal_supplement_docs and sq.domain != "law_common":
+                    legal_agent = self.agents["law_common"]
+                    legal_actions = legal_agent.suggest_actions(sq.query, content)
+                    actions.extend(legal_actions)
 
                 return sq.domain, {
                     "content": content,
@@ -563,6 +723,10 @@ class MainRouter:
                 all_sources.extend(resp["sources"])
                 all_actions.extend(resp["actions"])
 
+        # 법률 보충 소스 추가
+        if legal_supplement_result:
+            all_sources.extend(legal_supplement_result.sources)
+
         # 응답 통합
         if len(responses) == 1:
             domain = list(responses.keys())[0]
@@ -572,6 +736,7 @@ class MainRouter:
                 "startup_funding": "창업/지원",
                 "finance_tax": "재무/세무",
                 "hr_labor": "인사/노무",
+                "law_common": "법률",
             }
             parts = []
             for domain, resp in responses.items():
@@ -923,23 +1088,54 @@ class MainRouter:
 
         if len(domains) == 1 and domains[0] in self.agents:
             # 단일 도메인: 진정한 스트리밍
-            agent = self.agents[domains[0]]
-            all_sources = []
-            all_actions = []
+            domain = domains[0]
+            agent = self.agents[domain]
+            all_sources: list[SourceDocument] = []
+            all_actions: list[ActionSuggestion] = []
             content = ""
 
-            async for chunk in agent.astream(query, user_context):
+            # 법률 보충 검색 판단 (law_common이 아닌 경우만)
+            supplementary_documents: list[Document] | None = None
+            if (
+                domain != "law_common"
+                and self.settings.enable_legal_supplement
+                and needs_legal_supplement(query, [], domains)
+            ):
+                logger.info("[스트리밍] 쿼리 기반 법률 보충 검색 시작")
+                try:
+                    legal_agent = self.agents["law_common"]
+                    legal_result = await legal_agent.aretrieve_only(query)
+                    supplementary_documents = legal_result.documents[:self.settings.legal_supplement_k]
+                    all_sources.extend(
+                        legal_result.sources[:self.settings.legal_supplement_k]
+                    )
+                    logger.info(
+                        "[스트리밍] 법률 보충 검색 완료: %d건",
+                        len(supplementary_documents),
+                    )
+                except Exception as e:
+                    logger.warning("[스트리밍] 법률 보충 검색 실패: %s", e)
+
+            async for chunk in agent.astream(
+                query, user_context, supplementary_documents=supplementary_documents
+            ):
                 if chunk["type"] == "token":
                     yield {"type": "token", "content": chunk["content"]}
                 elif chunk["type"] == "done":
                     content = chunk["content"]
-                    all_sources = chunk["sources"]
+                    all_sources.extend(chunk["sources"])
                     all_actions = chunk["actions"]
+
+                    # 법률 보충 검색이 있으면 법률 에이전트의 액션도 추가
+                    if supplementary_documents:
+                        legal_agent = self.agents["law_common"]
+                        legal_actions = legal_agent.suggest_actions(query, content)
+                        all_actions.extend(legal_actions)
 
             yield {
                 "type": "done",
                 "content": content,
-                "domain": domains[0],
+                "domain": domain,
                 "domains": domains,
                 "sources": all_sources,
                 "actions": all_actions,
