@@ -1,8 +1,10 @@
 # Release Notes
 
-## [2026-02-09] - RAG 품질 개선 및 법률 에이전트 추가
+## [2026-02-09] - RAG 품질 개선 및 멀티에이전트 고도화
 
 ### Features
+- RetrievalAgent 구현 — 검색 파이프라인 3단계 전담 오케스트레이터 (SearchStrategySelector, DocumentBudgetCalculator, GraduatedRetryHandler, DocumentMerger)
+- ResponseGeneratorAgent 추가 — 통합 응답 생성 에이전트 (단일/복수 도메인 생성, 액션 선제안, SSE 토큰 스트리밍)
 - 법률 에이전트 추가 (LegalAgent, law_common 도메인) — 법률/소송/지식재산권 단독 처리
 - 법률 보충 검색 기능 (legal_supplement.py) — 주 도메인 검색 후 법률 키워드 감지 시 법률DB 추가 검색
 - 법률 보충 검색 설정 추가 (ENABLE_LEGAL_SUPPLEMENT, LEGAL_SUPPLEMENT_K)
@@ -16,6 +18,7 @@
 - RAGAS 평가기 추가 (ragas_evaluator.py)
 - 네거티브 테스트 케이스 추가 (negative_test_cases.py)
 - 검색 품질 리포트 생성 기능
+- 평가 노드 수정 — FAIL 시 generate 재실행 로직 개선
 
 ## [2026-02-08] - 초기 릴리즈
 

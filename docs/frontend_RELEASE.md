@@ -1,6 +1,14 @@
 # Release Notes
 
-## [2026-02-09] - 프로젝트 이름 통일
+## [2026-02-09] - 법률 에이전트 태그 및 복합 도메인 UI
+
+### Features
+- 법률 에이전트(A0000007) 태그 지원 — AgentCode, AGENT_NAMES, AGENT_COLORS 추가
+- 복합 도메인 다중 태그 UI — agent_codes 배열 기반 다중 Chip 렌더링
+- 스트리밍/비스트리밍 응답 모두 multi-domain agent_codes 매핑 지원
+- DOMAIN_TO_AGENT_CODE에 law_common 매핑 추가
+- 미사용 컴포넌트 삭제 (EmptyState.tsx, LoadingSpinner.tsx)
+- 미사용 타입 삭제 (CalendarEvent, ApiResponse, LoginResponse)
 
 ### Chores
 - 프로젝트 이름 bizmate → bizi 통일 (패키지명 bizi-frontend)
