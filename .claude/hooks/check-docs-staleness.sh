@@ -7,7 +7,7 @@ INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 
 # git push 명령이 아니면 통과
-if ! echo "$COMMAND" | grep -qE '^git\s+push'; then
+if ! echo "$COMMAND" | grep -qE 'git\s+push'; then
   exit 0
 fi
 
@@ -19,15 +19,15 @@ for dir in backend frontend rag scripts; do
   RELEASE_FILE="$PROJECT_DIR/docs/${dir}_RELEASE.md"
   [ ! -f "$RELEASE_FILE" ] && continue
 
-  # RELEASE.md에서 가장 최근 날짜 추출 (## [YYYY-MM-DD] 형식)
-  LAST_DATE=$(grep -m1 -oE '\[([0-9]{4}-[0-9]{2}-[0-9]{2})\]' "$RELEASE_FILE" | tr -d '[]')
-  [ -z "$LAST_DATE" ] && continue
+  # RELEASE.md를 마지막으로 수정한 커밋 해시 기준으로 비교
+  LAST_RELEASE_COMMIT=$(git -C "$PROJECT_DIR" log -1 --format="%H" -- "$RELEASE_FILE" 2>/dev/null)
+  [ -z "$LAST_RELEASE_COMMIT" ] && continue
 
-  # 해당 날짜 이후 해당 디렉토리의 커밋 수 (RELEASE.md 자체 변경은 제외)
-  COMMIT_COUNT=$(git -C "$PROJECT_DIR" log --oneline --after="$LAST_DATE" -- "$dir/" ':!'"docs/${dir}_RELEASE.md" ':!'"$dir/README.md" 2>/dev/null | wc -l | tr -d ' ')
+  # 해당 커밋 이후 해당 디렉토리의 새 커밋 수 (RELEASE.md, README.md 변경은 제외)
+  COMMIT_COUNT=$(git -C "$PROJECT_DIR" log --oneline "$LAST_RELEASE_COMMIT"..HEAD -- "$dir/" ':!'"docs/${dir}_RELEASE.md" ':!'"$dir/README.md" 2>/dev/null | wc -l | tr -d ' ')
 
   if [ "$COMMIT_COUNT" -gt 0 ]; then
-    STALE_DIRS="${STALE_DIRS}- docs/${dir}_RELEASE.md: ${COMMIT_COUNT}개 새 커밋 (마지막 기록: ${LAST_DATE})\n"
+    STALE_DIRS="${STALE_DIRS}- docs/${dir}_RELEASE.md: ${COMMIT_COUNT}개 새 커밋 (RELEASE.md 갱신 이후)\n"
     TOTAL_NEW=$((TOTAL_NEW + COMMIT_COUNT))
   fi
 done

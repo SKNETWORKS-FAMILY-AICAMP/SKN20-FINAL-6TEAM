@@ -25,9 +25,13 @@ if echo "$COMMAND" | grep -qE 'ruff|eslint|npm run lint'; then
 fi
 
 # git commit 후 문서 갱신 리마인더
-if echo "$COMMAND" | grep -qE '^git commit'; then
+if echo "$COMMAND" | grep -qE 'git\s+commit'; then
   if [ "$EXIT_CODE" = "0" ]; then
     CONTEXT="커밋 완료. 새 파일/엔드포인트/모듈을 추가했다면: 1) CLAUDE.md/AGENTS.md → /update-docs 2) README.md/docs/*_RELEASE.md → /update-release"
+    # push가 체인에 포함된 경우 문서 갱신 미실행 경고
+    if echo "$COMMAND" | grep -qE 'git\s+push'; then
+      CONTEXT="커밋+push 감지. push 전에 /update-release를 실행하여 RELEASE.md를 갱신하세요. (PreToolUse 훅에서 차단될 수 있습니다)"
+    fi
   fi
 fi
 
