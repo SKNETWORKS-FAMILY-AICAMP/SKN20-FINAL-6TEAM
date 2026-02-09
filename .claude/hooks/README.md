@@ -2,70 +2,76 @@
 
 ## 개요
 
-Hooks는 Claude Code 도구 실행 전후에 자동으로 실행되는 로직입니다.
+Claude Code 공식 hooks 시스템을 사용하여 도구 실행 전후에 자동 검사를 수행합니다.
+설정은 `.claude/settings.json`의 `hooks` 섹션에 정의됩니다.
 
-## 훅 유형
+## 훅 스크립트
 
-### PreToolUse
-도구 실행 **전**에 실행됩니다.
+### PreToolUse (도구 실행 전)
 
-| 훅 이름 | 설명 | 트리거 |
-|---------|------|--------|
-| python-type-hint-check | 타입 힌트 권장 | Python 파일 수정 시 |
-| env-file-security-warning | 보안 경고 | .env 파일 수정 시 |
+| 스크립트 | 매칭 도구 | 역할 |
+|---------|----------|------|
+| `check-docs-staleness.sh` | Bash | git push 시 RELEASE.md 최신 여부 확인, 미갱신 시 **push 차단** |
+| `pre-edit-check.sh` | Edit, Write | Python 파일 타입힌트 리마인더 + .env 파일 보안 경고 |
 
-### PostToolUse
-도구 실행 **후**에 실행됩니다.
+### PostToolUse (도구 실행 후)
 
-| 훅 이름 | 설명 | 트리거 |
-|---------|------|--------|
-| pytest-failure-analysis | 테스트 실패 분석 | pytest 명령 실패 시 |
-| lint-error-summary | 린트 에러 요약 | ruff/eslint 명령 실패 시 |
+| 스크립트 | 매칭 도구 | 역할 |
+|---------|----------|------|
+| `post-bash-check.sh` | Bash | pytest/lint 실패 분석 리마인더 + git commit 후 문서 갱신 안내 |
+| `post-edit-check.sh` | Edit, Write | JS/TS 파일 console.log 잔류 경고 |
 
-### SessionStart
-세션 시작 시 실행됩니다.
+## 핵심 동작: Git Push 차단
 
-| 훅 이름 | 설명 |
-|---------|------|
-| show-branch-info | 현재 브랜치와 마지막 커밋 표시 |
+`check-docs-staleness.sh`는 `git push` 명령 감지 시:
 
-## 설정 파일
+1. 각 서비스 디렉토리(`backend/`, `frontend/`, `rag/`, `scripts/`)의 RELEASE.md 확인
+2. RELEASE.md 마지막 기록 날짜 이후 새 커밋이 있는지 비교
+3. 미갱신 디렉토리가 있으면 `permissionDecision: "deny"` 반환으로 push 차단
+4. 사용자에게 `/update-release` 실행을 안내
 
-`hooks.json` 파일에서 훅을 정의합니다.
+```
+git push 시도 → staleness 체크 → 미갱신 발견 → push 차단
+  → /update-release 실행 → RELEASE.md 갱신 → commit → push 재시도 → 통과
+```
+
+## 설정 구조
+
+`.claude/settings.json`:
 
 ```json
 {
   "hooks": {
-    "PreToolUse": [...],
-    "PostToolUse": [...],
-    "SessionStart": [...]
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": ".claude/hooks/check-docs-staleness.sh", "timeout": 30 }]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command", "command": ".claude/hooks/pre-edit-check.sh", "timeout": 10 }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": ".claude/hooks/post-bash-check.sh", "timeout": 10 }]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command", "command": ".claude/hooks/post-edit-check.sh", "timeout": 10 }]
+      }
+    ]
   }
 }
 ```
 
-## 훅 구조
+## 의존성
 
-```json
-{
-  "name": "훅 이름",
-  "description": "설명",
-  "matcher": {
-    "tool": "도구명",
-    "file_pattern": "파일 패턴",
-    "command_pattern": "명령어 패턴"
-  },
-  "reminder": "사용자에게 표시할 메시지",
-  "command": "실행할 셸 명령 (SessionStart용)",
-  "on_failure": "실패 시 메시지 (PostToolUse용)"
-}
-```
+- `jq`: JSON 파싱에 필요 (macOS: `brew install jq`)
 
-## 비활성화
+## 제한사항
 
-특정 훅을 비활성화하려면 해당 항목을 주석 처리하거나 삭제하세요.
-
-## 주의사항
-
-- 훅은 모든 세션에서 실행됩니다
-- 성능에 영향을 줄 수 있으므로 무거운 작업은 피하세요
-- 보안 민감한 정보를 로그에 출력하지 마세요
+- Claude Code 세션 내에서만 동작 (터미널 직접 push는 미적용)
+- `git log --after` 는 날짜 단위이므로 같은 날 여러 push 시 정밀도 한계
+- hooks 설정 변경 후 `/hooks`에서 확인하거나 세션 재시작 필요

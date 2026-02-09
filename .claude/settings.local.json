@@ -35,7 +35,15 @@
       "Bash(lsof:*)",
       "Bash(xargs:*)",
       "Bash(tree:*)",
-      "Bash(source:*)"
+      "Bash(source:*)",
+      "Bash(find:*)",
+      "Bash(for file in /Users/backgold/WorkSpace/SKN20-FINAL-6TEAM/data/preprocessed/{law,finance,startup_support,labor}/*.jsonl)",
+      "Bash(do:*)",
+      "Bash(for dir in backend frontend rag scripts)",
+      "Bash(if [ -f \"$dir/RELEASE.md\" ])",
+      "Bash(then grep -m1 \"^## \\\\[\" \"$dir/RELEASE.md\")",
+      "Bash(else echo \"RELEASE.md not found\")",
+      "Bash(fi)"
     ]
   }
 }
