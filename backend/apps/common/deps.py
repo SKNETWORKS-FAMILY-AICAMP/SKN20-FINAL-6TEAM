@@ -39,13 +39,3 @@ def get_current_user(
             detail="User not found"
         )
     return user
-
-
-def get_current_user_optional(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
-) -> User | None:
-    try:
-        return get_current_user(credentials, db)
-    except HTTPException:
-        return None

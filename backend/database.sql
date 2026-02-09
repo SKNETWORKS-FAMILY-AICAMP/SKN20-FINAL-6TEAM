@@ -44,6 +44,7 @@ SELECT * FROM (
     UNION ALL SELECT '재무·세무', 'A', 'A0000003'
     UNION ALL SELECT '인사·노무', 'A', 'A0000004'
     UNION ALL SELECT '평가·검증', 'A', 'A0000005'
+    UNION ALL SELECT '법률', 'A', 'A0000007'
     -- 업종 코드 - KSIC(한국표준산업분류) 기반 (대분류 21개)
     UNION ALL SELECT '농업, 임업 및 어업', 'B', 'BA000000'
     UNION ALL SELECT '광업', 'B', 'BB000000'
@@ -799,6 +800,7 @@ SELECT * FROM (
     SELECT 'startup_funding' AS domain_key, '창업/지원사업' AS name, 0 AS sort_order
     UNION ALL SELECT 'finance_tax', '재무/세무', 1
     UNION ALL SELECT 'hr_labor', '인사/노무', 2
+    UNION ALL SELECT 'law_common', '법률', 3
 ) AS init_data
 WHERE NOT EXISTS (SELECT 1 FROM `domain` LIMIT 1);
 
@@ -888,11 +890,6 @@ SELECT dk.domain_id, dk.keyword, dk.keyword_type FROM (
         UNION ALL SELECT '4대보험', 'noun'
         UNION ALL SELECT '근로계약', 'noun'
         UNION ALL SELECT '취업규칙', 'noun'
-        UNION ALL SELECT '소송', 'noun'
-        UNION ALL SELECT '분쟁', 'noun'
-        UNION ALL SELECT '특허', 'noun'
-        UNION ALL SELECT '상표', 'noun'
-        UNION ALL SELECT '저작권', 'noun'
         UNION ALL SELECT '권고사직', 'noun'
         UNION ALL SELECT '정리해고', 'noun'
         UNION ALL SELECT '월급', 'noun'
@@ -904,6 +901,50 @@ SELECT dk.domain_id, dk.keyword, dk.keyword_type FROM (
         UNION ALL SELECT '짤리다', 'verb'
     ) kw
     WHERE d.domain_key = 'hr_labor'
+    UNION ALL
+    -- law_common 키워드
+    SELECT d.domain_id, kw.keyword, kw.keyword_type
+    FROM `domain` d
+    CROSS JOIN (
+        SELECT '법률' AS keyword, 'noun' AS keyword_type
+        UNION ALL SELECT '법령', 'noun'
+        UNION ALL SELECT '조문', 'noun'
+        UNION ALL SELECT '판례', 'noun'
+        UNION ALL SELECT '법규', 'noun'
+        UNION ALL SELECT '규정', 'noun'
+        UNION ALL SELECT '상법', 'noun'
+        UNION ALL SELECT '민법', 'noun'
+        UNION ALL SELECT '행정법', 'noun'
+        UNION ALL SELECT '공정거래법', 'noun'
+        UNION ALL SELECT '소송', 'noun'
+        UNION ALL SELECT '분쟁', 'noun'
+        UNION ALL SELECT '소장', 'noun'
+        UNION ALL SELECT '고소', 'noun'
+        UNION ALL SELECT '고발', 'noun'
+        UNION ALL SELECT '항소', 'noun'
+        UNION ALL SELECT '상고', 'noun'
+        UNION ALL SELECT '손해배상', 'noun'
+        UNION ALL SELECT '배상', 'noun'
+        UNION ALL SELECT '합의', 'noun'
+        UNION ALL SELECT '조정', 'noun'
+        UNION ALL SELECT '중재', 'noun'
+        UNION ALL SELECT '특허', 'noun'
+        UNION ALL SELECT '상표', 'noun'
+        UNION ALL SELECT '저작권', 'noun'
+        UNION ALL SELECT '지식재산', 'noun'
+        UNION ALL SELECT '출원', 'noun'
+        UNION ALL SELECT '침해', 'noun'
+        UNION ALL SELECT '변호사', 'noun'
+        UNION ALL SELECT '법무사', 'noun'
+        UNION ALL SELECT '변리사', 'noun'
+        UNION ALL SELECT '계약법', 'noun'
+        UNION ALL SELECT '약관', 'noun'
+        UNION ALL SELECT '채무불이행', 'noun'
+        UNION ALL SELECT '고소하다', 'verb'
+        UNION ALL SELECT '소송하다', 'verb'
+        UNION ALL SELECT '항소하다', 'verb'
+    ) kw
+    WHERE d.domain_key = 'law_common'
 ) dk
 WHERE NOT EXISTS (SELECT 1 FROM `domain_keyword` LIMIT 1);
 
@@ -1005,4 +1046,29 @@ AND NOT EXISTS (
     SELECT 1 FROM `domain_representative_query` q
     JOIN `domain` d2 ON q.domain_id = d2.domain_id
     WHERE d2.domain_key = 'hr_labor' LIMIT 1
+);
+
+INSERT INTO `domain_representative_query` (`domain_id`, `query_text`)
+SELECT d.domain_id, rq.query_text
+FROM `domain` d
+CROSS JOIN (
+    SELECT '소송 절차가 어떻게 되나요' AS query_text
+    UNION ALL SELECT '분쟁 해결 방법 알려주세요'
+    UNION ALL SELECT '특허 출원 방법이 궁금합니다'
+    UNION ALL SELECT '상표 등록 절차 안내해주세요'
+    UNION ALL SELECT '저작권 침해 시 대응 방법'
+    UNION ALL SELECT '상법에서 이사의 의무는 무엇인가요'
+    UNION ALL SELECT '민법상 계약 해제 요건'
+    UNION ALL SELECT '손해배상 청구 방법'
+    UNION ALL SELECT '지식재산권 보호 방법'
+    UNION ALL SELECT '법인 이사의 책임에 대해 알려주세요'
+    UNION ALL SELECT '계약서 분쟁 시 어떻게 해야 하나요'
+    UNION ALL SELECT '특허 침해 소송 절차가 궁금합니다'
+    UNION ALL SELECT '회사 관련 법적 분쟁 해결'
+) rq
+WHERE d.domain_key = 'law_common'
+AND NOT EXISTS (
+    SELECT 1 FROM `domain_representative_query` q
+    JOIN `domain` d2 ON q.domain_id = d2.domain_id
+    WHERE d2.domain_key = 'law_common' LIMIT 1
 );

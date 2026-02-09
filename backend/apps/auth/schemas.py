@@ -1,14 +1,10 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from datetime import datetime
 
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-
-
-class GoogleLoginRequest(BaseModel):
-    code: str
 
 
 class TestLoginRequest(BaseModel):
