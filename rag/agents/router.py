@@ -39,7 +39,7 @@ from schemas.response import (
     SourceDocument,
     TimingMetrics,
 )
-from utils.config import get_settings
+from utils.config import DOMAIN_LABELS, get_settings
 from utils.domain_classifier import DomainClassificationResult, get_domain_classifier
 from utils.legal_supplement import needs_legal_supplement
 from utils.prompts import REJECTION_RESPONSE
@@ -502,15 +502,9 @@ class MainRouter:
             domain = list(responses.keys())[0]
             final_response = responses[domain]["content"]
         else:
-            domain_labels = {
-                "startup_funding": "창업/지원",
-                "finance_tax": "재무/세무",
-                "hr_labor": "인사/노무",
-                "law_common": "법률",
-            }
             parts = []
             for domain, resp in responses.items():
-                label = domain_labels.get(domain, domain)
+                label = DOMAIN_LABELS.get(domain, domain)
                 parts.append(f"## {label}\n\n{resp['content']}")
             final_response = "\n\n---\n\n".join(parts)
 
@@ -623,15 +617,9 @@ class MainRouter:
             domain = list(responses.keys())[0]
             final_response = responses[domain]["content"]
         else:
-            domain_labels = {
-                "startup_funding": "창업/지원",
-                "finance_tax": "재무/세무",
-                "hr_labor": "인사/노무",
-                "law_common": "법률",
-            }
             parts = []
             for domain, resp in responses.items():
-                label = domain_labels.get(domain, domain)
+                label = DOMAIN_LABELS.get(domain, domain)
                 parts.append(f"## {label}\n\n{resp['content']}")
             final_response = "\n\n---\n\n".join(parts)
 

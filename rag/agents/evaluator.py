@@ -10,11 +10,9 @@ from typing import Any
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 
 from schemas.response import EvaluationResult
-from utils.config import get_settings
-from utils.token_tracker import TokenUsageCallbackHandler
+from utils.config import create_llm, get_settings
 from utils.prompts import EVALUATOR_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -54,12 +52,7 @@ class EvaluatorAgent:
     def __init__(self):
         """EvaluatorAgent를 초기화합니다."""
         self.settings = get_settings()
-        self.llm = ChatOpenAI(
-            model=self.settings.openai_model,
-            temperature=0.0,  # 평가는 일관성을 위해 낮은 temperature 사용
-            api_key=self.settings.openai_api_key,
-            callbacks=[TokenUsageCallbackHandler("평가")],
-        )
+        self.llm = create_llm("평가", temperature=0.0)
         self.threshold = self.settings.evaluation_threshold
 
     def _parse_evaluation_response(self, response: str) -> tuple[dict[str, Any], bool]:

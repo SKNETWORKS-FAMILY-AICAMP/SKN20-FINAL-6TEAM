@@ -14,6 +14,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
+# 도메인 → 한글 라벨 매핑
+DOMAIN_LABELS: dict[str, str] = {
+    "startup_funding": "창업/지원",
+    "finance_tax": "재무/세무",
+    "hr_labor": "인사/노무",
+    "law_common": "법률",
+}
+
 
 class Settings(BaseSettings):
     """RAG 서비스 설정 클래스.
@@ -364,3 +372,33 @@ def get_settings() -> Settings:
         Settings 인스턴스
     """
     return Settings()
+
+
+def create_llm(
+    label: str,
+    temperature: float | None = None,
+    request_timeout: float | None = None,
+) -> "ChatOpenAI":
+    """ChatOpenAI 인스턴스를 생성합니다.
+
+    Args:
+        label: 토큰 트래킹 레이블 (예: "생성", "평가")
+        temperature: None이면 settings.openai_temperature 사용
+        request_timeout: None이면 설정하지 않음
+
+    Returns:
+        ChatOpenAI 인스턴스
+    """
+    from langchain_openai import ChatOpenAI
+    from utils.token_tracker import TokenUsageCallbackHandler
+
+    settings = get_settings()
+    kwargs: dict = {
+        "model": settings.openai_model,
+        "api_key": settings.openai_api_key,
+        "temperature": temperature if temperature is not None else settings.openai_temperature,
+        "callbacks": [TokenUsageCallbackHandler(label)],
+    }
+    if request_timeout is not None:
+        kwargs["request_timeout"] = request_timeout
+    return ChatOpenAI(**kwargs)

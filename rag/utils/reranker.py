@@ -11,11 +11,9 @@ from abc import ABC, abstractmethod
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 
-from utils.config import get_settings
+from utils.config import create_llm, get_settings
 from utils.prompts import RERANK_PROMPT
-from utils.token_tracker import TokenUsageCallbackHandler
 
 logger = logging.getLogger(__name__)
 
@@ -178,12 +176,7 @@ class LLMReranker(BaseReranker):
     def __init__(self):
         """LLMReranker를 초기화합니다."""
         self.settings = get_settings()
-        self.llm = ChatOpenAI(
-            model="gpt-4o-mini",  # 빠른 모델 사용
-            temperature=0.0,
-            api_key=self.settings.openai_api_key,
-            callbacks=[TokenUsageCallbackHandler("리랭킹")],
-        )
+        self.llm = create_llm("리랭킹", temperature=0.0)
         self._chain = self._build_chain()
 
     def _build_chain(self):

@@ -13,12 +13,10 @@ from functools import lru_cache
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 
 from utils.cache import LRUCache
-from utils.config import get_settings
+from utils.config import create_llm, get_settings
 from utils.prompts import QUESTION_DECOMPOSER_PROMPT
-from utils.token_tracker import TokenUsageCallbackHandler
 
 logger = logging.getLogger(__name__)
 
@@ -108,12 +106,7 @@ class QuestionDecomposer:
     def __init__(self):
         """QuestionDecomposer를 초기화합니다."""
         self.settings = get_settings()
-        self.llm = ChatOpenAI(
-            model=self.settings.openai_model,
-            temperature=0.3,
-            api_key=self.settings.openai_api_key,
-            callbacks=[TokenUsageCallbackHandler("질문분해")],
-        )
+        self.llm = create_llm("질문분해")
         self._cache: LRUCache[list[SubQuery]] = LRUCache(
             max_size=200, default_ttl=3600,
         )

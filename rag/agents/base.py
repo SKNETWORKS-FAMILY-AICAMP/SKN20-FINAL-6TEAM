@@ -17,7 +17,7 @@ from langchain_core.documents import Document
 from chains.rag_chain import RAGChain
 from schemas.request import UserContext
 from schemas.response import ActionSuggestion, SourceDocument
-from utils.config import get_settings
+from utils.config import create_llm, get_settings
 
 if TYPE_CHECKING:
     from utils.feedback import SearchStrategy
@@ -340,9 +340,6 @@ class BaseAgent(ABC):
         """
         from langchain_core.output_parsers import StrOutputParser
         from langchain_core.prompts import ChatPromptTemplate
-        from langchain_openai import ChatOpenAI
-
-        from utils.token_tracker import TokenUsageCallbackHandler
 
         logger.info("[generate_only] %s 생성 시작: '%s'", self.domain, query[:50])
         start = time.time()
@@ -366,12 +363,7 @@ class BaseAgent(ABC):
         prompt = ChatPromptTemplate.from_messages(messages)
 
         # LLM 호출
-        llm = ChatOpenAI(
-            model=self.settings.openai_model,
-            temperature=self.settings.openai_temperature,
-            api_key=self.settings.openai_api_key,
-            callbacks=[TokenUsageCallbackHandler("생성")],
-        )
+        llm = create_llm("생성")
 
         chain = prompt | llm | StrOutputParser()
         invoke_params: dict = {
@@ -410,9 +402,6 @@ class BaseAgent(ABC):
         """
         from langchain_core.output_parsers import StrOutputParser
         from langchain_core.prompts import ChatPromptTemplate
-        from langchain_openai import ChatOpenAI
-
-        from utils.token_tracker import TokenUsageCallbackHandler
 
         logger.info("[agenerate_only] %s 생성 시작: '%s'", self.domain, query[:50])
         start = time.time()
@@ -436,12 +425,7 @@ class BaseAgent(ABC):
         prompt = ChatPromptTemplate.from_messages(messages)
 
         # LLM 호출
-        llm = ChatOpenAI(
-            model=self.settings.openai_model,
-            temperature=self.settings.openai_temperature,
-            api_key=self.settings.openai_api_key,
-            callbacks=[TokenUsageCallbackHandler("생성")],
-        )
+        llm = create_llm("생성")
 
         chain = prompt | llm | StrOutputParser()
         invoke_params: dict = {

@@ -25,7 +25,7 @@ from utils.question_decomposer import (
 def decomposer():
     """QuestionDecomposer 인스턴스를 생성합니다."""
     with patch("utils.question_decomposer.get_settings") as mock_settings, \
-         patch("utils.question_decomposer.ChatOpenAI"):
+         patch("utils.question_decomposer.create_llm"):
         mock_settings.return_value = MagicMock(
             openai_model="gpt-4o-mini",
             openai_api_key="sk-test-key",

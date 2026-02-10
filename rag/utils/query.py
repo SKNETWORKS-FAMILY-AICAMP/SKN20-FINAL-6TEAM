@@ -13,10 +13,8 @@ from typing import Any
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 
-from utils.config import get_settings
-from utils.token_tracker import TokenUsageCallbackHandler
+from utils.config import create_llm, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -75,12 +73,7 @@ class QueryProcessor:
     def __init__(self):
         """QueryProcessor를 초기화합니다."""
         self.settings = get_settings()
-        self.llm = ChatOpenAI(
-            model=self.settings.openai_model,
-            temperature=0.0,  # 일관된 결과를 위해 낮은 temperature
-            api_key=self.settings.openai_api_key,
-            callbacks=[TokenUsageCallbackHandler("쿼리재작성")],
-        )
+        self.llm = create_llm("쿼리재작성", temperature=0.0)
         self._rewrite_chain = self._build_rewrite_chain()
         self._compression_chain = self._build_compression_chain()
         self._rewrite_cache: OrderedDict[str, str] = OrderedDict()

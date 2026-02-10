@@ -42,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from agents.router import MainRouter
 from schemas.request import UserContext
 from schemas.response import SourceDocument, TimingMetrics
-from utils.config import get_settings
+from utils.config import DOMAIN_LABELS, get_settings
 from utils.domain_config_db import init_db, load_domain_config
 from utils.exceptions import (
     DomainClassificationError,
@@ -75,13 +75,6 @@ RAGAS_METRIC_LABELS: dict[str, str] = {
     "answer_relevancy": "Answer Relevancy (답변 관련성)",
     "context_precision": "Context Precision (컨텍스트 정밀도)",
     "context_recall": "Context Recall (컨텍스트 재현율)",
-}
-
-# 도메인 라벨
-DOMAIN_LABELS: dict[str, str] = {
-    "startup_funding": "창업/지원",
-    "finance_tax": "재무/세무",
-    "hr_labor": "인사/노무",
 }
 
 

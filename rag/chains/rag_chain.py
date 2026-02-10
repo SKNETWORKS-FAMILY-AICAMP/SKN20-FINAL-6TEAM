@@ -13,11 +13,9 @@ from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
-from langchain_openai import ChatOpenAI
 
 from schemas.response import SourceDocument
-from utils.config import get_settings
-from utils.token_tracker import TokenUsageCallbackHandler
+from utils.config import create_llm, get_settings
 from vectorstores.chroma import ChromaVectorStore
 
 if TYPE_CHECKING:
@@ -54,12 +52,9 @@ class RAGChain:
         """
         self.settings = get_settings()
         self.vector_store = vector_store or ChromaVectorStore()
-        self.llm = ChatOpenAI(
-            model=self.settings.openai_model,
-            temperature=self.settings.openai_temperature,
-            api_key=self.settings.openai_api_key,
+        self.llm = create_llm(
+            "생성",
             request_timeout=self.settings.llm_timeout,
-            callbacks=[TokenUsageCallbackHandler("생성")],
         )
 
         # 고급 기능 초기화 (지연 로딩)

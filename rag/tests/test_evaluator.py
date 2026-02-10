@@ -12,7 +12,7 @@ class TestEvaluatorAgent:
     @pytest.fixture
     def evaluator(self):
         """평가 에이전트 fixture."""
-        with patch("agents.evaluator.ChatOpenAI"):
+        with patch("utils.config.create_llm"):
             from agents.evaluator import EvaluatorAgent
             return EvaluatorAgent()
 

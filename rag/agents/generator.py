@@ -15,29 +15,19 @@ from typing import Any, AsyncGenerator
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 
 from agents.base import BaseAgent, RetrievalResult
 from chains.rag_chain import RAGChain
 from schemas.request import UserContext
 from schemas.response import ActionSuggestion, SourceDocument
-from utils.config import get_settings
+from utils.config import DOMAIN_LABELS, create_llm, get_settings
 from utils.prompts import (
     ACTION_HINT_TEMPLATE,
     MULTI_DOMAIN_SYNTHESIS_PROMPT,
 )
 from utils.question_decomposer import SubQuery
-from utils.token_tracker import TokenUsageCallbackHandler
 
 logger = logging.getLogger(__name__)
-
-# 도메인 라벨 매핑
-DOMAIN_LABELS: dict[str, str] = {
-    "startup_funding": "창업/지원",
-    "finance_tax": "재무/세무",
-    "hr_labor": "인사/노무",
-    "law_common": "법률",
-}
 
 
 @dataclass
@@ -89,18 +79,15 @@ class ResponseGeneratorAgent:
         self.agents = agents
         self.rag_chain = rag_chain or RAGChain()
 
-    def _get_llm(self) -> ChatOpenAI:
+    def _get_llm(self) -> "ChatOpenAI":
         """LLM 인스턴스를 생성합니다.
 
         Returns:
             ChatOpenAI 인스턴스
         """
-        return ChatOpenAI(
-            model=self.settings.openai_model,
-            temperature=self.settings.openai_temperature,
-            api_key=self.settings.openai_api_key,
+        return create_llm(
+            "통합생성",
             request_timeout=self.settings.llm_timeout,
-            callbacks=[TokenUsageCallbackHandler("통합생성")],
         )
 
     def _collect_actions(

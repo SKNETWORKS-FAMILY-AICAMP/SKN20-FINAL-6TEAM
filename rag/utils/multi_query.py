@@ -12,11 +12,9 @@ from typing import TYPE_CHECKING
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 
-from utils.config import get_settings
+from utils.config import create_llm, get_settings
 from utils.prompts import MULTI_QUERY_PROMPT
-from utils.token_tracker import TokenUsageCallbackHandler
 
 if TYPE_CHECKING:
     from chains.rag_chain import RAGChain
@@ -49,12 +47,7 @@ class MultiQueryRetriever:
         """
         self.rag_chain = rag_chain
         self.settings = get_settings()
-        self.llm = ChatOpenAI(
-            model=self.settings.openai_model,
-            temperature=0.7,  # 다양한 쿼리 생성을 위해 높은 temperature
-            api_key=self.settings.openai_api_key,
-            callbacks=[TokenUsageCallbackHandler("쿼리확장")],
-        )
+        self.llm = create_llm("쿼리확장", temperature=0.7)
 
     def _generate_queries(self, query: str) -> list[str]:
         """쿼리를 여러 관점으로 확장합니다.
