@@ -1,15 +1,21 @@
 # Release Notes
 
-## [2026-02-10] - LLM 팩토리 함수 및 DOMAIN_LABELS 중앙화
+## [2026-02-10] - LLM 팩토리 중앙화 및 코드 일관성 리팩토링
 
 ### Refactoring
 - utils/config.py에 create_llm() 팩토리 함수 추가 (9개 파일의 ChatOpenAI 초기화 통합)
 - utils/config.py에 DOMAIN_LABELS 상수 추가 (4곳의 중복 정의 통합)
-- 테스트 mock 경로를 utils.config.create_llm으로 업데이트
+- _llm_classify()의 ChatOpenAI 직접 생성을 create_llm 팩토리로 교체 (직접 생성 0건 달성)
+- classify()의 미사용 변수(keyword_domains, vector_best) 삭제 및 주석 정렬
+- 테스트 create_llm 패치 경로를 사용사이트로 통일 (test_evaluator, test_rag_chain)
+- 죽은 코드 및 legacy 생성 메서드 삭제 (~248줄): domain_config_db.py, multi_query.py, GENERATOR_PROMPT
 
 ### Bug Fixes
 - cli.py에서 law_common 도메인 라벨 누락 수정
 - 도메인 분류 개선 (키워드 보정을 벡터 threshold 판정 전에 적용)
+
+### Tests
+- 키워드 보정 threshold 인접 회귀 테스트 3개 추가 (경계값 검증)
 
 ### Documentation
 - ARCHITECTURE.md 갱신 (RetrievalAgent, ResponseGeneratorAgent, LegalAgent 반영)
