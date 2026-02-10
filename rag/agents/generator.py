@@ -170,20 +170,6 @@ class ResponseGeneratorAgent:
             parts.append(f"- {action.label}{desc}")
         return "\n".join(parts)
 
-    @staticmethod
-    def _extract_user_context(
-        user_context: UserContext | None,
-    ) -> tuple[str, str]:
-        """UserContext에서 user_type과 company_context를 추출합니다.
-
-        Args:
-            user_context: 사용자 컨텍스트
-
-        Returns:
-            (user_type, company_context) 튜플
-        """
-        return BaseAgent._extract_user_context(user_context)
-
     def generate(
         self,
         query: str,
@@ -207,7 +193,7 @@ class ResponseGeneratorAgent:
             GenerationResult
         """
         start = time.time()
-        user_type, company_context = self._extract_user_context(user_context)
+        user_type, company_context = BaseAgent._extract_user_context(user_context)
 
         # 액션 사전 수집
         actions = self._collect_actions(query, retrieval_results, domains)
@@ -286,7 +272,7 @@ class ResponseGeneratorAgent:
             GenerationResult
         """
         start = time.time()
-        user_type, company_context = self._extract_user_context(user_context)
+        user_type, company_context = BaseAgent._extract_user_context(user_context)
 
         # 액션 사전 수집
         actions = self._collect_actions(query, retrieval_results, domains)
@@ -364,7 +350,7 @@ class ResponseGeneratorAgent:
         Yields:
             스트리밍 토큰 딕셔너리
         """
-        user_type, company_context = self._extract_user_context(user_context)
+        user_type, company_context = BaseAgent._extract_user_context(user_context)
         agent = self.agents.get(domain)
         if not agent:
             logger.warning("[생성기 스트리밍] 도메인 에이전트 없음: %s", domain)
@@ -423,7 +409,7 @@ class ResponseGeneratorAgent:
         Yields:
             스트리밍 토큰 딕셔너리
         """
-        user_type, company_context = self._extract_user_context(user_context)
+        user_type, company_context = BaseAgent._extract_user_context(user_context)
 
         # 전체 문서 병합
         all_documents: list[Document] = []

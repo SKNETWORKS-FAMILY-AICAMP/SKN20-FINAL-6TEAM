@@ -234,10 +234,6 @@ class Settings(BaseSettings):
     )
 
     # 통합 생성 에이전트 설정
-    enable_integrated_generation: bool = Field(
-        default=True,
-        description="통합 생성 에이전트 활성화 (False이면 기존 방식 유지)"
-    )
     enable_action_aware_generation: bool = Field(
         default=True,
         description="액션 인식 생성 활성화 (액션을 생성 전에 결정하여 답변에 반영)"
@@ -318,7 +314,6 @@ class Settings(BaseSettings):
         "enable_graduated_retry",
         "max_retry_level",
         "primary_domain_budget_ratio",
-        "enable_integrated_generation",
         "enable_action_aware_generation",
         "debug",
     }

@@ -410,20 +410,16 @@ class MainRouter:
         """생성 노드: 검색된 문서 기반으로 답변을 생성합니다."""
         start = time.time()
 
-        if self.settings.enable_integrated_generation:
-            result = self.generator.generate(
-                query=state["query"],
-                sub_queries=state["sub_queries"],
-                retrieval_results=state["retrieval_results"],
-                user_context=state.get("user_context"),
-                domains=state["domains"],
-            )
-            state["final_response"] = result.content
-            state["actions"] = result.actions
-            state["sources"] = result.sources
-        else:
-            # 기존 로직 (backward compatibility)
-            self._generate_node_legacy(state)
+        result = self.generator.generate(
+            query=state["query"],
+            sub_queries=state["sub_queries"],
+            retrieval_results=state["retrieval_results"],
+            user_context=state.get("user_context"),
+            domains=state["domains"],
+        )
+        state["final_response"] = result.content
+        state["actions"] = result.actions
+        state["sources"] = result.sources
 
         generate_time = time.time() - start
         state["timing_metrics"]["generate_time"] = generate_time
@@ -435,102 +431,21 @@ class MainRouter:
         )
 
         return state
-
-    def _generate_node_legacy(self, state: RouterState) -> None:
-        """기존 생성 로직 (enable_integrated_generation=False 시 사용).
-
-        Args:
-            state: 라우터 상태 (in-place 수정)
-        """
-        sub_queries = state["sub_queries"]
-        retrieval_results = state["retrieval_results"]
-        user_context = state.get("user_context")
-
-        # 재시도 시 이전 평가 피드백 추출
-        evaluation_feedback = None
-        if state.get("retry_count", 0) > 0 and state.get("evaluation"):
-            evaluation_feedback = state["evaluation"].feedback
-            logger.info(
-                "[생성] 재시도 %d회차 - 피드백: %s",
-                state["retry_count"],
-                (evaluation_feedback or "")[:100],
-            )
-
-        responses: dict[str, Any] = {}
-        all_sources: list[SourceDocument] = []
-        all_actions: list[ActionSuggestion] = []
-
-        legal_supplement_result = retrieval_results.get("law_common_supplement")
-        legal_supplement_docs = legal_supplement_result.documents if legal_supplement_result else []
-
-        for sq in sub_queries:
-            if sq.domain in self.agents and sq.domain in retrieval_results:
-                agent = self.agents[sq.domain]
-                result = retrieval_results[sq.domain]
-
-                merged_documents = result.documents
-                if legal_supplement_docs and sq.domain != "law_common":
-                    merged_documents = result.documents + legal_supplement_docs
-
-                content = agent.generate_only(
-                    query=sq.query,
-                    documents=merged_documents,
-                    user_context=user_context,
-                    evaluation_feedback=evaluation_feedback,
-                )
-
-                actions = agent.suggest_actions(sq.query, content)
-
-                if legal_supplement_docs and sq.domain != "law_common":
-                    legal_agent = self.agents["law_common"]
-                    legal_actions = legal_agent.suggest_actions(sq.query, content)
-                    actions.extend(legal_actions)
-
-                responses[sq.domain] = {
-                    "content": content,
-                    "sources": result.sources,
-                    "actions": actions,
-                }
-
-                all_sources.extend(result.sources)
-                all_actions.extend(actions)
-
-        if legal_supplement_result:
-            all_sources.extend(legal_supplement_result.sources)
-
-        if len(responses) == 1:
-            domain = list(responses.keys())[0]
-            final_response = responses[domain]["content"]
-        else:
-            parts = []
-            for domain, resp in responses.items():
-                label = DOMAIN_LABELS.get(domain, domain)
-                parts.append(f"## {label}\n\n{resp['content']}")
-            final_response = "\n\n---\n\n".join(parts)
-
-        state["responses"] = responses
-        state["final_response"] = final_response
-        state["sources"] = all_sources
-        state["actions"] = all_actions
 
     async def _agenerate_node(self, state: RouterState) -> RouterState:
         """비동기 생성 노드: 통합 생성 에이전트 사용."""
         start = time.time()
 
-        if self.settings.enable_integrated_generation:
-            result = await self.generator.agenerate(
-                query=state["query"],
-                sub_queries=state["sub_queries"],
-                retrieval_results=state["retrieval_results"],
-                user_context=state.get("user_context"),
-                domains=state["domains"],
-            )
-            state["final_response"] = result.content
-            state["actions"] = result.actions
-            state["sources"] = result.sources
-        else:
-            # 기존 로직 (backward compatibility)
-            await self._agenerate_node_legacy(state)
+        result = await self.generator.agenerate(
+            query=state["query"],
+            sub_queries=state["sub_queries"],
+            retrieval_results=state["retrieval_results"],
+            user_context=state.get("user_context"),
+            domains=state["domains"],
+        )
+        state["final_response"] = result.content
+        state["actions"] = result.actions
+        state["sources"] = result.sources
 
         generate_time = time.time() - start
         state["timing_metrics"]["generate_time"] = generate_time
@@ -542,91 +457,6 @@ class MainRouter:
         )
 
         return state
-
-    async def _agenerate_node_legacy(self, state: RouterState) -> None:
-        """기존 비동기 생성 로직 (enable_integrated_generation=False 시 사용).
-
-        Args:
-            state: 라우터 상태 (in-place 수정)
-        """
-        sub_queries = state["sub_queries"]
-        retrieval_results = state["retrieval_results"]
-        user_context = state.get("user_context")
-
-        # 재시도 시 이전 평가 피드백 추출
-        evaluation_feedback = None
-        if state.get("retry_count", 0) > 0 and state.get("evaluation"):
-            evaluation_feedback = state["evaluation"].feedback
-            logger.info(
-                "[생성] 재시도 %d회차 - 피드백: %s",
-                state["retry_count"],
-                (evaluation_feedback or "")[:100],
-            )
-
-        legal_supplement_result = retrieval_results.get("law_common_supplement")
-        legal_supplement_docs = legal_supplement_result.documents if legal_supplement_result else []
-
-        async def generate_for_domain(sq: SubQuery) -> tuple[str, dict[str, Any]] | None:
-            if sq.domain in self.agents and sq.domain in retrieval_results:
-                agent = self.agents[sq.domain]
-                result = retrieval_results[sq.domain]
-
-                merged_documents = result.documents
-                if legal_supplement_docs and sq.domain != "law_common":
-                    merged_documents = result.documents + legal_supplement_docs
-
-                content = await agent.agenerate_only(
-                    query=sq.query,
-                    documents=merged_documents,
-                    user_context=user_context,
-                    evaluation_feedback=evaluation_feedback,
-                )
-
-                actions = agent.suggest_actions(sq.query, content)
-
-                if legal_supplement_docs and sq.domain != "law_common":
-                    legal_agent = self.agents["law_common"]
-                    legal_actions = legal_agent.suggest_actions(sq.query, content)
-                    actions.extend(legal_actions)
-
-                return sq.domain, {
-                    "content": content,
-                    "sources": result.sources,
-                    "actions": actions,
-                }
-            return None
-
-        tasks = [generate_for_domain(sq) for sq in sub_queries]
-        results = await asyncio.gather(*tasks)
-
-        responses: dict[str, Any] = {}
-        all_sources: list[SourceDocument] = []
-        all_actions: list[ActionSuggestion] = []
-
-        for result in results:
-            if result is not None:
-                domain, resp = result
-                responses[domain] = resp
-                all_sources.extend(resp["sources"])
-                all_actions.extend(resp["actions"])
-
-        if legal_supplement_result:
-            all_sources.extend(legal_supplement_result.sources)
-
-        if len(responses) == 1:
-            domain = list(responses.keys())[0]
-            final_response = responses[domain]["content"]
-        else:
-            parts = []
-            for domain, resp in responses.items():
-                label = DOMAIN_LABELS.get(domain, domain)
-                parts.append(f"## {label}\n\n{resp['content']}")
-            final_response = "\n\n---\n\n".join(parts)
-
-        state["responses"] = responses
-        state["final_response"] = final_response
-        state["sources"] = all_sources
-        state["actions"] = all_actions
 
     def _evaluate_node(self, state: RouterState) -> RouterState:
         """평가 노드: LLM 평가 (FAIL 시 재시도) + RAGAS 평가 (항상 로깅용)."""
@@ -1038,68 +868,51 @@ class MainRouter:
                 except Exception as e:
                     logger.warning("[스트리밍] 법률 보충 검색 실패: %s", e)
 
-            if self.settings.enable_integrated_generation:
-                # 통합 생성 에이전트 사용 스트리밍
-                # 검색 수행
-                retrieval_result = await agent.aretrieve_only(query)
-                documents = retrieval_result.documents
-                all_sources.extend(retrieval_result.sources)
+            # 통합 생성 에이전트 사용 스트리밍
+            # 검색 수행
+            retrieval_result = await agent.aretrieve_only(query)
+            documents = retrieval_result.documents
+            all_sources.extend(retrieval_result.sources)
 
-                if supplementary_documents:
-                    documents = documents + supplementary_documents
+            if supplementary_documents:
+                documents = documents + supplementary_documents
 
-                # 액션 사전 수집 (이미 검색된 결과 재사용)
-                retrieval_results_map: dict[str, RetrievalResult] = {
-                    domain: retrieval_result,
-                }
-                if supplementary_documents:
-                    legal_supp_sources = self.generator.rag_chain.documents_to_sources(
-                        supplementary_documents
-                    )
-                    retrieval_results_map["law_common_supplement"] = RetrievalResult(
-                        documents=supplementary_documents,
-                        scores=[],
-                        sources=legal_supp_sources,
-                        evaluation=RetrievalEvaluationResult(
-                            status=RetrievalStatus.SUCCESS,
-                            doc_count=len(supplementary_documents),
-                            keyword_match_ratio=0.0,
-                            avg_similarity_score=0.0,
-                        ),
-                    )
-
-                pre_actions = self.generator._collect_actions(
-                    query, retrieval_results_map, [domain]
+            # 액션 사전 수집 (이미 검색된 결과 재사용)
+            retrieval_results_map: dict[str, RetrievalResult] = {
+                domain: retrieval_result,
+            }
+            if supplementary_documents:
+                legal_supp_sources = self.generator.rag_chain.documents_to_sources(
+                    supplementary_documents
+                )
+                retrieval_results_map["law_common_supplement"] = RetrievalResult(
+                    documents=supplementary_documents,
+                    scores=[],
+                    sources=legal_supp_sources,
+                    evaluation=RetrievalEvaluationResult(
+                        status=RetrievalStatus.SUCCESS,
+                        doc_count=len(supplementary_documents),
+                        keyword_match_ratio=0.0,
+                        avg_similarity_score=0.0,
+                    ),
                 )
 
-                async for chunk in self.generator.astream_generate(
-                    query=query,
-                    documents=documents,
-                    user_context=user_context,
-                    domain=domain,
-                    actions=pre_actions,
-                ):
-                    if chunk["type"] == "token":
-                        yield {"type": "token", "content": chunk["content"]}
-                    elif chunk["type"] == "generation_done":
-                        content = chunk["content"]
-                        all_actions = pre_actions
-            else:
-                # 기존 방식 (BaseAgent.astream)
-                async for chunk in agent.astream(
-                    query, user_context, supplementary_documents=supplementary_documents
-                ):
-                    if chunk["type"] == "token":
-                        yield {"type": "token", "content": chunk["content"]}
-                    elif chunk["type"] == "done":
-                        content = chunk["content"]
-                        all_sources.extend(chunk["sources"])
-                        all_actions = chunk["actions"]
+            pre_actions = self.generator._collect_actions(
+                query, retrieval_results_map, [domain]
+            )
 
-                        if supplementary_documents:
-                            legal_agent = self.agents["law_common"]
-                            legal_actions = legal_agent.suggest_actions(query, content)
-                            all_actions.extend(legal_actions)
+            async for chunk in self.generator.astream_generate(
+                query=query,
+                documents=documents,
+                user_context=user_context,
+                domain=domain,
+                actions=pre_actions,
+            ):
+                if chunk["type"] == "token":
+                    yield {"type": "token", "content": chunk["content"]}
+                elif chunk["type"] == "generation_done":
+                    content = chunk["content"]
+                    all_actions = pre_actions
 
             yield {
                 "type": "done",
@@ -1109,7 +922,7 @@ class MainRouter:
                 "sources": all_sources,
                 "actions": all_actions,
             }
-        elif self.settings.enable_integrated_generation:
+        else:
             # 복수 도메인: 통합 생성 에이전트로 LLM 토큰 스트리밍
             # 분해 + 검색 수행
             initial_state = self._create_initial_state(query, user_context, history)
@@ -1159,21 +972,4 @@ class MainRouter:
                 "domains": domains,
                 "sources": all_sources_multi,
                 "actions": pre_actions,
-            }
-        else:
-            # 복합 도메인: 기존 방식 (전체 처리 후 문자 단위 스트리밍)
-            response = await self.aprocess(query, user_context, history)
-
-            for char in response.content:
-                yield {"type": "token", "content": char}
-
-            yield {
-                "type": "done",
-                "content": response.content,
-                "domain": response.domain,
-                "domains": response.domains,
-                "sources": response.sources,
-                "actions": response.actions,
-                "evaluation": response.evaluation,
-                "ragas_metrics": response.ragas_metrics,
             }
