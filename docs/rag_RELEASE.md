@@ -12,6 +12,7 @@
 - 죽은 코드 및 legacy 생성 메서드 삭제 (~248줄): domain_config_db.py, multi_query.py, GENERATOR_PROMPT
 
 ### Bug Fixes
+- schemas 패키지 복원 — 이전 커밋에서 의존성 확인 누락으로 삭제, 서비스 기동 실패(ModuleNotFoundError) 수정
 - cli.py에서 law_common 도메인 라벨 누락 수정
 - 도메인 분류 개선 (키워드 보정을 벡터 threshold 판정 전에 적용)
 
