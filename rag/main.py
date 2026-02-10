@@ -6,7 +6,6 @@ Bizi의 RAG 서비스 API 서버를 구동합니다.
 
 import asyncio
 import logging
-import re as _re
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -35,7 +34,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 민감 정보 마스킹 필터 추가 (루트 로거에 적용하여 모든 모듈에 적용)
-from utils.logging_utils import SensitiveDataFilter
+from utils.logging_utils import SensitiveDataFilter, mask_sensitive_data
 root_logger = logging.getLogger()
 root_logger.addFilter(SensitiveDataFilter())
 
@@ -79,21 +78,6 @@ from vectorstores.chroma import ChromaVectorStore
 metrics_collector = get_metrics_collector()
 
 
-def _mask_sensitive_info(text: str) -> str:
-    """민감 정보를 마스킹합니다 (주민번호, 사업자번호, 전화번호, 이메일)."""
-    # 주민등록번호 (000000-0000000)
-    text = _re.sub(r"\d{6}-[1-4]\d{6}", "******-*******", text)
-    # 사업자등록번호 (000-00-00000)
-    text = _re.sub(r"\d{3}-\d{2}-\d{5}", "***-**-*****", text)
-    # 전화번호 (010-0000-0000, 02-000-0000)
-    text = _re.sub(r"0\d{1,2}-\d{3,4}-\d{4}", "***-****-****", text)
-    # 이메일
-    text = _re.sub(
-        r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", "***@***.***", text
-    )
-    return text
-
-
 async def verify_admin_key(
     x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
 ) -> None:
@@ -131,8 +115,8 @@ def log_chat_interaction(
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # 민감 정보 마스킹 적용
-    masked_question = _mask_sensitive_info(question)
-    masked_answer = _mask_sensitive_info(answer)
+    masked_question = mask_sensitive_data(question)
+    masked_answer = mask_sensitive_data(answer)
 
     log_entry = f"""
 {'='*80}
