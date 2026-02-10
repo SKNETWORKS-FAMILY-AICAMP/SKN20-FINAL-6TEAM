@@ -87,19 +87,3 @@ class TestQueryProcessorIntegration:
         assert isinstance(rewritten, str)
         assert len(rewritten) > 0
 
-    @pytest.mark.skip(reason="실제 API 호출 필요")
-    def test_compress_context(self, processor):
-        """컨텍스트 압축 테스트 (실제 API 호출)."""
-        query = "부가세 신고 기한"
-        document = """
-        부가가치세 신고는 매 분기별로 해야 합니다.
-        일반과세자의 경우 1월, 4월, 7월, 10월에 신고합니다.
-        오늘 날씨가 좋습니다. 이것은 관련 없는 내용입니다.
-        신고 기한은 각 분기 종료 후 25일 이내입니다.
-        """
-
-        compressed = processor.compress_context(query, document)
-
-        # 압축된 내용은 원본보다 짧거나 관련 내용만 포함
-        assert isinstance(compressed, str)
-        assert len(compressed) > 0

@@ -124,8 +124,7 @@ class MainRouter:
         # RAGAS 평가기
         self._ragas_evaluator = None
 
-        # 그래프 빌드 (동기/비동기 분리)
-        self.graph = self._build_graph()
+        # 비동기 그래프 빌드
         self.async_graph = self._build_async_graph()
 
     @property
@@ -149,45 +148,6 @@ class MainRouter:
             from evaluation.ragas_evaluator import RagasEvaluator
             self._ragas_evaluator = RagasEvaluator()
         return self._ragas_evaluator
-
-    def _build_graph(self) -> StateGraph:
-        """LangGraph StateGraph를 빌드합니다.
-
-        Returns:
-            컴파일된 StateGraph
-        """
-        workflow = StateGraph(RouterState)
-
-        # 노드 추가
-        workflow.add_node("classify", self._classify_node)
-        workflow.add_node("decompose", self._decompose_node)
-        workflow.add_node("retrieve", self._retrieve_node)
-        workflow.add_node("generate", self._generate_node)
-        workflow.add_node("evaluate", self._evaluate_node)
-
-        # 엣지 정의
-        workflow.set_entry_point("classify")
-
-        # 조건부 엣지: 분류 후 관련 질문인지 확인
-        workflow.add_conditional_edges(
-            "classify",
-            self._should_continue_after_classify,
-            {
-                "continue": "decompose",
-                "reject": END,
-            },
-        )
-
-        workflow.add_edge("decompose", "retrieve")
-        workflow.add_edge("retrieve", "generate")
-        workflow.add_edge("generate", "evaluate")
-        workflow.add_conditional_edges(
-            "evaluate",
-            self._should_retry_after_evaluate,
-            {"generate": "generate", "__end__": END},
-        )
-
-        return workflow.compile()
 
     def _build_async_graph(self) -> StateGraph:
         """비동기 LangGraph StateGraph를 빌드합니다.
@@ -337,37 +297,6 @@ class MainRouter:
 
         return state
 
-    def _decompose_node(self, state: RouterState) -> RouterState:
-        """분해 노드: 복합 질문을 단일 도메인 질문으로 분해합니다."""
-        start = time.time()
-        query = state["query"]
-        domains = state["domains"]
-        history = state.get("history", [])
-
-        # 단일 도메인이면 QuestionDecomposer 초기화/호출 스킵
-        if len(domains) <= 1:
-            domain = domains[0] if domains else "startup_funding"
-            state["sub_queries"] = [SubQuery(domain=domain, query=query)]
-            decompose_time = time.time() - start
-            state["timing_metrics"]["decompose_time"] = decompose_time
-            logger.info("[분해] 단일 도메인 (%s) - 분해 스킵 (%.3fs)", domain, decompose_time)
-            return state
-
-        # 복합 질문 분해 (대화 이력 전달)
-        sub_queries = self.question_decomposer.decompose(query, domains, history)
-        state["sub_queries"] = sub_queries
-
-        decompose_time = time.time() - start
-        state["timing_metrics"]["decompose_time"] = decompose_time
-
-        logger.info(
-            "[분해] %d개 하위 질문 생성 (%.3fs)",
-            len(sub_queries),
-            decompose_time,
-        )
-
-        return state
-
     async def _adecompose_node(self, state: RouterState) -> RouterState:
         """비동기 분해 노드."""
         start = time.time()
@@ -398,39 +327,9 @@ class MainRouter:
 
         return state
 
-    def _retrieve_node(self, state: RouterState) -> RouterState:
-        """검색 노드: RetrievalAgent에 위임합니다."""
-        return self.retrieval_agent.retrieve(state)
-
     async def _aretrieve_node(self, state: RouterState) -> RouterState:
         """비동기 검색 노드: RetrievalAgent에 위임합니다."""
         return await self.retrieval_agent.aretrieve(state)
-
-    def _generate_node(self, state: RouterState) -> RouterState:
-        """생성 노드: 검색된 문서 기반으로 답변을 생성합니다."""
-        start = time.time()
-
-        result = self.generator.generate(
-            query=state["query"],
-            sub_queries=state["sub_queries"],
-            retrieval_results=state["retrieval_results"],
-            user_context=state.get("user_context"),
-            domains=state["domains"],
-        )
-        state["final_response"] = result.content
-        state["actions"] = result.actions
-        state["sources"] = result.sources
-
-        generate_time = time.time() - start
-        state["timing_metrics"]["generate_time"] = generate_time
-
-        logger.info(
-            "[생성] 완료: %d자 (%.3fs)",
-            len(state["final_response"]),
-            generate_time,
-        )
-
-        return state
 
     async def _agenerate_node(self, state: RouterState) -> RouterState:
         """비동기 생성 노드: 통합 생성 에이전트 사용."""
@@ -455,80 +354,6 @@ class MainRouter:
             len(state["final_response"]),
             generate_time,
         )
-
-        return state
-
-    def _evaluate_node(self, state: RouterState) -> RouterState:
-        """평가 노드: LLM 평가 (FAIL 시 재시도) + RAGAS 평가 (항상 로깅용)."""
-        start = time.time()
-
-        # 컨텍스트 생성
-        context = "\n".join([s.content for s in state["sources"][:5]])
-
-        # LLM 평가 수행
-        if self.settings.enable_llm_evaluation:
-            evaluation = self.evaluator.evaluate(
-                question=state["query"],
-                answer=state["final_response"],
-                context=context,
-            )
-            state["evaluation"] = evaluation
-
-            logger.info(
-                "[LLM 평가] 점수=%d/100, %s (retry=%d/%d)",
-                evaluation.total_score,
-                "PASS" if evaluation.passed else "FAIL",
-                state.get("retry_count", 0),
-                self.settings.max_retry_count,
-            )
-        else:
-            state["evaluation"] = None
-
-        # RAGAS 평가 (항상 실행, 로깅/모니터링용)
-        if self.settings.enable_ragas_evaluation and self.ragas_evaluator:
-            contexts = [s.content for s in state["sources"]]
-            ragas_metrics = self.ragas_evaluator.evaluate_answer_quality(
-                question=state["query"],
-                answer=state["final_response"],
-                contexts=contexts,
-            )
-            state["ragas_metrics"] = ragas_metrics
-
-            logger.info(
-                "[RAGAS 평가] faithfulness=%.2f, answer_relevancy=%.2f",
-                ragas_metrics.get("faithfulness") or 0,
-                ragas_metrics.get("answer_relevancy") or 0,
-            )
-        else:
-            state["ragas_metrics"] = None
-
-        # 재시도 판단: FAIL이고 재시도 가능하면 retry_count 증가
-        if (
-            self.settings.enable_post_eval_retry
-            and state.get("evaluation")
-            and not state["evaluation"].passed
-            and state.get("retry_count", 0) < self.settings.max_retry_count
-        ):
-            state["retry_count"] = state.get("retry_count", 0) + 1
-        elif (
-            self.settings.enable_post_eval_retry
-            and state.get("evaluation")
-            and not state["evaluation"].passed
-            and state.get("retry_count", 0) >= self.settings.max_retry_count
-        ):
-            # 최대 재시도 후에도 FAIL → 사과 메시지로 교체
-            logger.warning(
-                "[평가] 최대 재시도(%d회) 후에도 FAIL (점수=%d) → 사과 응답",
-                self.settings.max_retry_count,
-                state["evaluation"].total_score,
-            )
-            state["final_response"] = (
-                "죄송합니다. 질문에 대한 충분한 품질의 답변을 생성하지 못했습니다. "
-                "질문을 다른 방식으로 다시 해주시면 더 나은 답변을 드리겠습니다."
-            )
-
-        evaluate_time = time.time() - start
-        state["timing_metrics"]["evaluate_time"] = evaluate_time
 
         return state
 
@@ -724,31 +549,6 @@ class MainRouter:
             retrieval_evaluation=retrieval_evaluation,
             response_time=total_time,
         )
-
-    def process(
-        self,
-        query: str,
-        user_context: UserContext | None = None,
-        history: list[dict] | None = None,
-    ) -> ChatResponse:
-        """질문을 처리하고 응답을 생성합니다.
-
-        Args:
-            query: 사용자 질문
-            user_context: 사용자 컨텍스트
-            history: 대화 이력
-
-        Returns:
-            채팅 응답
-        """
-        total_start = time.time()
-        initial_state = self._create_initial_state(query, user_context, history)
-
-        # 그래프 실행
-        final_state = self.graph.invoke(initial_state)
-
-        total_time = time.time() - total_start
-        return self._create_response(final_state, total_time)
 
     async def aprocess(
         self,

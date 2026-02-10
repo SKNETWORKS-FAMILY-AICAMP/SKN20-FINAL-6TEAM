@@ -1077,50 +1077,9 @@ class RetrievalAgent:
         all_documents: list[Document],
         agent_timings: list[dict],
     ) -> None:
-        """법률 보충 검색을 수행합니다 (비동기).
-
-        Args:
-            query: 사용자 질문
-            documents: 도메인 에이전트가 검색한 전체 문서
-            domains: 분류된 도메인 리스트
-            retrieval_results: 검색 결과 딕셔너리 (in-place 수정)
-            all_documents: 전체 문서 리스트 (in-place 수정)
-            agent_timings: 에이전트 타이밍 리스트 (in-place 수정)
-        """
-        if not self.settings.enable_legal_supplement:
-            return
-
-        if not needs_legal_supplement(query, documents, domains):
-            return
-
-        logger.info("[법률 보충] 법률 보충 검색 시작 (비동기)")
-        legal_agent = self.agents.get("law_common")
-        if not legal_agent:
-            return
-
-        agent_start = time.time()
-
-        try:
-            result = await legal_agent.aretrieve_only(query)
-            if len(result.documents) > self.settings.legal_supplement_k:
-                result.documents = result.documents[: self.settings.legal_supplement_k]
-                result.sources = result.sources[: self.settings.legal_supplement_k]
-
-            retrieval_results["law_common_supplement"] = result
-            all_documents.extend(result.documents)
-
-            agent_elapsed = time.time() - agent_start
-            agent_timings.append({
-                "domain": "law_common_supplement",
-                "retrieve_time": result.retrieve_time,
-                "doc_count": len(result.documents),
-                "total_time": agent_elapsed,
-            })
-
-            logger.info(
-                "[법률 보충] 완료: %d건 (%.3fs)",
-                len(result.documents),
-                agent_elapsed,
-            )
-        except Exception as e:
-            logger.warning("[법률 보충] 검색 실패: %s", e)
+        """법률 보충 검색을 비동기로 수행합니다 (동기 메서드에 위임)."""
+        await asyncio.to_thread(
+            self._perform_legal_supplement,
+            query, documents, domains,
+            retrieval_results, all_documents, agent_timings,
+        )

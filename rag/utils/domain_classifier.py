@@ -14,7 +14,6 @@ import json
 import logging
 import time as _time
 from dataclasses import dataclass
-from functools import lru_cache
 
 import numpy as np
 from kiwipiepy import Kiwi
@@ -66,10 +65,15 @@ class DomainClassificationResult:
     matched_keywords: dict[str, list[str]] | None = None
 
 
-@lru_cache(maxsize=1)
+_kiwi: Kiwi | None = None
+
+
 def _get_kiwi() -> Kiwi:
     """Kiwi 형태소 분석기 싱글톤."""
-    return Kiwi()
+    global _kiwi
+    if _kiwi is None:
+        _kiwi = Kiwi()
+    return _kiwi
 
 
 def extract_lemmas(query: str) -> set[str]:
@@ -447,13 +451,24 @@ class VectorDomainClassifier:
         )
 
 
-@lru_cache(maxsize=1)
+_domain_classifier: VectorDomainClassifier | None = None
+
+
 def get_domain_classifier() -> VectorDomainClassifier:
     """VectorDomainClassifier 싱글톤 인스턴스를 반환합니다.
 
     Returns:
         VectorDomainClassifier 인스턴스
     """
-    from vectorstores.embeddings import get_embeddings
+    global _domain_classifier
+    if _domain_classifier is None:
+        from vectorstores.embeddings import get_embeddings
 
-    return VectorDomainClassifier(get_embeddings())
+        _domain_classifier = VectorDomainClassifier(get_embeddings())
+    return _domain_classifier
+
+
+def reset_domain_classifier() -> None:
+    """VectorDomainClassifier 싱글톤을 리셋합니다 (테스트용)."""
+    global _domain_classifier
+    _domain_classifier = None

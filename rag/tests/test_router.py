@@ -138,13 +138,12 @@ class TestMainRouterInit:
         assert router.evaluator is not None
         mock_dependencies["evaluator"].assert_called_once()
 
-    def test_mainrouter_init_builds_both_graphs(
+    def test_mainrouter_init_builds_async_graph(
         self, mock_vector_store, mock_dependencies
     ):
-        """동기/비동기 그래프 모두 빌드 확인."""
+        """비동기 그래프 빌드 확인."""
         router = MainRouter(vector_store=mock_vector_store)
 
-        assert router.graph is not None
         assert router.async_graph is not None
 
 

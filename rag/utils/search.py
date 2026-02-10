@@ -199,6 +199,46 @@ def reciprocal_rank_fusion(
     return results
 
 
+def reciprocal_rank_fusion_docs(
+    doc_lists: list[list[Document]],
+    k: int = 60,
+) -> list[Document]:
+    """Document 리스트 기반 RRF 융합 (Multi-Query용).
+
+    Args:
+        doc_lists: 각 쿼리별 검색 결과 Document 리스트
+        k: RRF 상수 (기본 60)
+
+    Returns:
+        RRF 점수로 정렬된 Document 리스트 (메타데이터에 rrf_score/score 포함)
+    """
+    fused_scores: dict[int, float] = {}
+    doc_map: dict[int, Document] = {}
+
+    for doc_list in doc_lists:
+        for rank, doc in enumerate(doc_list):
+            doc_id = hash(doc.page_content[:500])
+            if doc_id not in doc_map:
+                doc_map[doc_id] = doc
+                fused_scores[doc_id] = 0.0
+            fused_scores[doc_id] += 1 / (rank + k)
+
+    sorted_doc_ids = sorted(
+        fused_scores.keys(),
+        key=lambda x: fused_scores[x],
+        reverse=True,
+    )
+
+    result_docs = []
+    for doc_id in sorted_doc_ids:
+        doc = doc_map[doc_id]
+        doc.metadata["rrf_score"] = fused_scores[doc_id]
+        doc.metadata["score"] = fused_scores[doc_id]
+        result_docs.append(doc)
+
+    return result_docs
+
+
 class HybridSearcher:
     """Hybrid Search 구현.
 

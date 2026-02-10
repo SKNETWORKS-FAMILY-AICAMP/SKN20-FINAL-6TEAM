@@ -9,7 +9,6 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from functools import lru_cache
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -332,11 +331,22 @@ class QuestionDecomposer:
             ]
 
 
-@lru_cache(maxsize=1)
+_question_decomposer: QuestionDecomposer | None = None
+
+
 def get_question_decomposer() -> QuestionDecomposer:
     """QuestionDecomposer 싱글톤 인스턴스를 반환합니다.
 
     Returns:
         QuestionDecomposer 인스턴스
     """
-    return QuestionDecomposer()
+    global _question_decomposer
+    if _question_decomposer is None:
+        _question_decomposer = QuestionDecomposer()
+    return _question_decomposer
+
+
+def reset_question_decomposer() -> None:
+    """QuestionDecomposer 싱글톤을 리셋합니다 (테스트용)."""
+    global _question_decomposer
+    _question_decomposer = None

@@ -12,8 +12,6 @@ from typing import TYPE_CHECKING, Any
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
-
 from schemas.response import SourceDocument
 from utils.config import create_llm, get_settings
 from vectorstores.chroma import ChromaVectorStore
@@ -415,71 +413,6 @@ class RAGChain:
                 )
             )
         return sources
-
-    def invoke(
-        self,
-        query: str,
-        domain: str,
-        system_prompt: str,
-        user_type: str = "prospective",
-        company_context: str = "정보 없음",
-        include_common: bool = False,
-        search_strategy: "SearchStrategy | None" = None,
-    ) -> dict[str, Any]:
-        """RAG 체인을 실행하여 응답을 생성합니다.
-
-        Args:
-            query: 사용자 질문
-            domain: 도메인
-            system_prompt: 시스템 프롬프트
-            user_type: 사용자 유형
-            company_context: 기업 정보 컨텍스트
-            include_common: 공통 법령 DB 포함 여부
-            search_strategy: 피드백 기반 검색 전략
-
-        Returns:
-            응답 딕셔너리 (content, sources, documents, retrieve_time, generate_time)
-        """
-        # 문서 검색 - 시간 측정
-        retrieve_start = time.time()
-        documents = self.retrieve(
-            query=query,
-            domain=domain,
-            include_common=include_common,
-            search_strategy=search_strategy,
-        )
-        retrieve_time = time.time() - retrieve_start
-        logger.info("[invoke] 검색 완료: %d건 (%.3fs)", len(documents), retrieve_time)
-
-        # 컨텍스트 포맷팅
-        context = self.format_context(documents)
-
-        # 프롬프트 구성
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", "{query}"),
-        ])
-
-        # 체인 실행 - 시간 측정
-        chain = prompt | self.llm | StrOutputParser()
-
-        generate_start = time.time()
-        response = chain.invoke({
-            "query": query,
-            "context": context,
-            "user_type": user_type,
-            "company_context": company_context,
-        })
-        generate_time = time.time() - generate_start
-        logger.info("[생성] LLM 응답 생성 완료 (%.3fs, %d자)", generate_time, len(response))
-
-        return {
-            "content": response,
-            "sources": self.documents_to_sources(documents),
-            "documents": documents,
-            "retrieve_time": retrieve_time,
-            "generate_time": generate_time,
-        }
 
     async def ainvoke(
         self,

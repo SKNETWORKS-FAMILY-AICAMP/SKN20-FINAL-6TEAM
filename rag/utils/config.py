@@ -7,15 +7,12 @@ Pydantic BaseSettings를 사용하여 환경변수를 관리합니다.
 import json
 import logging
 from dataclasses import dataclass, field
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import pymysql
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-from utils.prompts import _DEFAULT_DOMAIN_KEYWORDS, _DEFAULT_DOMAIN_COMPOUND_RULES
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +23,95 @@ DOMAIN_LABELS: dict[str, str] = {
     "hr_labor": "인사/노무",
     "law_common": "법률",
 }
+
+# 도메인 분류 키워드 (원형/lemma 기반)
+# 명사: 그대로, 동사/형용사: "~다" 형태로 통일
+# kiwipiepy 형태소 분석 후 매칭됨
+_DEFAULT_DOMAIN_KEYWORDS: dict[str, list[str]] = {
+    "startup_funding": [
+        # 명사
+        "창업", "사업자등록", "법인설립", "업종", "인허가",
+        "지원사업", "보조금", "정책자금", "공고", "지원금",
+        "마케팅", "광고", "홍보", "브랜딩", "스타트업",
+        "개업", "가게", "매장", "점포", "프랜차이즈",
+        "사업계획", "사업자", "폐업", "휴업", "업종변경",
+        # 동사 (원형)
+        "차리다",
+    ],
+    "finance_tax": [
+        # 명사
+        "세금", "부가세", "법인세", "소득세", "회계",
+        "세무", "재무", "결산", "세무조정",
+        "세액", "공제", "감면", "원천징수",
+        "종소세", "종합소득", "양도세", "증여세", "상속세",
+        "부가가치세", "세율", "세무사",
+        "연말정산", "간이과세", "일반과세", "세금계산서",
+        "장부", "복식부기", "간편장부", "사업소득",
+        "가산세", "체납", "과태료", "세무조사",
+        "매출", "매입", "경비", "비용처리",
+        "감가상각", "자산", "부채", "자본",
+        "현금영수증", "카드매출",
+        "취득세", "재산세", "종합부동산세",
+        # 동사 (원형)
+        "신고하다", "납부하다", "절세하다",
+    ],
+    "hr_labor": [
+        # 명사
+        "근로", "채용", "해고", "급여", "퇴직금", "연차",
+        "인사", "노무", "4대보험", "근로계약", "취업규칙",
+        "권고사직", "정리해고",
+        "월급", "임금", "최저임금", "수당", "주휴",
+        "산재", "산업재해", "직장내괴롭힘", "괴롭힘", "육아휴직",
+        "출산휴가", "파견", "비정규직", "정규직", "수습",
+        "야근", "초과근무", "휴일근무", "교대근무",
+        "징계", "감봉", "경고", "시말서",
+        "단체협약", "노조", "노동조합",
+        # 근무시간/근무제 관련
+        "근무", "근무제", "근무시간", "근로시간", "연장근로",
+        "위반", "처벌", "벌금", "과태료",
+        "휴가", "휴직", "병가", "경조사",
+        # 동사 (원형)
+        "짜르다", "짤리다",
+    ],
+    "law_common": [
+        # 법률 일반
+        "법률", "법령", "조문", "판례", "법규", "규정",
+        "상법", "민법", "행정법", "공정거래법",
+        # 소송/분쟁
+        "소장", "고소", "고발", "항소", "상고",
+        "손해배상", "배상", "합의", "조정", "중재",
+        # 지식재산권
+        "지식재산", "출원", "등록", "침해",
+        # 전문가
+        "변호사", "법무사", "변리사",
+        # 계약법
+        "계약법", "약관", "이행", "채무불이행", "해제",
+        # 소송/분쟁 (hr_labor에서 이전)
+        "소송", "분쟁", "특허", "상표", "저작권",
+        # 동사 (원형)
+        "고소하다", "소송하다", "항소하다",
+    ],
+}
+
+# 복합 키워드 규칙: lemma 집합 내 조합으로 도메인 판별
+# 단독으로는 오탐 가능하지만, 조합 시 도메인 확정 가능한 패턴
+# 각 규칙은 (도메인, 필수 키워드 집합) 형태
+_DEFAULT_DOMAIN_COMPOUND_RULES: list[tuple[str, set[str]]] = [
+    # "지원" + 기업/사업/기관/중소 → 지원사업
+    ("startup_funding", {"지원", "기업"}),
+    ("startup_funding", {"지원", "사업"}),
+    ("startup_funding", {"지원", "중소"}),
+    ("startup_funding", {"지원", "소상공인"}),
+    ("startup_funding", {"지원", "벤처"}),
+    # "등록" + 사업/법인 → 창업
+    ("startup_funding", {"등록", "사업"}),
+    ("startup_funding", {"등록", "법인"}),
+    # 법률 복합 규칙
+    ("law_common", {"법", "위반"}),
+    ("law_common", {"법", "적용"}),
+    ("law_common", {"법적", "절차"}),
+    ("law_common", {"법적", "문제"}),
+]
 
 
 class Settings(BaseSettings):
@@ -364,14 +450,25 @@ class Settings(BaseSettings):
         }
 
 
-@lru_cache
+_settings: Settings | None = None
+
+
 def get_settings() -> Settings:
     """Settings 인스턴스를 반환합니다 (싱글톤).
 
     Returns:
         Settings 인스턴스
     """
-    return Settings()
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings
+
+
+def reset_settings() -> None:
+    """Settings 싱글톤을 리셋합니다 (테스트용)."""
+    global _settings
+    _settings = None
 
 
 def create_llm(

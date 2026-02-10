@@ -4,9 +4,7 @@
 """
 
 import asyncio
-import hashlib
 import logging
-import re
 import threading
 import time
 from collections import OrderedDict
@@ -230,20 +228,15 @@ class ResponseCache:
         )
 
     @staticmethod
-    def _normalize_query(query: str) -> str:
-        """쿼리를 정규화합니다."""
-        # 소문자 변환, 공백 정리
-        normalized = query.lower().strip()
-        normalized = re.sub(r'\s+', ' ', normalized)
-        return normalized
-
-    @staticmethod
     def _generate_key(query: str, domain: str | None = None) -> str:
-        """캐시 키를 생성합니다."""
-        normalized = ResponseCache._normalize_query(query)
-        domain_key = domain or "unknown"
-        normalized = f"{domain_key}:{normalized}"
-        return hashlib.md5(normalized.encode()).hexdigest()
+        """캐시 키를 생성합니다.
+
+        QueryProcessor.generate_cache_key에 위임합니다.
+        domain이 None이면 "unknown"을 사용합니다.
+        """
+        from utils.query import QueryProcessor
+
+        return QueryProcessor.generate_cache_key(query, domain=domain or "unknown")
 
     def get(
         self,

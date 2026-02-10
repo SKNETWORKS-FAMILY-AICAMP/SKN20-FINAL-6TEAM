@@ -10,6 +10,7 @@ from utils.domain_classifier import (
     DomainClassificationResult,
     VectorDomainClassifier,
     get_domain_classifier,
+    reset_domain_classifier,
 )
 
 
@@ -602,13 +603,13 @@ class TestGetDomainClassifier:
             mock_get_embeddings.return_value = mock_embeddings
 
             # lru_cache 초기화
-            get_domain_classifier.cache_clear()
+            reset_domain_classifier()
 
             instance1 = get_domain_classifier()
             instance2 = get_domain_classifier()
 
             assert instance1 is instance2
-            # get_embeddings는 한 번만 호출 (lru_cache)
+            # get_embeddings는 한 번만 호출 (싱글톤)
             mock_get_embeddings.assert_called_once()
 
     def test_singleton_calls_get_embeddings(self):
@@ -617,7 +618,7 @@ class TestGetDomainClassifier:
             mock_embeddings = Mock()
             mock_get_embeddings.return_value = mock_embeddings
 
-            get_domain_classifier.cache_clear()
+            reset_domain_classifier()
             classifier = get_domain_classifier()
 
             assert isinstance(classifier, VectorDomainClassifier)

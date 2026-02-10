@@ -9,7 +9,6 @@ import json
 import logging
 import re
 from collections import OrderedDict
-from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.documents import Document
@@ -18,6 +17,7 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from utils.config import create_llm, get_settings
 from utils.prompts import CONTEXT_COMPRESSION_PROMPT, MULTI_QUERY_PROMPT, QUERY_REWRITE_PROMPT
+from utils.search import reciprocal_rank_fusion_docs
 
 if TYPE_CHECKING:
     from chains.rag_chain import RAGChain
@@ -107,36 +107,6 @@ class QueryProcessor:
         except Exception as e:
             logger.warning(f"쿼리 재작성 실패, 원본 사용: {e}")
             return query
-
-    def compress_context(self, query: str, document: str) -> str:
-        """문서에서 질문과 관련된 부분만 추출합니다.
-
-        Args:
-            query: 사용자 질문
-            document: 원본 문서 내용
-
-        Returns:
-            압축된 컨텍스트
-        """
-        try:
-            # 문서가 짧으면 그대로 반환
-            if len(document) < 300:
-                return document
-
-            compressed = self._compression_chain.invoke({
-                "query": query,
-                "document": document,
-            })
-            compressed = compressed.strip()
-
-            # "관련 내용 없음"이면 원본 반환
-            if "관련 내용 없음" in compressed or len(compressed) < 50:
-                return document[:500]
-
-            return compressed
-        except Exception as e:
-            logger.warning(f"컨텍스트 압축 실패: {e}")
-            return document[:500]
 
     async def acompress_context(self, query: str, document: str) -> str:
         """문서를 비동기로 압축합니다.
@@ -360,12 +330,14 @@ class MultiQueryRetriever:
             logger.warning("[Multi-Query] 쿼리 확장 실패: %s", e)
             return [query]  # 원본 쿼리만 반환
 
+    @staticmethod
     def _reciprocal_rank_fusion(
-        self,
         doc_lists: list[list[Document]],
         k: int = 60,
     ) -> list[Document]:
         """RRF (Reciprocal Rank Fusion)로 검색 결과를 융합합니다.
+
+        search.reciprocal_rank_fusion_docs에 위임합니다.
 
         Args:
             doc_lists: 각 쿼리별 검색 결과 리스트
@@ -374,40 +346,7 @@ class MultiQueryRetriever:
         Returns:
             융합된 문서 리스트 (점수순 정렬)
         """
-        # 문서 ID → RRF 점수
-        fused_scores: dict[str, float] = {}
-        # 문서 ID → 문서 객체
-        doc_map: dict[str, Document] = {}
-
-        for doc_list in doc_lists:
-            for rank, doc in enumerate(doc_list):
-                # 문서 식별자 (내용 해시 사용)
-                doc_id = hash(doc.page_content[:500])
-
-                if doc_id not in doc_map:
-                    doc_map[doc_id] = doc
-                    fused_scores[doc_id] = 0.0
-
-                # RRF 점수 누적
-                fused_scores[doc_id] += 1 / (rank + k)
-
-        # 점수 내림차순 정렬
-        sorted_doc_ids = sorted(
-            fused_scores.keys(),
-            key=lambda x: fused_scores[x],
-            reverse=True,
-        )
-
-        # 문서에 RRF 점수 추가
-        result_docs = []
-        for doc_id in sorted_doc_ids:
-            doc = doc_map[doc_id]
-            # 메타데이터에 RRF 점수 추가
-            doc.metadata["rrf_score"] = fused_scores[doc_id]
-            doc.metadata["score"] = fused_scores[doc_id]  # 통일된 점수 필드
-            result_docs.append(doc)
-
-        return result_docs
+        return reciprocal_rank_fusion_docs(doc_lists, k=k)
 
     def retrieve(
         self,
@@ -495,7 +434,9 @@ class MultiQueryRetriever:
         )
 
 
-@lru_cache(maxsize=1)
+_multi_query_retriever: MultiQueryRetriever | None = None
+
+
 def get_multi_query_retriever(rag_chain: "RAGChain") -> MultiQueryRetriever:
     """MultiQueryRetriever 싱글톤 인스턴스를 반환합니다.
 
@@ -505,4 +446,13 @@ def get_multi_query_retriever(rag_chain: "RAGChain") -> MultiQueryRetriever:
     Returns:
         MultiQueryRetriever 인스턴스
     """
-    return MultiQueryRetriever(rag_chain)
+    global _multi_query_retriever
+    if _multi_query_retriever is None:
+        _multi_query_retriever = MultiQueryRetriever(rag_chain)
+    return _multi_query_retriever
+
+
+def reset_multi_query_retriever() -> None:
+    """MultiQueryRetriever 싱글톤을 리셋합니다 (테스트용)."""
+    global _multi_query_retriever
+    _multi_query_retriever = None

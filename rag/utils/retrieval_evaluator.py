@@ -7,7 +7,6 @@ LLM 호출 없이 빠르게 검색 품질을 판단합니다.
 import logging
 import re
 from dataclasses import dataclass
-from functools import lru_cache
 
 from langchain_core.documents import Document
 
@@ -193,7 +192,18 @@ class RuleBasedRetrievalEvaluator:
         return result
 
 
-@lru_cache(maxsize=1)
+_retrieval_evaluator: RuleBasedRetrievalEvaluator | None = None
+
+
 def get_retrieval_evaluator() -> RuleBasedRetrievalEvaluator:
     """RuleBasedRetrievalEvaluator 싱글톤 인스턴스를 반환합니다."""
-    return RuleBasedRetrievalEvaluator()
+    global _retrieval_evaluator
+    if _retrieval_evaluator is None:
+        _retrieval_evaluator = RuleBasedRetrievalEvaluator()
+    return _retrieval_evaluator
+
+
+def reset_retrieval_evaluator() -> None:
+    """RuleBasedRetrievalEvaluator 싱글톤을 리셋합니다 (테스트용)."""
+    global _retrieval_evaluator
+    _retrieval_evaluator = None
