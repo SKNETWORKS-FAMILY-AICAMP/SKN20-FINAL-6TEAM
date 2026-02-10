@@ -43,7 +43,7 @@ from agents.router import MainRouter
 from schemas.request import UserContext
 from schemas.response import SourceDocument, TimingMetrics
 from utils.config import DOMAIN_LABELS, get_settings
-from utils.domain_classifier import init_db, load_domain_config
+from utils.config import init_db, load_domain_config
 from utils.exceptions import (
     DomainClassificationError,
     EmbeddingError,

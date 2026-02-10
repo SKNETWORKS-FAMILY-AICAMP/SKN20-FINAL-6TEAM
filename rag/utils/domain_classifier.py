@@ -1,4 +1,4 @@
-"""벡터 유사도 기반 도메인 분류 및 MySQL 설정 관리 모듈.
+"""벡터 유사도 기반 도메인 분류 모듈.
 
 LLM 호출 없이 임베딩 유사도로 도메인을 분류합니다.
 키워드 매칭과 벡터 유사도를 둘 다 실행하여 벡터가 최종 결정권을 가집니다.
@@ -6,433 +6,41 @@ LLM 호출 없이 임베딩 유사도로 도메인을 분류합니다.
 
 키워드 매칭은 kiwipiepy 형태소 분석기를 사용하여 원형(lemma) 기반으로 수행합니다.
 
-도메인 키워드, 복합 규칙, 대표 쿼리를 MySQL DB에서 관리합니다.
-DB 연결 실패 시 기존 하드코딩 값으로 자동 fallback합니다.
+DB 관리 기능(DomainConfig, init_db, load_domain_config 등)은 utils.config에 위치하며,
+후방 호환을 위해 이 모듈에서 re-export합니다.
 """
 
 import json
 import logging
 import time as _time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import lru_cache
 
 import numpy as np
-import pymysql
 from kiwipiepy import Kiwi
 from langchain_huggingface import HuggingFaceEmbeddings
 
-from utils.config import create_llm, get_settings
-from utils.prompts import (
-    LLM_DOMAIN_CLASSIFICATION_PROMPT,
-    _DEFAULT_DOMAIN_COMPOUND_RULES,
-    _DEFAULT_DOMAIN_KEYWORDS,
+from utils.config import (
+    DOMAIN_REPRESENTATIVE_QUERIES,
+    DomainConfig,
+    _get_connection,
+    _get_default_config,
+    create_llm,
+    get_domain_config,
+    get_settings,
+    init_db,
+    load_domain_config,
+    reload_domain_config,
+    reset_domain_config,
 )
+from utils.prompts import LLM_DOMAIN_CLASSIFICATION_PROMPT
 
 logger = logging.getLogger(__name__)
 
-
-# ===================================================================
-# 도메인별 대표 쿼리 (임베딩 미리 계산)
-# ===================================================================
-
-DOMAIN_REPRESENTATIVE_QUERIES: dict[str, list[str]] = {
-    "startup_funding": [
-        "사업자등록 절차가 궁금합니다",
-        "창업 지원사업 추천해주세요",
-        "법인 설립 방법을 알려주세요",
-        "정부 보조금 신청 방법",
-        "마케팅 전략 조언",
-        "스타트업 초기 자금 조달",
-        "업종별 인허가 필요한가요",
-        "창업 아이템 검증 방법",
-        "예비창업자 지원 프로그램",
-        "소상공인 지원정책",
-        "가게 어떻게 차려요",
-        "카페 창업 비용이 얼마나 드나요",
-        "음식점 개업 절차 알려주세요",
-        "프랜차이즈 가맹점 열고 싶어요",
-        "헬스장 차리려면 뭐가 필요해요",
-        "우리 지역에 기업 지원해주는 사업 있나요",
-        "IT 기업 대상 정부 지원 프로그램 알려주세요",
-    ],
-    "finance_tax": [
-        "부가세 신고 방법",
-        "법인세 계산 방법",
-        "세금 절세 방법",
-        "회계 처리 방법",
-        "재무제표 작성법",
-        "원천징수 신고 절차",
-        "세무조정 어떻게 하나요",
-        "종합소득세 신고 기한",
-        "매입세액 공제 조건",
-        "결산 절차가 궁금합니다",
-        "종소세 언제 내야 하나요",
-        "부가세 납부 기한이 언제예요",
-        "양도세 얼마나 나와요",
-        "연말정산 어떻게 해요",
-        "간이과세자 기준이 뭐예요",
-    ],
-    "hr_labor": [
-        "퇴직금 계산 방법",
-        "근로계약서 작성법",
-        "4대보험 가입 방법",
-        "연차 계산 방법",
-        "해고 절차",
-        "최저임금 적용 기준",
-        "야근 수당 계산",
-        "취업규칙 작성 방법",
-        "근로시간 단축 제도",
-        "채용 공고 작성법",
-        "직원 짤랐는데 퇴직금 얼마 줘야 해요",
-        "월급에서 세금 얼마나 떼나요",
-        "주휴수당 계산법 알려주세요",
-        "권고사직 시 절차가 어떻게 되나요",
-        "알바 4대보험 가입해야 하나요",
-        "주 52시간 근무제 위반 시 처벌이 어떻게 되나요",
-        "연장근로 한도와 수당 계산법을 알려주세요",
-        "육아휴직 신청 조건과 급여 기준",
-        "직장내 괴롭힘 신고 방법이 궁금합니다",
-        "출산휴가 기간과 급여는 어떻게 되나요",
-    ],
-    "law_common": [
-        "소송 절차가 어떻게 되나요",
-        "분쟁 해결 방법 알려주세요",
-        "특허 출원 방법이 궁금합니다",
-        "상표 등록 절차 안내해주세요",
-        "저작권 침해 시 대응 방법",
-        "상법에서 이사의 의무는 무엇인가요",
-        "민법상 계약 해제 요건",
-        "손해배상 청구 방법",
-        "지식재산권 보호 방법",
-        "법인 이사의 책임에 대해 알려주세요",
-        "계약서 분쟁 시 어떻게 해야 하나요",
-        "특허 침해 소송 절차가 궁금합니다",
-        "회사 관련 법적 분쟁 해결",
-    ],
-}
-
-
-# ===================================================================
-# DomainConfig: MySQL 기반 도메인 설정 관리
-# ===================================================================
-
-@dataclass
-class DomainConfig:
-    """도메인 분류 설정 데이터.
-
-    Attributes:
-        keywords: 도메인별 키워드 리스트
-        compound_rules: (도메인, 필수 lemma 집합) 튜플 리스트
-        representative_queries: 도메인별 대표 쿼리 리스트
-    """
-
-    keywords: dict[str, list[str]] = field(default_factory=dict)
-    compound_rules: list[tuple[str, set[str]]] = field(default_factory=list)
-    representative_queries: dict[str, list[str]] = field(default_factory=dict)
-
-
-# 모듈 레벨 캐시
-_domain_config: DomainConfig | None = None
-
-
-def _get_default_config() -> DomainConfig:
-    """하드코딩된 기본 설정을 반환합니다 (fallback용).
-
-    Returns:
-        기본 DomainConfig
-    """
-    return DomainConfig(
-        keywords=dict(_DEFAULT_DOMAIN_KEYWORDS),
-        compound_rules=list(_DEFAULT_DOMAIN_COMPOUND_RULES),
-        representative_queries=dict(DOMAIN_REPRESENTATIVE_QUERIES),
-    )
-
-
-def _get_connection() -> pymysql.Connection:
-    """MySQL 연결을 생성합니다.
-
-    Returns:
-        pymysql Connection 객체
-    """
-    settings = get_settings()
-    return pymysql.connect(
-        host=settings.mysql_host,
-        port=settings.mysql_port,
-        user=settings.mysql_user,
-        password=settings.mysql_password,
-        database=settings.mysql_database,
-        charset="utf8mb4",
-        cursorclass=pymysql.cursors.DictCursor,
-    )
-
-
-def _tables_exist(conn: pymysql.Connection) -> bool:
-    """도메인 설정 테이블이 존재하는지 확인합니다."""
-    with conn.cursor() as cursor:
-        cursor.execute(
-            "SELECT COUNT(*) AS cnt FROM information_schema.tables "
-            "WHERE table_schema = DATABASE() AND table_name = 'domain'"
-        )
-        result = cursor.fetchone()
-        return result["cnt"] > 0
-
-
-def _has_data(conn: pymysql.Connection) -> bool:
-    """도메인 테이블에 데이터가 있는지 확인합니다."""
-    with conn.cursor() as cursor:
-        cursor.execute("SELECT COUNT(*) AS cnt FROM domain")
-        result = cursor.fetchone()
-        return result["cnt"] > 0
-
-
-def init_db() -> None:
-    """MySQL에 도메인 설정 테이블을 생성하고 시드 데이터를 삽입합니다.
-
-    테이블이 이미 존재하고 데이터가 있으면 건너뜁니다.
-    """
-    try:
-        conn = _get_connection()
-    except Exception:
-        logger.warning("[도메인 설정 DB] MySQL 연결 실패, 하드코딩 기본값 사용")
-        return
-
-    try:
-        if _tables_exist(conn) and _has_data(conn):
-            logger.info("[도메인 설정 DB] 기존 테이블/데이터 사용")
-            return
-
-        if not _tables_exist(conn):
-            _create_tables(conn)
-
-        if not _has_data(conn):
-            _seed_data(conn)
-            conn.commit()
-            logger.info("[도메인 설정 DB] 시드 데이터 삽입 완료")
-    finally:
-        conn.close()
-
-
-def _create_tables(conn: pymysql.Connection) -> None:
-    """테이블을 생성합니다."""
-    with conn.cursor() as cursor:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS `domain` (
-                `domain_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                `domain_key` VARCHAR(50) NOT NULL UNIQUE,
-                `name` VARCHAR(100) NOT NULL,
-                `sort_order` INT DEFAULT 0,
-                `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
-                `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                `use_yn` TINYINT(1) NOT NULL DEFAULT 1
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS `domain_keyword` (
-                `keyword_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                `domain_id` INT NOT NULL,
-                `keyword` VARCHAR(100) NOT NULL,
-                `keyword_type` VARCHAR(20) DEFAULT 'noun',
-                `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
-                `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                `use_yn` TINYINT(1) NOT NULL DEFAULT 1,
-                FOREIGN KEY (`domain_id`) REFERENCES `domain`(`domain_id`) ON DELETE CASCADE,
-                UNIQUE KEY `uq_domain_keyword` (`domain_id`, `keyword`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS `domain_compound_rule` (
-                `rule_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                `domain_id` INT NOT NULL,
-                `required_lemmas` JSON NOT NULL,
-                `description` VARCHAR(255) DEFAULT NULL,
-                `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
-                `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                `use_yn` TINYINT(1) NOT NULL DEFAULT 1,
-                FOREIGN KEY (`domain_id`) REFERENCES `domain`(`domain_id`) ON DELETE CASCADE
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS `domain_representative_query` (
-                `query_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                `domain_id` INT NOT NULL,
-                `query_text` VARCHAR(500) NOT NULL,
-                `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
-                `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                `use_yn` TINYINT(1) NOT NULL DEFAULT 1,
-                FOREIGN KEY (`domain_id`) REFERENCES `domain`(`domain_id`) ON DELETE CASCADE
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        """)
-    conn.commit()
-    logger.info("[도메인 설정 DB] 테이블 생성 완료")
-
-
-def _seed_data(conn: pymysql.Connection) -> None:
-    """현재 하드코딩 값으로 시드 데이터를 삽입합니다."""
-    default = _get_default_config()
-
-    domain_names = {
-        "startup_funding": "창업/지원사업",
-        "finance_tax": "재무/세무",
-        "hr_labor": "인사/노무",
-        "law_common": "법률",
-    }
-
-    domain_ids: dict[str, int] = {}
-
-    with conn.cursor() as cursor:
-        # 도메인 삽입
-        for i, domain_key in enumerate(["startup_funding", "finance_tax", "hr_labor", "law_common"]):
-            name = domain_names[domain_key]
-            cursor.execute(
-                "INSERT INTO domain (domain_key, name, sort_order) VALUES (%s, %s, %s)",
-                (domain_key, name, i),
-            )
-            domain_ids[domain_key] = cursor.lastrowid
-
-        # 키워드 삽입
-        for domain_key, keywords in default.keywords.items():
-            domain_id = domain_ids[domain_key]
-            for kw in keywords:
-                kw_type = "verb" if kw.endswith("다") else "noun"
-                cursor.execute(
-                    "INSERT INTO domain_keyword (domain_id, keyword, keyword_type) "
-                    "VALUES (%s, %s, %s)",
-                    (domain_id, kw, kw_type),
-                )
-
-        # 복합 규칙 삽입
-        for domain_key, required_lemmas in default.compound_rules:
-            domain_id = domain_ids[domain_key]
-            lemmas_json = json.dumps(sorted(required_lemmas), ensure_ascii=False)
-            desc = "+".join(sorted(required_lemmas)) + " → " + domain_key
-            cursor.execute(
-                "INSERT INTO domain_compound_rule (domain_id, required_lemmas, description) "
-                "VALUES (%s, %s, %s)",
-                (domain_id, lemmas_json, desc),
-            )
-
-        # 대표 쿼리 삽입
-        for domain_key, queries in default.representative_queries.items():
-            domain_id = domain_ids[domain_key]
-            for query_text in queries:
-                cursor.execute(
-                    "INSERT INTO domain_representative_query (domain_id, query_text) "
-                    "VALUES (%s, %s)",
-                    (domain_id, query_text),
-                )
-
-
-def load_domain_config() -> DomainConfig:
-    """MySQL에서 도메인 설정을 로드합니다.
-
-    DB 연결 실패 시 하드코딩 기본값을 반환합니다.
-
-    Returns:
-        DomainConfig 인스턴스
-    """
-    try:
-        conn = _get_connection()
-    except Exception:
-        logger.warning("[도메인 설정 DB] MySQL 연결 실패, 하드코딩 기본값 사용")
-        return _get_default_config()
-
-    try:
-        if not _tables_exist(conn) or not _has_data(conn):
-            logger.warning("[도메인 설정 DB] 테이블/데이터 없음, 하드코딩 기본값 사용")
-            return _get_default_config()
-
-        config = DomainConfig()
-
-        with conn.cursor() as cursor:
-            # 활성 도메인 조회
-            cursor.execute(
-                "SELECT domain_id, domain_key FROM domain "
-                "WHERE use_yn = 1 ORDER BY sort_order"
-            )
-            domains = cursor.fetchall()
-
-            domain_map: dict[int, str] = {
-                row["domain_id"]: row["domain_key"] for row in domains
-            }
-
-            # 키워드 로드
-            for domain_id, domain_key in domain_map.items():
-                cursor.execute(
-                    "SELECT keyword FROM domain_keyword "
-                    "WHERE domain_id = %s AND use_yn = 1",
-                    (domain_id,),
-                )
-                config.keywords[domain_key] = [
-                    row["keyword"] for row in cursor.fetchall()
-                ]
-
-            # 복합 규칙 로드
-            for domain_id, domain_key in domain_map.items():
-                cursor.execute(
-                    "SELECT required_lemmas FROM domain_compound_rule "
-                    "WHERE domain_id = %s AND use_yn = 1",
-                    (domain_id,),
-                )
-                for row in cursor.fetchall():
-                    lemmas_raw = row["required_lemmas"]
-                    # MySQL JSON 컬럼은 이미 파싱된 리스트로 반환될 수 있음
-                    if isinstance(lemmas_raw, str):
-                        lemmas = set(json.loads(lemmas_raw))
-                    else:
-                        lemmas = set(lemmas_raw)
-                    config.compound_rules.append((domain_key, lemmas))
-
-            # 대표 쿼리 로드
-            for domain_id, domain_key in domain_map.items():
-                cursor.execute(
-                    "SELECT query_text FROM domain_representative_query "
-                    "WHERE domain_id = %s AND use_yn = 1",
-                    (domain_id,),
-                )
-                config.representative_queries[domain_key] = [
-                    row["query_text"] for row in cursor.fetchall()
-                ]
-
-        logger.info(
-            "[도메인 설정 DB] 로드 완료: 키워드 %d개, 규칙 %d개, 쿼리 %d개",
-            sum(len(kws) for kws in config.keywords.values()),
-            len(config.compound_rules),
-            sum(len(qs) for qs in config.representative_queries.values()),
-        )
-        return config
-
-    finally:
-        conn.close()
-
-
-def get_domain_config() -> DomainConfig:
-    """캐시된 DomainConfig 싱글톤을 반환합니다.
-
-    Returns:
-        DomainConfig 인스턴스
-    """
-    global _domain_config
-    if _domain_config is None:
-        _domain_config = load_domain_config()
-    return _domain_config
-
-
-def reload_domain_config() -> DomainConfig:
-    """도메인 설정을 다시 로드합니다.
-
-    Returns:
-        새로 로드된 DomainConfig
-    """
-    global _domain_config
-    _domain_config = load_domain_config()
-    logger.info("[도메인 설정 DB] 설정 리로드 완료")
-    return _domain_config
-
-
-def reset_domain_config() -> None:
-    """캐시된 DomainConfig를 초기화합니다 (테스트용)."""
-    global _domain_config
-    _domain_config = None
+# Re-exports (backward compatibility):
+# DOMAIN_REPRESENTATIVE_QUERIES, DomainConfig, _get_connection,
+# _get_default_config, init_db, load_domain_config, get_domain_config,
+# reload_domain_config, reset_domain_config
 
 
 # ===================================================================
