@@ -140,17 +140,32 @@ class RuleBasedRetrievalEvaluator:
             )
 
         # 3. 유사도 점수 체크
-        if scores is None:
-            scores = [doc.metadata.get("score", 0.0) for doc in documents]
+        # embedding_similarity가 존재하면 품질 점수 소스로 우선 사용합니다.
+        embedding_scores: list[float] = []
+        for doc in documents:
+            raw_score = doc.metadata.get("embedding_similarity")
+            if raw_score is None:
+                continue
+            try:
+                embedding_scores.append(float(raw_score))
+            except (TypeError, ValueError):
+                logger.debug("[검색 평가] embedding_similarity 파싱 실패: %r", raw_score)
 
-        valid_scores = [s for s in scores if s > 0]
+        if embedding_scores:
+            quality_score_source = "embedding_similarity"
+            valid_scores = [max(0.0, min(1.0, s)) for s in embedding_scores]
+        else:
+            quality_score_source = "legacy_score"
+            if scores is None:
+                scores = [doc.metadata.get("score", 0.0) for doc in documents]
+            valid_scores = [s for s in scores if s > 0]
 
         if valid_scores:
             avg_similarity = sum(valid_scores) / len(valid_scores)
 
-            # 점수가 거리 기반(낮을수록 좋음)인 경우 변환
+            # legacy 점수가 거리 기반(낮을수록 좋음)인 경우 변환
             # ChromaDB는 거리를 반환하므로 1 - distance로 변환
-            if avg_similarity > 1.0:
+            if quality_score_source == "legacy_score" and avg_similarity > 1.0:
                 avg_similarity = max(0, 1 - avg_similarity / 2)
 
             if avg_similarity < self.min_avg_similarity:
@@ -175,6 +190,7 @@ class RuleBasedRetrievalEvaluator:
                 "matched_keywords": matched,
                 "all_keywords": all_keywords,
                 "valid_scores": valid_scores,
+                "quality_score_source": quality_score_source,
             },
         )
 

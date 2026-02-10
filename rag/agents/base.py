@@ -70,7 +70,7 @@ class RetrievalResult:
         retrieve_time: 검색 소요 시간
         domain: 검색 도메인
         query: 검색에 사용된 쿼리
-        rewritten_query: 재작성된 쿼리 (있을 경우)
+        rewritten_query: 확장 쿼리 목록 문자열 (있을 경우)
     """
 
     documents: list[Document]
@@ -195,12 +195,16 @@ class BaseAgent(ABC):
         Returns:
             검색된 문서 리스트
         """
-        return self.rag_chain.retrieve(
+        from utils.query import MultiQueryRetriever
+
+        multi_query_retriever = MultiQueryRetriever(self.rag_chain)
+        documents, _ = multi_query_retriever.retrieve(
             query=query,
             domain=self.domain,
             k=k,
             include_common=include_common,
         )
+        return documents
 
     def retrieve_only(
         self,
@@ -226,17 +230,22 @@ class BaseAgent(ABC):
         logger.info("[retrieve_only] %s 검색 시작: '%s'", self.domain, query[:50])
         start = time.time()
 
-        # 1차 검색
+        # Multi-Query 검색 (항상 기본 경로)
+        rewritten_query: str | None = None
         try:
-            documents = self.rag_chain.retrieve(
+            from utils.query import MultiQueryRetriever
+
+            multi_query_retriever = MultiQueryRetriever(self.rag_chain)
+            documents, rewritten_query = multi_query_retriever.retrieve(
                 query=query,
                 domain=self.domain,
                 include_common=include_common,
                 search_strategy=search_strategy,
             )
         except Exception as e:
-            logger.error("[retrieve_only] 검색 실패: %s", e)
+            logger.warning("[retrieve_only] Multi-Query 검색 실패: %s", e)
             documents = []
+            rewritten_query = None
 
         # 점수 추출 (메타데이터에서)
         scores = [doc.metadata.get("score", 0.0) for doc in documents]
@@ -245,42 +254,13 @@ class BaseAgent(ABC):
         evaluator = RuleBasedRetrievalEvaluator()
         evaluation = evaluator.evaluate(query, documents, scores)
 
-        used_multi_query = False
-        rewritten_query = None
-
-        # 평가 실패 시 Multi-Query 재검색 시도
-        if not evaluation.passed and self.settings.enable_multi_query:
-            logger.info(
-                "[retrieve_only] 1차 평가 미통과, Multi-Query 재검색 시도: %s",
-                evaluation.reason,
-            )
-            try:
-                from utils.query import MultiQueryRetriever
-
-                multi_query_retriever = MultiQueryRetriever(self.rag_chain)
-                documents, rewritten_query = multi_query_retriever.retrieve(
-                    query=query,
-                    domain=self.domain,
-                    include_common=include_common,
-                )
-                scores = [doc.metadata.get("score", 0.0) for doc in documents]
-                evaluation = evaluator.evaluate(query, documents, scores)
-                used_multi_query = True
-                logger.info(
-                    "[retrieve_only] Multi-Query 재검색 완료: %d건, 평가=%s",
-                    len(documents),
-                    "PASS" if evaluation.passed else "FAIL",
-                )
-            except Exception as e:
-                logger.warning("[retrieve_only] Multi-Query 실패: %s", e)
-
         elapsed = time.time() - start
         logger.info(
             "[retrieve_only] %s 완료: %d건 (%.3fs, multi_query=%s)",
             self.domain,
             len(documents),
             elapsed,
-            used_multi_query,
+            True,
         )
 
         return RetrievalResult(
@@ -288,7 +268,7 @@ class BaseAgent(ABC):
             scores=scores,
             sources=self.rag_chain.documents_to_sources(documents),
             evaluation=evaluation,
-            used_multi_query=used_multi_query,
+            used_multi_query=True,
             retrieve_time=elapsed,
             domain=self.domain,
             query=query,
@@ -582,21 +562,22 @@ class BaseAgent(ABC):
         """
         user_type, company_context = self._extract_user_context(user_context)
 
-        # 문서 검색 (스트리밍 전에 수행)
+        # 문서 검색 (스트리밍 전에 1회 수행)
         try:
-            documents = await asyncio.wait_for(
-                asyncio.to_thread(
-                    self.rag_chain.retrieve,
-                    query,
-                    self.domain,
-                    None,
-                    False,
+            retrieval_result = await asyncio.wait_for(
+                self.aretrieve_only(
+                    query=query,
+                    search_strategy=None,
+                    include_common=False,
                 ),
                 timeout=30.0,
             )
-        except (TimeoutError, Exception) as e:
+            documents = retrieval_result.documents
+            sources = retrieval_result.sources
+        except (asyncio.TimeoutError, Exception) as e:
             logger.error("[스트리밍] 검색 실패 (%s): %s", self.domain, e)
             documents = []
+            sources = []
 
         # 보충 문서 병합
         if supplementary_documents:
@@ -606,13 +587,10 @@ class BaseAgent(ABC):
                 len(supplementary_documents),
                 len(documents),
             )
+            sources = self.rag_chain.documents_to_sources(documents)
 
-        sources = self.rag_chain.documents_to_sources(documents)
-
-        # 보충 문서가 있으면 병합된 문서로 컨텍스트 직접 포맷팅
-        context_override: str | None = None
-        if supplementary_documents:
-            context_override = self.rag_chain.format_context(documents)
+        # 검색된 결과를 그대로 사용하기 위해 컨텍스트를 직접 전달
+        context_override = self.rag_chain.format_context(documents)
 
         # 토큰 스트리밍
         content_buffer = ""

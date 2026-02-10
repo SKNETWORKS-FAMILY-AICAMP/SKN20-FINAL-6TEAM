@@ -384,6 +384,50 @@ class ChromaVectorStore:
             "metadata": collection.metadata,
         }
 
+    def get_domain_documents(self, domain: str) -> list[Document]:
+        """도메인 컬렉션의 전체 문서를 반환합니다.
+
+        BM25 인덱스 초기화 등 오프라인/초기화용 전체 문서 로딩에 사용됩니다.
+
+        Args:
+            domain: 도메인 키
+
+        Returns:
+            Document 리스트
+        """
+        store = self.get_or_create_store(domain)
+
+        try:
+            payload = store._collection.get(include=["documents", "metadatas"])
+        except Exception as e:
+            logger.warning("[벡터스토어] 전체 문서 로드 실패 (%s): %s", domain, e)
+            return []
+
+        raw_documents = payload.get("documents", []) if isinstance(payload, dict) else []
+        raw_metadatas = payload.get("metadatas", []) if isinstance(payload, dict) else []
+        raw_ids = payload.get("ids", []) if isinstance(payload, dict) else []
+
+        if not isinstance(raw_documents, list):
+            logger.warning("[벡터스토어] 전체 문서 포맷 오류 (%s): documents 타입 불일치", domain)
+            return []
+
+        documents: list[Document] = []
+        for idx, content in enumerate(raw_documents):
+            if not isinstance(content, str) or not content.strip():
+                continue
+
+            metadata: dict[str, Any] = {}
+            if idx < len(raw_metadatas) and isinstance(raw_metadatas[idx], dict):
+                metadata = dict(raw_metadatas[idx])
+
+            if idx < len(raw_ids) and raw_ids[idx] is not None and "id" not in metadata:
+                metadata["id"] = str(raw_ids[idx])
+
+            documents.append(Document(page_content=content, metadata=metadata))
+
+        logger.info("[벡터스토어] 전체 문서 로드 완료: %s (%d건)", domain, len(documents))
+        return documents
+
     def get_all_stats(self) -> dict[str, dict[str, Any]]:
         """모든 컬렉션의 통계를 반환합니다.
 

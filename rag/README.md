@@ -70,11 +70,11 @@ python -m vectorstores.build_vectordb --stats         # 통계 확인
 | `ENABLE_HYBRID_SEARCH` | BM25+Vector+RRF 앙상블 검색 | `true` |
 | `VECTOR_SEARCH_WEIGHT` | 벡터 검색 가중치 (0.0~1.0) | `0.7` |
 | `ENABLE_RERANKING` | Cross-encoder 재정렬 | `true` |
-| `ENABLE_QUERY_REWRITE` | LLM 쿼리 재작성 | `true` |
+| `MULTI_QUERY_COUNT` | Multi-Query 생성 개수 | `3` |
+| `MIN_DOC_EMBEDDING_SIMILARITY` | 문서별 임베딩 유사도 필터 임계값 | `0.2` |
 | `ENABLE_LLM_EVALUATION` | LLM 답변 평가 | `true` |
 | `ENABLE_DOMAIN_REJECTION` | 도메인 외 질문 거부 | `true` |
 | `ENABLE_RAGAS_EVALUATION` | RAGAS 정량 평가 | `false` |
-| `ENABLE_MULTI_QUERY` | Multi-Query 재검색 | `true` |
 
 ## 아키텍처 개요
 

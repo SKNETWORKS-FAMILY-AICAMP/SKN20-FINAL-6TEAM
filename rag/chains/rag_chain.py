@@ -1,7 +1,7 @@
 """RAG 체인 모듈.
 
 벡터 스토어 검색과 LLM 응답 생성을 담당하는 RAG 체인을 구현합니다.
-고급 기능: 쿼리 재작성, Hybrid Search, Re-ranking, 컨텍스트 압축, 캐싱
+고급 기능: Multi-Query, Hybrid Search, Re-ranking, 컨텍스트 압축, 캐싱
 """
 
 import asyncio
@@ -66,7 +66,7 @@ class RAGChain:
     @property
     def query_processor(self):
         """QueryProcessor 인스턴스 (지연 로딩)."""
-        if self._query_processor is None and self.settings.enable_query_rewrite:
+        if self._query_processor is None and self.settings.enable_context_compression:
             from utils.query import get_query_processor
             self._query_processor = get_query_processor()
         return self._query_processor
@@ -104,107 +104,112 @@ class RAGChain:
         domain: str,
         k: int | None = None,
         include_common: bool = False,
-        use_mmr: bool = True,
-        use_query_rewrite: bool | None = None,
+        use_mmr: bool | None = None,
         use_rerank: bool | None = None,
         use_hybrid: bool | None = None,
         search_strategy: "SearchStrategy | None" = None,
     ) -> list[Document]:
-        """벡터 스토어에서 관련 문서를 검색합니다.
+        """Multi-Query 기반으로 관련 문서를 검색합니다.
 
-        도메인별 벡터 DB를 검색하고, include_common이 True면
-        공통 법령 DB(law_common)도 함께 검색하여 병합합니다.
-
-        Args:
-            query: 검색 쿼리
-            domain: 검색할 도메인 (startup_funding, finance_tax, hr_labor)
-            k: 검색 결과 개수 (None이면 설정값 사용)
-            include_common: 공통 법령 DB 포함 여부
-            use_mmr: MMR 검색 사용 여부 (다양성 확보)
-            use_query_rewrite: 쿼리 재작성 사용 여부 (None이면 설정값)
-            use_rerank: Re-ranking 사용 여부 (None이면 설정값)
-            use_hybrid: Hybrid Search 사용 여부 (None이면 설정값)
-            search_strategy: 피드백 기반 검색 전략 (재시도 시 사용)
-
-        Returns:
-            검색된 문서 리스트
+        단일 쿼리 primitive 검색은 `_retrieve_documents`에서 수행됩니다.
         """
-        # SearchStrategy가 있으면 전략 파라미터 적용
-        if search_strategy:
-            k = search_strategy.k
-            k_common = search_strategy.k_common
-            use_query_rewrite = search_strategy.use_query_rewrite
-            use_rerank = search_strategy.use_rerank
-            use_mmr = search_strategy.use_mmr
-            fetch_k_mult = search_strategy.fetch_k_multiplier
-            lambda_mult = search_strategy.mmr_lambda
-            logger.debug(f"검색 전략 적용: k={k}, rewrite={use_query_rewrite}, rerank={use_rerank}")
-        else:
-            k = k or self.settings.retrieval_k
-            k_common = self.settings.retrieval_k_common
-            fetch_k_mult = self.settings.mmr_fetch_k_multiplier
-            lambda_mult = self.settings.mmr_lambda_mult
-
-        documents: list[Document] = []
+        from utils.query import MultiQueryRetriever
 
         logger.info("=" * 60)
         logger.info("[검색 시작] 도메인=%s, 쿼리='%s'", domain, query[:50])
 
-        # 쿼리 재작성 (설정에 따라)
-        search_query = query
-        if use_query_rewrite is None:
-            use_query_rewrite = self.settings.enable_query_rewrite
+        try:
+            multi_retriever = MultiQueryRetriever(self)
+            documents, _ = multi_retriever.retrieve(
+                query=query,
+                domain=domain,
+                k=k,
+                include_common=include_common,
+                use_mmr=use_mmr,
+                use_rerank=use_rerank,
+                use_hybrid=use_hybrid,
+                search_strategy=search_strategy,
+            )
+        except Exception as e:
+            logger.warning("[검색] Multi-Query 실패: %s", e)
+            documents = []
 
-        if use_query_rewrite and self.query_processor:
-            logger.info("[쿼리 재작성] 활성화 (ENABLE_QUERY_REWRITE=true)")
-            logger.info("[쿼리 재작성] 원본: %s", query)
-            try:
-                rewrite_start = time.time()
-                search_query = self.query_processor.rewrite_query(query)
-                rewrite_time = time.time() - rewrite_start
-                logger.info("[쿼리 재작성] 재작성: %s", search_query)
-                logger.info("[쿼리 재작성] 소요 시간: %.3fs", rewrite_time)
-            except Exception as e:
-                logger.warning("[쿼리 재작성] 실패: %s (원본 쿼리 사용)", e)
-                search_query = query
-        elif use_query_rewrite and not self.query_processor:
-            logger.info("[쿼리 재작성] 비활성화 (QueryProcessor 미초기화)")
+        logger.info("[검색 완료] 총 %d건 검색됨", len(documents))
+        for idx, doc in enumerate(documents):
+            title = doc.metadata.get("title", "제목 없음")[:50]
+            source = doc.metadata.get("source_name") or doc.metadata.get("source_file") or "출처 없음"
+            score = doc.metadata.get("score")
+            score_str = f"{score:.4f}" if score is not None else "N/A"
+            logger.info("  [%d] %s (score: %s, 출처: %s)", idx + 1, title, score_str, source[:30])
+        logger.info("=" * 60)
+
+        return documents
+
+    def _retrieve_documents(
+        self,
+        query: str,
+        domain: str,
+        k: int | None = None,
+        include_common: bool = False,
+        use_mmr: bool | None = None,
+        use_rerank: bool | None = None,
+        use_hybrid: bool | None = None,
+        search_strategy: "SearchStrategy | None" = None,
+    ) -> list[Document]:
+        """단일 쿼리 primitive 검색을 수행합니다 (Multi-Query 내부 전용)."""
+        strategy_k_common: int | None = None
+        strategy_use_rerank: bool | None = None
+        strategy_use_mmr: bool | None = None
+        strategy_use_hybrid: bool | None = None
+
+        if search_strategy:
+            k = search_strategy.k
+            strategy_k_common = search_strategy.k_common
+            strategy_use_rerank = search_strategy.use_rerank
+            strategy_use_mmr = search_strategy.use_mmr
+            strategy_use_hybrid = search_strategy.use_hybrid
+            fetch_k_mult = search_strategy.fetch_k_multiplier
+            lambda_mult = search_strategy.mmr_lambda
+            logger.debug("검색 전략 적용: k=%s, rerank=%s, hybrid=%s", k, strategy_use_rerank, strategy_use_hybrid)
         else:
-            logger.info("[쿼리 재작성] 비활성화 (ENABLE_QUERY_REWRITE=false)")
+            fetch_k_mult = self.settings.mmr_fetch_k_multiplier
+            lambda_mult = self.settings.mmr_lambda_mult
 
-        # Re-ranking 사용 여부 결정
+        k = k or self.settings.retrieval_k
+        k_common = strategy_k_common if strategy_k_common is not None else self.settings.retrieval_k_common
+
         if use_rerank is None:
-            use_rerank = self.settings.enable_reranking
-
-        # Hybrid Search 사용 여부 결정
+            use_rerank = strategy_use_rerank if strategy_use_rerank is not None else self.settings.enable_reranking
+        if use_mmr is None:
+            use_mmr = strategy_use_mmr if strategy_use_mmr is not None else True
         if use_hybrid is None:
-            use_hybrid = self.settings.enable_hybrid_search
+            use_hybrid = strategy_use_hybrid if strategy_use_hybrid is not None else self.settings.enable_hybrid_search
+
+        documents: list[Document] = []
 
         # Hybrid Search 모드
         if use_hybrid and self.hybrid_searcher:
-            logger.info("[검색] Hybrid Search 모드 (BM25+Vector+RRF)")
+            logger.info("[검색] Primitive Hybrid Search 모드 (BM25+Vector+RRF)")
 
-            # 도메인별 Hybrid Search
             try:
                 domain_search_start = time.time()
                 domain_docs = self.hybrid_searcher.search(
-                    query=search_query,
+                    query=query,
                     domain=domain,
                     k=k,
-                    use_rerank=use_rerank,  # HybridSearcher 내부에서 rerank 처리
+                    use_rerank=use_rerank,
                 )
                 domain_search_time = time.time() - domain_search_start
                 documents.extend(domain_docs)
                 logger.info("[검색] 도메인 DB (Hybrid): %d건 (%.3fs)", len(domain_docs), domain_search_time)
             except Exception as e:
-                logger.error(f"Hybrid Search 실패 ({domain}): {e}")
+                logger.error("Hybrid Search 실패 (%s): %s", domain, e)
 
-            # 공통 법령 DB 검색 (Vector Search만 사용, rerank 생략)
             if include_common and domain != "law_common":
                 try:
                     common_search_start = time.time()
                     common_docs = self.vector_store.max_marginal_relevance_search(
-                        query=search_query,
+                        query=query,
                         domain="law_common",
                         k=k_common,
                         fetch_k=k_common * fetch_k_mult,
@@ -214,25 +219,22 @@ class RAGChain:
                     documents.extend(common_docs)
                     logger.info("[검색] 공통 법령 DB: %d건 (%.3fs)", len(common_docs), common_search_time)
                 except Exception as e:
-                    logger.error(f"공통 법령 DB 검색 실패: {e}")
+                    logger.error("공통 법령 DB 검색 실패: %s", e)
 
-            documents = self._deduplicate_documents(documents)
-            return documents
+            return self._deduplicate_documents(documents)
 
-        # 기존 로직 (MMR/similarity search + separate rerank)
+        # MMR/similarity search + rerank
         fetch_k = k * 3 if use_rerank else k
-
         logger.info(
-            "[검색] 검색 방법: %s, use_rerank=%s, fetch_k=%d",
+            "[검색] Primitive 검색 방법: %s, use_rerank=%s, fetch_k=%d",
             "MMR" if use_mmr else "similarity", use_rerank, fetch_k,
         )
 
-        # 도메인별 검색 (MMR 또는 일반 유사도 검색)
         try:
             domain_search_start = time.time()
             if use_mmr:
                 domain_docs = self.vector_store.max_marginal_relevance_search(
-                    query=search_query,
+                    query=query,
                     domain=domain,
                     k=fetch_k,
                     fetch_k=fetch_k * fetch_k_mult,
@@ -240,7 +242,7 @@ class RAGChain:
                 )
             else:
                 domain_docs = self.vector_store.similarity_search(
-                    query=search_query,
+                    query=query,
                     domain=domain,
                     k=fetch_k,
                 )
@@ -248,9 +250,8 @@ class RAGChain:
             documents.extend(domain_docs)
             logger.info("[검색] 도메인 DB: %d건 (%.3fs)", len(domain_docs), domain_search_time)
         except Exception as e:
-            logger.error(f"도메인 검색 실패 ({domain}): {e}")
+            logger.error("도메인 검색 실패 (%s): %s", domain, e)
 
-        # 공통 법령 DB 검색
         if include_common and domain != "law_common":
             common_fetch_k = k_common * 2 if use_rerank else k_common
 
@@ -258,7 +259,7 @@ class RAGChain:
                 common_search_start = time.time()
                 if use_mmr:
                     common_docs = self.vector_store.max_marginal_relevance_search(
-                        query=search_query,
+                        query=query,
                         domain="law_common",
                         k=common_fetch_k,
                         fetch_k=common_fetch_k * fetch_k_mult,
@@ -266,7 +267,7 @@ class RAGChain:
                     )
                 else:
                     common_docs = self.vector_store.similarity_search(
-                        query=search_query,
+                        query=query,
                         domain="law_common",
                         k=common_fetch_k,
                     )
@@ -274,12 +275,10 @@ class RAGChain:
                 documents.extend(common_docs)
                 logger.info("[검색] 공통 법령 DB: %d건 (%.3fs)", len(common_docs), common_search_time)
             except Exception as e:
-                logger.error(f"공통 법령 DB 검색 실패: {e}")
+                logger.error("공통 법령 DB 검색 실패: %s", e)
 
-        # 중복 문서 제거
         documents = self._deduplicate_documents(documents)
 
-        # Re-ranking (설정에 따라)
         if use_rerank and self.reranker and len(documents) > k:
             try:
                 pre_rerank_count = len(documents)
@@ -288,20 +287,10 @@ class RAGChain:
                 rerank_time = time.time() - rerank_start
                 logger.info("[검색] Re-ranking: %d건 → %d건 (%.3fs)", pre_rerank_count, len(documents), rerank_time)
             except Exception as e:
-                logger.warning(f"Re-ranking 실패: {e}")
+                logger.warning("Re-ranking 실패: %s", e)
                 documents = documents[:k]
         elif len(documents) > k:
             documents = documents[:k]
-
-        # 최종 검색 결과 로깅 (제목 및 출처)
-        logger.info("[검색 완료] 총 %d건 검색됨", len(documents))
-        for idx, doc in enumerate(documents):
-            title = doc.metadata.get("title", "제목 없음")[:50]
-            source = doc.metadata.get("source_name") or doc.metadata.get("source_file") or "출처 없음"
-            score = doc.metadata.get("score")
-            score_str = f"{score:.4f}" if score is not None else "N/A"
-            logger.info("  [%d] %s (score: %s, 출처: %s)", idx + 1, title, score_str, source[:30])
-        logger.info("=" * 60)
 
         return documents
 
@@ -519,28 +508,20 @@ class RAGChain:
 
         logger.info("[ainvoke] 도메인=%s, 쿼리='%s'", domain, query[:50])
 
-        # 쿼리 재작성 (비동기)
-        search_query = query
-        if self.settings.enable_query_rewrite and self.query_processor:
-            try:
-                rewrite_start = time.time()
-                search_query = await self.query_processor.arewrite_query(query)
-                rewrite_time = time.time() - rewrite_start
-                logger.info("[ainvoke] 쿼리 재작성: '%s' → '%s' (%.3fs)", query[:30], search_query[:30], rewrite_time)
-            except Exception as e:
-                logger.warning(f"쿼리 재작성 실패: {e}")
-
         # 문서 검색 (동기 호출을 스레드로 실행) - 시간 측정 + 타임아웃 적용
         retrieve_start = time.time()
         try:
             documents = await asyncio.wait_for(
                 asyncio.to_thread(
-                    self._retrieve_with_rewritten_query,
-                    search_query,
+                    self.retrieve,
                     query,
                     domain,
                     None,
                     include_common,
+                    None,
+                    None,
+                    None,
+                    search_strategy,
                 ),
                 timeout=self.settings.search_timeout,
             )
@@ -642,68 +623,6 @@ class RAGChain:
         if len(unique) < len(documents):
             logger.info("[중복 제거] %d건 → %d건", len(documents), len(unique))
         return unique
-
-    def _retrieve_with_rewritten_query(
-        self,
-        search_query: str,
-        original_query: str,
-        domain: str,
-        k: int | None,
-        include_common: bool,
-    ) -> list[Document]:
-        """재작성된 쿼리로 검색합니다 (내부 헬퍼)."""
-        k = k or self.settings.retrieval_k
-        documents: list[Document] = []
-
-        fetch_k_mult = self.settings.mmr_fetch_k_multiplier
-        lambda_mult = self.settings.mmr_lambda_mult
-        use_rerank = self.settings.enable_reranking
-        fetch_k = k * 3 if use_rerank else k
-
-        # 도메인별 검색
-        try:
-            domain_docs = self.vector_store.max_marginal_relevance_search(
-                query=search_query,
-                domain=domain,
-                k=fetch_k,
-                fetch_k=fetch_k * fetch_k_mult,
-                lambda_mult=lambda_mult,
-            )
-            documents.extend(domain_docs)
-        except Exception as e:
-            logger.error(f"도메인 검색 실패 ({domain}): {e}")
-
-        # 공통 법령 DB 검색
-        if include_common and domain != "law_common":
-            common_k = self.settings.retrieval_k_common
-            common_fetch_k = common_k * 2 if use_rerank else common_k
-
-            try:
-                common_docs = self.vector_store.max_marginal_relevance_search(
-                    query=search_query,
-                    domain="law_common",
-                    k=common_fetch_k,
-                    fetch_k=common_fetch_k * fetch_k_mult,
-                    lambda_mult=lambda_mult,
-                )
-                documents.extend(common_docs)
-            except Exception as e:
-                logger.error(f"공통 법령 DB 검색 실패: {e}")
-
-        # 중복 문서 제거
-        documents = self._deduplicate_documents(documents)
-
-        # Re-ranking
-        if use_rerank and self.reranker and len(documents) > k:
-            try:
-                documents = self.reranker.rerank(original_query, documents, top_k=k)
-            except Exception as e:
-                logger.warning(f"Re-ranking 실패: {e}")
-                documents = documents[:k]
-        elif len(documents) > k:
-            documents = documents[:k]
-
-        return documents
 
     async def astream(
         self,

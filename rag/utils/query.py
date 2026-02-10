@@ -1,6 +1,6 @@
 """쿼리 처리 유틸리티 모듈.
 
-쿼리 재작성, 확장, 컨텍스트 압축, Multi-Query 검색 등의 기능을 제공합니다.
+쿼리 확장, 컨텍스트 압축, Multi-Query 검색 기능을 제공합니다.
 """
 
 import asyncio
@@ -8,19 +8,19 @@ import hashlib
 import json
 import logging
 import re
-from collections import OrderedDict
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
 from utils.config import create_llm, get_settings
-from utils.prompts import CONTEXT_COMPRESSION_PROMPT, MULTI_QUERY_PROMPT, QUERY_REWRITE_PROMPT
+from utils.prompts import CONTEXT_COMPRESSION_PROMPT, MULTI_QUERY_PROMPT
 
 if TYPE_CHECKING:
     from chains.rag_chain import RAGChain
+    from utils.feedback import SearchStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -28,85 +28,19 @@ logger = logging.getLogger(__name__)
 class QueryProcessor:
     """쿼리 처리 클래스.
 
-    쿼리 재작성, 확장, 해시 생성 등의 기능을 제공합니다.
+    컨텍스트 압축, 키워드 추출, 캐시 키 생성 기능을 제공합니다.
     """
 
     def __init__(self):
         """QueryProcessor를 초기화합니다."""
         self.settings = get_settings()
-        self.llm = create_llm("쿼리재작성", temperature=0.0)
-        self._rewrite_chain = self._build_rewrite_chain()
+        self.llm = create_llm("컨텍스트압축", temperature=0.0)
         self._compression_chain = self._build_compression_chain()
-        self._rewrite_cache: OrderedDict[str, str] = OrderedDict()
-        self._rewrite_cache_max_size = 500
-
-    def _build_rewrite_chain(self):
-        """쿼리 재작성 체인을 빌드합니다."""
-        prompt = ChatPromptTemplate.from_template(QUERY_REWRITE_PROMPT)
-        return prompt | self.llm | StrOutputParser()
 
     def _build_compression_chain(self):
         """컨텍스트 압축 체인을 빌드합니다."""
         prompt = ChatPromptTemplate.from_template(CONTEXT_COMPRESSION_PROMPT)
         return prompt | self.llm | StrOutputParser()
-
-    def rewrite_query(self, query: str) -> str:
-        """쿼리를 검색에 최적화된 형태로 재작성합니다.
-
-        Args:
-            query: 원본 사용자 쿼리
-
-        Returns:
-            재작성된 쿼리
-        """
-        cache_key = query.strip().lower()
-        if cache_key in self._rewrite_cache:
-            self._rewrite_cache.move_to_end(cache_key)
-            logger.debug(f"쿼리 재작성 캐시 히트: '{query}'")
-            return self._rewrite_cache[cache_key]
-
-        try:
-            rewritten = self._rewrite_chain.invoke({"query": query})
-            rewritten = rewritten.strip()
-            logger.debug(f"쿼리 재작성: '{query}' -> '{rewritten}'")
-
-            if len(self._rewrite_cache) >= self._rewrite_cache_max_size:
-                self._rewrite_cache.popitem(last=False)
-            self._rewrite_cache[cache_key] = rewritten
-
-            return rewritten
-        except Exception as e:
-            logger.warning(f"쿼리 재작성 실패, 원본 사용: {e}")
-            return query
-
-    async def arewrite_query(self, query: str) -> str:
-        """쿼리를 비동기로 재작성합니다.
-
-        Args:
-            query: 원본 사용자 쿼리
-
-        Returns:
-            재작성된 쿼리
-        """
-        cache_key = query.strip().lower()
-        if cache_key in self._rewrite_cache:
-            self._rewrite_cache.move_to_end(cache_key)
-            logger.debug(f"쿼리 재작성 캐시 히트: '{query}'")
-            return self._rewrite_cache[cache_key]
-
-        try:
-            rewritten = await self._rewrite_chain.ainvoke({"query": query})
-            rewritten = rewritten.strip()
-            logger.debug(f"쿼리 재작성: '{query}' -> '{rewritten}'")
-
-            if len(self._rewrite_cache) >= self._rewrite_cache_max_size:
-                self._rewrite_cache.popitem(last=False)
-            self._rewrite_cache[cache_key] = rewritten
-
-            return rewritten
-        except Exception as e:
-            logger.warning(f"쿼리 재작성 실패, 원본 사용: {e}")
-            return query
 
     def compress_context(self, query: str, document: str) -> str:
         """문서에서 질문과 관련된 부분만 추출합니다.
@@ -340,8 +274,8 @@ class MultiQueryRetriever:
                     if expanded_queries:
                         logger.info("[Multi-Query] 라인 기반 파싱: %d개", len(expanded_queries))
                     else:
-                        logger.warning("[Multi-Query] 모든 파싱 실패, 원본 쿼리만 사용")
-                        return [query]
+                        logger.warning("[Multi-Query] 모든 파싱 실패")
+                        return []
 
             # 원본 쿼리 + 확장 쿼리
             all_queries = [query] + expanded_queries[:self.settings.multi_query_count]
@@ -358,7 +292,124 @@ class MultiQueryRetriever:
 
         except Exception as e:
             logger.warning("[Multi-Query] 쿼리 확장 실패: %s", e)
-            return [query]  # 원본 쿼리만 반환
+            return []
+
+    @staticmethod
+    def _make_doc_key(doc: Document) -> str:
+        """문서 식별용 안정 키를 생성합니다."""
+        metadata = doc.metadata or {}
+        source = (
+            str(metadata.get("source_name") or "")
+            or str(metadata.get("source_file") or "")
+            or str(metadata.get("source") or "")
+        )
+        title = str(metadata.get("title") or "")
+        content = doc.page_content.strip()[:1000]
+        raw = f"{source}|{title}|{content}"
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _distance_to_similarity(distance: float) -> float:
+        """Chroma distance를 코사인 유사도(0~1)로 변환합니다."""
+        similarity = 1.0 - distance
+        return max(0.0, min(1.0, similarity))
+
+    def _collect_embedding_similarity_map(
+        self,
+        query: str,
+        domain: str,
+        candidate_docs: list[Document],
+        include_common: bool,
+    ) -> dict[str, float]:
+        """원본 쿼리 기준 후보 문서의 embedding similarity 맵을 생성합니다."""
+        if not candidate_docs:
+            return {}
+
+        target_domains = [domain]
+        if include_common and domain != "law_common":
+            target_domains.append("law_common")
+
+        search_k = max(
+            len(candidate_docs) * 2,
+            self.settings.max_retrieval_docs,
+            self.settings.retrieval_k + (
+                self.settings.retrieval_k_common if include_common and domain != "law_common" else 0
+            ),
+        )
+
+        similarity_map: dict[str, float] = {}
+        for target_domain in target_domains:
+            try:
+                scored_docs = self.rag_chain.vector_store.similarity_search_with_score(
+                    query=query,
+                    domain=target_domain,
+                    k=search_k,
+                )
+            except Exception as e:
+                logger.warning(
+                    "[Multi-Query] embedding 유사도 계산 실패 (domain=%s): %s",
+                    target_domain,
+                    e,
+                )
+                continue
+
+            for scored_doc, distance in scored_docs:
+                doc_key = self._make_doc_key(scored_doc)
+                similarity = self._distance_to_similarity(float(distance))
+                current = similarity_map.get(doc_key)
+                if current is None or similarity > current:
+                    similarity_map[doc_key] = similarity
+
+        return similarity_map
+
+    def _apply_embedding_similarity_filter(
+        self,
+        query: str,
+        domain: str,
+        fused_docs: list[Document],
+        include_common: bool,
+    ) -> tuple[list[Document], bool]:
+        """RRF 후보에 embedding similarity를 주입하고 임계값으로 필터링합니다."""
+        if not fused_docs:
+            return [], False
+
+        threshold = self.settings.min_doc_embedding_similarity
+        similarity_map = self._collect_embedding_similarity_map(
+            query=query,
+            domain=domain,
+            candidate_docs=fused_docs,
+            include_common=include_common,
+        )
+
+        for doc in fused_docs:
+            doc_key = self._make_doc_key(doc)
+            metadata = doc.metadata or {}
+            metadata["embedding_similarity"] = similarity_map.get(doc_key, 0.0)
+            doc.metadata = metadata
+
+        filtered_docs = [
+            doc
+            for doc in fused_docs
+            if doc.metadata.get("embedding_similarity", 0.0) >= threshold
+        ]
+
+        used_fallback = False
+        if not filtered_docs and fused_docs:
+            used_fallback = True
+            filtered_docs = [fused_docs[0]]
+            logger.warning(
+                "[Multi-Query] embedding 필터 전부 탈락. RRF Top1 유지 (threshold=%.2f)",
+                threshold,
+            )
+
+        logger.info(
+            "[Multi-Query] 후보=%d, embedding 필터 통과=%d, fallback=%s",
+            len(fused_docs),
+            len(filtered_docs),
+            used_fallback,
+        )
+
+        return filtered_docs, used_fallback
 
     def _reciprocal_rank_fusion(
         self,
@@ -381,8 +432,8 @@ class MultiQueryRetriever:
 
         for doc_list in doc_lists:
             for rank, doc in enumerate(doc_list):
-                # 문서 식별자 (내용 해시 사용)
-                doc_id = hash(doc.page_content[:500])
+                # 문서 식별자 (안정 해시 사용)
+                doc_id = self._make_doc_key(doc)
 
                 if doc_id not in doc_map:
                     doc_map[doc_id] = doc
@@ -402,9 +453,11 @@ class MultiQueryRetriever:
         result_docs = []
         for doc_id in sorted_doc_ids:
             doc = doc_map[doc_id]
-            # 메타데이터에 RRF 점수 추가
-            doc.metadata["rrf_score"] = fused_scores[doc_id]
-            doc.metadata["score"] = fused_scores[doc_id]  # 통일된 점수 필드
+            # RRF 점수는 랭킹 전용 메타데이터로만 유지
+            metadata = doc.metadata or {}
+            metadata["rrf_score"] = fused_scores[doc_id]
+            metadata["ranking_score"] = fused_scores[doc_id]
+            doc.metadata = metadata
             result_docs.append(doc)
 
         return result_docs
@@ -415,6 +468,10 @@ class MultiQueryRetriever:
         domain: str,
         k: int | None = None,
         include_common: bool = True,
+        use_mmr: bool | None = None,
+        use_rerank: bool | None = None,
+        use_hybrid: bool | None = None,
+        search_strategy: "SearchStrategy | None" = None,
     ) -> tuple[list[Document], str]:
         """Multi-Query 검색을 수행합니다.
 
@@ -423,27 +480,46 @@ class MultiQueryRetriever:
             domain: 검색할 도메인
             k: 최종 반환할 문서 수
             include_common: 공통 법령 DB 포함 여부
+            use_mmr: 단일 쿼리 primitive 검색 시 MMR 사용 여부
+            use_rerank: 최종 융합 결과 Re-ranking 사용 여부
+            use_hybrid: 단일 쿼리 primitive 검색 시 Hybrid 사용 여부
+            search_strategy: 검색 전략
 
         Returns:
             (검색된 문서 리스트, 확장된 쿼리들 문자열)
         """
-        k = k or self.settings.retrieval_k
+        if search_strategy is not None:
+            target_k = search_strategy.k
+            target_use_mmr = search_strategy.use_mmr if use_mmr is None else use_mmr
+            target_use_rerank = search_strategy.use_rerank if use_rerank is None else use_rerank
+            target_use_hybrid = search_strategy.use_hybrid if use_hybrid is None else use_hybrid
+        else:
+            target_k = k or self.settings.retrieval_k
+            target_use_mmr = use_mmr if use_mmr is not None else True
+            target_use_rerank = use_rerank if use_rerank is not None else self.settings.enable_reranking
+            target_use_hybrid = use_hybrid
+
         max_docs = self.settings.max_retrieval_docs
 
         # 1. 쿼리 확장
         queries = self._generate_queries(query)
+        if not queries:
+            logger.warning("[Multi-Query] 쿼리 확장 실패로 검색 중단")
+            return [], ""
 
-        # 2. 각 쿼리로 검색 (쿼리 재작성/리랭킹 비활성화하여 중복 방지)
+        # 2. 각 쿼리로 primitive 검색 (쿼리별 rerank 비활성화 후 RRF 적용)
         doc_lists: list[list[Document]] = []
 
         for q in queries:
-            docs = self.rag_chain.retrieve(
+            docs = self.rag_chain._retrieve_documents(
                 query=q,
                 domain=domain,
-                k=k,
+                k=target_k,
                 include_common=include_common,
-                use_query_rewrite=False,  # Multi-Query에서 이미 확장했으므로
-                use_rerank=False,  # RRF 후 별도 처리
+                use_mmr=target_use_mmr,
+                use_rerank=False,
+                use_hybrid=target_use_hybrid,
+                search_strategy=search_strategy,
             )
             doc_lists.append(docs)
             logger.debug(
@@ -455,11 +531,31 @@ class MultiQueryRetriever:
         # 3. RRF 융합
         fused_docs = self._reciprocal_rank_fusion(doc_lists)
 
-        # 4. 상위 K개 반환 (최대 max_docs)
-        final_docs = fused_docs[:min(k, max_docs)]
+        # 4. embedding 유사도 주입 + 품질 필터
+        filtered_docs, _ = self._apply_embedding_similarity_filter(
+            query=query,
+            domain=domain,
+            fused_docs=fused_docs,
+            include_common=include_common,
+        )
+
+        # 5. 최종 Re-ranking (설정/전략에 따라)
+        final_k = min(target_k, max_docs)
+        if target_use_rerank and self.rag_chain.reranker and len(filtered_docs) > final_k:
+            try:
+                final_docs = self.rag_chain.reranker.rerank(
+                    query=query,
+                    documents=filtered_docs,
+                    top_k=final_k,
+                )
+            except Exception as e:
+                logger.warning("[Multi-Query] 최종 Re-ranking 실패: %s", e)
+                final_docs = filtered_docs[:final_k]
+        else:
+            final_docs = filtered_docs[:final_k]
 
         logger.info(
-            "[Multi-Query] 융합 완료: %d개 쿼리 → %d건 → %d건",
+            "[Multi-Query] 융합 완료: %d개 쿼리 → %d건(RRF) → %d건(최종)",
             len(queries),
             len(fused_docs),
             len(final_docs),
@@ -474,6 +570,10 @@ class MultiQueryRetriever:
         domain: str,
         k: int | None = None,
         include_common: bool = True,
+        use_mmr: bool | None = None,
+        use_rerank: bool | None = None,
+        use_hybrid: bool | None = None,
+        search_strategy: "SearchStrategy | None" = None,
     ) -> tuple[list[Document], str]:
         """Multi-Query 검색을 비동기로 수행합니다.
 
@@ -492,6 +592,10 @@ class MultiQueryRetriever:
             domain,
             k,
             include_common,
+            use_mmr,
+            use_rerank,
+            use_hybrid,
+            search_strategy,
         )
 
 

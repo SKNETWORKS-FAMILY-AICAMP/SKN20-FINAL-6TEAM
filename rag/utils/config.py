@@ -123,9 +123,6 @@ class Settings(BaseSettings):
     evaluator_context_length: int = Field(default=2000, description="평가 시 컨텍스트 최대 길이")
 
     # ===== RAG Feature Flags =====
-    # 쿼리 처리
-    enable_query_rewrite: bool = Field(default=True, description="쿼리 재작성 활성화")
-
     # 검색 설정
     enable_hybrid_search: bool = Field(default=True, description="Hybrid Search (BM25+Vector) 활성화")
     vector_search_weight: float = Field(
@@ -224,13 +221,13 @@ class Settings(BaseSettings):
     min_avg_similarity_score: float = Field(
         default=0.5, ge=0.0, le=1.0, description="최소 평균 유사도 점수"
     )
+    min_doc_embedding_similarity: float = Field(
+        default=0.2, ge=0.0, le=1.0, description="문서별 최소 임베딩 유사도 점수"
+    )
 
     # Multi-Query 설정
-    enable_multi_query: bool = Field(
-        default=True, description="Multi-Query 재검색 활성화"
-    )
     multi_query_count: int = Field(
-        default=3, description="Multi-Query 생성 개수"
+        default=3, gt=0, description="Multi-Query 생성 개수"
     )
 
     # 평가 후 재시도 설정
@@ -304,13 +301,12 @@ class Settings(BaseSettings):
         "enable_hybrid_search",
         "vector_search_weight",
         "enable_reranking",
-        "enable_query_rewrite",
         "enable_context_compression",
         "enable_response_cache",
         "reranker_type",
         "enable_vector_domain_classification",
         "enable_llm_domain_classification",
-        "enable_multi_query",
+        "multi_query_count",
         "enable_ragas_evaluation",
         "enable_post_eval_retry",
         "enable_legal_supplement",
