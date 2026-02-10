@@ -10,6 +10,8 @@
 - classify()의 미사용 변수(keyword_domains, vector_best) 삭제 및 주석 정렬
 - 테스트 create_llm 패치 경로를 사용사이트로 통일 (test_evaluator, test_rag_chain)
 - 죽은 코드 및 legacy 생성 메서드 삭제 (~248줄): domain_config_db.py, multi_query.py, GENERATOR_PROMPT
+- `domain_classifier.py` DB 관리 코드를 `config.py`로 분리 (단일 책임 원칙: DB 설정 vs 분류 로직, re-export로 후방 호환)
+- `logging_utils.mask_sensitive_data()`로 마스킹 함수 중복 제거 통합
 
 ### Bug Fixes
 - schemas 패키지 복원 — 이전 커밋에서 의존성 확인 누락으로 삭제, 서비스 기동 실패(ModuleNotFoundError) 수정
