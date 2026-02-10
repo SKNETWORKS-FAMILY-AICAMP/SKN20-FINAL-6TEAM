@@ -2,6 +2,9 @@
 
 ## [2026-02-10] - LLM 팩토리 중앙화 및 코드 일관성 리팩토링
 
+### Performance
+- CrossEncoder 모델 서비스 시작 시 사전 로딩 — 첫 요청 응답 시간 42% 개선 (47초 → 27초)
+
 ### Refactoring
 - HybridSearcher 가중치 RRF 단일 경로 통일 (~130줄 감소): 4개 헬퍼 메서드 삭제, `_build_search_results()` 추출, sync/async 동작 일치
 - utils/config.py에 create_llm() 팩토리 함수 추가 (9개 파일의 ChatOpenAI 초기화 통합)

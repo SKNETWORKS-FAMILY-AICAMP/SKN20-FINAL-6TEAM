@@ -70,6 +70,7 @@ from utils.middleware import (
 )
 from utils.cache import get_response_cache
 from utils.config import init_db, load_domain_config, reload_domain_config
+from utils.reranker import get_reranker
 from utils.token_tracker import RequestTokenTracker
 from vectorstores.chroma import ChromaVectorStore
 
@@ -263,6 +264,15 @@ async def lifespan(app: FastAPI):
     vector_store = ChromaVectorStore()
     router_agent = MainRouter(vector_store=vector_store)
     executor = ActionExecutor()
+
+    # CrossEncoder 모델 사전 로딩 (첫 요청 ~21초 지연 제거)
+    settings = get_settings()
+    if settings.enable_reranking:
+        logger.info("CrossEncoder 모델 사전 로딩 시작...")
+        reranker = get_reranker()
+        await asyncio.to_thread(lambda: reranker.model)
+        logger.info("CrossEncoder 모델 사전 로딩 완료")
+
     logger.info("RAG 서비스 초기화 완료")
 
     yield
