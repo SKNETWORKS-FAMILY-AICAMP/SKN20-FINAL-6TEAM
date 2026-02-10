@@ -1,5 +1,23 @@
 # Release Notes
 
+## [2026-02-10] - LLM 팩토리 함수 및 DOMAIN_LABELS 중앙화
+
+### Refactoring
+- utils/config.py에 create_llm() 팩토리 함수 추가 (9개 파일의 ChatOpenAI 초기화 통합)
+- utils/config.py에 DOMAIN_LABELS 상수 추가 (4곳의 중복 정의 통합)
+- 테스트 mock 경로를 utils.config.create_llm으로 업데이트
+
+### Bug Fixes
+- cli.py에서 law_common 도메인 라벨 누락 수정
+- 도메인 분류 개선 (키워드 보정을 벡터 threshold 판정 전에 적용)
+
+### Documentation
+- ARCHITECTURE.md 갱신 (RetrievalAgent, ResponseGeneratorAgent, LegalAgent 반영)
+
+### Chores
+- PLAN_generator.md 삭제 (구현 완료된 계획서)
+- RAG 의존성 정리
+
 ## [2026-02-09] - RAG 품질 개선 및 멀티에이전트 고도화
 
 ### Features
