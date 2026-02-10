@@ -13,7 +13,7 @@ from utils.domain_classifier import (
     DomainClassificationResult,
     extract_lemmas,
 )
-from utils.domain_config_db import (
+from utils.domain_classifier import (
     DomainConfig,
     _get_default_config,
     load_domain_config,
@@ -260,7 +260,7 @@ class TestMySQLSingleDomain:
         SINGLE_DOMAIN_CASES,
         ids=[c[2] for c in SINGLE_DOMAIN_CASES],
     )
-    @patch("utils.domain_config_db._get_connection")
+    @patch("utils.domain_classifier._get_connection")
     def test_single_domain(self, mock_get_conn, query, expected_domains, test_id):
         default = _get_default_config()
         mock_get_conn.return_value = _make_mock_conn_for_config(default)
@@ -280,7 +280,7 @@ class TestMySQLMultiDomain:
         MULTI_DOMAIN_CASES,
         ids=[c[2] for c in MULTI_DOMAIN_CASES],
     )
-    @patch("utils.domain_config_db._get_connection")
+    @patch("utils.domain_classifier._get_connection")
     def test_multi_domain(self, mock_get_conn, query, expected_domains, test_id):
         default = _get_default_config()
         mock_get_conn.return_value = _make_mock_conn_for_config(default)
@@ -300,7 +300,7 @@ class TestMySQLRejection:
         REJECTION_CASES,
         ids=[c[2] for c in REJECTION_CASES],
     )
-    @patch("utils.domain_config_db._get_connection")
+    @patch("utils.domain_classifier._get_connection")
     def test_rejection(self, mock_get_conn, query, expected_domains, test_id):
         default = _get_default_config()
         mock_get_conn.return_value = _make_mock_conn_for_config(default)
@@ -322,7 +322,7 @@ class TestHardcodedVsMySQLComparison:
         ALL_CASES,
         ids=ALL_IDS,
     )
-    @patch("utils.domain_config_db._get_connection")
+    @patch("utils.domain_classifier._get_connection")
     def test_domains_match(self, mock_get_conn, query, expected_domains, test_id):
         """두 방식의 도메인 분류 결과가 동일합니다."""
         h_config = _get_default_config()
@@ -350,7 +350,7 @@ class TestHardcodedVsMySQLComparison:
         ALL_CASES,
         ids=ALL_IDS,
     )
-    @patch("utils.domain_config_db._get_connection")
+    @patch("utils.domain_classifier._get_connection")
     def test_confidence_match(self, mock_get_conn, query, expected_domains, test_id):
         """두 방식의 신뢰도가 동일합니다."""
         h_config = _get_default_config()
@@ -373,7 +373,7 @@ class TestHardcodedVsMySQLComparison:
         ALL_CASES,
         ids=ALL_IDS,
     )
-    @patch("utils.domain_config_db._get_connection")
+    @patch("utils.domain_classifier._get_connection")
     def test_matched_keywords_match(self, mock_get_conn, query, expected_domains, test_id):
         """두 방식의 매칭 키워드가 동일합니다."""
         h_config = _get_default_config()
@@ -420,7 +420,7 @@ class TestClassifierIntegration:
         SINGLE_DOMAIN_CASES,
         ids=[c[2] for c in SINGLE_DOMAIN_CASES],
     )
-    @patch("utils.domain_config_db._get_connection")
+    @patch("utils.domain_classifier._get_connection")
     def test_single_domain(self, mock_get_conn, classifier, query, expected_domains, test_id):
         """단일 도메인 키워드 매칭."""
         default = _get_default_config()
@@ -436,7 +436,7 @@ class TestClassifierIntegration:
         MULTI_DOMAIN_CASES,
         ids=[c[2] for c in MULTI_DOMAIN_CASES],
     )
-    @patch("utils.domain_config_db._get_connection")
+    @patch("utils.domain_classifier._get_connection")
     def test_multi_domain(self, mock_get_conn, classifier, query, expected_domains, test_id):
         """복합 도메인 키워드 매칭."""
         default = _get_default_config()
@@ -454,7 +454,7 @@ class TestClassifierIntegration:
         REJECTION_CASES,
         ids=[c[2] for c in REJECTION_CASES],
     )
-    @patch("utils.domain_config_db._get_connection")
+    @patch("utils.domain_classifier._get_connection")
     def test_rejection(self, mock_get_conn, classifier, query, expected_domains, test_id):
         """도메인 외 질문은 None 반환."""
         default = _get_default_config()

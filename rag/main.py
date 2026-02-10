@@ -70,7 +70,7 @@ from utils.middleware import (
     get_metrics_collector,
 )
 from utils.cache import get_response_cache
-from utils.domain_config_db import init_db, load_domain_config, reload_domain_config
+from utils.domain_classifier import init_db, load_domain_config, reload_domain_config
 from utils.token_tracker import RequestTokenTracker
 from vectorstores.chroma import ChromaVectorStore
 

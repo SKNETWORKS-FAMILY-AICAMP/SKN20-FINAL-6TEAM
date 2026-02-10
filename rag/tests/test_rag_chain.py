@@ -34,7 +34,7 @@ class TestRAGChainRetrieve:
     @pytest.fixture
     def rag_chain(self, mock_vector_store):
         """RAGChain fixture."""
-        with patch("utils.config.create_llm"):
+        with patch("chains.rag_chain.create_llm"):
             from chains.rag_chain import RAGChain
             chain = RAGChain(vector_store=mock_vector_store)
             chain._query_processor = None  # 쿼리 재작성 비활성화
@@ -112,7 +112,7 @@ class TestRAGChainFormatContext:
     @pytest.fixture
     def rag_chain(self):
         """RAGChain fixture."""
-        with patch("utils.config.create_llm"), \
+        with patch("chains.rag_chain.create_llm"), \
              patch("chains.rag_chain.ChromaVectorStore"):
             from chains.rag_chain import RAGChain
             return RAGChain()
@@ -155,7 +155,7 @@ class TestRAGChainDocumentsToSources:
     @pytest.fixture
     def rag_chain(self):
         """RAGChain fixture."""
-        with patch("utils.config.create_llm"), \
+        with patch("chains.rag_chain.create_llm"), \
              patch("chains.rag_chain.ChromaVectorStore"):
             from chains.rag_chain import RAGChain
             return RAGChain()
@@ -186,7 +186,7 @@ class TestRAGChainInvoke:
     @pytest.fixture
     def rag_chain(self):
         """RAGChain fixture with mocks."""
-        with patch("utils.config.create_llm") as mock_llm, \
+        with patch("chains.rag_chain.create_llm") as mock_llm, \
              patch("chains.rag_chain.ChromaVectorStore") as mock_store:
 
             # Mock LLM

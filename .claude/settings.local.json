@@ -43,7 +43,18 @@
       "Bash(if [ -f \"docs/${dir}_RELEASE.md\" ])",
       "Bash(then grep -m1 \"^## \\\\[\" \"docs/${dir}_RELEASE.md\")",
       "Bash(else echo \"RELEASE.md not found\")",
-      "Bash(fi)"
+      "Bash(fi)",
+      "Bash(ls:*)",
+      "mcp__plugin_playwright_playwright__browser_type",
+      "mcp__plugin_playwright_playwright__browser_wait_for",
+      "mcp__plugin_playwright_playwright__browser_click",
+      "mcp__plugin_playwright_playwright__browser_take_screenshot",
+      "mcp__plugin_playwright_playwright__browser_evaluate",
+      "mcp__plugin_playwright_playwright__browser_close",
+      "Bash(for port in 3306 8000 8001 5173 8002)",
+      "mcp__plugin_playwright_playwright__browser_navigate",
+      "mcp__plugin_playwright_playwright__browser_snapshot",
+      "mcp__plugin_playwright_playwright__browser_run_code"
     ]
   }
 }

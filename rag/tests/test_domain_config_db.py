@@ -1,6 +1,6 @@
 """도메인 설정 DB (MySQL) 테스트.
 
-MySQL 연결을 mock하여 domain_config_db 모듈의 로직을 검증합니다.
+MySQL 연결을 mock하여 domain_classifier 모듈의 도메인 설정 로직을 검증합니다.
 """
 
 import json
@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from utils.domain_config_db import (
+from utils.domain_classifier import (
     DomainConfig,
     _get_default_config,
     init_db,
@@ -120,7 +120,7 @@ class TestDomainConfig:
 class TestInitDB:
     """init_db() 테스트."""
 
-    @patch("utils.domain_config_db._get_connection")
+    @patch("utils.domain_classifier._get_connection")
     def test_skip_if_tables_exist_and_has_data(self, mock_get_conn):
         """테이블이 이미 있고 데이터도 있으면 건너뜁니다."""
         mock_conn = _make_mock_conn(tables_exist=True, has_data=True)
@@ -129,7 +129,7 @@ class TestInitDB:
         # _create_tables나 _seed_data가 호출되지 않음
         mock_conn.commit.assert_not_called()
 
-    @patch("utils.domain_config_db._get_connection")
+    @patch("utils.domain_classifier._get_connection")
     def test_fallback_on_connection_error(self, mock_get_conn):
         """연결 실패 시 경고만 출력하고 넘어갑니다."""
         mock_get_conn.side_effect = Exception("Connection refused")
@@ -139,7 +139,7 @@ class TestInitDB:
 class TestLoadDomainConfig:
     """load_domain_config() 테스트."""
 
-    @patch("utils.domain_config_db._get_connection")
+    @patch("utils.domain_classifier._get_connection")
     def test_fallback_on_connection_error(self, mock_get_conn):
         """연결 실패 시 하드코딩 기본값을 반환합니다."""
         mock_get_conn.side_effect = Exception("Connection refused")
@@ -150,7 +150,7 @@ class TestLoadDomainConfig:
         assert "hr_labor" in config.keywords
         assert len(config.compound_rules) > 0
 
-    @patch("utils.domain_config_db._get_connection")
+    @patch("utils.domain_classifier._get_connection")
     def test_load_from_db(self, mock_get_conn):
         """DB에서 올바르게 로드합니다."""
         mock_conn = _make_mock_conn()
@@ -166,7 +166,7 @@ class TestLoadDomainConfig:
         assert "세금" in config.keywords["finance_tax"]
         assert "퇴직금" in config.keywords["hr_labor"]
 
-    @patch("utils.domain_config_db._get_connection")
+    @patch("utils.domain_classifier._get_connection")
     def test_load_matches_hardcoded(self, mock_get_conn):
         """DB에서 로드한 값이 하드코딩 값과 일치합니다."""
         mock_conn = _make_mock_conn()
@@ -179,7 +179,7 @@ class TestLoadDomainConfig:
                 default_config.keywords[domain_key]
             )
 
-    @patch("utils.domain_config_db._get_connection")
+    @patch("utils.domain_classifier._get_connection")
     def test_fallback_when_no_tables(self, mock_get_conn):
         """테이블이 없으면 하드코딩 기본값을 반환합니다."""
         mock_conn = _make_mock_conn(tables_exist=False)
@@ -193,7 +193,7 @@ class TestLoadDomainConfig:
         config = load_domain_config()
         assert "startup_funding" in config.keywords
 
-    @patch("utils.domain_config_db._get_connection")
+    @patch("utils.domain_classifier._get_connection")
     def test_compound_rule_lemmas_are_sets(self, mock_get_conn):
         """복합 규칙의 required_lemmas가 set으로 로드됩니다."""
         mock_conn = _make_mock_conn()
@@ -207,7 +207,7 @@ class TestLoadDomainConfig:
 class TestGetDomainConfig:
     """get_domain_config() 싱글톤 테스트."""
 
-    @patch("utils.domain_config_db._get_connection")
+    @patch("utils.domain_classifier._get_connection")
     def test_returns_same_instance(self, mock_get_conn):
         """같은 인스턴스를 반환합니다."""
         mock_get_conn.side_effect = Exception("Connection refused")
@@ -215,7 +215,7 @@ class TestGetDomainConfig:
         config2 = get_domain_config()
         assert config1 is config2
 
-    @patch("utils.domain_config_db._get_connection")
+    @patch("utils.domain_classifier._get_connection")
     def test_returns_valid_config(self, mock_get_conn):
         """유효한 설정을 반환합니다."""
         mock_get_conn.side_effect = Exception("Connection refused")
@@ -227,7 +227,7 @@ class TestGetDomainConfig:
 class TestReloadDomainConfig:
     """reload_domain_config() 테스트."""
 
-    @patch("utils.domain_config_db._get_connection")
+    @patch("utils.domain_classifier._get_connection")
     def test_reload_returns_fresh_config(self, mock_get_conn):
         """리로드 시 새 인스턴스를 반환합니다."""
         mock_get_conn.side_effect = Exception("Connection refused")

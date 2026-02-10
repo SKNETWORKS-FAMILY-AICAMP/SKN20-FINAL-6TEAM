@@ -589,7 +589,7 @@ class TestGraduatedRetryHandler:
         result = _make_result(passed=False)
         budget = DocumentBudget("finance_tax", 5, True, 1)
 
-        with patch("utils.multi_query.MultiQueryRetriever") as mock_mq_cls:
+        with patch("utils.query.MultiQueryRetriever") as mock_mq_cls:
             mock_mq = MagicMock()
             mock_mq.retrieve.return_value = (
                 [_make_doc("MQ 결과", 0.8)],

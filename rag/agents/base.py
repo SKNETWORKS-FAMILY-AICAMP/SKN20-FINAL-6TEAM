@@ -255,7 +255,7 @@ class BaseAgent(ABC):
                 evaluation.reason,
             )
             try:
-                from utils.multi_query import MultiQueryRetriever
+                from utils.query import MultiQueryRetriever
 
                 multi_query_retriever = MultiQueryRetriever(self.rag_chain)
                 documents, rewritten_query = multi_query_retriever.retrieve(

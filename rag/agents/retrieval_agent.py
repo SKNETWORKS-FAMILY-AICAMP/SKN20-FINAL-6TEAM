@@ -25,7 +25,7 @@ from utils.legal_supplement import needs_legal_supplement
 if TYPE_CHECKING:
     from agents.base import BaseAgent
     from chains.rag_chain import RAGChain
-    from utils.multi_query import MultiQueryRetriever
+    from utils.query import MultiQueryRetriever
     from utils.question_decomposer import SubQuery
     from utils.retrieval_evaluator import RuleBasedRetrievalEvaluator
     from vectorstores.chroma import ChromaVectorStore
@@ -454,7 +454,7 @@ class GraduatedRetryHandler:
         ctx: RetryContext,
     ) -> RetrievalResult:
         """Level 2: Multi-Query 재검색."""
-        from utils.multi_query import MultiQueryRetriever
+        from utils.query import MultiQueryRetriever
         from utils.retrieval_evaluator import RuleBasedRetrievalEvaluator
 
         logger.info("[재시도] Level 2 (MULTI_QUERY): %s", domain)

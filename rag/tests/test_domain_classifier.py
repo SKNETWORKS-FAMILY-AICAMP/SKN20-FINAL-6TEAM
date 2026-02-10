@@ -474,6 +474,85 @@ class TestVectorDomainClassifier:
         # 벡터 분류가 항상 호출됨
         mock_embeddings.embed_query.assert_called_once()
 
+    # ========== 키워드 보정 threshold 인접 회귀 테스트 ==========
+
+    def _setup_specific_similarity_vectors(
+        self,
+        classifier: VectorDomainClassifier,
+        mock_embeddings: Mock,
+        target_similarity: float,
+    ) -> None:
+        """특정 코사인 유사도를 가지는 벡터를 설정하는 헬퍼.
+
+        Args:
+            classifier: VectorDomainClassifier 인스턴스
+            mock_embeddings: Mock 임베딩
+            target_similarity: startup_funding에 설정할 코사인 유사도
+        """
+        query_vec = np.zeros(1024)
+        query_vec[0] = 1.0
+
+        # startup_funding: target_similarity
+        vec_target = np.zeros(1024)
+        vec_target[0] = target_similarity
+        vec_target[1] = np.sqrt(1 - target_similarity ** 2)
+        vec_target = vec_target / np.linalg.norm(vec_target)
+
+        # 나머지: 낮은 유사도 (cos ≈ 0.0, 직교)
+        vec_low_1 = np.zeros(1024)
+        vec_low_1[2] = 1.0
+        vec_low_2 = np.zeros(1024)
+        vec_low_2[3] = 1.0
+        vec_low_3 = np.zeros(1024)
+        vec_low_3[4] = 1.0
+
+        mock_embeddings.embed_query.return_value = query_vec
+        classifier._domain_vectors = {
+            "startup_funding": vec_target,
+            "finance_tax": vec_low_1,
+            "hr_labor": vec_low_2,
+            "law_common": vec_low_3,
+        }
+
+    def test_classify_keyword_boost_crosses_threshold(
+        self, classifier: VectorDomainClassifier, mock_embeddings: Mock
+    ) -> None:
+        """벡터 0.56 + 키워드 보정 → 0.66으로 threshold(0.6) 통과."""
+        query = "창업 절차가 궁금합니다"
+        self._setup_specific_similarity_vectors(classifier, mock_embeddings, 0.56)
+
+        result = classifier.classify(query)
+
+        assert result.is_relevant is True
+        assert result.method == "keyword+vector"
+        assert result.confidence == pytest.approx(0.66, abs=0.01)
+        assert "startup_funding" in result.domains
+
+    def test_classify_keyword_boost_still_below_threshold(
+        self, classifier: VectorDomainClassifier, mock_embeddings: Mock
+    ) -> None:
+        """벡터 0.45 + 키워드 보정 → 0.55로 여전히 threshold(0.6) 미만."""
+        query = "창업 절차가 궁금합니다"
+        self._setup_specific_similarity_vectors(classifier, mock_embeddings, 0.45)
+
+        result = classifier.classify(query)
+
+        assert result.is_relevant is False
+        assert result.method == "vector"
+
+    def test_classify_keyword_boost_at_exact_threshold(
+        self, classifier: VectorDomainClassifier, mock_embeddings: Mock
+    ) -> None:
+        """벡터 0.50 + 키워드 보정 → 0.60 = threshold 정확히 일치 (>= 통과)."""
+        query = "창업 절차가 궁금합니다"
+        self._setup_specific_similarity_vectors(classifier, mock_embeddings, 0.50)
+
+        result = classifier.classify(query)
+
+        assert result.is_relevant is True
+        assert result.method == "keyword+vector"
+        assert result.confidence == pytest.approx(0.60, abs=0.01)
+
     def test_classify_fallback_to_keyword_when_vector_disabled(
         self, mock_embeddings
     ):
