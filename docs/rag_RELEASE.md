@@ -3,6 +3,7 @@
 ## [2026-02-10] - LLM 팩토리 중앙화 및 코드 일관성 리팩토링
 
 ### Refactoring
+- HybridSearcher 가중치 RRF 단일 경로 통일 (~130줄 감소): 4개 헬퍼 메서드 삭제, `_build_search_results()` 추출, sync/async 동작 일치
 - utils/config.py에 create_llm() 팩토리 함수 추가 (9개 파일의 ChatOpenAI 초기화 통합)
 - utils/config.py에 DOMAIN_LABELS 상수 추가 (4곳의 중복 정의 통합)
 - _llm_classify()의 ChatOpenAI 직접 생성을 create_llm 팩토리로 교체 (직접 생성 0건 달성)
@@ -15,6 +16,7 @@
 - 도메인 분류 개선 (키워드 보정을 벡터 threshold 판정 전에 적용)
 
 ### Tests
+- HybridSearcher 단위 테스트 6개 추가 (벡터/BM25 검색, reranker, metadata score 검증)
 - 키워드 보정 threshold 인접 회귀 테스트 3개 추가 (경계값 검증)
 
 ### Documentation

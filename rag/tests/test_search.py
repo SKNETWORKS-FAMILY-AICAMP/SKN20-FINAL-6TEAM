@@ -1,10 +1,12 @@
 """검색 모듈 테스트."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from langchain_core.documents import Document
 
-from utils.search import BM25Index, SearchResult, reciprocal_rank_fusion
+from utils.search import BM25Index, HybridSearcher, SearchResult, reciprocal_rank_fusion
 
 
 class TestBM25Index:
@@ -168,3 +170,90 @@ class TestReciprocalRankFusion:
         assert len(results) == 2
         # 벡터 결과가 더 높은 점수를 가져야 함
         assert results[0].score > results[1].score
+
+
+class TestHybridSearcher:
+    """HybridSearcher 테스트."""
+
+    @pytest.fixture
+    def mock_vector_store(self) -> MagicMock:
+        """벡터 스토어 Mock."""
+        store = MagicMock()
+        store.similarity_search_with_score.return_value = [
+            (Document(page_content="벡터 문서1", metadata={}), 0.3),
+            (Document(page_content="벡터 문서2", metadata={}), 0.5),
+            (Document(page_content="벡터 문서3", metadata={}), 0.8),
+        ]
+        return store
+
+    @pytest.fixture
+    def searcher(self, mock_vector_store: MagicMock) -> HybridSearcher:
+        """HybridSearcher 인스턴스."""
+        with patch("utils.search.get_settings") as mock_settings:
+            settings = MagicMock()
+            settings.vector_search_weight = 0.7
+            settings.enable_reranking = False
+            mock_settings.return_value = settings
+            return HybridSearcher(mock_vector_store)
+
+    def test_search_returns_documents(self, searcher: HybridSearcher) -> None:
+        """기본 검색: 문서가 k개 이하로 반환됩니다."""
+        results = searcher.search("창업 절차", domain="startup", k=2, use_rerank=False)
+
+        assert len(results) <= 2
+        assert all(isinstance(doc, Document) for doc in results)
+
+    def test_search_with_bm25_index(
+        self, searcher: HybridSearcher, mock_vector_store: MagicMock
+    ) -> None:
+        """BM25 인덱스가 있으면 벡터 + BM25 모두 사용됩니다."""
+        # BM25 인덱스 빌드
+        docs = [
+            Document(page_content="창업 절차와 사업자 등록 방법"),
+            Document(page_content="부가가치세 신고 방법"),
+        ]
+        searcher.build_bm25_index("startup", docs)
+
+        results = searcher.search("창업 절차", domain="startup", k=3, use_rerank=False)
+
+        mock_vector_store.similarity_search_with_score.assert_called_once()
+        assert len(results) <= 3
+
+    def test_search_without_bm25_index(
+        self, searcher: HybridSearcher, mock_vector_store: MagicMock
+    ) -> None:
+        """BM25 인덱스가 없으면 벡터 결과만 반환됩니다."""
+        results = searcher.search("창업 절차", domain="startup", k=3, use_rerank=False)
+
+        mock_vector_store.similarity_search_with_score.assert_called_once()
+        assert len(results) <= 3
+        assert "startup" not in searcher.bm25_indices
+
+    def test_search_score_in_metadata(self, searcher: HybridSearcher) -> None:
+        """모든 반환 문서의 metadata에 score가 존재합니다."""
+        results = searcher.search("창업 절차", domain="startup", k=5, use_rerank=False)
+
+        for doc in results:
+            assert "score" in doc.metadata
+
+    def test_search_rerank_applied(self, searcher: HybridSearcher) -> None:
+        """use_rerank=True이고 문서 수 > k이면 reranker가 호출됩니다."""
+        mock_reranker = MagicMock()
+        mock_reranker.rerank.return_value = [
+            Document(page_content="리랭크 결과", metadata={"score": 0.9}),
+        ]
+        searcher._reranker = mock_reranker
+
+        results = searcher.search("창업 절차", domain="startup", k=1, use_rerank=True)
+
+        mock_reranker.rerank.assert_called_once()
+        assert len(results) == 1
+
+    def test_search_rerank_skipped_when_disabled(self, searcher: HybridSearcher) -> None:
+        """use_rerank=False이면 reranker가 호출되지 않습니다."""
+        mock_reranker = MagicMock()
+        searcher._reranker = mock_reranker
+
+        searcher.search("창업 절차", domain="startup", k=5, use_rerank=False)
+
+        mock_reranker.rerank.assert_not_called()

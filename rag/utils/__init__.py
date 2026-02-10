@@ -19,6 +19,7 @@ from utils.search import (
     SearchResult,
     reciprocal_rank_fusion,
     get_hybrid_searcher,
+    reset_hybrid_searcher,
 )
 from utils.reranker import (
     BaseReranker,
@@ -69,6 +70,7 @@ __all__ = [
     "SearchResult",
     "reciprocal_rank_fusion",
     "get_hybrid_searcher",
+    "reset_hybrid_searcher",
     # Reranker
     "BaseReranker",
     "CrossEncoderReranker",
