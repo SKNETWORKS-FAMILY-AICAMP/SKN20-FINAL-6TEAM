@@ -88,7 +88,6 @@ services:
       # RAG 고급 검색 설정
       - ENABLE_HYBRID_SEARCH=${ENABLE_HYBRID_SEARCH:-true}
       - ENABLE_RERANKING=${ENABLE_RERANKING:-true}
-      - ENABLE_QUERY_REWRITE=${ENABLE_QUERY_REWRITE:-true}
     depends_on:
       db:
         condition: service_healthy

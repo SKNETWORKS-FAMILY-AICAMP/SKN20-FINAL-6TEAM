@@ -10,7 +10,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, AsyncGenerator
+from typing import TYPE_CHECKING, Any, AsyncGenerator, ClassVar
 
 from langchain_core.documents import Document
 
@@ -105,6 +105,25 @@ class AgentResponse:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
+class ActionRule:
+    """액션 추천 규칙.
+
+    키워드 매칭으로 추천 액션을 결정하는 규칙을 정의합니다.
+
+    Attributes:
+        keywords: 매칭할 키워드 리스트
+        action: 매칭 시 추천할 액션
+        match_response: True이면 query+response 모두 검색, False이면 query만 검색
+        dynamic_query_param: True이면 params["query"]에 실제 query를 동적 주입
+    """
+
+    keywords: list[str]
+    action: ActionSuggestion
+    match_response: bool = True
+    dynamic_query_param: bool = False
+
+
 class BaseAgent(ABC):
     """기본 에이전트 추상 클래스.
 
@@ -118,13 +137,13 @@ class BaseAgent(ABC):
     Example:
         >>> class MyAgent(BaseAgent):
         ...     domain = "my_domain"
+        ...     ACTION_RULES = [...]
         ...     def get_system_prompt(self) -> str:
         ...         return "시스템 프롬프트"
-        ...     def suggest_actions(self, query, response) -> list:
-        ...         return []
     """
 
     domain: str = ""
+    ACTION_RULES: ClassVar[list[ActionRule]] = []
 
     def __init__(self, rag_chain: RAGChain | None = None):
         """BaseAgent를 초기화합니다.
@@ -162,13 +181,15 @@ class BaseAgent(ABC):
         """
         pass
 
-    @abstractmethod
     def suggest_actions(
         self,
         query: str,
         response: str,
     ) -> list[ActionSuggestion]:
-        """추천 액션을 생성합니다.
+        """ACTION_RULES 기반으로 추천 액션을 생성합니다.
+
+        각 규칙의 키워드를 query(및 match_response=True이면 response)와 매칭하여
+        해당하는 액션을 수집합니다.
 
         Args:
             query: 사용자 질문
@@ -177,7 +198,25 @@ class BaseAgent(ABC):
         Returns:
             추천 액션 리스트
         """
-        pass
+        actions: list[ActionSuggestion] = []
+        query_lower = query.lower()
+        response_lower = response.lower()
+
+        for rule in self.ACTION_RULES:
+            texts = [query_lower]
+            if rule.match_response:
+                texts.append(response_lower)
+            if any(kw in text for kw in rule.keywords for text in texts):
+                base = rule.action
+                params = {**base.params, "query": query} if rule.dynamic_query_param else base.params.copy()
+                actions.append(ActionSuggestion(
+                    type=base.type,
+                    label=base.label,
+                    description=base.description,
+                    params=params,
+                ))
+
+        return actions
 
     def retrieve_context(
         self,

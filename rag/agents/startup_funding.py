@@ -3,9 +3,9 @@
 창업, 지원사업, 마케팅 도메인을 담당하는 전문 에이전트입니다.
 """
 
+from agents.base import ActionRule, BaseAgent
 from schemas.response import ActionSuggestion
 from utils.prompts import STARTUP_FUNDING_PROMPT
-from agents.base import BaseAgent
 
 
 class StartupFundingAgent(BaseAgent):
@@ -26,64 +26,37 @@ class StartupFundingAgent(BaseAgent):
 
     domain = "startup_funding"
 
+    ACTION_RULES = [
+        ActionRule(
+            keywords=["지원사업", "보조금", "정책자금", "공고", "지원금"],
+            action=ActionSuggestion(
+                type="funding_search",
+                label="맞춤 지원사업 검색",
+                description="기업 조건에 맞는 지원사업을 검색합니다",
+                params={},
+            ),
+            dynamic_query_param=True,
+        ),
+        ActionRule(
+            keywords=["사업계획서", "사업 계획", "창업 계획"],
+            action=ActionSuggestion(
+                type="document_generation",
+                label="사업계획서 템플릿",
+                description="사업계획서 작성 템플릿을 제공합니다",
+                params={"document_type": "business_plan"},
+            ),
+        ),
+        ActionRule(
+            keywords=["사업자등록", "사업자 등록", "등록 신청"],
+            action=ActionSuggestion(
+                type="external_link",
+                label="홈택스 바로가기",
+                description="사업자등록 신청은 홈택스에서 가능합니다",
+                params={"url": "https://www.hometax.go.kr"},
+            ),
+        ),
+    ]
+
     def get_system_prompt(self) -> str:
         """창업/지원 에이전트 시스템 프롬프트를 반환합니다."""
         return STARTUP_FUNDING_PROMPT
-
-    def suggest_actions(
-        self,
-        query: str,
-        response: str,
-    ) -> list[ActionSuggestion]:
-        """추천 액션을 생성합니다.
-
-        지원사업, 사업계획서 관련 키워드가 있으면 해당 액션을 제안합니다.
-
-        Args:
-            query: 사용자 질문
-            response: 에이전트 응답
-
-        Returns:
-            추천 액션 리스트
-        """
-        actions = []
-        query_lower = query.lower()
-        response_lower = response.lower()
-
-        # 지원사업 관련 키워드
-        funding_keywords = ["지원사업", "보조금", "정책자금", "공고", "지원금"]
-        if any(kw in query_lower or kw in response_lower for kw in funding_keywords):
-            actions.append(
-                ActionSuggestion(
-                    type="funding_search",
-                    label="맞춤 지원사업 검색",
-                    description="기업 조건에 맞는 지원사업을 검색합니다",
-                    params={"query": query},
-                )
-            )
-
-        # 사업계획서 관련 키워드
-        plan_keywords = ["사업계획서", "사업 계획", "창업 계획"]
-        if any(kw in query_lower or kw in response_lower for kw in plan_keywords):
-            actions.append(
-                ActionSuggestion(
-                    type="document_generation",
-                    label="사업계획서 템플릿",
-                    description="사업계획서 작성 템플릿을 제공합니다",
-                    params={"document_type": "business_plan"},
-                )
-            )
-
-        # 사업자등록 관련 키워드
-        registration_keywords = ["사업자등록", "사업자 등록", "등록 신청"]
-        if any(kw in query_lower or kw in response_lower for kw in registration_keywords):
-            actions.append(
-                ActionSuggestion(
-                    type="external_link",
-                    label="홈택스 바로가기",
-                    description="사업자등록 신청은 홈택스에서 가능합니다",
-                    params={"url": "https://www.hometax.go.kr"},
-                )
-            )
-
-        return actions

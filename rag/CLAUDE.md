@@ -23,10 +23,11 @@
 
 ### 새 에이전트 추가
 1. `agents/{domain}.py` 생성 — `BaseAgent` 상속
-2. `agents/router.py`에 에이전트 등록
-3. `utils/prompts.py`에 프롬프트 추가
-4. `vectorstores/config.py`에 컬렉션 매핑 추가
-5. 도메인 키워드 → `DOMAIN_KEYWORDS` dict에 추가
+2. `ACTION_RULES` 클래스 변수에 `ActionRule` 리스트 선언 (키워드 기반 액션 추천)
+3. `agents/router.py`에 에이전트 등록
+4. `utils/prompts.py`에 프롬프트 추가
+5. `vectorstores/config.py`에 컬렉션 매핑 추가
+6. 도메인 키워드 → `DOMAIN_KEYWORDS` dict에 추가
 
 ### 새 벡터DB 컬렉션 추가
 1. `vectorstores/config.py`에 설정 추가
@@ -155,7 +156,8 @@ MIN_DOC_EMBEDDING_SIMILARITY=0.2       # 문서별 임베딩 유사도 필터 �
 ### Multi-Query / 재시도
 ```
 MULTI_QUERY_COUNT=3                    # 생성할 쿼리 수
-ENABLE_POST_EVAL_RETRY=false           # 평가 후 재시도 (기본 비활성화)
+ENABLE_POST_EVAL_RETRY=true            # 평가 후 재시도
+POST_EVAL_ALT_QUERY_COUNT=2            # 평가 후 대체 쿼리 수 (1~5)
 ```
 
 ### 법률 보충 검색

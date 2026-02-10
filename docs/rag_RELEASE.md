@@ -1,20 +1,24 @@
 # Release Notes
 
-## [2026-02-10] - LLM 팩토리 중앙화 및 코드 일관성 리팩토링
+## [2026-02-10] - ActionRule 패턴 도입, BM25 점수 분리, Dead Code 정리
 
 ### Performance
 - CrossEncoder 모델 서비스 시작 시 사전 로딩 — 첫 요청 응답 시간 42% 개선 (47초 → 27초)
+- 쿼리 재작성(Query Rewrite) 기능 제거 — LLM 호출 1회/요청 감소, 지연시간·토큰 비용 절감
 
 ### Refactoring
-- HybridSearcher 가중치 RRF 단일 경로 통일 (~130줄 감소): 4개 헬퍼 메서드 삭제, `_build_search_results()` 추출, sync/async 동작 일치
+- **ActionRule 선언적 패턴 도입**: 4개 도메인 에이전트의 `suggest_actions()` 중복 코드를 `BaseAgent.ACTION_RULES` 클래스 변수 기반으로 통일
+- **ActionSuggestion 불변성 보장**: `suggest_actions()`에서 항상 새 인스턴스 생성 + `params.copy()`로 클래스 레벨 객체 공유 방지
+- **BM25 RRF(랭킹)와 embedding similarity(품질) 분리**: RRF는 랭킹 전용, embedding similarity는 품질 필터로 역할 분리
+- MultiQueryRetriever에 `_make_doc_key`, `_distance_to_similarity`, `_collect_embedding_similarity_map`, `_apply_embedding_similarity_filter` 메서드 추가
+- HybridSearcher 가중치 RRF 단일 경로 통일 (~130줄 감소)
 - utils/config.py에 create_llm() 팩토리 함수 추가 (9개 파일의 ChatOpenAI 초기화 통합)
 - utils/config.py에 DOMAIN_LABELS 상수 추가 (4곳의 중복 정의 통합)
-- _llm_classify()의 ChatOpenAI 직접 생성을 create_llm 팩토리로 교체 (직접 생성 0건 달성)
-- classify()의 미사용 변수(keyword_domains, vector_best) 삭제 및 주석 정렬
-- 테스트 create_llm 패치 경로를 사용사이트로 통일 (test_evaluator, test_rag_chain)
-- 죽은 코드 및 legacy 생성 메서드 삭제 (~248줄): domain_config_db.py, multi_query.py, GENERATOR_PROMPT
-- `domain_classifier.py` DB 관리 코드를 `config.py`로 분리 (단일 책임 원칙: DB 설정 vs 분류 로직, re-export로 후방 호환)
+- QueryProcessor 역할 명확화 (쿼리 재작성 제거, 컨텍스트 압축 전담)
+- `enable_query_rewrite` 설정 필드 및 `QUERY_REWRITE_PROMPT` 제거
+- `domain_classifier.py` DB 관리 코드를 `config.py`로 분리 (단일 책임 원칙)
 - `logging_utils.mask_sensitive_data()`로 마스킹 함수 중복 제거 통합
+- RAG 파이프라인 dead code 정리 (-929줄)
 
 ### Bug Fixes
 - schemas 패키지 복원 — 이전 커밋에서 의존성 확인 누락으로 삭제, 서비스 기동 실패(ModuleNotFoundError) 수정
@@ -24,13 +28,17 @@
 ### Tests
 - HybridSearcher 단위 테스트 6개 추가 (벡터/BM25 검색, reranker, metadata score 검증)
 - 키워드 보정 threshold 인접 회귀 테스트 3개 추가 (경계값 검증)
+- MultiQueryRetriever RRF 점수 분리/필터링 테스트 3개 추가
 
 ### Documentation
 - ARCHITECTURE.md 갱신 (RetrievalAgent, ResponseGeneratorAgent, LegalAgent 반영)
+- CLAUDE.md 환경변수 동기화: `ENABLE_QUERY_REWRITE` 제거, `POST_EVAL_ALT_QUERY_COUNT` 추가, `ENABLE_POST_EVAL_RETRY` 기본값 수정
+- 새 에이전트 추가 가이드에 ACTION_RULES 단계 추가
 
 ### Chores
 - PLAN_generator.md 삭제 (구현 완료된 계획서)
 - RAG 의존성 정리
+- docker-compose.yaml에서 `ENABLE_QUERY_REWRITE` 환경변수 제거
 
 ## [2026-02-09] - RAG 품질 개선 및 멀티에이전트 고도화
 

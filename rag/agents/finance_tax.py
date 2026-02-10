@@ -3,9 +3,9 @@
 세무, 회계, 재무 도메인을 담당하는 전문 에이전트입니다.
 """
 
+from agents.base import ActionRule, BaseAgent
 from schemas.response import ActionSuggestion
 from utils.prompts import FINANCE_TAX_PROMPT
-from agents.base import BaseAgent
 
 
 class FinanceTaxAgent(BaseAgent):
@@ -26,76 +26,46 @@ class FinanceTaxAgent(BaseAgent):
 
     domain = "finance_tax"
 
+    ACTION_RULES = [
+        ActionRule(
+            keywords=["부가세", "부가가치세", "매입세액", "매출세액"],
+            action=ActionSuggestion(
+                type="schedule_alert",
+                label="부가세 신고 알림 등록",
+                description="부가세 신고 기한 알림을 등록합니다",
+                params={"schedule_type": "vat_report"},
+            ),
+        ),
+        ActionRule(
+            keywords=["법인세", "법인 세금"],
+            action=ActionSuggestion(
+                type="schedule_alert",
+                label="법인세 신고 알림 등록",
+                description="법인세 신고 기한 알림을 등록합니다",
+                params={"schedule_type": "corporate_tax_report"},
+            ),
+        ),
+        ActionRule(
+            keywords=["계산", "얼마", "세액", "세금 얼마"],
+            action=ActionSuggestion(
+                type="calculator",
+                label="세금 계산기",
+                description="세금 계산기를 사용합니다",
+                params={"calculator_type": "tax"},
+            ),
+            match_response=False,
+        ),
+        ActionRule(
+            keywords=["신고", "납부", "홈택스", "전자신고"],
+            action=ActionSuggestion(
+                type="external_link",
+                label="홈택스 바로가기",
+                description="세금 신고/납부는 홈택스에서 가능합니다",
+                params={"url": "https://www.hometax.go.kr"},
+            ),
+        ),
+    ]
+
     def get_system_prompt(self) -> str:
         """재무/세무 에이전트 시스템 프롬프트를 반환합니다."""
         return FINANCE_TAX_PROMPT
-
-    def suggest_actions(
-        self,
-        query: str,
-        response: str,
-    ) -> list[ActionSuggestion]:
-        """추천 액션을 생성합니다.
-
-        세금 신고, 계산 관련 키워드가 있으면 해당 액션을 제안합니다.
-
-        Args:
-            query: 사용자 질문
-            response: 에이전트 응답
-
-        Returns:
-            추천 액션 리스트
-        """
-        actions = []
-        query_lower = query.lower()
-        response_lower = response.lower()
-
-        # 부가세 관련 키워드
-        vat_keywords = ["부가세", "부가가치세", "매입세액", "매출세액"]
-        if any(kw in query_lower or kw in response_lower for kw in vat_keywords):
-            actions.append(
-                ActionSuggestion(
-                    type="schedule_alert",
-                    label="부가세 신고 알림 등록",
-                    description="부가세 신고 기한 알림을 등록합니다",
-                    params={"schedule_type": "vat_report"},
-                )
-            )
-
-        # 법인세 관련 키워드
-        corporate_tax_keywords = ["법인세", "법인 세금"]
-        if any(kw in query_lower or kw in response_lower for kw in corporate_tax_keywords):
-            actions.append(
-                ActionSuggestion(
-                    type="schedule_alert",
-                    label="법인세 신고 알림 등록",
-                    description="법인세 신고 기한 알림을 등록합니다",
-                    params={"schedule_type": "corporate_tax_report"},
-                )
-            )
-
-        # 세금 계산 관련 키워드
-        calc_keywords = ["계산", "얼마", "세액", "세금 얼마"]
-        if any(kw in query_lower for kw in calc_keywords):
-            actions.append(
-                ActionSuggestion(
-                    type="calculator",
-                    label="세금 계산기",
-                    description="세금 계산기를 사용합니다",
-                    params={"calculator_type": "tax"},
-                )
-            )
-
-        # 홈택스 관련 키워드
-        hometax_keywords = ["신고", "납부", "홈택스", "전자신고"]
-        if any(kw in query_lower or kw in response_lower for kw in hometax_keywords):
-            actions.append(
-                ActionSuggestion(
-                    type="external_link",
-                    label="홈택스 바로가기",
-                    description="세금 신고/납부는 홈택스에서 가능합니다",
-                    params={"url": "https://www.hometax.go.kr"},
-                )
-            )
-
-        return actions

@@ -27,7 +27,9 @@ logger = logging.getLogger(__name__)
 class QueryProcessor:
     """쿼리 처리 클래스.
 
-    컨텍스트 압축, 키워드 추출, 캐시 키 생성 기능을 제공합니다.
+    컨텍스트 압축 및 쿼리 유틸리티 클래스.
+    쿼리 재작성(Query Rewrite) 기능은 제거되었으며,
+    현재는 컨텍스트 압축, 키워드 추출, 캐시 키 생성을 전담합니다.
     """
 
     def __init__(self):
