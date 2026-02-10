@@ -635,10 +635,10 @@ class SearchQualityEvaluator:
                 break
 
         configs = {
-            "A_all_on": {"enable_hybrid_search": True, "enable_reranking": True, "enable_query_rewrite": True},
-            "B_no_hybrid": {"enable_hybrid_search": False, "enable_reranking": True, "enable_query_rewrite": True},
-            "C_no_rerank": {"enable_hybrid_search": True, "enable_reranking": False, "enable_query_rewrite": True},
-            "D_no_rewrite": {"enable_hybrid_search": True, "enable_reranking": True, "enable_query_rewrite": False},
+            "A_all_on": {"enable_hybrid_search": True, "enable_reranking": True, "multi_query_count": 3},
+            "B_no_hybrid": {"enable_hybrid_search": False, "enable_reranking": True, "multi_query_count": 3},
+            "C_no_rerank": {"enable_hybrid_search": True, "enable_reranking": False, "multi_query_count": 3},
+            "D_mq_count_1": {"enable_hybrid_search": True, "enable_reranking": True, "multi_query_count": 1},
         }
 
         config_results: dict[str, dict[str, Any]] = {}

@@ -32,7 +32,6 @@ class SearchStrategy:
     k_common: int = 2
 
     # 고급 검색 옵션
-    use_query_rewrite: bool = True
     use_mmr: bool = True
     use_rerank: bool = False
     use_hybrid: bool = False
@@ -178,11 +177,10 @@ class FeedbackAnalyzer:
                 logger.info("검색 전략 조정: 검색 범위 확장, Re-ranking 활성화")
 
             elif ftype == FeedbackType.ACCURACY:
-                # 정확성 문제: Re-ranking 강화, 쿼리 재작성 활성화
-                strategy.use_query_rewrite = True
+                # 정확성 문제: Re-ranking 강화
                 strategy.use_rerank = True
                 strategy.fetch_k_multiplier = min(6, strategy.fetch_k_multiplier + 1)
-                logger.info("검색 전략 조정: 쿼리 재작성 및 Re-ranking 강화")
+                logger.info("검색 전략 조정: Re-ranking 강화")
 
             elif ftype == FeedbackType.COMPLETENESS:
                 # 완성도 문제: 더 많은 문서 검색
@@ -191,10 +189,9 @@ class FeedbackAnalyzer:
                 logger.info("검색 전략 조정: 검색 결과 수 증가")
 
             elif ftype == FeedbackType.RELEVANCE:
-                # 관련성 문제: 쿼리 재작성, 다양성 감소
-                strategy.use_query_rewrite = True
+                # 관련성 문제: 다양성 감소
                 strategy.mmr_lambda = min(0.8, strategy.mmr_lambda + 0.1)
-                logger.info("검색 전략 조정: 쿼리 재작성 활성화, 유사도 중시")
+                logger.info("검색 전략 조정: 유사도 중시")
 
             elif ftype == FeedbackType.CITATION:
                 # 출처 문제: 법령 DB 검색 강화

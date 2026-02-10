@@ -131,7 +131,7 @@ class EvaluationResult(BaseModel):
 ENABLE_HYBRID_SEARCH=true        # Hybrid Search (BM25+Vector+RRF)
 VECTOR_SEARCH_WEIGHT=0.7         # 벡터 검색 가중치 (0.0=BM25만, 1.0=벡터만)
 ENABLE_RERANKING=true            # Cross-encoder Re-ranking
-ENABLE_QUERY_REWRITE=true        # LLM 쿼리 재작성
+MULTI_QUERY_COUNT=3              # Multi-Query 생성 개수 (항상 사용)
 ENABLE_LLM_EVALUATION=true       # LLM 답변 평가
 ENABLE_DOMAIN_REJECTION=true     # 도메인 외 질문 거부
 ENABLE_RAGAS_EVALUATION=false    # RAGAS 정량 평가
@@ -149,11 +149,11 @@ ENABLE_LLM_DOMAIN_CLASSIFICATION=false # LLM 분류 비교 (추가 비용 발생
 MIN_RETRIEVAL_DOC_COUNT=2              # 최소 문서 수
 MIN_KEYWORD_MATCH_RATIO=0.3            # 최소 키워드 매칭 비율
 MIN_AVG_SIMILARITY_SCORE=0.5           # 최소 평균 유사도
+MIN_DOC_EMBEDDING_SIMILARITY=0.2       # 문서별 임베딩 유사도 필터 임계값
 ```
 
 ### Multi-Query / 재시도
 ```
-ENABLE_MULTI_QUERY=true                # Multi-Query 재검색 활성화
 MULTI_QUERY_COUNT=3                    # 생성할 쿼리 수
 ENABLE_POST_EVAL_RETRY=false           # 평가 후 재시도 (기본 비활성화)
 ```

@@ -383,7 +383,6 @@ def parse_args() -> argparse.Namespace:
   python -m cli --debug                       # 디버그 출력 (DEBUG 로그)
   python -m cli --user-type startup_ceo       # 사용자 유형 지정
   python -m cli --no-hybrid --no-rerank       # Hybrid Search, Re-ranking 비활성화
-  python -m cli --no-rewrite                  # 쿼리 재작성 비활성화
         """,
     )
     parser.add_argument(
@@ -428,12 +427,6 @@ def parse_args() -> argparse.Namespace:
         help="Re-ranking 비활성화",
     )
     search_group.add_argument(
-        "--no-rewrite",
-        action="store_true",
-        default=False,
-        help="쿼리 재작성 비활성화",
-    )
-    search_group.add_argument(
         "--debug",
         action="store_true",
         default=False,
@@ -457,8 +450,6 @@ async def main() -> None:
         settings.override(enable_hybrid_search=False)
     if args.no_rerank:
         settings.override(enable_reranking=False)
-    if args.no_rewrite:
-        settings.override(enable_query_rewrite=False)
 
     # 초기화
     print("RAG 서비스 초기화 중...")
@@ -481,7 +472,7 @@ async def main() -> None:
     print(f"  Hybrid Search (BM25+RRF): {'ON' if settings.enable_hybrid_search else 'OFF'}")
     rerank_label = settings.reranker_type if settings.enable_reranking else "OFF"
     print(f"  Re-ranking: {rerank_label}")
-    print(f"  Query Rewrite: {'ON' if settings.enable_query_rewrite else 'OFF'}")
+    print(f"  Query Expansion: Multi-Query Only (count={settings.multi_query_count})")
     print("초기화 완료.\n")
 
     user_context = UserContext(user_type=args.user_type)

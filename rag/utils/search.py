@@ -253,6 +253,7 @@ class HybridSearcher:
         """
         self.vector_store = vector_store
         self.bm25_indices: dict[str, BM25Index] = {}
+        self._bm25_init_attempted: set[str] = set()
         self._reranker = None  # 지연 로딩
         self.settings = get_settings()
 
@@ -282,6 +283,46 @@ class HybridSearcher:
         except Exception as e:
             logger.error(f"BM25 인덱스 빌드 실패: {domain} - {e}")
 
+    def _ensure_bm25_index(self, domain: str) -> None:
+        """도메인 BM25 인덱스를 필요 시 지연 초기화합니다.
+
+        런타임 경로에서 `build_bm25_index`가 호출되지 않아 BM25가 비활성처럼
+        동작하는 문제를 방지하기 위해, 최초 검색 시 1회 자동 빌드를 시도합니다.
+        """
+        if domain in self.bm25_indices:
+            return
+        if domain in self._bm25_init_attempted:
+            return
+
+        self._bm25_init_attempted.add(domain)
+
+        load_documents = getattr(self.vector_store, "get_domain_documents", None)
+        if not callable(load_documents):
+            logger.warning("[하이브리드] BM25 인덱스 자동 빌드 불가: get_domain_documents 미지원 (%s)", domain)
+            return
+
+        try:
+            documents = load_documents(domain)
+        except Exception as e:
+            logger.warning("[하이브리드] BM25 인덱스 자동 빌드 실패 (%s): %s", domain, e)
+            return
+
+        if not isinstance(documents, list):
+            logger.warning("[하이브리드] BM25 인덱스 자동 빌드 실패: 문서 포맷 오류 (%s)", domain)
+            return
+
+        valid_documents = [
+            doc for doc in documents
+            if isinstance(doc, Document)
+            and isinstance(doc.page_content, str)
+            and doc.page_content.strip()
+        ]
+        if not valid_documents:
+            logger.warning("[하이브리드] BM25 인덱스 자동 빌드 스킵: 유효 문서 없음 (%s)", domain)
+            return
+
+        self.build_bm25_index(domain, valid_documents)
+
     def _build_search_results(
         self,
         query: str,
@@ -302,6 +343,7 @@ class HybridSearcher:
         """
         if vector_weight is None:
             vector_weight = self.settings.vector_search_weight
+        vector_weight = min(1.0, max(0.0, vector_weight))
         bm25_weight = 1.0 - vector_weight
 
         fetch_k = k * 3
@@ -326,6 +368,7 @@ class HybridSearcher:
         logger.info("[하이브리드] 벡터 검색: %d건", len(vector_results))
 
         # 2. BM25 검색
+        self._ensure_bm25_index(domain)
         bm25_results: list[SearchResult] = []
         if domain in self.bm25_indices:
             bm25_results = self.bm25_indices[domain].search(query, k=fetch_k)

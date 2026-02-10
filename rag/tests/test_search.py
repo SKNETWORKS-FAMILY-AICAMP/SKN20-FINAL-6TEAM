@@ -229,6 +229,21 @@ class TestHybridSearcher:
         assert len(results) <= 3
         assert "startup" not in searcher.bm25_indices
 
+    def test_search_auto_builds_bm25_index_from_vector_store(
+        self, searcher: HybridSearcher, mock_vector_store: MagicMock
+    ) -> None:
+        """BM25 인덱스가 없으면 벡터스토어 문서로 자동 빌드합니다."""
+        mock_vector_store.get_domain_documents.return_value = [
+            Document(page_content="창업 절차와 사업자 등록 방법", metadata={"id": "a1"}),
+            Document(page_content="부가가치세 신고 방법", metadata={"id": "a2"}),
+        ]
+
+        results = searcher.search("창업 절차", domain="startup", k=3, use_rerank=False)
+
+        assert len(results) <= 3
+        assert "startup" in searcher.bm25_indices
+        mock_vector_store.get_domain_documents.assert_called_once_with("startup")
+
     def test_search_score_in_metadata(self, searcher: HybridSearcher) -> None:
         """모든 반환 문서의 metadata에 score가 존재합니다."""
         results = searcher.search("창업 절차", domain="startup", k=5, use_rerank=False)

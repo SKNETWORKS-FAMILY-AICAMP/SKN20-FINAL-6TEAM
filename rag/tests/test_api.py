@@ -47,7 +47,8 @@ class TestConfigEndpoint:
         data = response.json()
         assert "openai_model" in data
         assert "retrieval_k" in data
-        assert "enable_query_rewrite" in data
+        assert data.get("query_expansion_mode") == "multi_query_only"
+        assert "multi_query_count" in data
 
         # API 키는 노출되지 않아야 함
         assert "openai_api_key" not in data

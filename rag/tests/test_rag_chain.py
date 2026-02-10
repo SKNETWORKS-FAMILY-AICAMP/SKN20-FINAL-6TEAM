@@ -37,19 +37,28 @@ class TestRAGChainRetrieve:
         with patch("chains.rag_chain.create_llm"):
             from chains.rag_chain import RAGChain
             chain = RAGChain(vector_store=mock_vector_store)
-            chain._query_processor = None  # 쿼리 재작성 비활성화
             chain._reranker = None  # Re-ranking 비활성화
             return chain
 
     def test_retrieve_default(self, rag_chain, mock_vector_store):
         """기본 검색 테스트."""
-        docs = rag_chain.retrieve(
-            query="테스트 쿼리",
-            domain="finance_tax",
-        )
+        with patch("utils.query.MultiQueryRetriever") as mock_mq_cls:
+            mock_mq = MagicMock()
+            mock_mq.retrieve.return_value = (
+                [Document(page_content="MQ 결과", metadata={"score": 0.9})],
+                "확장 쿼리 1 | 확장 쿼리 2",
+            )
+            mock_mq_cls.return_value = mock_mq
+
+            docs = rag_chain.retrieve(
+                query="테스트 쿼리",
+                domain="finance_tax",
+            )
 
         assert len(docs) > 0
-        mock_vector_store.max_marginal_relevance_search.assert_called()
+        mock_mq.retrieve.assert_called_once()
+        call_kwargs = mock_mq.retrieve.call_args.kwargs
+        assert "vector_weight" not in call_kwargs
 
     def test_retrieve_with_search_strategy(self, rag_chain, mock_vector_store):
         """검색 전략 적용 테스트."""
@@ -58,7 +67,6 @@ class TestRAGChainRetrieve:
         strategy = SearchStrategy(
             k=5,
             k_common=3,
-            use_query_rewrite=False,
             use_rerank=False,
             use_mmr=True,
             mmr_lambda=0.7,
@@ -67,7 +75,7 @@ class TestRAGChainRetrieve:
         # settings에서 hybrid search 비활성화
         rag_chain.settings.enable_hybrid_search = False
 
-        docs = rag_chain.retrieve(
+        docs = rag_chain._retrieve_documents(
             query="테스트 쿼리",
             domain="finance_tax",
             search_strategy=strategy,
@@ -82,7 +90,7 @@ class TestRAGChainRetrieve:
 
     def test_retrieve_no_mmr(self, rag_chain, mock_vector_store):
         """MMR 비활성화 검색 테스트."""
-        docs = rag_chain.retrieve(
+        docs = rag_chain._retrieve_documents(
             query="테스트 쿼리",
             domain="finance_tax",
             use_mmr=False,
@@ -93,7 +101,7 @@ class TestRAGChainRetrieve:
 
     def test_retrieve_include_common(self, rag_chain, mock_vector_store):
         """공통 법령 DB 포함 검색 테스트."""
-        docs = rag_chain.retrieve(
+        docs = rag_chain._retrieve_documents(
             query="테스트 쿼리",
             domain="finance_tax",
             include_common=True,

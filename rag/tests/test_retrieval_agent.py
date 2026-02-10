@@ -537,9 +537,7 @@ class TestGraduatedRetryHandler:
     @patch("agents.retrieval_agent.get_settings")
     def test_already_passed_returns_immediately(self, mock_settings) -> None:
         """이미 통과된 결과는 재시도 없이 즉시 반환."""
-        settings = MagicMock()
-        settings.enable_multi_query = True
-        mock_settings.return_value = settings
+        mock_settings.return_value = MagicMock()
 
         handler = GraduatedRetryHandler(self.mock_agents, self.mock_rag_chain)
         result = _make_result(passed=True)
@@ -553,35 +551,37 @@ class TestGraduatedRetryHandler:
     @patch("agents.retrieval_agent.get_settings")
     def test_level1_relax_params_retrieves_with_increased_k(self, mock_settings) -> None:
         """Level 1: K를 +3 증가하여 재검색."""
-        settings = MagicMock()
-        settings.enable_multi_query = False
-        mock_settings.return_value = settings
-
-        new_docs = [_make_doc(f"재검색 문서 {i}", 0.8) for i in range(6)]
-        self.mock_rag_chain.retrieve.return_value = new_docs
+        mock_settings.return_value = MagicMock()
 
         handler = GraduatedRetryHandler(self.mock_agents, self.mock_rag_chain)
         result = _make_result(passed=False)
         budget = DocumentBudget("finance_tax", 5, True, 1)
 
-        handler.retry(
-            "테스트 쿼리",
-            "finance_tax",
-            result,
-            budget,
-            max_level=RetryLevel.RELAX_PARAMS,
-        )
+        with patch("utils.query.MultiQueryRetriever") as mock_mq_cls:
+            mock_mq = MagicMock()
+            mock_mq.retrieve.return_value = (
+                [_make_doc(f"재검색 문서 {i}", 0.8) for i in range(6)],
+                "확장 쿼리",
+            )
+            mock_mq_cls.return_value = mock_mq
 
-        self.mock_rag_chain.retrieve.assert_called_once()
-        call_kwargs = self.mock_rag_chain.retrieve.call_args
-        assert call_kwargs.kwargs.get("k") == 8
+            handler.retry(
+                "테스트 쿼리",
+                "finance_tax",
+                result,
+                budget,
+                max_level=RetryLevel.RELAX_PARAMS,
+            )
+
+            mock_mq.retrieve.assert_called_once()
+            call_kwargs = mock_mq.retrieve.call_args.kwargs
+            assert call_kwargs.get("k") == 8
+            assert "vector_weight" not in call_kwargs
 
     @patch("agents.retrieval_agent.get_settings")
     def test_level2_multi_query_uses_multi_retriever(self, mock_settings) -> None:
         """Level 2: MultiQueryRetriever 사용."""
-        settings = MagicMock()
-        settings.enable_multi_query = True
-        mock_settings.return_value = settings
+        mock_settings.return_value = MagicMock()
 
         self.mock_rag_chain.retrieve.return_value = []
 
@@ -610,14 +610,7 @@ class TestGraduatedRetryHandler:
     @patch("agents.retrieval_agent.get_settings")
     def test_level3_cross_domain_searches_adjacent(self, mock_settings) -> None:
         """Level 3: 인접 도메인을 검색."""
-        settings = MagicMock()
-        settings.enable_multi_query = False
-        mock_settings.return_value = settings
-
-        self.mock_rag_chain.retrieve.side_effect = [
-            [],  # Level 1 재검색 결과
-            [_make_doc("인접 도메인 결과", 0.7)],  # Level 3 인접 도메인 결과
-        ]
+        mock_settings.return_value = MagicMock()
 
         handler = GraduatedRetryHandler(self.mock_agents, self.mock_rag_chain)
         result = _make_result(
@@ -627,13 +620,22 @@ class TestGraduatedRetryHandler:
         )
         budget = DocumentBudget("hr_labor", 5, True, 1)
 
-        output = handler.retry(
-            "근로 관련 질문",
-            "hr_labor",
-            result,
-            budget,
-            max_level=RetryLevel.CROSS_DOMAIN,
-        )
+        with patch("utils.query.MultiQueryRetriever") as mock_mq_cls:
+            mock_mq = MagicMock()
+            mock_mq.retrieve.side_effect = [
+                ([], "L1"),  # Level 1
+                ([], "L2"),  # Level 2
+                ([_make_doc("인접 도메인 결과", 0.7)], "L3"),  # Level 3
+            ]
+            mock_mq_cls.return_value = mock_mq
+
+            output = handler.retry(
+                "근로 관련 질문",
+                "hr_labor",
+                result,
+                budget,
+                max_level=RetryLevel.CROSS_DOMAIN,
+            )
 
         assert "law_common" in ADJACENT_DOMAINS["hr_labor"]
         assert len(output.documents) >= 1
@@ -641,9 +643,7 @@ class TestGraduatedRetryHandler:
     @patch("agents.retrieval_agent.get_settings")
     def test_max_level_none_returns_original(self, mock_settings) -> None:
         """max_level=NONE이면 재시도 없이 원본 반환."""
-        settings = MagicMock()
-        settings.enable_multi_query = True
-        mock_settings.return_value = settings
+        mock_settings.return_value = MagicMock()
 
         handler = GraduatedRetryHandler(self.mock_agents, self.mock_rag_chain)
         result = _make_result(passed=False)

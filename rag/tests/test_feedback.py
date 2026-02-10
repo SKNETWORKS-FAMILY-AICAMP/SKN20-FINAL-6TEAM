@@ -32,7 +32,6 @@ class TestSearchStrategy:
 
         assert strategy.k == 3
         assert strategy.k_common == 2
-        assert strategy.use_query_rewrite is True
         assert strategy.use_mmr is True
         assert strategy.use_rerank is False
         assert strategy.use_hybrid is False
@@ -143,7 +142,6 @@ class TestSuggestStrategy:
         feedback = "정보가 부정확합니다."
         strategy = analyzer.suggest_strategy(feedback)
 
-        assert strategy.use_query_rewrite is True
         assert strategy.use_rerank is True
         assert strategy.fetch_k_multiplier >= 4
 
@@ -152,7 +150,6 @@ class TestSuggestStrategy:
         feedback = "질문과 관련 없는 답변입니다."
         strategy = analyzer.suggest_strategy(feedback)
 
-        assert strategy.use_query_rewrite is True
         assert strategy.mmr_lambda >= 0.6  # 유사도 중시
 
     def test_suggest_strategy_citation(self, analyzer):

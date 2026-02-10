@@ -52,7 +52,6 @@ def mock_settings():
         openai_temperature=0.3,
         retrieval_k=3,
         retrieval_k_common=2,
-        enable_query_rewrite=True,
         enable_response_cache=True,
         enable_rate_limit=True,
         cache_ttl=60,

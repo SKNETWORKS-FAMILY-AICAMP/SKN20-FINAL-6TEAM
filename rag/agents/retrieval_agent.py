@@ -42,8 +42,8 @@ class SearchMode(str, Enum):
     """검색 모드."""
 
     HYBRID = "hybrid"  # BM25 + Vector + RRF (기본)
-    VECTOR_HEAVY = "vector"  # vector_weight=0.9
-    BM25_HEAVY = "bm25"  # vector_weight=0.2
+    VECTOR_HEAVY = "vector"  # 벡터 중심 검색
+    BM25_HEAVY = "bm25"  # 키워드(BM25) 중심 검색
     MMR_DIVERSE = "mmr"  # MMR로 다양성 극대화
     EXACT_PLUS_VECTOR = "exact"  # 법조문 인용 등 정확 매칭 우선
 
@@ -53,7 +53,7 @@ class RetryLevel(int, Enum):
 
     NONE = 0  # 재시도 안함 (성공)
     RELAX_PARAMS = 1  # 평가 기준 완화 + K 증가
-    MULTI_QUERY = 2  # LLM 쿼리 확장 (기존 방식)
+    MULTI_QUERY = 2  # 기본 Multi-Query 검색 강화
     CROSS_DOMAIN = 3  # 인접 도메인 검색
     PARTIAL_ANSWER = 4  # 부분 답변 허용 (포기)
 
@@ -348,7 +348,7 @@ class GraduatedRetryHandler:
                 return result
 
         # Level 2: MULTI_QUERY
-        if max_level >= RetryLevel.MULTI_QUERY and self.settings.enable_multi_query:
+        if max_level >= RetryLevel.MULTI_QUERY:
             result = self._retry_multi_query(query, domain, result, budget, ctx)
             if result.evaluation.passed:
                 return result
@@ -381,6 +381,28 @@ class GraduatedRetryHandler:
             self.retry, query, domain, current_result, budget, max_level
         )
 
+    def _multi_query_retrieve(
+        self,
+        query: str,
+        domain: str,
+        k: int,
+        include_common: bool,
+        use_mmr: bool | None = None,
+        use_hybrid: bool | None = None,
+    ) -> tuple[list[Document], str]:
+        """도메인별 Multi-Query 검색 공통 헬퍼."""
+        from utils.query import MultiQueryRetriever
+
+        multi_retriever = MultiQueryRetriever(self.rag_chain)
+        return multi_retriever.retrieve(
+            query=query,
+            domain=domain,
+            k=k,
+            include_common=include_common,
+            use_mmr=use_mmr,
+            use_hybrid=use_hybrid,
+        )
+
     def _retry_relax_params(
         self,
         query: str,
@@ -399,12 +421,12 @@ class GraduatedRetryHandler:
         # K를 +3 증가하여 재검색
         new_k = budget.allocated_k + 3
         if domain in self.agents:
-            agent = self.agents[domain]
             try:
-                documents = self.rag_chain.retrieve(
+                documents, expanded_queries = self._multi_query_retrieve(
                     query=query,
                     domain=domain,
                     k=new_k,
+                    include_common=False,
                 )
                 scores = [doc.metadata.get("score", 0.0) for doc in documents]
 
@@ -427,10 +449,11 @@ class GraduatedRetryHandler:
                     scores=scores,
                     sources=self.rag_chain.documents_to_sources(documents),
                     evaluation=evaluation,
-                    used_multi_query=False,
+                    used_multi_query=True,
                     retrieve_time=result.retrieve_time,
                     domain=domain,
                     query=query,
+                    rewritten_query=expanded_queries,
                 )
 
                 logger.info(
@@ -454,7 +477,6 @@ class GraduatedRetryHandler:
         ctx: RetryContext,
     ) -> RetrievalResult:
         """Level 2: Multi-Query 재검색."""
-        from utils.query import MultiQueryRetriever
         from utils.retrieval_evaluator import RuleBasedRetrievalEvaluator
 
         logger.info("[재시도] Level 2 (MULTI_QUERY): %s", domain)
@@ -462,8 +484,7 @@ class GraduatedRetryHandler:
         ctx.attempts += 1
 
         try:
-            multi_retriever = MultiQueryRetriever(self.rag_chain)
-            documents, rewritten_query = multi_retriever.retrieve(
+            documents, rewritten_query = self._multi_query_retrieve(
                 query=query,
                 domain=domain,
                 k=budget.allocated_k,
@@ -526,10 +547,11 @@ class GraduatedRetryHandler:
                 continue
 
             try:
-                adj_docs = self.rag_chain.retrieve(
+                adj_docs, _ = self._multi_query_retrieve(
                     query=query,
                     domain=adj_domain,
                     k=3,
+                    include_common=False,
                 )
                 combined_docs.extend(adj_docs)
                 logger.info(
@@ -550,7 +572,7 @@ class GraduatedRetryHandler:
                 scores=scores,
                 sources=self.rag_chain.documents_to_sources(combined_docs),
                 evaluation=evaluation,
-                used_multi_query=result.used_multi_query,
+                used_multi_query=True,
                 retrieve_time=result.retrieve_time,
                 domain=domain,
                 query=query,
@@ -968,6 +990,7 @@ class RetrievalAgent:
             RetrievalResult
         """
         from utils.retrieval_evaluator import RuleBasedRetrievalEvaluator
+        from utils.query import MultiQueryRetriever
 
         start = time.time()
 
@@ -982,16 +1005,19 @@ class RetrievalAgent:
         use_mmr = mode == SearchMode.MMR_DIVERSE
 
         try:
-            documents = self.rag_chain.retrieve(
+            multi_retriever = MultiQueryRetriever(self.rag_chain)
+            documents, expanded_queries = multi_retriever.retrieve(
                 query=query,
                 domain=domain,
                 k=k,
+                include_common=False,
                 use_mmr=use_mmr,
                 use_hybrid=use_hybrid if mode != SearchMode.MMR_DIVERSE else False,
             )
         except Exception as e:
             logger.error("[RetrievalAgent] 검색 실패 (%s): %s", domain, e)
             documents = []
+            expanded_queries = None
 
         scores = [doc.metadata.get("score", 0.0) for doc in documents]
 
@@ -1005,10 +1031,11 @@ class RetrievalAgent:
             scores=scores,
             sources=self.rag_chain.documents_to_sources(documents),
             evaluation=evaluation,
-            used_multi_query=False,
+            used_multi_query=True,
             retrieve_time=elapsed,
             domain=domain,
             query=query,
+            rewritten_query=expanded_queries,
         )
 
     def _perform_legal_supplement(
