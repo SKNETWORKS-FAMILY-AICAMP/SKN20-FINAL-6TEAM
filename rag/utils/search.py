@@ -360,12 +360,18 @@ class HybridSearcher:
                 query=query, domain=domain, k=fetch_k,
             )
             vector_results = [
-                SearchResult(doc, 1.0 / (1.0 + distance), "vector")
+                SearchResult(doc, max(0.0, min(1.0, 1.0 - distance)), "vector")
                 for doc, distance in raw_results
             ]
         except Exception as e:
             logger.warning("[하이브리드] 벡터 검색 실패: %s", e)
         logger.info("[하이브리드] 벡터 검색: %d건", len(vector_results))
+
+        # 벡터 검색 원본 유사도 보존 (RRF 전)
+        vector_similarity_map: dict[int, float] = {}
+        for r in vector_results:
+            doc_id = hash(r.document.page_content[:200])
+            vector_similarity_map[doc_id] = r.score
 
         # 2. BM25 검색
         self._ensure_bm25_index(domain)
@@ -384,10 +390,12 @@ class HybridSearcher:
             combined = vector_results
         logger.info("[하이브리드] RRF 융합 완료: %d건", len(combined))
 
-        # 4. 문서 추출 (score를 metadata에 주입)
+        # 4. 문서 추출 (score + embedding_similarity를 metadata에 주입)
         documents: list[Document] = []
         for r in combined[:fetch_k]:
             r.document.metadata["score"] = r.score
+            doc_id = hash(r.document.page_content[:200])
+            r.document.metadata["embedding_similarity"] = vector_similarity_map.get(doc_id, 0.0)
             documents.append(r.document)
 
         return documents

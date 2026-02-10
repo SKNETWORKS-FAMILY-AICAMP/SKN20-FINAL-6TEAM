@@ -163,6 +163,7 @@ class MainRouter:
         workflow.add_node("retrieve", self._aretrieve_node)
         workflow.add_node("generate", self._agenerate_node)
         workflow.add_node("evaluate", self._aevaluate_node)
+        workflow.add_node("retry_with_alternatives", self._aretry_with_alternatives_node)
 
         # 엣지 정의
         workflow.set_entry_point("classify")
@@ -182,8 +183,9 @@ class MainRouter:
         workflow.add_conditional_edges(
             "evaluate",
             self._should_retry_after_evaluate,
-            {"generate": "generate", "__end__": END},
+            {"retry_with_alternatives": "retry_with_alternatives", "__end__": END},
         )
+        workflow.add_edge("retry_with_alternatives", END)
 
         return workflow.compile()
 
@@ -205,14 +207,14 @@ class MainRouter:
     def _should_retry_after_evaluate(self, state: RouterState) -> str:
         """평가 결과에 따라 재시도 여부를 결정합니다.
 
-        LLM 평가 실패 시 generate 노드로 돌아가 피드백 기반 재생성을 시도합니다.
+        LLM 평가 실패 시 멀티쿼리 대체 답변 생성 노드로 라우팅합니다.
         PASS이거나 최대 재시도 횟수에 도달하면 종료합니다.
 
         Args:
             state: 라우터 상태
 
         Returns:
-            "generate": 재시도 필요
+            "retry_with_alternatives": 멀티쿼리 재시도 필요
             "__end__": 종료
         """
         evaluation = state.get("evaluation")
@@ -225,12 +227,12 @@ class MainRouter:
             and retry_count < self.settings.max_retry_count
         ):
             logger.info(
-                "[평가→재시도] FAIL (점수=%d, retry=%d/%d) → generate 재실행",
+                "[평가→재시도] FAIL (점수=%d, retry=%d/%d) → 멀티쿼리 대체 답변 생성",
                 evaluation.total_score,
                 retry_count,
                 self.settings.max_retry_count,
             )
-            return "generate"
+            return "retry_with_alternatives"
         return "__end__"
 
     def _augment_query_for_classification(self, query: str, history: list[dict]) -> str:
@@ -401,33 +403,182 @@ class MainRouter:
         else:
             state["ragas_metrics"] = None
 
-        # 재시도 판단: FAIL이고 재시도 가능하면 retry_count 증가
-        if (
-            self.settings.enable_post_eval_retry
-            and state.get("evaluation")
-            and not state["evaluation"].passed
-            and state.get("retry_count", 0) < self.settings.max_retry_count
-        ):
-            state["retry_count"] = state.get("retry_count", 0) + 1
-        elif (
-            self.settings.enable_post_eval_retry
-            and state.get("evaluation")
-            and not state["evaluation"].passed
-            and state.get("retry_count", 0) >= self.settings.max_retry_count
-        ):
-            # 최대 재시도 후에도 FAIL → 사과 메시지로 교체
-            logger.warning(
-                "[평가] 최대 재시도(%d회) 후에도 FAIL (점수=%d) → 사과 응답",
-                self.settings.max_retry_count,
-                state["evaluation"].total_score,
-            )
-            state["final_response"] = (
-                "죄송합니다. 질문에 대한 충분한 품질의 답변을 생성하지 못했습니다. "
-                "질문을 다른 방식으로 다시 해주시면 더 나은 답변을 드리겠습니다."
-            )
-
         evaluate_time = time.time() - start
         state["timing_metrics"]["evaluate_time"] = evaluate_time
+
+        return state
+
+    async def _aretry_with_alternatives_node(self, state: RouterState) -> RouterState:
+        """평가 FAIL 시 멀티쿼리 대체 답변을 병렬 생성하고 최고 점수를 선택합니다.
+
+        1. 원본 답변 + 평가 점수 보존
+        2. MultiQueryRetriever._generate_queries()로 대체 쿼리 N개 생성
+        3. 각 대체 쿼리에 대해 asyncio.gather로 병렬 실행:
+           a. 도메인 에이전트로 검색 (aretrieve_only)
+           b. generator.agenerate()로 답변 생성
+           c. evaluator.aevaluate()로 평가
+        4. 원본 포함 모든 후보 중 total_score 최대값 선택
+        5. state 교체 후 반환
+
+        Args:
+            state: 라우터 상태
+
+        Returns:
+            최고 점수 답변으로 교체된 라우터 상태
+        """
+        from utils.query import MultiQueryRetriever
+
+        start = time.time()
+        state["retry_count"] = state.get("retry_count", 0) + 1
+
+        query = state["query"]
+        domains = state["domains"]
+        user_context = state.get("user_context")
+
+        # 원본 답변 보존
+        original_response = state["final_response"]
+        original_evaluation = state["evaluation"]
+        original_score = original_evaluation.total_score if original_evaluation else 0
+        original_sources = state["sources"]
+        original_actions = state["actions"]
+
+        logger.info(
+            "[재시도] 멀티쿼리 대체 답변 생성 시작 (원본 점수=%d)",
+            original_score,
+        )
+
+        # 대체 쿼리 생성
+        multi_query_retriever = MultiQueryRetriever(self.rag_chain)
+        all_queries = await asyncio.to_thread(
+            multi_query_retriever._generate_queries, query
+        )
+
+        if not all_queries or len(all_queries) <= 1:
+            logger.warning("[재시도] 대체 쿼리 생성 실패 - 원본 답변 유지")
+            retry_time = time.time() - start
+            state["timing_metrics"]["retry_time"] = retry_time
+            return state
+
+        # 원본(index 0) 제외, N개 대체 쿼리 추출
+        alt_count = self.settings.post_eval_alt_query_count
+        alt_queries = all_queries[1:1 + alt_count]
+
+        logger.info(
+            "[재시도] 대체 쿼리 %d개 생성: %s",
+            len(alt_queries),
+            [q[:40] for q in alt_queries],
+        )
+
+        # 후보 결과 타입: (content, score, evaluation, sources, actions)
+        CandidateTuple = tuple[
+            str, int, EvaluationResult, list[SourceDocument], list[ActionSuggestion]
+        ]
+
+        async def _generate_candidate(alt_query: str) -> CandidateTuple | None:
+            """대체 쿼리로 검색→생성→평가를 수행합니다.
+
+            Args:
+                alt_query: 대체 쿼리 문자열
+
+            Returns:
+                (content, score, evaluation, sources, actions) 또는 실패 시 None
+            """
+            try:
+                # 1. 도메인별 병렬 검색
+                retrieval_results: dict[str, RetrievalResult] = {}
+                retrieve_tasks = []
+                retrieve_domains = []
+                for domain in domains:
+                    if domain in self.agents:
+                        retrieve_tasks.append(
+                            self.agents[domain].aretrieve_only(alt_query)
+                        )
+                        retrieve_domains.append(domain)
+
+                results = await asyncio.gather(*retrieve_tasks, return_exceptions=True)
+
+                for domain, result in zip(retrieve_domains, results):
+                    if isinstance(result, Exception):
+                        logger.warning("[재시도] %s 검색 실패: %s", domain, result)
+                        continue
+                    retrieval_results[domain] = result
+
+                if not retrieval_results:
+                    return None
+
+                # 2. sub_queries 구성
+                alt_sub_queries = [
+                    SubQuery(domain=d, query=alt_query) for d in domains
+                ]
+
+                # 3. 답변 생성 (원본 쿼리로 생성하여 사용자 질문에 직접 응답)
+                gen_result = await self.generator.agenerate(
+                    query=query,
+                    sub_queries=alt_sub_queries,
+                    retrieval_results=retrieval_results,
+                    user_context=user_context,
+                    domains=domains,
+                )
+
+                # 4. 평가 (원본 쿼리 기준으로 평가)
+                context = "\n".join([s.content for s in gen_result.sources[:5]])
+                evaluation = await self.evaluator.aevaluate(
+                    question=query,
+                    answer=gen_result.content,
+                    context=context,
+                )
+
+                logger.info(
+                    "[재시도] 후보 '%s...' → 점수=%d",
+                    alt_query[:30],
+                    evaluation.total_score,
+                )
+
+                return (
+                    gen_result.content,
+                    evaluation.total_score,
+                    evaluation,
+                    gen_result.sources,
+                    gen_result.actions,
+                )
+            except Exception as e:
+                logger.warning("[재시도] 후보 생성 실패 (%s): %s", alt_query[:30], e)
+                return None
+
+        # 병렬 후보 생성
+        tasks = [_generate_candidate(aq) for aq in alt_queries]
+        candidates = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # 원본 포함 후보 리스트 구성
+        all_candidates: list[CandidateTuple] = [
+            (original_response, original_score, original_evaluation, original_sources, original_actions)
+        ]
+
+        for i, candidate in enumerate(candidates):
+            if isinstance(candidate, Exception):
+                logger.warning("[재시도] 후보 %d 예외: %s", i + 1, candidate)
+                continue
+            if candidate is not None:
+                all_candidates.append(candidate)
+
+        # 최고 점수 선택
+        best = max(all_candidates, key=lambda c: c[1])
+
+        state["final_response"] = best[0]
+        state["evaluation"] = best[2]
+        state["sources"] = best[3]
+        state["actions"] = best[4]
+
+        retry_time = time.time() - start
+        state["timing_metrics"]["retry_time"] = retry_time
+
+        logger.info(
+            "[재시도] 후보 %d개 중 최고 점수 %d점 선택 (원본=%d점, %.3fs)",
+            len(all_candidates),
+            best[1],
+            original_score,
+            retry_time,
+        )
 
         return state
 

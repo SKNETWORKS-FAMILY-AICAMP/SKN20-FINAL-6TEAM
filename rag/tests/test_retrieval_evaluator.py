@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
 from langchain_core.documents import Document
 
 from utils.retrieval_evaluator import RuleBasedRetrievalEvaluator
@@ -74,6 +75,56 @@ def test_evaluator_pass_fail_based_on_embedding_similarity():
     assert fail_result.passed is False
     assert fail_result.details is not None
     assert fail_result.details["quality_score_source"] == "embedding_similarity"
+
+
+def test_evaluator_filters_zero_embedding_similarity():
+    """embedding_similarity 0.0인 BM25 전용 문서는 평균 계산에서 제외해야 한다."""
+    docs = [
+        Document(
+            page_content="벡터 매칭 문서",
+            metadata={"embedding_similarity": 0.72},
+        ),
+        Document(
+            page_content="벡터 매칭 문서 2",
+            metadata={"embedding_similarity": 0.68},
+        ),
+        Document(
+            page_content="BM25 전용 문서",
+            metadata={"embedding_similarity": 0.0},
+        ),
+    ]
+
+    with patch("utils.retrieval_evaluator.get_settings", return_value=_settings()):
+        evaluator = RuleBasedRetrievalEvaluator()
+        result = evaluator.evaluate(query="벡터 매칭", documents=docs)
+
+    # 0.0을 제외한 (0.72 + 0.68) / 2 = 0.7 → PASS (>= 0.5)
+    assert result.passed is True
+    assert result.avg_similarity_score == pytest.approx(0.7, abs=0.01)
+    assert result.details is not None
+    assert result.details["quality_score_source"] == "embedding_similarity"
+
+
+def test_evaluator_all_zero_embedding_similarity_fallback():
+    """모든 embedding_similarity가 0.0이면 전체 포함하여 graceful 실패."""
+    docs = [
+        Document(
+            page_content="BM25 전용 문서 A",
+            metadata={"embedding_similarity": 0.0},
+        ),
+        Document(
+            page_content="BM25 전용 문서 B",
+            metadata={"embedding_similarity": 0.0},
+        ),
+    ]
+
+    with patch("utils.retrieval_evaluator.get_settings", return_value=_settings()):
+        evaluator = RuleBasedRetrievalEvaluator()
+        result = evaluator.evaluate(query="BM25 전용", documents=docs)
+
+    # 모두 0.0 → positive_scores 비어있음 → 전체 포함 → avg=0.0 → FAIL
+    assert result.passed is False
+    assert result.avg_similarity_score == pytest.approx(0.0, abs=0.01)
 
 
 def test_evaluator_falls_back_to_legacy_score_when_embedding_missing():

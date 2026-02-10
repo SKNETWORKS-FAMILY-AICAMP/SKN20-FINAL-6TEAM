@@ -155,6 +155,8 @@ Agentic RAG 구조로 6개 에이전트 운영:
 | Hybrid Search | `ENABLE_HYBRID_SEARCH` | true | BM25 + Vector + RRF 앙상블 검색 |
 | Vector Weight | `VECTOR_SEARCH_WEIGHT` | 0.7 | 벡터 검색 가중치 (0.0=BM25만, 1.0=벡터만) |
 | Re-ranking | `ENABLE_RERANKING` | true | Cross-encoder 기반 재정렬 |
+| Fixed Doc Limit | `ENABLE_FIXED_DOC_LIMIT` | true | 도메인별 고정 문서 개수 제한 (bounded 방식) |
+| Cross-Domain Rerank | `ENABLE_CROSS_DOMAIN_RERANK` | true | 복합 도메인 병합 후 Cross-Domain Reranking |
 | Domain Rejection | `ENABLE_DOMAIN_REJECTION` | true | 도메인 외 질문 거부 |
 | LLM Domain Classification | `ENABLE_LLM_DOMAIN_CLASSIFICATION` | false | LLM 기반 도메인 분류 비교 (추가 비용) |
 | Response Caching | 항상 활성화 | - | LRU 캐시 (500건, 1시간 TTL) |

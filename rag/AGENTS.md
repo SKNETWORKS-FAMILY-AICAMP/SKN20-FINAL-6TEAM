@@ -15,7 +15,7 @@ rag/
 ├── evaluation/              # RAGAS 정량 평가
 ├── vectorstores/            # VectorDB 관리 (config, chroma, embeddings, loader, build)
 ├── schemas/                 # Pydantic 스키마 (request, response)
-├── utils/                   # config, prompts, cache, feedback, middleware, query, search, legal_supplement
+├── utils/                   # config, prompts, cache, feedback, middleware, query, search, legal_supplement, retrieval_evaluator, token_tracker
 └── tests/                   # pytest 테스트
 ```
 

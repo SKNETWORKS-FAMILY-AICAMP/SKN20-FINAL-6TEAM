@@ -152,7 +152,9 @@ class RuleBasedRetrievalEvaluator:
 
         if embedding_scores:
             quality_score_source = "embedding_similarity"
-            valid_scores = [max(0.0, min(1.0, s)) for s in embedding_scores]
+            # BM25 전용 문서(embedding_similarity=0.0)가 평균을 끌어내리는 것을 방지
+            positive_scores = [max(0.0, min(1.0, s)) for s in embedding_scores if s > 0]
+            valid_scores = positive_scores if positive_scores else [max(0.0, min(1.0, s)) for s in embedding_scores]
         else:
             quality_score_source = "legacy_score"
             if scores is None:

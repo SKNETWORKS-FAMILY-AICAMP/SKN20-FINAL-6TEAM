@@ -272,3 +272,35 @@ class TestHybridSearcher:
         searcher.search("창업 절차", domain="startup", k=5, use_rerank=False)
 
         mock_reranker.rerank.assert_not_called()
+
+    def test_build_search_results_sets_embedding_similarity(
+        self, searcher: HybridSearcher, mock_vector_store: MagicMock
+    ) -> None:
+        """Hybrid 검색 후 모든 문서에 embedding_similarity가 존재합니다."""
+        # BM25 인덱스 추가 (hybrid 경로 활성화)
+        bm25_docs = [
+            Document(page_content="창업 절차와 사업자 등록 방법"),
+            Document(page_content="BM25 전용 문서 내용"),
+        ]
+        searcher.build_bm25_index("startup", bm25_docs)
+
+        results = searcher.search("창업 절차", domain="startup", k=5, use_rerank=False)
+
+        for doc in results:
+            assert "embedding_similarity" in doc.metadata
+            assert isinstance(doc.metadata["embedding_similarity"], float)
+            assert 0.0 <= doc.metadata["embedding_similarity"] <= 1.0
+
+    def test_vector_similarity_formula_cosine(
+        self, searcher: HybridSearcher, mock_vector_store: MagicMock
+    ) -> None:
+        """cosine distance 0.3 → similarity 0.7로 변환됩니다."""
+        mock_vector_store.similarity_search_with_score.return_value = [
+            (Document(page_content="테스트 문서", metadata={}), 0.3),
+        ]
+
+        results = searcher.search("테스트", domain="startup", k=5, use_rerank=False)
+
+        assert len(results) >= 1
+        # 1.0 - 0.3 = 0.7
+        assert results[0].metadata["embedding_similarity"] == pytest.approx(0.7, abs=0.01)

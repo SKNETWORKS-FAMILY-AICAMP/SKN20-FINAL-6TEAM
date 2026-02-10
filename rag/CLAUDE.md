@@ -153,6 +153,12 @@ MIN_AVG_SIMILARITY_SCORE=0.5           # 최소 평균 유사도
 MIN_DOC_EMBEDDING_SIMILARITY=0.2       # 문서별 임베딩 유사도 필터 임계값
 ```
 
+### 문서 제한 / Reranking
+```
+ENABLE_FIXED_DOC_LIMIT=true            # 도메인별 고정 문서 개수 제한 (False면 Dynamic K)
+ENABLE_CROSS_DOMAIN_RERANK=true        # 복합 도메인 병합 후 Cross-Domain Reranking
+```
+
 ### Multi-Query / 재시도
 ```
 MULTI_QUERY_COUNT=3                    # 생성할 쿼리 수

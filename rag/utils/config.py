@@ -182,7 +182,11 @@ class Settings(BaseSettings):
 
     # 평가 설정
     evaluation_threshold: int = Field(default=70, ge=0, le=100, description="평가 통과 임계값 (100점 만점)")
-    max_retry_count: int = Field(default=2, ge=0, description="최대 재시도 횟수")
+    max_retry_count: int = Field(default=1, ge=0, description="최대 재시도 횟수")
+    post_eval_alt_query_count: int = Field(
+        default=2, ge=1, le=5,
+        description="평가 실패 재시도 시 생성할 대체 쿼리 수"
+    )
     enable_llm_evaluation: bool = Field(
         default=True, description="LLM 기반 답변 평가 활성화"
     )
@@ -342,6 +346,14 @@ class Settings(BaseSettings):
     enable_dynamic_k: bool = Field(
         default=True, description="동적 K값 (쿼리 특성에 따라 검색 문서 수 자동 조절)"
     )
+    enable_fixed_doc_limit: bool = Field(
+        default=True,
+        description="고정 문서 개수 제한 활성화 (False면 기존 Dynamic K 방식)"
+    )
+    enable_cross_domain_rerank: bool = Field(
+        default=True,
+        description="복합 도메인 병합 후 Cross-Domain Reranking 활성화"
+    )
     dynamic_k_min: int = Field(
         default=3, gt=0, description="동적 K 최소값"
     )
@@ -395,9 +407,12 @@ class Settings(BaseSettings):
         "multi_query_count",
         "enable_ragas_evaluation",
         "enable_post_eval_retry",
+        "post_eval_alt_query_count",
         "enable_legal_supplement",
         "enable_adaptive_search",
         "enable_dynamic_k",
+        "enable_fixed_doc_limit",
+        "enable_cross_domain_rerank",
         "enable_graduated_retry",
         "max_retry_level",
         "primary_domain_budget_ratio",

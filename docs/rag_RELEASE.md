@@ -1,6 +1,11 @@
 # Release Notes
 
-## [2026-02-10] - ActionRule 패턴 도입, BM25 점수 분리, Dead Code 정리
+## [2026-02-10] - 도메인별 문서 제한 + Cross-Domain Reranking + ActionRule 패턴 도입
+
+### Features
+- **도메인별 고정 문서 개수 제한** (DocumentBudgetCalculator bounded 방식): 주/보조 도메인별 N개씩 균등 배분
+- **Cross-Domain Reranking**: 복합 도메인 병합 후 Cross-Encoder 기반 전체 재정렬
+- 새 환경변수: `ENABLE_FIXED_DOC_LIMIT` (기본 true), `ENABLE_CROSS_DOMAIN_RERANK` (기본 true)
 
 ### Performance
 - CrossEncoder 모델 서비스 시작 시 사전 로딩 — 첫 요청 응답 시간 42% 개선 (47초 → 27초)
@@ -26,6 +31,8 @@
 - 도메인 분류 개선 (키워드 보정을 벡터 threshold 판정 전에 적용)
 
 ### Tests
+- retrieval_evaluator 단위 테스트 추가 (검색 평가 로직 검증)
+- search 모듈 단위 테스트 추가 (검색 기능 검증)
 - HybridSearcher 단위 테스트 6개 추가 (벡터/BM25 검색, reranker, metadata score 검증)
 - 키워드 보정 threshold 인접 회귀 테스트 3개 추가 (경계값 검증)
 - MultiQueryRetriever RRF 점수 분리/필터링 테스트 3개 추가

@@ -243,8 +243,83 @@ class DocumentBudgetCalculator:
         else:
             recommended_k = settings.retrieval_k
 
+        # enable_fixed_doc_limit ON: 도메인당 최대 retrieval_k개 제한
+        if settings.enable_fixed_doc_limit:
+            logger.debug(
+                "[DocumentBudget] bounded 방식 (retrieval_k=%d, recommended_k=%d)",
+                settings.retrieval_k,
+                recommended_k,
+            )
+            return self._calculate_bounded(domains, recommended_k, settings.retrieval_k)
+
+        # enable_fixed_doc_limit OFF: 기존 Dynamic K 방식
+        logger.debug(
+            "[DocumentBudget] dynamic 방식 (max_total=%d, recommended_k=%d)",
+            max_total,
+            recommended_k,
+        )
+        return self._calculate_dynamic(
+            domains, recommended_k, max_total, primary_ratio
+        )
+
+    def _calculate_bounded(
+        self,
+        domains: list[str],
+        recommended_k: int,
+        retrieval_k: int,
+    ) -> dict[str, DocumentBudget]:
+        """도메인당 retrieval_k를 상한으로 하는 문서 할당 방식.
+
+        Args:
+            domains: 분류된 도메인 리스트
+            recommended_k: Dynamic K 추천값
+            retrieval_k: 도메인당 상한값
+
+        Returns:
+            도메인 → DocumentBudget 매핑
+        """
+        k = min(recommended_k, retrieval_k)
+
         if len(domains) == 1:
-            # 단일 도메인: recommended_k 그대로
+            return {
+                domains[0]: DocumentBudget(
+                    domain=domains[0],
+                    allocated_k=k,
+                    is_primary=True,
+                    priority=1,
+                )
+            }
+
+        # 복합 도메인: 각 도메인에 min(recommended_k, retrieval_k) 균등 할당
+        budgets: dict[str, DocumentBudget] = {}
+        for i, domain in enumerate(domains):
+            budgets[domain] = DocumentBudget(
+                domain=domain,
+                allocated_k=k,
+                is_primary=(i == 0),
+                priority=i + 1,
+            )
+        return budgets
+
+    def _calculate_dynamic(
+        self,
+        domains: list[str],
+        recommended_k: int,
+        max_total: int,
+        primary_ratio: float,
+    ) -> dict[str, DocumentBudget]:
+        """기존 Dynamic K 방식 (max_total 비례 분배).
+
+        Args:
+            domains: 분류된 도메인 리스트
+            recommended_k: Dynamic K 추천값
+            max_total: 전체 문서 예산
+            primary_ratio: 주 도메인 예산 비율
+
+        Returns:
+            도메인 → DocumentBudget 매핑
+        """
+        if len(domains) == 1:
             k = min(recommended_k, max_total)
             return {
                 domains[0]: DocumentBudget(
@@ -795,10 +870,10 @@ class RetrievalAgent:
                 if d != "law_common_supplement"
             }
             if len(main_results) > 1:
-                merged = self.merger.merge_and_prioritize(
-                    retrieval_results=main_results,
+                merged = self._merge_with_optional_rerank(
+                    query=query,
+                    main_results=main_results,
                     budgets=budgets,
-                    max_total=self.settings.max_retrieval_docs,
                 )
                 # supplement 문서 뒤에 추가
                 supplement = retrieval_results.get("law_common_supplement")
@@ -942,10 +1017,10 @@ class RetrievalAgent:
                 if d != "law_common_supplement"
             }
             if len(main_results) > 1:
-                merged = self.merger.merge_and_prioritize(
-                    retrieval_results=main_results,
+                merged = await self._amerge_with_optional_rerank(
+                    query=query,
+                    main_results=main_results,
                     budgets=budgets,
-                    max_total=self.settings.max_retrieval_docs,
                 )
                 supplement = retrieval_results.get("law_common_supplement")
                 if supplement:
@@ -968,6 +1043,115 @@ class RetrievalAgent:
         return state
 
     # ----- 내부 헬퍼 -------------------------------------------------------
+
+    def _merge_with_optional_rerank(
+        self,
+        query: str,
+        main_results: dict[str, RetrievalResult],
+        budgets: dict[str, DocumentBudget],
+    ) -> list[Document]:
+        """복합 도메인 병합 후 선택적 cross-domain reranking (동기).
+
+        Args:
+            query: 사용자 질문
+            main_results: supplement 제외 도메인별 검색 결과
+            budgets: 도메인별 문서 할당량
+
+        Returns:
+            병합(+rerank) 된 문서 리스트
+        """
+        if self.settings.enable_cross_domain_rerank:
+            # rerank 후보를 넉넉히 확보
+            candidate_total = sum(
+                b.allocated_k for b in budgets.values()
+                if b.domain in main_results
+            )
+            merged = self.merger.merge_and_prioritize(
+                retrieval_results=main_results,
+                budgets=budgets,
+                max_total=candidate_total,
+            )
+            # primary domain의 allocated_k를 final_k로 사용 (recommended_k 반영)
+            primary_budget = next(
+                (b for b in budgets.values() if b.is_primary), None
+            )
+            final_k = primary_budget.allocated_k if primary_budget else self.settings.retrieval_k
+            reranker = self.rag_chain.reranker
+            if reranker and len(merged) > final_k:
+                logger.info(
+                    "[RetrievalAgent] cross-domain rerank: %d건 → %d건",
+                    len(merged),
+                    final_k,
+                )
+                merged = reranker.rerank(query, merged, top_k=final_k)
+            else:
+                if not reranker:
+                    logger.warning(
+                        "[RetrievalAgent] cross-domain rerank 활성화됐지만 "
+                        "reranker 없음 (enable_reranking=False?). 점수순 슬라이스로 대체"
+                    )
+                merged = merged[:final_k]
+            return merged
+
+        # 기존 방식: 우선순위 기반 병합
+        return self.merger.merge_and_prioritize(
+            retrieval_results=main_results,
+            budgets=budgets,
+            max_total=self.settings.max_retrieval_docs,
+        )
+
+    async def _amerge_with_optional_rerank(
+        self,
+        query: str,
+        main_results: dict[str, RetrievalResult],
+        budgets: dict[str, DocumentBudget],
+    ) -> list[Document]:
+        """복합 도메인 병합 후 선택적 cross-domain reranking (비동기).
+
+        Args:
+            query: 사용자 질문
+            main_results: supplement 제외 도메인별 검색 결과
+            budgets: 도메인별 문서 할당량
+
+        Returns:
+            병합(+rerank) 된 문서 리스트
+        """
+        if self.settings.enable_cross_domain_rerank:
+            candidate_total = sum(
+                b.allocated_k for b in budgets.values()
+                if b.domain in main_results
+            )
+            merged = self.merger.merge_and_prioritize(
+                retrieval_results=main_results,
+                budgets=budgets,
+                max_total=candidate_total,
+            )
+            primary_budget = next(
+                (b for b in budgets.values() if b.is_primary), None
+            )
+            final_k = primary_budget.allocated_k if primary_budget else self.settings.retrieval_k
+            reranker = self.rag_chain.reranker
+            if reranker and len(merged) > final_k:
+                logger.info(
+                    "[RetrievalAgent] cross-domain rerank: %d건 → %d건",
+                    len(merged),
+                    final_k,
+                )
+                merged = await reranker.arerank(query, merged, top_k=final_k)
+            else:
+                if not reranker:
+                    logger.warning(
+                        "[RetrievalAgent] cross-domain rerank 활성화됐지만 "
+                        "reranker 없음 (enable_reranking=False?). 점수순 슬라이스로 대체"
+                    )
+                merged = merged[:final_k]
+            return merged
+
+        return self.merger.merge_and_prioritize(
+            retrieval_results=main_results,
+            budgets=budgets,
+            max_total=self.settings.max_retrieval_docs,
+        )
 
     def _retrieve_with_strategy(
         self,
