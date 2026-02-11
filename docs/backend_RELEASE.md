@@ -1,5 +1,24 @@
 # Release Notes
 
+## [2026-02-11] - JWT HttpOnly 쿠키 전환 + 보안 감사 12건 수정
+
+### Security
+- JWT 인증 방식 전환: localStorage Bearer → HttpOnly 쿠키 (access_token + refresh_token)
+- Refresh Token 자동 갱신 엔드포인트 (`POST /auth/refresh`)
+- 토큰 블랙리스트 인메모리 → DB 전환 (`token_blacklist` 테이블 + `TokenBlacklist` 모델)
+- `get_current_user`: Bearer 헤더 → 쿠키에서 토큰 추출 + jti 블랙리스트 검증
+- JWT_SECRET_KEY 기본값 제거 + 시작 시 검증 (32자 이상 필수)
+- Google OAuth `email_verified` 검증 추가
+- 파일 업로드 확장자/크기/Content-Type 화이트리스트 검증
+- 관리자 권한(U0000001) 셀프 상승 차단
+- CSRF 미들웨어 추가 (Content-Type / X-Requested-With 검증)
+- 탈퇴 사용자(`use_yn=False`) 로그인 차단
+- 프로덕션 환경 Swagger/ReDoc 비활성화
+- CORS methods/headers 최소화
+- slowapi Rate Limiting (auth: 10/min, refresh: 30/min, upload: 5/min)
+- 인증 이벤트 로깅 (login/logout/refresh)
+- 에러 메시지 정규화 (내부 상세 → 서버 로그만)
+
 ## [2026-02-11] - Google OAuth2 로그인 구현
 
 ### Features

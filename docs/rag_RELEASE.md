@@ -1,5 +1,12 @@
 # Release Notes
 
+## [2026-02-11] - RAG API Key 인증 미들웨어 추가
+
+### Security
+- `APIKeyMiddleware` 추가 — `RAG_API_KEY` 설정 시 `/api/*` 경로에 `X-API-Key` 헤더 검증
+- Docker 포트 내부화 (`ports` → `expose`) — 외부 직접 접근 차단
+- `rag_api_key` 설정 필드 추가 (`utils/config.py`)
+
 ## [2026-02-10] - 도메인별 문서 제한 + Cross-Domain Reranking + ActionRule 패턴 도입
 
 ### Features

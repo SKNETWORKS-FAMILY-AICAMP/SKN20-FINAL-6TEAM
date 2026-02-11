@@ -1,5 +1,15 @@
 # Release Notes
 
+## [2026-02-11] - JWT HttpOnly 쿠키 전환 + 보안 강화
+
+### Security
+- JWT 인증 방식 전환: localStorage Bearer → HttpOnly 쿠키 (`withCredentials: true`)
+- Refresh Token 자동 갱신 인터셉터 (401 → `/auth/refresh` → 재시도 큐)
+- `X-Requested-With: XMLHttpRequest` 헤더 추가 (CSRF 방어)
+- `ProtectedRoute` 컴포넌트 추가 — 인증/권한 기반 라우트 보호
+- `isAuthChecking` 상태 추가 — 페이지 새로고침 시 인증 확인 전 리다이렉트 방지
+- `authStore`에서 `accessToken` localStorage 저장 제거
+
 ## [2026-02-11] - Google OAuth2 로그인 구현
 
 ### Features
