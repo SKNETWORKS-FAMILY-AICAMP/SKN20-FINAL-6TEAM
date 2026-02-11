@@ -84,3 +84,9 @@ web-design-guidelines/
 /test
 .python-version
 .claude/settings.local.json
+
+
+# =============================================
+# 전처리 캐시
+# =============================================
+scripts/preprocessing/_cache_*.json
