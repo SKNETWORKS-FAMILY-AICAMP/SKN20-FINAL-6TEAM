@@ -13,6 +13,10 @@ class TestLoginRequest(BaseModel):
     type_code: str | None = None
 
 
+class GoogleLoginRequest(BaseModel):
+    id_token: str
+
+
 class TestLoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

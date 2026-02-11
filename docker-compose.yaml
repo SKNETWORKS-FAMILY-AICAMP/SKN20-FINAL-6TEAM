@@ -61,6 +61,7 @@ services:
       - VITE_RAG_URL=http://localhost:8001
       - VITE_RAG_ENABLED=${RAG_ENABLED:-true}
       - VITE_RAG_STREAMING=${VITE_RAG_STREAMING:-true}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
     depends_on:
       - backend
     command: npm run dev -- --host

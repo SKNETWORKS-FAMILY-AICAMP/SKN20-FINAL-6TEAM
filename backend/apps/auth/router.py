@@ -6,7 +6,8 @@ from jose import jwt
 from config.database import get_db
 from config.settings import settings
 from apps.common.models import User
-from .schemas import TokenResponse, TestLoginRequest, TestLoginResponse, UserInfo
+from .services import verify_google_token
+from .schemas import TokenResponse, TestLoginRequest, TestLoginResponse, UserInfo, GoogleLoginRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -22,16 +23,52 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     return encoded_jwt
 
 
-@router.get("/google")
-async def login_google():
+@router.post("/google", response_model=TestLoginResponse)
+async def login_google(
+    request: GoogleLoginRequest,
+    db: Session = Depends(get_db)
+):
     """
-    Google OAuth2 로그인 시작
-    실제 구현 전까지는 테스트 로그인 사용 안내
+    Google OAuth2 로그인
+    Client로부터 받은 ID Token을 검증하고 JWT 발급
     """
-    return {
-        "message": "Google OAuth2 is not implemented yet. Use /auth/test-login instead.",
-        "test_login_url": "/auth/test-login"
-    }
+    # 1. Google ID Token 검증
+    id_info = verify_google_token(request.id_token)
+    email = id_info.get("email")
+    name = id_info.get("name", "Google User")
+
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email not found in Google token"
+        )
+
+    # 2. 사용자 조회 또는 생성
+    user = db.query(User).filter(User.google_email == email).first()
+    if not user:
+        user = User(
+            google_email=email,
+            username=name,
+            type_code="U0000002", # 기본: 예비창업자
+            birth=None, # Google Token에서는 생년월일을 기본으로 제공하지 않음
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    # 3. JWT 토큰 생성
+    access_token = create_access_token(data={"sub": user.google_email})
+
+    return TestLoginResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user=UserInfo(
+            user_id=user.user_id,
+            google_email=user.google_email,
+            username=user.username,
+            type_code=user.type_code
+        )
+    )
 
 
 @router.post("/test-login", response_model=TestLoginResponse)
