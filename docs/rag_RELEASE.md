@@ -7,6 +7,9 @@
 - Docker 포트 내부화 (`ports` → `expose`) — 외부 직접 접근 차단
 - `rag_api_key` 설정 필드 추가 (`utils/config.py`)
 
+### Documentation
+- CLAUDE.md 갱신 — RAG_API_KEY 환경변수 섹션 추가
+
 ## [2026-02-10] - 도메인별 문서 제한 + Cross-Domain Reranking + ActionRule 패턴 도입
 
 ### Features

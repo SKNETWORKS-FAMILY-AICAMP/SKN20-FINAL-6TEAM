@@ -10,6 +10,9 @@
 - `isAuthChecking` 상태 추가 — 페이지 새로고침 시 인증 확인 전 리다이렉트 방지
 - `authStore`에서 `accessToken` localStorage 저장 제거
 
+### Documentation
+- CLAUDE.md 갱신 — HttpOnly 쿠키 인증, ProtectedRoute, 자동 refresh 반영
+
 ## [2026-02-11] - Google OAuth2 로그인 구현
 
 ### Features

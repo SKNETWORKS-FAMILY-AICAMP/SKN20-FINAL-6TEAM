@@ -19,6 +19,9 @@
 - 인증 이벤트 로깅 (login/logout/refresh)
 - 에러 메시지 정규화 (내부 상세 → 서버 로그만)
 
+### Documentation
+- CLAUDE.md 갱신 — 인증 방식 HttpOnly 쿠키, TokenBlacklist 모델, CSRF/Rate Limiting 반영
+
 ## [2026-02-11] - Google OAuth2 로그인 구현
 
 ### Features
