@@ -175,6 +175,11 @@ LEGAL_SUPPLEMENT_K=3                   # 법률 보충 검색 문서 수
 `law_common`이 주 도메인인 직접 법률 질문은 보충 없이 단독 처리됩니다.
 판단 로직: `utils/legal_supplement.py` (LLM 미사용, 키워드 매칭)
 
+### API 인증
+```
+RAG_API_KEY=                          # 설정 시 /api/* 경로에 X-API-Key 헤더 검증 (미설정 시 인증 없이 통과)
+```
+
 필수 환경 변수(`OPENAI_API_KEY`, `CHROMA_HOST` 등)는 [README.md](./README.md) 참조.
 
 ---

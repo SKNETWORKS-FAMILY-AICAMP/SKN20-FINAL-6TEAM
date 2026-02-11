@@ -8,19 +8,20 @@
 ## 코드 작성 가이드
 
 ### API 클라이언트
-- **Backend API**: `src/lib/api.ts` — JWT 토큰 자동 추가 (interceptor), 401 시 로그인 리다이렉트
-- **RAG API**: `src/lib/rag.ts` — 채팅/AI 응답 전용
+- **Backend API**: `src/lib/api.ts` — HttpOnly 쿠키 (`withCredentials: true`), 401 시 자동 refresh + 재시도 큐
+- **RAG API**: `src/lib/rag.ts` — 채팅/AI 응답 전용 (`X-API-Key` 헤더 포함)
 
 ### 상태 관리
 
 #### Zustand 전역 상태
 
 **authStore** (`src/stores/authStore.ts`):
-- `isAuthenticated`, `user`, `accessToken` 관리
-- `login(user, token)`: 로그인 + 게스트 메시지 동기화 (`syncGuestMessages`) + 카운트 리셋
-- `logout()`: 토큰 제거 + 상태 초기화
+- `isAuthenticated`, `isAuthChecking`, `user` 관리 (토큰은 HttpOnly 쿠키, localStorage 미저장)
+- `login(user)`: 로그인 + 게스트 메시지 동기화 (`syncGuestMessages`) + 카운트 리셋
+- `logout()`: 서버 로그아웃 요청 (`/auth/logout`) + 상태 초기화
+- `checkAuth()`: 서버 인증 확인 (`/auth/me`) — 페이지 로드 시 호출
 - `updateUser(userData)`: 사용자 정보 부분 업데이트
-- `persist` 미들웨어로 localStorage에 저장
+- `persist` 미들웨어로 `isAuthenticated`, `user`만 localStorage 저장
 
 **chatStore** (`src/stores/chatStore.ts`):
 - **멀티세션**: `sessions: ChatSession[]`, `currentSessionId`
@@ -44,6 +45,11 @@
 ## React Router 설정
 
 `src/App.tsx` 참조. MainLayout 래퍼 패턴으로 인증/비인증 공통 레이아웃(Sidebar) 적용.
+
+**라우트 보호**: `ProtectedRoute` 컴포넌트 (`src/components/common/ProtectedRoute.tsx`)
+- `<Route element={<ProtectedRoute />}>` — 인증 필요 라우트 래핑
+- `<Route element={<ProtectedRoute requiredTypeCode="U0000001" />}>` — 관리자 전용
+- `isAuthChecking` 중에는 렌더링 보류 (리다이렉트 방지)
 
 **주의**: `/profile` 라우트는 없음. 프로필 관리는 Sidebar 설정(톱니바퀴) → `ProfileDialog` 모달.
 
@@ -86,8 +92,9 @@
 
 ## 중요 참고사항
 - **환경 변수**: `VITE_` 접두사 필수, `import.meta.env.VITE_*`로 접근
-- **인증**: JWT 토큰은 localStorage에 저장, `api.ts` interceptor가 자동 첨부
-- **401 처리**: axios 인터셉터에서 자동 로그인 리다이렉트
+- **인증**: JWT HttpOnly 쿠키 (서버가 set-cookie), `api.ts`에서 `withCredentials: true`
+- **401 처리**: 자동 refresh 시도 (`/auth/refresh`) → 실패 시 로그아웃 + `/login` 리다이렉트
+- **CSRF**: `api.ts`에 `X-Requested-With: XMLHttpRequest` 헤더 자동 포함
 - **API 기본 URL**: Backend(8000), RAG(8001) — 별도 클라이언트 사용
 - **관리자 메뉴**: `U0000001` (관리자) 타입 사용자만 노출
 - **게스트 제한**: 10회 무료 메시지 (`GUEST_MESSAGE_LIMIT`)

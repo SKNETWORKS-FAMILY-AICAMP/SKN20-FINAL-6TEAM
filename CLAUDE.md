@@ -12,7 +12,7 @@ Bizi는 예비 창업자, 스타트업 CEO, 중소기업 대표를 위한 AI 기
 
 ## 기술 스택
 - **Frontend**: React 18 + Vite, TypeScript, TailwindCSS, React Router, axios, react-markdown
-- **Backend**: FastAPI, SQLAlchemy 2.0, Google OAuth2, JWT
+- **Backend**: FastAPI, SQLAlchemy 2.0, Google OAuth2, JWT (HttpOnly Cookie)
 - **RAG Service**: FastAPI, LangChain, LangGraph, OpenAI GPT-4
 - **Database**: MySQL 8.0 (스키마: final_test)
 - **Vector DB**: ChromaDB
@@ -193,7 +193,7 @@ Agentic RAG 구조로 6개 에이전트 운영:
 
 ## 데이터베이스 스키마
 - 스키마명: `final_test`
-- 테이블: code, user, company, history, file, announce, schedule
+- 테이블: code, user, company, history, file, announce, schedule, token_blacklist
 - 상세 정의: `backend/database.sql` 참조
 
 ### 주요 테이블
@@ -206,6 +206,7 @@ Agentic RAG 구조로 6개 에이전트 운영:
 | file | 파일 정보 (첨부파일 경로) |
 | announce | 지원사업 공고 |
 | schedule | 일정 관리 |
+| token_blacklist | JWT 토큰 블랙리스트 (jti, expires_at) |
 
 ## 주요 참고 문서
 
@@ -223,7 +224,7 @@ Agentic RAG 구조로 6개 에이전트 운영:
 - `data/CLAUDE.md`: 데이터 폴더 가이드
 
 ### 환경 변수
-`.env.example` 파일 참조. 주요 키: `MYSQL_*`, `JWT_SECRET_KEY`, `GOOGLE_CLIENT_ID/SECRET`, `OPENAI_API_KEY`, `CHROMA_HOST/PORT`, `BIZINFO_API_KEY`, `KSTARTUP_API_KEY`
+`.env.example` 파일 참조. 주요 키: `MYSQL_*`, `JWT_SECRET_KEY`, `GOOGLE_CLIENT_ID/SECRET`, `OPENAI_API_KEY`, `CHROMA_HOST/PORT`, `BIZINFO_API_KEY`, `KSTARTUP_API_KEY`, `RAG_API_KEY`, `ENVIRONMENT`
 
 ## 테스트를 위해 생성하여 프로젝트에 포함되지 않는 파일/폴더
 /test

@@ -10,10 +10,11 @@
 새 기능 추가 시 아래 파일의 패턴을 따르세요:
 - **라우터**: `apps/*/router.py` → 패턴: `.claude/rules/patterns.md`
 - **서비스**: `apps/*/service.py` → 패턴: `.claude/rules/patterns.md`
-- **모델**: `apps/common/models.py` (User, Company, History, Code, File, Announce, Schedule)
+- **모델**: `apps/common/models.py` (User, Company, History, Code, File, Announce, Schedule, TokenBlacklist)
 - **스키마**: `apps/*/schemas.py` → 패턴: `.claude/rules/patterns.md`
-- **의존성**: `apps/common/deps.py` (get_db, get_current_user - JWT Bearer)
+- **의존성**: `apps/common/deps.py` (get_db, get_current_user - HttpOnly 쿠키)
 - **설정**: `config/settings.py` (Pydantic BaseSettings), `config/database.py` (SQLAlchemy)
+- **토큰 블랙리스트**: `apps/auth/token_blacklist.py` (blacklist_token, is_blacklisted, cleanup_expired)
 
 ### 라우터 등록 (main.py)
 새 라우터 추가 시 `main.py`에 등록:
@@ -54,12 +55,15 @@ app.include_router({기능}_router)
 ---
 
 ## 중요 참고사항
-- **인증**: JWT 토큰은 Bearer 방식, `apps/common/deps.py`의 `get_current_user`
+- **인증**: JWT HttpOnly 쿠키 방식 (access_token + refresh_token), `apps/common/deps.py`의 `get_current_user`
+- **CSRF**: `main.py`의 `CSRFMiddleware` — POST/PUT/DELETE에 `Content-Type: application/json` 또는 `X-Requested-With` 헤더 필수
+- **Rate Limiting**: `slowapi` 사용, 인증/업로드 엔드포인트에 적용
 - **세션**: SQLAlchemy Session은 요청마다 생성/종료
 - **에러 처리**: HTTPException 사용
 - **스키마**: DB 스키마명 `final_test` 고정
 - **포트**: 8000 (Frontend 5173에서 CORS 허용)
 - **소프트 삭제**: 기업 삭제는 `use_yn=False` (물리 삭제 아님)
+- **프로덕션**: `ENVIRONMENT=production` 시 Swagger/ReDoc 비활성화
 
 ## 코드 품질
 `.claude/rules/coding-style.md`, `.claude/rules/security.md`, `.claude/rules/patterns.md` 참조
