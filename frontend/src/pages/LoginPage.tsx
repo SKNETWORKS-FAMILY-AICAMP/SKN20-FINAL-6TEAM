@@ -21,9 +21,9 @@ const LoginPage: React.FC = () => {
       const response = await api.post('/auth/google', {
         id_token: credentialResponse.credential,
       });
-      const { access_token, user } = response.data;
+      const { user } = response.data;
 
-      login(user, access_token);
+      login(user);
       navigate('/');
     } catch (err: unknown) {
       console.error('Login error:', err);

@@ -38,7 +38,7 @@ services:
       - MYSQL_DATABASE=final_test
       - MYSQL_USER=${MYSQL_USER:-bizi}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD:-bizi123}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-secret-key-change-in-production}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
     depends_on:
@@ -61,6 +61,7 @@ services:
       - VITE_RAG_URL=http://localhost:8001
       - VITE_RAG_ENABLED=${RAG_ENABLED:-true}
       - VITE_RAG_STREAMING=${VITE_RAG_STREAMING:-true}
+      - VITE_RAG_API_KEY=${RAG_API_KEY:-}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
     depends_on:
       - backend
@@ -73,10 +74,11 @@ services:
     restart: unless-stopped
     volumes:
       - ./rag:/app
-    ports:
-      - "8001:8001"
+    expose:
+      - "8001"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - RAG_API_KEY=${RAG_API_KEY:-}
       - BIZINFO_API_KEY=${BIZINFO_API_KEY:-}
       - KSTARTUP_API_KEY=${KSTARTUP_API_KEY:-}
       - TAVILY_API_KEY=${TAVILY_API_KEY:-}

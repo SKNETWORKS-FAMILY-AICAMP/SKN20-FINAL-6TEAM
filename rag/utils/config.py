@@ -259,6 +259,11 @@ class Settings(BaseSettings):
     rate_limit_rate: float = Field(default=10.0, description="초당 토큰 충전 속도")
     rate_limit_capacity: float = Field(default=100.0, description="최대 토큰 수 (버스트)")
 
+    # RAG API 인증 설정
+    rag_api_key: str = Field(
+        default="", description="RAG API 키 (비어있으면 인증 비활성화)"
+    )
+
     # 관리자 인증 설정
     admin_api_key: str = Field(
         default="", description="관리자 API 키 (모니터링 엔드포인트 인증용, 비어있으면 인증 비활성화)"

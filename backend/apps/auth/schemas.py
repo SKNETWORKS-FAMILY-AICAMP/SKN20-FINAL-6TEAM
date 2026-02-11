@@ -1,26 +1,14 @@
 from pydantic import BaseModel
-from datetime import datetime
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-
-
-class TestLoginRequest(BaseModel):
-    email: str | None = None
-    username: str | None = None
-    type_code: str | None = None
 
 
 class GoogleLoginRequest(BaseModel):
     id_token: str
 
 
-class TestLoginResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user: "UserInfo"
+class TestLoginRequest(BaseModel):
+    email: str | None = None
+    username: str | None = None
+    type_code: str | None = None
 
 
 class UserInfo(BaseModel):
@@ -33,4 +21,5 @@ class UserInfo(BaseModel):
         from_attributes = True
 
 
-TestLoginResponse.model_rebuild()
+class LoginResponse(BaseModel):
+    user: UserInfo

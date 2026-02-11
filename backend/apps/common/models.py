@@ -4,6 +4,15 @@ from datetime import datetime
 from config.database import Base
 
 
+class TokenBlacklist(Base):
+    __tablename__ = "token_blacklist"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    jti = Column(String(36), unique=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+
 class Code(Base):
     __tablename__ = "code"
 

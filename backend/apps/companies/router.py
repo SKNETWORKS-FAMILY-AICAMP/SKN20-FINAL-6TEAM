@@ -1,9 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from typing import List
 import os
 import uuid
 from datetime import datetime
+
+limiter = Limiter(key_func=get_remote_address)
 
 from config.database import get_db
 from apps.common.models import User, Company
@@ -13,6 +17,9 @@ from .schemas import CompanyCreate, CompanyUpdate, CompanyResponse
 router = APIRouter(prefix="/companies", tags=["companies"])
 
 UPLOAD_DIR = "uploads/companies"
+ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png"}
+ALLOWED_CONTENT_TYPES = {"application/pdf", "image/jpeg", "image/png"}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 
 @router.get("", response_model=List[CompanyResponse])
@@ -124,11 +131,13 @@ async def delete_company(
 
 
 @router.post("/{company_id}/upload", response_model=CompanyResponse)
+@limiter.limit("5/minute")
 async def upload_business_registration(
+    request: Request,
     company_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """사업자등록증 파일 업로드"""
     company = db.query(Company).filter(
@@ -143,14 +152,33 @@ async def upload_business_registration(
             detail="Company not found"
         )
 
+    # 파일 검증
+    file_ext = os.path.splitext(file.filename or "")[1].lower()
+    if file_ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Allowed file types: {', '.join(ALLOWED_EXTENSIONS)}",
+        )
+
+    if file.content_type and file.content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file content type",
+        )
+
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File size exceeds {MAX_FILE_SIZE // (1024 * 1024)}MB limit",
+        )
+
     # 파일 저장
     os.makedirs(UPLOAD_DIR, exist_ok=True)
-    file_ext = os.path.splitext(file.filename)[1]
     file_name = f"{uuid.uuid4()}{file_ext}"
     file_path = os.path.join(UPLOAD_DIR, file_name)
 
     with open(file_path, "wb") as buffer:
-        content = await file.read()
         buffer.write(content)
 
     company.file_path = file_path

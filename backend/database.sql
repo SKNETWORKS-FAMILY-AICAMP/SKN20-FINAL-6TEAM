@@ -729,7 +729,19 @@ CREATE TABLE IF NOT EXISTS `schedule` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
--- 8. Domain 테이블 (RAG 도메인 분류 설정)
+-- 8. Token Blacklist 테이블
+-- ============================================
+CREATE TABLE IF NOT EXISTS `token_blacklist` (
+    `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `jti` VARCHAR(36) NOT NULL UNIQUE,
+    `expires_at` DATETIME NOT NULL,
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_jti` (`jti`),
+    INDEX `idx_expires_at` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- 9. Domain 테이블 (RAG 도메인 분류 설정)
 -- ============================================
 CREATE TABLE IF NOT EXISTS `domain` (
     `domain_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,

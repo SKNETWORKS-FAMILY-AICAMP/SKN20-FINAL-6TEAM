@@ -4,12 +4,18 @@ import type { RagStreamResponse } from '../types';
 const RAG_URL = import.meta.env.VITE_RAG_URL || 'http://localhost:8001';
 const RAG_ENABLED = import.meta.env.VITE_RAG_ENABLED !== 'false';
 const RAG_STREAMING = import.meta.env.VITE_RAG_STREAMING !== 'false';
+const RAG_API_KEY = import.meta.env.VITE_RAG_API_KEY || '';
+
+const ragHeaders: Record<string, string> = {
+  'Content-Type': 'application/json',
+};
+if (RAG_API_KEY) {
+  ragHeaders['X-API-Key'] = RAG_API_KEY;
+}
 
 const ragApi = axios.create({
   baseURL: RAG_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  headers: ragHeaders,
   timeout: 60000,
 });
 
@@ -40,11 +46,16 @@ export const streamChat = async (
   callbacks: StreamCallbacks,
   signal?: AbortSignal
 ): Promise<void> => {
+  const fetchHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (RAG_API_KEY) {
+    fetchHeaders['X-API-Key'] = RAG_API_KEY;
+  }
+
   const response = await fetch(`${RAG_URL}/api/chat/stream`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: fetchHeaders,
     body: JSON.stringify({ message }),
     signal,
   });

@@ -1,90 +1,160 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import logging
+import uuid
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
-from jose import jwt
+from jose import jwt, JWTError
+
+logger = logging.getLogger("auth")
+limiter = Limiter(key_func=get_remote_address)
 
 from config.database import get_db
 from config.settings import settings
 from apps.common.models import User
+from apps.common.deps import get_current_user
 from .services import verify_google_token
-from .schemas import TokenResponse, TestLoginRequest, TestLoginResponse, UserInfo, GoogleLoginRequest
+from .schemas import LoginResponse, TestLoginRequest, UserInfo, GoogleLoginRequest
+from .token_blacklist import blacklist_token, is_blacklisted
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
+# ---------------------------------------------------------------------------
+# Token helpers
+# ---------------------------------------------------------------------------
+
+def create_access_token(data: dict) -> str:
     to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
-    return encoded_jwt
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({
+        "exp": expire,
+        "jti": str(uuid.uuid4()),
+        "type": "access",
+    })
+    return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
-@router.post("/google", response_model=TestLoginResponse)
+def create_refresh_token(data: dict) -> str:
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode.update({
+        "exp": expire,
+        "jti": str(uuid.uuid4()),
+        "type": "refresh",
+    })
+    return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+
+# ---------------------------------------------------------------------------
+# Cookie helpers
+# ---------------------------------------------------------------------------
+
+def set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/",
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+        path="/auth",
+    )
+
+
+def clear_auth_cookies(response: Response) -> None:
+    response.delete_cookie("access_token", path="/")
+    response.delete_cookie("refresh_token", path="/auth")
+
+
+def _build_user_info(user: User) -> UserInfo:
+    return UserInfo(
+        user_id=user.user_id,
+        google_email=user.google_email,
+        username=user.username,
+        type_code=user.type_code,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+@router.post("/google", response_model=LoginResponse)
+@limiter.limit("10/minute")
 async def login_google(
-    request: GoogleLoginRequest,
-    db: Session = Depends(get_db)
-):
-    """
-    Google OAuth2 로그인
-    Client로부터 받은 ID Token을 검증하고 JWT 발급
-    """
-    # 1. Google ID Token 검증
-    id_info = verify_google_token(request.id_token)
+    request: Request,
+    body: GoogleLoginRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> LoginResponse:
+    """Google OAuth2 로그인 — HttpOnly 쿠키로 토큰 발급"""
+    id_info = verify_google_token(body.id_token)
     email = id_info.get("email")
     name = id_info.get("name", "Google User")
 
     if not email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email not found in Google token"
+            detail="Email not found in Google token",
         )
 
-    # 2. 사용자 조회 또는 생성
+    if not id_info.get("email_verified"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email address is not verified by Google",
+        )
+
     user = db.query(User).filter(User.google_email == email).first()
+    if user and not user.use_yn:
+        logger.warning("LOGIN_BLOCKED email=%s reason=deactivated", email)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account has been deactivated",
+        )
     if not user:
         user = User(
             google_email=email,
             username=name,
-            type_code="U0000002", # 기본: 예비창업자
-            birth=None, # Google Token에서는 생년월일을 기본으로 제공하지 않음
+            type_code="U0000002",
+            birth=None,
         )
         db.add(user)
         db.commit()
         db.refresh(user)
 
-    # 3. JWT 토큰 생성
     access_token = create_access_token(data={"sub": user.google_email})
+    refresh_token = create_refresh_token(data={"sub": user.google_email})
+    set_auth_cookies(response, access_token, refresh_token)
 
-    return TestLoginResponse(
-        access_token=access_token,
-        token_type="bearer",
-        user=UserInfo(
-            user_id=user.user_id,
-            google_email=user.google_email,
-            username=user.username,
-            type_code=user.type_code
-        )
-    )
+    logger.info("LOGIN_SUCCESS email=%s user_id=%d", user.google_email, user.user_id)
+    return LoginResponse(user=_build_user_info(user))
 
 
-@router.post("/test-login", response_model=TestLoginResponse)
+@router.post("/test-login", response_model=LoginResponse)
 async def test_login(
+    response: Response,
     request: TestLoginRequest | None = None,
     db: Session = Depends(get_db),
-):
-    """
-    테스트 로그인 - Google 로그인 구현 전까지 사용
-    기본: test@bizi.com 계정 / request body로 이메일·이름·유형 지정 가능
-    """
+) -> LoginResponse:
+    """테스트 로그인 — ENABLE_TEST_LOGIN=true일 때만 동작"""
+    if not settings.ENABLE_TEST_LOGIN:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
     test_email = request.email if request and request.email else "test@bizi.com"
     test_username = request.username if request and request.username else "테스트 사용자"
     test_type_code = request.type_code if request and request.type_code else "U0000002"
 
-    # 테스트 사용자 조회 또는 생성
     user = db.query(User).filter(User.google_email == test_email).first()
     if not user:
         user = User(
@@ -97,37 +167,100 @@ async def test_login(
         db.commit()
         db.refresh(user)
 
-    # JWT 토큰 생성
     access_token = create_access_token(data={"sub": user.google_email})
+    refresh_token = create_refresh_token(data={"sub": user.google_email})
+    set_auth_cookies(response, access_token, refresh_token)
 
-    return TestLoginResponse(
-        access_token=access_token,
-        token_type="bearer",
-        user=UserInfo(
-            user_id=user.user_id,
-            google_email=user.google_email,
-            username=user.username,
-            type_code=user.type_code
-        )
-    )
+    return LoginResponse(user=_build_user_info(user))
 
 
 @router.post("/logout")
-async def logout():
-    """
-    로그아웃 - 클라이언트에서 토큰 삭제 필요
-    """
-    return {"message": "Successfully logged out. Please delete the token on client side."}
+async def logout(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    """로그아웃 — 토큰 블랙리스트 등록 + 쿠키 삭제"""
+    # access_token 블랙리스트 등록
+    access_raw = request.cookies.get("access_token")
+    if access_raw:
+        try:
+            payload = jwt.decode(access_raw, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+            jti = payload.get("jti")
+            exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+            if jti:
+                blacklist_token(jti, exp)
+        except JWTError:
+            pass
+
+    # refresh_token 블랙리스트 등록
+    refresh_raw = request.cookies.get("refresh_token")
+    if refresh_raw:
+        try:
+            payload = jwt.decode(refresh_raw, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+            jti = payload.get("jti")
+            exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+            if jti:
+                blacklist_token(jti, exp)
+        except JWTError:
+            pass
+
+    clear_auth_cookies(response)
+    logger.info("LOGOUT user_id=%d", current_user.user_id)
+    return {"message": "Successfully logged out"}
 
 
-@router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(
-    db: Session = Depends(get_db)
-):
-    """
-    토큰 갱신 (현재 미구현 - 새 로그인 필요)
-    """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Token refresh not implemented. Please login again."
-    )
+@router.post("/refresh")
+@limiter.limit("30/minute")
+async def refresh(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    """Refresh Token으로 새 토큰 쌍 발급 (Token Rotation)"""
+    refresh_raw = request.cookies.get("refresh_token")
+    if not refresh_raw:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No refresh token")
+
+    try:
+        payload = jwt.decode(refresh_raw, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+    except JWTError:
+        clear_auth_cookies(response)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+
+    if payload.get("type") != "refresh":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
+
+    jti = payload.get("jti")
+    if jti and is_blacklisted(jti):
+        clear_auth_cookies(response)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token revoked")
+
+    email: str | None = payload.get("sub")
+    if not email:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+
+    user = db.query(User).filter(User.google_email == email, User.use_yn == True).first()
+    if not user:
+        clear_auth_cookies(response)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+    # 기존 refresh token 블랙리스트 등록 (rotation)
+    if jti:
+        exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+        blacklist_token(jti, exp)
+
+    new_access = create_access_token(data={"sub": email})
+    new_refresh = create_refresh_token(data={"sub": email})
+    set_auth_cookies(response, new_access, new_refresh)
+
+    logger.info("TOKEN_REFRESH email=%s", email)
+    return {"message": "Token refreshed"}
+
+
+@router.get("/me", response_model=LoginResponse)
+async def get_me(
+    current_user: User = Depends(get_current_user),
+) -> LoginResponse:
+    """현재 인증된 사용자 정보 반환 (페이지 새로고침 시 인증 복원용)"""
+    return LoginResponse(user=_build_user_info(current_user))

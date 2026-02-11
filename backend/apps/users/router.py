@@ -40,13 +40,15 @@ async def update_user_type(
     current_user: User = Depends(get_current_user)
 ):
     """사용자 유형 변경 (예비창업자/사업자)"""
+    ADMIN_TYPE_CODE = "U0000001"
     valid_codes = db.execute(
         select(Code.code).where(Code.main_code == "U", Code.use_yn == True)
     ).scalars().all()
-    if type_update.type_code not in valid_codes:
+    allowed_codes = [c for c in valid_codes if c != ADMIN_TYPE_CODE]
+    if type_update.type_code not in allowed_codes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid type_code. Must be one of: {', '.join(valid_codes)}"
+            detail=f"Invalid type_code. Must be one of: {', '.join(allowed_codes)}"
         )
 
     current_user.type_code = type_update.type_code

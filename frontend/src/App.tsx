@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from '@material-tailwind/react';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { MainLayout } from './components/layout';
+import ProtectedRoute from './components/common/ProtectedRoute';
 import {
   LoginPage,
   MainPage,
@@ -11,10 +12,15 @@ import {
   AdminPage,
   UsageGuidePage,
 } from './pages';
+import { useAuthStore } from './stores/authStore';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 const App: React.FC = () => {
+  useEffect(() => {
+    useAuthStore.getState().checkAuth();
+  }, []);
+
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <ThemeProvider>
@@ -23,16 +29,25 @@ const App: React.FC = () => {
             {/* Login page */}
             <Route path="/login" element={<LoginPage />} />
 
-            {/* All pages under MainLayout (authenticated + unauthenticated) */}
+            {/* All pages under MainLayout */}
             <Route element={<MainLayout />}>
+              {/* 게스트 허용 */}
               <Route path="/" element={<MainPage />} />
-              <Route path="/company" element={<CompanyPage />} />
-              <Route path="/schedule" element={<SchedulePage />} />
               <Route path="/guide" element={<UsageGuidePage />} />
-              <Route path="/admin" element={<AdminPage />} />
+
+              {/* 인증 필요 */}
+              <Route element={<ProtectedRoute />}>
+                <Route path="/company" element={<CompanyPage />} />
+                <Route path="/schedule" element={<SchedulePage />} />
+              </Route>
+
+              {/* 관리자 전용 */}
+              <Route element={<ProtectedRoute requiredTypeCode="U0000001" />}>
+                <Route path="/admin" element={<AdminPage />} />
+              </Route>
             </Route>
 
-            {/* Catch-all redirect (including /guest) */}
+            {/* Catch-all redirect */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>

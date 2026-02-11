@@ -302,6 +302,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# API Key 인증 미들웨어
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import JSONResponse
+
+
+class APIKeyMiddleware(BaseHTTPMiddleware):
+    """RAG API Key 인증 미들웨어.
+
+    RAG_API_KEY가 설정되어 있으면 보호 경로에 X-API-Key 헤더를 요구합니다.
+    미설정 시 인증 없이 통과합니다 (개발 환경).
+    """
+
+    PROTECTED_PREFIXES = ("/api/chat", "/api/documents", "/api/funding")
+
+    async def dispatch(self, request: StarletteRequest, call_next):
+        api_key = _settings.rag_api_key
+        if api_key and api_key.strip():
+            path = request.url.path
+            if any(path.startswith(prefix) for prefix in self.PROTECTED_PREFIXES):
+                provided_key = request.headers.get("X-API-Key", "")
+                if provided_key != api_key:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "Invalid or missing API key"},
+                    )
+        return await call_next(request)
+
+
+if _settings.rag_api_key:
+    app.add_middleware(APIKeyMiddleware)
+    logger.info("RAG API Key 인증 활성화")
+
 # 메트릭 수집 미들웨어
 app.add_middleware(MetricsMiddleware, collector=metrics_collector)
 
