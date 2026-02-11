@@ -1,5 +1,28 @@
 # Release Notes
 
+## [2026-02-11] - AWS RDS 마이그레이션 + Nginx 리버스 프록시 + DB 안전성 강화
+
+### Infrastructure
+- Docker Compose 전면 재구성: Nginx 리버스 프록시 (외부 유일 진입점, port 80)
+- SSH Tunnel 사이드카 추가 (Alpine + openssh-client → Bastion EC2 → AWS RDS)
+- 모든 서비스 `ports` → `expose` 변경 (Nginx만 외부 노출)
+- 로컬 MySQL 컨테이너 제거 → AWS RDS 전환
+- `nginx.conf` 추가: `/api/*` → backend, `/rag/*` → rag, `/*` → frontend
+- SSE 스트리밍 지원 (proxy_buffering off, proxy_read_timeout 300s)
+- Vite HMR WebSocket 프록시 지원
+
+### Refactoring
+- DB 스키마명 `final_test` → `bizi_db` (settings.py, database.sql)
+- `TokenBlacklist` 모델에 `use_yn` 컬럼 추가 — 만료 토큰 소프트 삭제
+- `cleanup_expired()`: DELETE → UPDATE `use_yn=False` (소프트 삭제)
+- `is_blacklisted()`: `use_yn=True` 필터 조건 추가
+- FK ondelete: `CASCADE` → `RESTRICT` (company, history, schedule) — 연쇄 삭제 방지
+- User relationships: `cascade="all, delete-orphan"` → `cascade="save-update, merge"`
+- SQLAlchemy 커넥션 풀 튜닝: `pool_recycle=1800`, `pool_size=10`, `max_overflow=20`
+
+### Documentation
+- CLAUDE.md 갱신 — 소프트 삭제 범위 확대, FK RESTRICT 제약 명시
+
 ## [2026-02-11] - JWT HttpOnly 쿠키 전환 + 보안 감사 12건 수정
 
 ### Security

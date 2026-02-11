@@ -60,9 +60,10 @@ app.include_router({기능}_router)
 - **Rate Limiting**: `slowapi` 사용, 인증/업로드 엔드포인트에 적용
 - **세션**: SQLAlchemy Session은 요청마다 생성/종료
 - **에러 처리**: HTTPException 사용
-- **스키마**: DB 스키마명 `final_test` 고정
+- **스키마**: DB 스키마명 `bizi_db`
 - **포트**: 8000 (Frontend 5173에서 CORS 허용)
-- **소프트 삭제**: 기업 삭제는 `use_yn=False` (물리 삭제 아님)
+- **소프트 삭제**: 기업 삭제, 토큰 블랙리스트 정리 모두 `use_yn=False` (물리 삭제 아님)
+- **FK 제약**: company, history, schedule의 user FK는 `RESTRICT` (CASCADE 아님 — 실수로 연쇄 삭제 방지)
 - **프로덕션**: `ENVIRONMENT=production` 시 Swagger/ReDoc 비활성화
 
 ## 코드 품질

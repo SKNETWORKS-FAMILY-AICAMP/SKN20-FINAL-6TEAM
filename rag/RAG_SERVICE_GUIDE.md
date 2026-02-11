@@ -101,7 +101,7 @@ Bizi RAG는 LangGraph 기반으로 다음 5단계로 동작합니다:
              ↓                              ↓
      ┌──────────────┐             ┌─────────────────────┐
      │    MySQL     │             │     ChromaDB        │
-     │  final_test  │             │   (Vector DB)       │
+     │  bizi_db  │             │   (Vector DB)       │
      └──────────────┘             └─────────────────────┘
 ```
 

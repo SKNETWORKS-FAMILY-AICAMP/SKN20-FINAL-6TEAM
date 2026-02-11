@@ -17,7 +17,7 @@ Bizi는 예비 창업자, 스타트업 CEO, 중소기업 대표를 위한 AI 기
 - **Frontend**: React 18 + Vite, TypeScript, TailwindCSS, React Router
 - **Backend**: FastAPI, SQLAlchemy 2.0, Google OAuth2, JWT
 - **RAG Service**: FastAPI, LangChain, LangGraph, OpenAI GPT-4o-mini
-- **Database**: MySQL 8.0 (스키마: final_test)
+- **Database**: MySQL 8.0 (스키마: bizi_db)
 - **Vector DB**: ChromaDB
 - **Container**: Docker, Docker Compose
 
@@ -47,7 +47,7 @@ SKN20-FINAL-6TEAM/
 │   ├── CLAUDE.md          # Backend 개발 가이드
 │   ├── AGENTS.md          # Backend AI 에이전트 가이드
 │   ├── main.py            # FastAPI 진입점
-│   ├── database.sql       # DB 스키마 (final_test)
+│   ├── database.sql       # DB 스키마 (bizi_db)
 │   ├── config/            # 환경 설정
 │   │   ├── settings.py
 │   │   └── database.py    # SQLAlchemy 연결
@@ -153,7 +153,7 @@ uvicorn main:app --host 0.0.0.0 --port 8001 --reload
                 ↓                             ↓
         ┌───────────────┐           ┌─────────────────────┐
         │    MySQL      │           │     ChromaDB        │
-        │  final_test   │           │   (Vector DB)       │
+        │  bizi_db   │           │   (Vector DB)       │
         └───────────────┘           └─────────────────────┘
 ```
 
@@ -200,7 +200,7 @@ chore: 빌드, 설정 변경
 ```
 
 ## 데이터베이스 스키마
-- 스키마명: `final_test`
+- 스키마명: `bizi_db`
 - 테이블: code, user, company, history, file, announce, schedule
 - 상세 정의: `backend/database.sql` 참조
 
@@ -228,7 +228,7 @@ chore: 빌드, 설정 변경
 # Database
 MYSQL_HOST=localhost
 MYSQL_PORT=3306
-MYSQL_DATABASE=final_test
+MYSQL_DATABASE=bizi_db
 MYSQL_USER=root
 MYSQL_PASSWORD=
 

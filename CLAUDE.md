@@ -14,15 +14,16 @@ Bizi는 예비 창업자, 스타트업 CEO, 중소기업 대표를 위한 AI 기
 - **Frontend**: React 18 + Vite, TypeScript, TailwindCSS, React Router, axios, react-markdown
 - **Backend**: FastAPI, SQLAlchemy 2.0, Google OAuth2, JWT (HttpOnly Cookie)
 - **RAG Service**: FastAPI, LangChain, LangGraph, OpenAI GPT-4
-- **Database**: MySQL 8.0 (스키마: final_test)
+- **Database**: MySQL 8.0 (AWS RDS, 스키마: bizi_db)
 - **Vector DB**: ChromaDB
-- **Container**: Docker, Docker Compose
+- **Infra**: Docker Compose, Nginx (리버스 프록시), SSH Tunnel (Bastion → RDS)
 
 ## 프로젝트 구조
 ```
 SKN20-FINAL-6TEAM/
 ├── CLAUDE.md              # 이 파일 (프로젝트 전체 가이드)
 ├── docker-compose.yaml    # Docker 서비스 구성
+├── nginx.conf             # Nginx 리버스 프록시 설정
 ├── .env                   # 환경 변수 (git에서 제외)
 ├── .env.example           # 환경 변수 예시
 │
@@ -49,7 +50,7 @@ SKN20-FINAL-6TEAM/
 │   ├── CLAUDE.md          # Backend 개발 가이드
 │   ├── AGENTS.md          # Backend AI 에이전트 가이드
 │   ├── main.py            # FastAPI 진입점
-│   ├── database.sql       # DB 스키마 (final_test)
+│   ├── database.sql       # DB 스키마 (bizi_db)
 │   ├── config/            # 환경 설정
 │   │   ├── settings.py
 │   │   └── database.py    # SQLAlchemy 연결
@@ -90,13 +91,13 @@ SKN20-FINAL-6TEAM/
 ```
 
 ## 서비스 포트
-| 서비스 | 포트 | 설명 |
-|--------|------|------|
-| Frontend | 5173 | Vite 개발 서버 |
-| Backend | 8000 | FastAPI REST API |
-| RAG | 8001 | RAG Service (LangChain/FastAPI) |
-| MySQL | 3306 | 데이터베이스 |
-| ChromaDB | 8002 | 벡터 데이터베이스 |
+| 서비스 | 포트 | 외부 노출 | 설명 |
+|--------|------|----------|------|
+| Nginx | 80 | O (유일) | 리버스 프록시 (외부 진입점) |
+| Frontend | 5173 | X | Vite 개발 서버 |
+| Backend | 8000 | X | FastAPI REST API |
+| RAG | 8001 | X | RAG Service (LangChain/FastAPI) |
+| SSH Tunnel | 3306 | X | Bastion → AWS RDS 터널 |
 
 ## 실행
 Docker: `docker-compose up --build`
@@ -108,28 +109,28 @@ E2E 테스트: `cd frontend && npm run test:e2e`
 
 ### 시스템 구성도
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Frontend (React + Vite)                     │
-│                    localhost:5173                                │
-└───────────────┬─────────────────────────────────┬───────────────┘
-                │ axios (REST API)                │ axios (직접 통신)
-                │ (인증, 사용자, 기업)               │ (채팅, AI 응답)
-                ↓                                 ↓
-┌───────────────────────────┐    ┌─────────────────────────────────┐
-│   Backend (FastAPI)       │    │      RAG Service (FastAPI)      │
-│   localhost:8000          │    │      localhost:8001             │
-│                           │    │                                 │
-│ - Google OAuth2 인증       │    │ - Master Router                 │
-│ - 사용자/기업 관리          │    │ - 4개 도메인 에이전트             │
-│ - 상담 이력 저장            │    │ - Action Executor               │
-│ - 일정 관리               │    │ - RAG 체인                       │
-└───────────────┬───────────┘    └───────────┬─────────────────────┘
-                │                             │
-                ↓                             ↓
-        ┌───────────────┐           ┌─────────────────────┐
-        │    MySQL      │           │     ChromaDB        │
-        │  final_test   │           │   (Vector DB)       │
-        └───────────────┘           └─────────────────────┘
+                        ┌──────────────────┐
+                        │   Client (브라우저) │
+                        └────────┬─────────┘
+                                 │ :80
+                        ┌────────▼─────────┐
+                        │  Nginx (리버스 프록시) │
+                        │  /api/* → backend  │
+                        │  /rag/* → rag      │
+                        │  /*    → frontend  │
+                        └──┬─────┬─────┬───┘
+                 ┌─────────┘     │     └─────────┐
+                 ↓               ↓               ↓
+        ┌────────────┐  ┌────────────┐  ┌────────────────┐
+        │  Frontend   │  │  Backend   │  │  RAG Service   │
+        │  :5173      │  │  :8000     │  │  :8001         │
+        └────────────┘  └──────┬─────┘  └──────┬─────────┘
+                               │               │
+                        ┌──────▼───────────────▼──┐
+                        │   SSH Tunnel (:3306)     │
+                        │   Bastion EC2 → AWS RDS  │
+                        │   (bizi_db)              │
+                        └──────────────────────────┘
 ```
 
 ### 멀티에이전트 시스템
@@ -171,8 +172,9 @@ Agentic RAG 구조로 6개 에이전트 운영:
 - 스트리밍 완료 후 에이전트 태그 표시
 
 ### API 통신 흐름
-- **인증/데이터 관리**: Frontend (axios) → Backend → MySQL
-- **AI 채팅**: Frontend (axios) → RAG Service (직접 통신) → Vector DB
+- **인증/데이터 관리**: Client → Nginx `/api/*` → Backend → SSH Tunnel → AWS RDS
+- **AI 채팅**: Client → Nginx `/rag/*` → RAG Service → Vector DB
+- **프론트엔드**: Client → Nginx `/*` → Frontend (Vite)
 
 ## 사용자 유형
 | 코드 | 유형 | 주요 관심사 |
@@ -192,7 +194,7 @@ Agentic RAG 구조로 6개 에이전트 운영:
 - `.claude/rules/agents.md`: 에이전트 라우팅
 
 ## 데이터베이스 스키마
-- 스키마명: `final_test`
+- 스키마명: `bizi_db`
 - 테이블: code, user, company, history, file, announce, schedule, token_blacklist
 - 상세 정의: `backend/database.sql` 참조
 

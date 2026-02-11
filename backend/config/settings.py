@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     # Database
     MYSQL_HOST: str = "localhost"
     MYSQL_PORT: int = 3306
-    MYSQL_DATABASE: str = "final_test"
+    MYSQL_DATABASE: str = "bizi_db"
     MYSQL_USER: str = "root"
     MYSQL_PASSWORD: str = ""
 

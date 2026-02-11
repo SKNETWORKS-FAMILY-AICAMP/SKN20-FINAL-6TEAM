@@ -3,7 +3,7 @@
 > 상세 개발 가이드: [CLAUDE.md](./CLAUDE.md)
 
 ## Tech Stack
-Python 3.10+ / FastAPI / SQLAlchemy 2.0 / MySQL 8.0 (final_test) / Google OAuth2 / JWT
+Python 3.10+ / FastAPI / SQLAlchemy 2.0 / MySQL 8.0 (bizi_db) / Google OAuth2 / JWT
 
 ## Project Structure
 ```

@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-02-11] - DB 설정 bizi_db 통일
+
+### Refactoring
+- `utils/config.py` mysql_database 기본값 `final_test` → `bizi_db` 통일
+
 ## [2026-02-11] - RAG API Key 인증 미들웨어 추가
 
 ### Security

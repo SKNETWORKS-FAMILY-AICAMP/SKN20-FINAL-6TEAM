@@ -1,27 +1,50 @@
 services:
-  # MySQL Database
-  db:
-    image: mysql:8.0
-    container_name: bizi-db
+  # Nginx Reverse Proxy (외부 유일한 진입점)
+  nginx:
+    image: nginx:alpine
+    container_name: bizi-nginx
     restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-bizi123}
-      MYSQL_DATABASE: final_test
-      MYSQL_USER: ${MYSQL_USER:-bizi}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-bizi123}
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
     ports:
-      - "3306:3306"
+      - "80:80"
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./backend/database.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - backend
+      - rag
+
+  # SSH Tunnel to AWS RDS (via Bastion EC2)
+  ssh-tunnel:
+    image: alpine:latest
+    container_name: bizi-ssh-tunnel
+    restart: unless-stopped
+    volumes:
+      - ./.ssh/bizi-key.pem:/tmp/bizi-key.pem:ro
+    entrypoint:
+      - sh
+      - -c
+      - |
+        apk add --no-cache openssh-client > /dev/null 2>&1
+        mkdir -p /root/.ssh
+        cp /tmp/bizi-key.pem /root/.ssh/bizi-key.pem
+        chmod 600 /root/.ssh/bizi-key.pem
+        echo "Starting SSH tunnel to RDS..."
+        ssh -N \
+          -L 0.0.0.0:3306:${MYSQL_HOST}:${MYSQL_PORT:-3306} \
+          -o StrictHostKeyChecking=no \
+          -o ServerAliveInterval=30 \
+          -o ServerAliveCountMax=3 \
+          -o ExitOnForwardFailure=yes \
+          -i /root/.ssh/bizi-key.pem \
+          ubuntu@${BASTION_HOST}
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD-SHELL", "netstat -tln | grep -q ':3306 ' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s
+    expose:
+      - "3306"
 
   # FastAPI Backend
   backend:
@@ -30,19 +53,19 @@ services:
     restart: unless-stopped
     volumes:
       - ./backend:/app
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
-      - MYSQL_HOST=db
+      - MYSQL_HOST=ssh-tunnel
       - MYSQL_PORT=3306
-      - MYSQL_DATABASE=final_test
-      - MYSQL_USER=${MYSQL_USER:-bizi}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-bizi123}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-bizi_db}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
     depends_on:
-      db:
+      ssh-tunnel:
         condition: service_healthy
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
@@ -54,11 +77,11 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    ports:
-      - "5173:5173"
+    expose:
+      - "5173"
     environment:
-      - VITE_API_URL=http://localhost:8000
-      - VITE_RAG_URL=http://localhost:8001
+      - VITE_API_URL=/api
+      - VITE_RAG_URL=/rag
       - VITE_RAG_ENABLED=${RAG_ENABLED:-true}
       - VITE_RAG_STREAMING=${VITE_RAG_STREAMING:-true}
       - VITE_RAG_API_KEY=${RAG_API_KEY:-}
@@ -82,17 +105,17 @@ services:
       - BIZINFO_API_KEY=${BIZINFO_API_KEY:-}
       - KSTARTUP_API_KEY=${KSTARTUP_API_KEY:-}
       - TAVILY_API_KEY=${TAVILY_API_KEY:-}
-      # MySQL (도메인 설정 DB)
-      - MYSQL_HOST=db
+      # MySQL (via SSH tunnel)
+      - MYSQL_HOST=ssh-tunnel
       - MYSQL_PORT=3306
-      - MYSQL_DATABASE=final_test
-      - MYSQL_USER=${MYSQL_USER:-bizi}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-bizi123}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-bizi_db}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
       # RAG 고급 검색 설정
       - ENABLE_HYBRID_SEARCH=${ENABLE_HYBRID_SEARCH:-true}
       - ENABLE_RERANKING=${ENABLE_RERANKING:-true}
     depends_on:
-      db:
+      ssh-tunnel:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
@@ -101,6 +124,3 @@ services:
       retries: 3
       start_period: 120s
     command: uvicorn main:app --host 0.0.0.0 --port 8001
-
-volumes:
-  mysql_data:

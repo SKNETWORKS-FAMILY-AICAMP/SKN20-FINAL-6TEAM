@@ -11,6 +11,7 @@ class TokenBlacklist(Base):
     jti = Column(String(36), unique=True, nullable=False)
     expires_at = Column(DateTime, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
+    use_yn = Column(Boolean, nullable=False, default=True, comment="0: 미사용, 1: 사용")
 
 
 class Code(Base):
@@ -38,15 +39,15 @@ class User(Base):
     use_yn = Column(Boolean, nullable=False, default=True, comment="0: 미사용, 1: 사용")
 
     # Relationships
-    companies = relationship("Company", back_populates="user", cascade="all, delete-orphan")
-    histories = relationship("History", back_populates="user", cascade="all, delete-orphan")
+    companies = relationship("Company", back_populates="user", cascade="save-update, merge")
+    histories = relationship("History", back_populates="user", cascade="save-update, merge")
 
 
 class Company(Base):
     __tablename__ = "company"
 
     company_id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("user.user_id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("user.user_id", ondelete="RESTRICT"), nullable=False)
     com_name = Column(String(255), nullable=False, default="")
     biz_num = Column(String(50), nullable=False, default="", comment="사업자등록번호")
     addr = Column(String(255), nullable=False, default="")
@@ -60,14 +61,14 @@ class Company(Base):
 
     # Relationships
     user = relationship("User", back_populates="companies")
-    schedules = relationship("Schedule", back_populates="company", cascade="all, delete-orphan")
+    schedules = relationship("Schedule", back_populates="company", cascade="save-update, merge")
 
 
 class History(Base):
     __tablename__ = "history"
 
     history_id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("user.user_id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("user.user_id", ondelete="RESTRICT"), nullable=False)
     agent_code = Column(String(8), ForeignKey("code.code"), comment="답변 에이전트 코드")
     question = Column(Text, default="", comment="질문")
     answer = Column(Text, default="", comment="JSON 형태 저장 가능")
@@ -115,7 +116,7 @@ class Schedule(Base):
     __tablename__ = "schedule"
 
     schedule_id = Column(Integer, primary_key=True, autoincrement=True)
-    company_id = Column(Integer, ForeignKey("company.company_id", ondelete="CASCADE"), nullable=False)
+    company_id = Column(Integer, ForeignKey("company.company_id", ondelete="RESTRICT"), nullable=False)
     announce_id = Column(Integer, ForeignKey("announce.announce_id", ondelete="SET NULL"), nullable=True)
     schedule_name = Column(String(255), nullable=False, default="", comment="일정 제목")
     start_date = Column(DateTime, nullable=False, default=datetime.now, comment="시작일시")

@@ -8,8 +8,8 @@
 SET NAMES utf8mb4;
 SET CHARACTER SET utf8mb4;
 
-CREATE DATABASE IF NOT EXISTS final_test;
-USE final_test;
+CREATE DATABASE IF NOT EXISTS bizi_db;
+USE bizi_db;
 
 -- ============================================
 -- 1. Code 테이블 (가장 먼저 생성 - 다른 테이블에서 참조)
@@ -607,9 +607,9 @@ CREATE TABLE IF NOT EXISTS `user` (
 -- ============================================
 -- Test용 User 데이터 추가 (테이블이 비어있을 때만)
 -- ============================================
-INSERT INTO `user` (`google_email`, `username`, `birth`, `type_code`)
-SELECT 'test@bizi.com', '테스트 사용자', '1990-01-01', 'U0000002'
-WHERE NOT EXISTS (SELECT 1 FROM `user` LIMIT 1);	
+-- INSERT INTO `user` (`google_email`, `username`, `birth`, `type_code`)
+-- SELECT 'test@bizi.com', '테스트 사용자', '1990-01-01', 'U0000002'
+-- WHERE NOT EXISTS (SELECT 1 FROM `user` LIMIT 1);	
 
 
 -- ============================================
@@ -629,7 +629,7 @@ CREATE TABLE IF NOT EXISTS `company` (
     `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `use_yn` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0: 미사용, 1: 사용',
     
-    FOREIGN KEY (`user_id`) REFERENCES `user`(`user_id`) ON DELETE CASCADE,
+    FOREIGN KEY (`user_id`) REFERENCES `user`(`user_id`) ON DELETE RESTRICT,
     FOREIGN KEY (`biz_code`) REFERENCES `code`(`code`) ON UPDATE CASCADE,
     INDEX `idx_company_user_id` (`user_id`),
     INDEX `idx_company_biz_code` (`biz_code`),
@@ -652,7 +652,7 @@ CREATE TABLE IF NOT EXISTS `history` (
     `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `use_yn` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0: 미사용, 1: 사용',
 
-    FOREIGN KEY (`user_id`) REFERENCES `user`(`user_id`) ON DELETE CASCADE,
+    FOREIGN KEY (`user_id`) REFERENCES `user`(`user_id`) ON DELETE RESTRICT,
     FOREIGN KEY (`agent_code`) REFERENCES `code`(`code`) ON UPDATE CASCADE,
     FOREIGN KEY (`parent_history_id`) REFERENCES `history`(`history_id`) ON DELETE SET NULL,
     INDEX `idx_history_user_id` (`user_id`),
@@ -719,7 +719,7 @@ CREATE TABLE IF NOT EXISTS `schedule` (
     `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `use_yn` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0: 미사용, 1: 사용',
     
-    FOREIGN KEY (`company_id`) REFERENCES `company`(`company_id`) ON DELETE CASCADE,
+    FOREIGN KEY (`company_id`) REFERENCES `company`(`company_id`) ON DELETE RESTRICT,
     FOREIGN KEY (`announce_id`) REFERENCES `announce`(`announce_id`) ON DELETE SET NULL,
     INDEX `idx_schedule_company_id` (`company_id`),
     INDEX `idx_schedule_announce_id` (`announce_id`),
@@ -736,6 +736,7 @@ CREATE TABLE IF NOT EXISTS `token_blacklist` (
     `jti` VARCHAR(36) NOT NULL UNIQUE,
     `expires_at` DATETIME NOT NULL,
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `use_yn` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0: 미사용, 1: 사용',
     INDEX `idx_jti` (`jti`),
     INDEX `idx_expires_at` (`expires_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

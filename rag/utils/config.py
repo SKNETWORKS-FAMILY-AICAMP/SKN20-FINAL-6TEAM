@@ -142,7 +142,7 @@ class Settings(BaseSettings):
     # MySQL 설정 (Backend와 동일한 DB 사용)
     mysql_host: str = Field(default="localhost", description="MySQL 호스트")
     mysql_port: int = Field(default=3306, description="MySQL 포트")
-    mysql_database: str = Field(default="final_test", description="MySQL 데이터베이스명")
+    mysql_database: str = Field(default="bizi_db", description="MySQL 데이터베이스명")
     mysql_user: str = Field(default="root", description="MySQL 사용자")
     mysql_password: str = Field(default="", description="MySQL 비밀번호")
 

@@ -17,8 +17,8 @@
 |------|------|
 | 프레임워크 | FastAPI |
 | ORM | SQLAlchemy 2.0 |
-| 데이터베이스 | MySQL 8.0 (스키마: `final_test`) |
-| 인증 | Google OAuth2 + JWT (Bearer) |
+| 데이터베이스 | MySQL 8.0 (AWS RDS, 스키마: `bizi_db`) |
+| 인증 | Google OAuth2 + JWT (HttpOnly Cookie) |
 
 ## 시작하기
 
@@ -44,7 +44,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 |------|------|------|
 | `MYSQL_HOST` | MySQL 호스트 | O |
 | `MYSQL_PORT` | MySQL 포트 (기본: 3306) | O |
-| `MYSQL_DATABASE` | 스키마명 (기본: `final_test`) | O |
+| `MYSQL_DATABASE` | 스키마명 (기본: `bizi_db`) | O |
 | `MYSQL_USER` / `MYSQL_PASSWORD` | DB 인증 정보 | O |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth2 클라이언트 | O |
 | `GOOGLE_REDIRECT_URI` | OAuth 콜백 URL | O |
