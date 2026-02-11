@@ -1,7 +1,7 @@
 """
-세무 지원 제도 PDF 전처리 (Upstage Document Parse API)
+세무 지원 제도 PDF 전처리 (Upstage Document Parse API + GPT-4o Vision 하이브리드)
 
-표가 많은 PDF를 Upstage OCR로 추출하여 JSONL로 변환합니다.
+표가 많은 PDF를 Upstage OCR로 추출하고, 수식 부분은 GPT-4o Vision 결과로 교체하여 JSONL로 변환합니다.
 """
 
 import json
@@ -694,15 +694,18 @@ def flatten_markdown_multi_headers(content: str) -> str:
     """마크다운 테이블의 다단 헤더(2행 이상)를 부모(자식) 형태로 병합합니다.
 
     Upstage OCR이 HTML 대신 마크다운으로 반환한 테이블에서,
-    헤더 행이 2행이고 상위 행에 동일 값이 반복되면 하위 행의 값을 자식으로 병합합니다.
+    구분선(| --- |) **위에** 헤더 행이 2행 있고 상위 행에 동일 값이 반복되면
+    하위 행의 값을 자식으로 병합합니다.
 
-    예:
-        | 요 건 | 요 건 | 요 건 |
-        | --- | --- | --- |
-        | 규모 | 소재지 | 업종 |
+    올바른 패턴 (헤더2행 → 구분선):
+        | 요 건 | 요 건 | 요 건 |     ← 상위 헤더
+        | 규모 | 소재지 | 업종 |       ← 하위 헤더
+        | --- | --- | --- |           ← 구분선
       →
         | 요건(규모) | 요건(소재지) | 요건(업종) |
         | --- | --- | --- |
+
+    구분선 아래 행은 데이터이므로 절대 병합하지 않습니다.
     """
     lines = content.split("\n")
     result: list[str] = []
@@ -711,13 +714,13 @@ def flatten_markdown_multi_headers(content: str) -> str:
     while i < len(lines):
         line = lines[i].strip()
 
-        # 마크다운 테이블 시작 감지: | ... | 형태
+        # 마크다운 테이블 행이 아니면 그대로
         if not line.startswith("|") or not line.endswith("|"):
             result.append(lines[i])
             i += 1
             continue
 
-        # 3행 연속 (헤더1, 구분선, 헤더2/데이터) 확인
+        # 3행 연속 (헤더1, 헤더2, 구분선) 확인
         if i + 2 >= len(lines):
             result.append(lines[i])
             i += 1
@@ -726,27 +729,36 @@ def flatten_markdown_multi_headers(content: str) -> str:
         next1 = lines[i + 1].strip()
         next2 = lines[i + 2].strip()
 
-        # 구분선 확인 (| --- | --- | 형태)
-        is_separator = (
-            next1.startswith("|")
-            and next1.endswith("|")
-            and all(c.strip().replace("-", "") == "" for c in next1.split("|") if c.strip())
+        # 패턴: lines[i]=헤더1, lines[i+1]=헤더2, lines[i+2]=구분선
+        # 구분선은 lines[i+2] 위치에 있어야 함 (헤더 아래가 아니라 헤더2 아래)
+        is_next1_table_row = (
+            next1.startswith("|") and next1.endswith("|")
+        )
+        is_next2_separator = (
+            next2.startswith("|")
+            and next2.endswith("|")
+            and all(
+                c.strip().replace("-", "") == ""
+                for c in next2.split("|") if c.strip()
+            )
+        )
+        # next1이 구분선이 아닌 테이블 행이고, next2가 구분선인 경우만 처리
+        is_next1_separator = (
+            is_next1_table_row
+            and all(
+                c.strip().replace("-", "") == ""
+                for c in next1.split("|") if c.strip()
+            )
         )
 
-        if not is_separator:
+        if not (is_next1_table_row and not is_next1_separator and is_next2_separator):
             result.append(lines[i])
             i += 1
             continue
 
-        # 다음 행이 데이터 행인지 확인
-        if not next2.startswith("|") or not next2.endswith("|"):
-            result.append(lines[i])
-            i += 1
-            continue
-
-        # 헤더1, 헤더2 셀 파싱
+        # 헤더1(lines[i]), 헤더2(lines[i+1]) 셀 파싱
         header1_cells = [c.strip() for c in line.split("|")[1:-1]]
-        header2_cells = [c.strip() for c in next2.split("|")[1:-1]]
+        header2_cells = [c.strip() for c in next1.split("|")[1:-1]]
 
         if len(header1_cells) != len(header2_cells):
             result.append(lines[i])
@@ -778,23 +790,518 @@ def flatten_markdown_multi_headers(content: str) -> str:
 
         merged_header = "| " + " | ".join(merged) + " |"
         result.append(merged_header)
-        result.append(lines[i + 1])  # 구분선 유지
-        # 헤더2 행(i+2)은 스킵
+        result.append(lines[i + 2])  # 구분선 유지
+        # 헤더1(i), 헤더2(i+1), 구분선(i+2) 모두 처리 → 다음은 i+3
         i += 3
         continue
 
     return "\n".join(result)
 
 
+def load_gpt4o_formulas(
+    output_dir: str,
+) -> tuple[dict[int, list[str]], dict[int, list[tuple[str, str]]], dict[int, str]]:
+    """GPT-4o raw JSON에서 페이지별 수식 라인을 추출합니다.
+
+    Args:
+        output_dir: gpt4o_raw.json이 위치한 디렉토리
+
+    Returns:
+        (등호 수식 dict, 라벨 수식 dict, 수식 페이지 raw content dict) 튜플
+        - 등호 수식: {page: [formula_line, ...]} (= 포함 수식)
+        - 라벨 수식: {page: [(label, formula), ...]} (= 미포함 수식)
+        - raw content: {page: content} (수식이 있는 페이지의 GPT-4o 전체 콘텐츠)
+    """
+    raw_path = os.path.join(output_dir, "gpt4o_raw.json")
+    if not os.path.exists(raw_path):
+        print(f"  WARNING: GPT-4o raw JSON 없음: {raw_path}")
+        return {}, {}, {}
+
+    with open(raw_path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    formulas: dict[int, list[str]] = {}
+    labeled: dict[int, list[tuple[str, str]]] = {}
+    raw_contents: dict[int, str] = {}
+
+    for item in data:
+        page = item["page"]
+        content = item.get("content", "")
+        page_formulas = _extract_gpt4o_formula_lines(content)
+        if page_formulas:
+            formulas[page] = page_formulas
+        page_labeled = _extract_gpt4o_labeled_formulas(content)
+        if page_labeled:
+            labeled[page] = page_labeled
+        # 수식이 하나라도 있으면 raw content 보존
+        if page_formulas or page_labeled:
+            raw_contents[page] = content
+
+    print(f"  GPT-4o 수식 로드: {len(formulas)}개 페이지에서 등호 수식 발견")
+    print(f"  GPT-4o 라벨 수식 로드: {len(labeled)}개 페이지에서 라벨 수식 발견")
+    print(f"  GPT-4o raw content: {len(raw_contents)}개 수식 페이지")
+    return formulas, labeled, raw_contents
+
+
+def _extract_gpt4o_formula_lines(content: str) -> list[str]:
+    """GPT-4o 콘텐츠에서 수식 라인을 추출합니다.
+
+    수식 조건:
+    - `=` + 수학 연산자(×, ÷, /) → 등호 수식
+    - `×` 또는 `÷` (= 없이) → 표현식 수식 (/ 는 일반 텍스트에 흔하므로 제외)
+
+    Args:
+        content: GPT-4o 페이지 콘텐츠
+
+    Returns:
+        수식 라인 리스트
+    """
+    formulas: list[str] = []
+    for line in content.split("\n"):
+        stripped = line.strip()
+        # 테이블 행 제외
+        if stripped.startswith("|"):
+            continue
+        # 빈 줄, 짧은 줄 제외
+        if len(stripped) < 10:
+            continue
+        # 수식 판별: = 있는 수식만 (= 없는 수식은 _extract_gpt4o_labeled_formulas 전담)
+        if "=" in stripped and any(op in stripped for op in ["×", "÷", "/"]):
+            formulas.append(stripped)
+    return formulas
+
+
+def _extract_gpt4o_labeled_formulas(content: str) -> list[tuple[str, str]]:
+    """GPT-4o 콘텐츠에서 (label, formula) 쌍을 추출합니다.
+
+    `=` 없이 `×`/`÷`만 있는 수식에 대해 선행 라벨을 매칭합니다.
+    예: "1. 첫 회분 납부할 가산금" (label) + "연부연납을 허가한 총세액 × ..." (formula)
+
+    Args:
+        content: GPT-4o 페이지 콘텐츠
+
+    Returns:
+        (label_text, formula_line) 튜플 리스트
+    """
+    lines = content.split("\n")
+    labeled: list[tuple[str, str]] = []
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        # 테이블 행, 빈 줄, 짧은 줄 제외
+        if stripped.startswith("|") or len(stripped) < 10:
+            continue
+        # = 없이 ×/÷가 있는 수식만 대상
+        if "=" in stripped:
+            continue
+        if not any(op in stripped for op in ["×", "÷"]):
+            continue
+
+        # 위로 탐색하여 라벨 줄 찾기
+        label = ""
+        for j in range(i - 1, max(i - 5, -1), -1):
+            candidate = lines[j].strip()
+            if not candidate:
+                continue
+            # 수식이나 테이블이 아닌 텍스트 줄을 라벨로 사용
+            if candidate.startswith("|"):
+                break
+            if any(op in candidate for op in ["×", "÷"]):
+                break
+            label = candidate
+            break
+
+        if label:
+            labeled.append((label, stripped))
+
+    return labeled
+
+
+def _extract_formula_key(formula_line: str) -> str:
+    """수식 라인에서 = 앞의 수식 이름(키)을 추출합니다.
+
+    예: "감면소득 = A × B / C" → "감면소득"
+
+    Args:
+        formula_line: 수식 라인
+
+    Returns:
+        정규화된 수식 키 (공백 제거)
+    """
+    parts = formula_line.split("=", 1)
+    key = parts[0].strip()
+    # 앞의 기호 제거 (·, •, -, *, # 등 리스트/헤딩 마커)
+    key = re.sub(r"^[·•\-*#\s]+", "", key)
+    return key
+
+
+def _pick_best_formula(candidates: list[str], upstage_line: str) -> str:
+    """동일 키의 GPT-4o 수식 중 Upstage 줄과 가장 유사한 것을 선택합니다.
+
+    = 뒤 콘텐츠의 공통 문자 수로 유사도를 판단합니다.
+
+    Args:
+        candidates: 동일 키를 가진 GPT-4o 수식 리스트
+        upstage_line: 매칭 대상 Upstage 줄
+
+    Returns:
+        가장 유사한 GPT-4o 수식
+    """
+    if len(candidates) == 1:
+        return candidates[0]
+
+    parts = upstage_line.split("=", 1)
+    rhs = re.sub(r"\s+", "", parts[1]) if len(parts) > 1 else ""
+
+    best = candidates[0]
+    best_score = -1
+    for formula in candidates:
+        f_parts = formula.split("=", 1)
+        f_rhs = re.sub(r"\s+", "", f_parts[1]) if len(f_parts) > 1 else ""
+        score = sum(1 for c in rhs if c in f_rhs)
+        if score > best_score:
+            best_score = score
+            best = formula
+    return best
+
+
+def _expand_formula_block_lenient(
+    lines: list[str], formula_idx: int
+) -> tuple[int, int]:
+    """× 로 끝나는 수식 줄의 블록 확장 (리스트 마커 무시, 빈줄 1개 건너뜀).
+
+    일반 `_expand_formula_block`과 달리 리스트/헤딩 마커(-·#*)를 제거한 뒤
+    구조적 줄 여부를 판단하고, 분모 방향으로 빈줄 1개를 건너뜁니다.
+
+    Args:
+        lines: 전체 줄 리스트
+        formula_idx: 수식이 있는 줄 인덱스
+
+    Returns:
+        (블록_시작_인덱스, 블록_끝_인덱스) 튜플
+    """
+    start = formula_idx
+    end = formula_idx
+
+    # 위로 확장 (분자) - 리스트 마커 제거 후 판단
+    for j in range(formula_idx - 1, max(formula_idx - 4, -1), -1):
+        stripped = lines[j].strip()
+        if not stripped:
+            break
+        cleaned = re.sub(r"^[#·\-*\s]+", "", stripped)
+        if cleaned and len(cleaned) < 50 and "=" not in cleaned and ":" not in cleaned:
+            start = j
+        else:
+            break
+
+    # 아래로 확장 (분모) - 빈줄 1개 건너뜀 허용
+    skipped_empty = 0
+    for j in range(formula_idx + 1, min(formula_idx + 5, len(lines))):
+        stripped = lines[j].strip()
+        if not stripped:
+            skipped_empty += 1
+            if skipped_empty > 1:
+                break
+            continue
+        cleaned = re.sub(r"^[#·\-*\s]+", "", stripped)
+        if cleaned and len(cleaned) < 50 and "=" not in cleaned and ":" not in cleaned:
+            end = j
+        else:
+            break
+
+    return start, end
+
+
+def replace_formulas_with_gpt4o(
+    upstage_content: str, gpt4o_formulas: list[str]
+) -> str:
+    """Upstage 콘텐츠의 깨진 수식 블록을 GPT-4o 수식으로 교체합니다.
+
+    Strategy B: 수식 부분만 교체하고 나머지 구조(테이블, 헤딩)는 Upstage 유지.
+
+    Args:
+        upstage_content: Upstage OCR로 추출한 페이지 콘텐츠
+        gpt4o_formulas: 해당 페이지의 GPT-4o 수식 라인 리스트
+
+    Returns:
+        수식이 교체된 콘텐츠
+    """
+    if not gpt4o_formulas:
+        return upstage_content
+
+    # GPT-4o 수식을 키(수식명)별로 인덱싱 (동일 키 복수 수식 지원)
+    gpt4o_by_key: dict[str, list[str]] = {}
+    for formula in gpt4o_formulas:
+        key = _extract_formula_key(formula)
+        if key:
+            normalized = re.sub(r"\s+", "", key)
+            gpt4o_by_key.setdefault(normalized, []).append(formula)
+
+    if not gpt4o_by_key:
+        return upstage_content
+
+    lines = upstage_content.split("\n")
+    result: list[str] = []
+    skip_until = -1
+
+    for i, line in enumerate(lines):
+        if i < skip_until:
+            continue
+
+        stripped = line.strip()
+
+        # 테이블 행은 그대로 유지
+        if stripped.startswith("|"):
+            result.append(line)
+            continue
+
+        # Upstage에서 깨진 수식 패턴 감지
+        matched_key, block_start, block_end = _find_broken_formula(
+            lines, i, gpt4o_by_key,
+        )
+
+        if matched_key and gpt4o_by_key.get(matched_key):
+            # 동일 키에 수식이 여러 개면 콘텐츠 기반으로 최적 매칭
+            best = _pick_best_formula(
+                gpt4o_by_key[matched_key], stripped
+            )
+            # 이전에 이미 추가된 분자 줄 제거 (block_start < i인 경우)
+            lines_to_remove = i - block_start
+            for _ in range(lines_to_remove):
+                if result and not result[-1].strip().startswith("|"):
+                    result.pop()
+
+            result.append(best)
+            gpt4o_by_key[matched_key].remove(best)
+            skip_until = block_end + 1
+        else:
+            result.append(line)
+
+    return "\n".join(result)
+
+
+def _normalize_for_match(text: str) -> str:
+    """라벨 매칭용 문자열 정규화 (공백·마커 제거).
+
+    Args:
+        text: 원본 문자열
+
+    Returns:
+        정규화된 문자열
+    """
+    normalized = re.sub(r"^[\d.)\-·•*#\s]+", "", text.strip())
+    return re.sub(r"\s+", "", normalized)
+
+
+def replace_labeled_formulas(
+    content: str, labeled_formulas: list[tuple[str, str]]
+) -> str:
+    """라벨 기반으로 Upstage 콘텐츠의 깨진 수식 블록을 GPT-4o 수식으로 교체합니다.
+
+    각 (label, formula) 쌍에 대해:
+    1. Upstage content에서 label 텍스트 위치 찾기
+    2. label 다음 줄부터 다음 구조적 줄까지를 garbled block으로 식별
+    3. garbled block을 GPT-4o formula로 교체
+
+    Args:
+        content: Upstage OCR 콘텐츠
+        labeled_formulas: (label_text, formula_line) 쌍 리스트
+
+    Returns:
+        수식이 교체된 콘텐츠
+    """
+    if not labeled_formulas:
+        return content
+
+    lines = content.split("\n")
+
+    for label, formula in labeled_formulas:
+        label_norm = _normalize_for_match(label)
+        if not label_norm:
+            continue
+
+        # Upstage 줄에서 라벨 위치 찾기
+        match_idx = -1
+        for i, line in enumerate(lines):
+            line_norm = _normalize_for_match(line)
+            if label_norm in line_norm or line_norm in label_norm:
+                # 이미 정상 수식이 있으면 스킵
+                if any(op in line for op in ["×", "÷"]):
+                    continue
+                match_idx = i
+                break
+
+        if match_idx < 0:
+            continue
+
+        # 라벨 다음 줄부터 garbled block 범위 식별
+        block_start = match_idx + 1
+        block_end = block_start
+
+        for j in range(block_start, min(block_start + 10, len(lines))):
+            stripped = lines[j].strip()
+            if not stripped:
+                # 빈줄이 연속 2개면 블록 종료
+                if j + 1 < len(lines) and not lines[j + 1].strip():
+                    break
+                continue
+            # 헤딩이면 블록 종료
+            if stripped.startswith("#"):
+                break
+            # 새로운 번호 항목이면 블록 종료
+            if re.match(r"^\d+\.\s", stripped):
+                break
+            # 테이블 행(|)은 garbled block의 일부로 포함
+            block_end = j
+
+        if block_start > block_end:
+            continue
+
+        # garbled block을 GPT-4o formula로 교체
+        lines[block_start] = formula
+        for j in range(block_start + 1, block_end + 1):
+            lines[j] = ""
+
+    # 연속 빈줄 정리
+    result: list[str] = []
+    prev_empty = False
+    for line in lines:
+        is_empty = not line.strip()
+        if is_empty and prev_empty:
+            continue
+        result.append(line)
+        prev_empty = is_empty
+
+    return "\n".join(result)
+
+
+def _find_broken_formula(
+    lines: list[str],
+    current_idx: int,
+    gpt4o_keys: dict[str, list[str]],
+) -> tuple[str | None, int, int]:
+    """현재 줄이 깨진 수식 블록의 일부인지 확인하고 매칭되는 GPT-4o 키를 반환합니다.
+
+    Args:
+        lines: 전체 줄 리스트
+        current_idx: 현재 줄 인덱스
+        gpt4o_keys: GPT-4o 수식 키 → 수식 리스트 딕셔너리
+
+    Returns:
+        (매칭된_키 또는 None, 블록_시작_인덱스, 블록_끝_인덱스)
+    """
+    stripped = lines[current_idx].strip()
+
+    def _key_available(normalized: str) -> bool:
+        return bool(gpt4o_keys.get(normalized))
+
+    # Pattern A: × × (이중 곱셈 → 분수 위치)
+    if "=" in stripped and re.search(r"×\s*×", stripped):
+        key = _extract_formula_key(stripped)
+        normalized = re.sub(r"\s+", "", key)
+        if _key_available(normalized):
+            start, end = _expand_formula_block(lines, current_idx)
+            return normalized, start, end
+
+    # Pattern B: = × 로 끝나는 줄
+    if re.match(r".+=\s*×\s*$", stripped):
+        key = _extract_formula_key(stripped)
+        normalized = re.sub(r"\s+", "", key)
+        if _key_available(normalized):
+            start, end = _expand_formula_block(lines, current_idx)
+            return normalized, start, end
+
+    # Pattern C: (텍스트 ) + × (괄호 안 분수)
+    if re.search(r"\([^)]+\s+\)\s*$", stripped) and "×" in stripped and "=" in stripped:
+        key = _extract_formula_key(stripped)
+        normalized = re.sub(r"\s+", "", key)
+        if _key_available(normalized):
+            start, end = _expand_formula_block(lines, current_idx)
+            return normalized, start, end
+
+    # Pattern E: 줄이 × 로 끝남 (분수 깨짐의 확실한 신호)
+    # 리스트/헤딩 마커(-·#*)가 있어도 감지, 관대한 블록 확장 사용
+    if "=" in stripped and stripped.rstrip().endswith("×"):
+        if not stripped.startswith("|"):
+            key = _extract_formula_key(stripped)
+            normalized = re.sub(r"\s+", "", key)
+            if _key_available(normalized):
+                start, end = _expand_formula_block_lenient(
+                    lines, current_idx
+                )
+                return normalized, start, end
+
+    # Pattern D: = 포함 + 수학 연산자 포함 (일반적 깨진 수식)
+    if "=" in stripped and any(op in stripped for op in ["×", "÷"]):
+        if not stripped.startswith("|"):
+            key = _extract_formula_key(stripped)
+            normalized = re.sub(r"\s+", "", key)
+            if _key_available(normalized):
+                # 위/아래에 분리된 분자/분모가 있는지 확인
+                has_split = False
+                if current_idx > 0:
+                    prev = lines[current_idx - 1].strip()
+                    if prev and not _is_structural_line(lines[current_idx - 1]) and "=" not in prev:
+                        has_split = True
+                if current_idx + 1 < len(lines):
+                    next_s = lines[current_idx + 1].strip()
+                    if next_s and not _is_structural_line(lines[current_idx + 1]) and "=" not in next_s:
+                        has_split = True
+
+                if has_split:
+                    start, end = _expand_formula_block(lines, current_idx)
+                    return normalized, start, end
+
+    return None, current_idx, current_idx
+
+
+def _expand_formula_block(
+    lines: list[str], formula_idx: int
+) -> tuple[int, int]:
+    """수식 줄을 기준으로 위(분자)/아래(분모)로 확장하여 블록 범위를 반환합니다.
+
+    Args:
+        lines: 전체 줄 리스트
+        formula_idx: 수식이 있는 줄 인덱스
+
+    Returns:
+        (블록_시작_인덱스, 블록_끝_인덱스) 튜플
+    """
+    start = formula_idx
+    end = formula_idx
+
+    # 위로 확장 (분자)
+    for j in range(formula_idx - 1, max(formula_idx - 4, -1), -1):
+        prev = lines[j].strip()
+        if not prev:
+            break
+        if _is_structural_line(lines[j]) or "=" in prev:
+            break
+        start = j
+
+    # 아래로 확장 (분모)
+    for j in range(formula_idx + 1, min(formula_idx + 4, len(lines))):
+        next_s = lines[j].strip()
+        if not next_s:
+            break
+        if _is_structural_line(lines[j]) or "=" in next_s:
+            break
+        end = j
+
+    return start, end
+
+
 def build_documents(
     contents: list[dict[str, str]],
     source_filename: str,
+    gpt4o_raw_pages: dict[int, str] | None = None,
 ) -> list[dict[str, Any]]:
     """추출된 콘텐츠를 통합 스키마 문서로 변환합니다.
 
     Args:
         contents: [{"page": int, "title": str, "content": str}, ...]
         source_filename: 원본 파일명
+        gpt4o_raw_pages: 수식이 있는 페이지의 GPT-4o 전체 콘텐츠
 
     Returns:
         통합 스키마 문서 리스트
@@ -803,22 +1310,29 @@ def build_documents(
     documents = []
 
     for idx, item in enumerate(contents, 1):
-        processed_content = flatten_html_tables(item["content"])
-        processed_content = flatten_markdown_multi_headers(processed_content)
-        processed_content = fix_text_fractions(processed_content)
-        processed_content = fix_broken_fractions(processed_content)
+        page = item.get("page", 0)
+
+        # 수식 페이지는 GPT-4o raw content 전체를 사용
+        if gpt4o_raw_pages and page in gpt4o_raw_pages:
+            processed_content = gpt4o_raw_pages[page]
+        else:
+            processed_content = flatten_html_tables(item["content"])
+            processed_content = flatten_markdown_multi_headers(processed_content)
+            processed_content = fix_text_fractions(processed_content)
+            processed_content = fix_broken_fractions(processed_content)
+
         processed_content = remove_garbled_latex(
             processed_content, item.get("text_content", "")
         )
         processed_content = move_references_to_end(processed_content)
         doc = {
-            "id": f"TAX_SUPPORT_{idx:03d}",
-            "type": "tax",
-            "domain": "tax",
+            "id": f"TAX_GUIDE_{idx:03d}",
+            "type": "guide",
+            "domain": "finance_tax",
             "title": "2025 중소기업세제 세정지원 제도",
             "content": processed_content,
             "source": {
-                "name": "중소기업 세제·세정지원 제도",
+                "name": "국세청 중소기업 세제·세정지원 제도",
                 "url": "",
                 "collected_at": collected_at,
             },
@@ -826,7 +1340,7 @@ def build_documents(
             "metadata": {
                 "category": "세무 가이드",
                 "chapter": "세제·세정지원",
-                "page": item.get("page", 0),
+                "page": page,
                 "source_file": source_filename,
             },
         }
@@ -999,7 +1513,116 @@ def reprocess_from_raw(output_dir: str) -> list[dict[str, Any]]:
     return documents
 
 
-def main():
+def _extract_upstage_contents(results: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Upstage raw JSON 배치 결과에서 페이지별 콘텐츠를 추출합니다.
+
+    페이지 번호를 배치 오프셋 기반 실제 PDF 페이지 번호로 변환합니다.
+
+    Args:
+        results: Upstage API 배치 결과 리스트
+
+    Returns:
+        [{"page": int, "title": str, "content": str, "text_content": str}, ...]
+    """
+    all_contents: list[dict[str, str]] = []
+
+    for batch_result in results:
+        batch_start = batch_result.get("_batch_start", 0)
+        elements = batch_result.get("elements", [])
+
+        if elements:
+            page_md: dict[int, list[str]] = {}
+            page_txt: dict[int, list[str]] = {}
+            for elem in elements:
+                cat = elem.get("category", "")
+                if cat == "figure":
+                    continue
+                local_page = elem.get("page", 1)
+                # 배치 내 로컬 페이지 → 실제 PDF 페이지 번호로 변환
+                actual_page = batch_start + local_page
+                md = elem.get("content", {}).get("markdown", "")
+                txt = elem.get("content", {}).get("text", "")
+                if cat == "equation" and txt.strip():
+                    md = txt
+                if md.strip():
+                    page_md.setdefault(actual_page, []).append(md)
+                if txt.strip():
+                    page_txt.setdefault(actual_page, []).append(txt)
+
+            for page_num in sorted(page_md.keys()):
+                combined = "\n\n".join(page_md[page_num])
+                combined_text = "\n\n".join(page_txt.get(page_num, []))
+                if len(combined) > 50:
+                    lines = combined.strip().split("\n")
+                    title = (
+                        lines[0].strip()[:100]
+                        if lines
+                        else f"세무 지원 제도 - 페이지 {page_num}"
+                    )
+                    all_contents.append({
+                        "page": page_num,
+                        "title": title,
+                        "content": combined,
+                        "text_content": combined_text,
+                    })
+        else:
+            md = extract_content_from_result(batch_result, "markdown")
+            if md and len(md.strip()) > 50:
+                all_contents.append({
+                    "page": batch_start + 1,
+                    "title": f"세무 지원 제도 - 페이지 {batch_start + 1}-{batch_result.get('_batch_end', '')}",
+                    "content": md,
+                })
+
+    return all_contents
+
+
+def reprocess_hybrid(output_dir: str) -> list[dict[str, Any]]:
+    """Upstage OCR 구조 + GPT-4o 수식을 병합하여 JSONL을 생성합니다.
+
+    Strategy B: 수식 페이지에서 수식 부분만 GPT-4o로 교체하고
+    나머지 구조(테이블, 헤딩)는 Upstage를 유지합니다.
+
+    Args:
+        output_dir: raw JSON 파일들이 위치한 디렉토리
+
+    Returns:
+        통합 스키마 문서 리스트
+    """
+    # 1. Upstage raw JSON 로드
+    raw_path = os.path.join(
+        output_dir, "2025 중소기업세제 세정지원 제도_upstage_raw.json"
+    )
+    if not os.path.exists(raw_path):
+        print(f"  ERROR: Upstage raw JSON 없음: {raw_path}")
+        return []
+
+    print(f"  Upstage raw JSON 로드: {raw_path}")
+    with open(raw_path, encoding="utf-8") as f:
+        upstage_results = json.load(f)
+
+    # 2. GPT-4o 수식 로드 (raw content만 사용)
+    _, _, gpt4o_raw = load_gpt4o_formulas(output_dir)
+
+    # 3. Upstage 콘텐츠 추출 (실제 PDF 페이지 번호 사용)
+    all_contents = _extract_upstage_contents(upstage_results)
+    print(f"  Upstage 페이지별 콘텐츠: {len(all_contents)}건")
+
+    # 4. 수식 페이지 현황 출력
+    content_page_set = {item["page"] for item in all_contents}
+    raw_matched = set(gpt4o_raw.keys()) & content_page_set
+    print(f"  GPT-4o raw 교체 대상 페이지: {len(raw_matched)}개 {sorted(raw_matched)}")
+
+    # 5. build_documents에 GPT-4o raw content 전달
+    documents = build_documents(
+        all_contents,
+        "2025 중소기업세제 세정지원 제도.pdf",
+        gpt4o_raw_pages=gpt4o_raw,
+    )
+    return documents
+
+
+def main() -> None:
     """메인 실행 함수"""
     import argparse
 
@@ -1009,9 +1632,30 @@ def main():
         action="store_true",
         help="저장된 raw JSON에서 JSONL 재생성 (API 재호출 없음)",
     )
+    parser.add_argument(
+        "--hybrid",
+        action="store_true",
+        help="Upstage OCR + GPT-4o 수식 병합 모드 (API 재호출 없음)",
+    )
     args = parser.parse_args()
 
     output_dir = str(PROJECT_ROOT / "data" / "preprocessed" / "finance")
+
+    if args.hybrid:
+        print("=" * 60)
+        print("세무 지원 제도 - 하이브리드 모드 (Upstage + GPT-4o 수식)")
+        print("=" * 60)
+
+        documents = reprocess_hybrid(output_dir)
+        if documents:
+            jsonl_path = os.path.join(output_dir, "tax_support.jsonl")
+            save_jsonl(documents, jsonl_path)
+            print(f"\n{'=' * 60}")
+            print(f"완료! 총 {len(documents)}건 (하이브리드)")
+            print(f"{'=' * 60}")
+        else:
+            print("\n처리할 데이터가 없습니다.")
+        return
 
     if args.reprocess:
         print("=" * 60)
