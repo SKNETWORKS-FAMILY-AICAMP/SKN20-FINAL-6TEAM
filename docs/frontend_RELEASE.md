@@ -1,5 +1,13 @@
 # Release Notes
 
+## [2026-02-11] - Google OAuth2 로그인 구현
+
+### Features
+- `@react-oauth/google` 라이브러리 도입, Google 로그인 UI 교체
+- `GoogleOAuthProvider`로 App 전체 감싸기
+- `LoginPage`: 테스트 로그인 → 실제 Google 로그인 버튼으로 전환
+- Vite 설정: `.env`에서 `GOOGLE_CLIENT_ID` 자동 로드
+
 ## [2026-02-09] - 법률 에이전트 태그 및 복합 도메인 UI
 
 ### Features

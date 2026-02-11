@@ -1,5 +1,14 @@
 # Release Notes
 
+## [2026-02-11] - Google OAuth2 로그인 구현
+
+### Features
+- Google ID Token 검증 + 자동 회원가입/로그인 API (`POST /auth/google`)
+- `backend/apps/auth/services.py` 신규 추가 (Google token 검증 서비스)
+- `GoogleLoginRequest` 스키마 추가
+- `google-auth`, `requests` 의존성 추가
+- `user.birth` 컬럼 `NOT NULL` → `DEFAULT NULL` 변경
+
 ## [2026-02-09] - 법률 도메인 스키마 추가 및 프로젝트 정리
 
 ### Features
