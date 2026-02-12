@@ -1,6 +1,7 @@
 .env
 __pycache__
 .pytest_cache
+settings.local.json
 
 # =============================================
 # Windows 특수 파일
