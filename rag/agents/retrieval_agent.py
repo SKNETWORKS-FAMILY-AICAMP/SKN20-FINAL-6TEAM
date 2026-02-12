@@ -471,9 +471,9 @@ class GraduatedRetryHandler:
         use_hybrid: bool | None = None,
     ) -> tuple[list[Document], str]:
         """도메인별 Multi-Query 검색 공통 헬퍼."""
-        from utils.query import MultiQueryRetriever
+        from utils.query import get_multi_query_retriever
 
-        multi_retriever = MultiQueryRetriever(self.rag_chain)
+        multi_retriever = get_multi_query_retriever(self.rag_chain)
         return multi_retriever.retrieve(
             query=query,
             domain=domain,
@@ -492,7 +492,7 @@ class GraduatedRetryHandler:
         ctx: RetryContext,
     ) -> RetrievalResult:
         """Level 1: 파라미터 완화 + K 증가."""
-        from utils.retrieval_evaluator import RuleBasedRetrievalEvaluator
+        from utils.retrieval_evaluator import get_retrieval_evaluator
 
         logger.info("[재시도] Level 1 (RELAX_PARAMS): %s", domain)
         ctx.level = RetryLevel.RELAX_PARAMS
@@ -510,19 +510,13 @@ class GraduatedRetryHandler:
                 )
                 scores = [doc.metadata.get("score", 0.0) for doc in documents]
 
-                # 완화된 기준으로 평가
-                evaluator = RuleBasedRetrievalEvaluator()
-                orig_keyword = evaluator.min_keyword_match_ratio
-                orig_similarity = evaluator.min_avg_similarity
-
-                evaluator.min_keyword_match_ratio = max(0.15, orig_keyword - 0.15)
-                evaluator.min_avg_similarity = max(0.35, orig_similarity - 0.15)
-
-                evaluation = evaluator.evaluate(query, documents, scores)
-
-                # 원래 기준 복원
-                evaluator.min_keyword_match_ratio = orig_keyword
-                evaluator.min_avg_similarity = orig_similarity
+                # 완화된 기준으로 평가 (override 파라미터로 thread-safe)
+                evaluator = get_retrieval_evaluator()
+                evaluation = evaluator.evaluate(
+                    query, documents, scores,
+                    min_keyword_override=max(0.15, evaluator.min_keyword_match_ratio - 0.15),
+                    min_similarity_override=max(0.35, evaluator.min_avg_similarity - 0.15),
+                )
 
                 new_result = RetrievalResult(
                     documents=documents,
@@ -557,7 +551,7 @@ class GraduatedRetryHandler:
         ctx: RetryContext,
     ) -> RetrievalResult:
         """Level 2: Multi-Query 재검색."""
-        from utils.retrieval_evaluator import RuleBasedRetrievalEvaluator
+        from utils.retrieval_evaluator import get_retrieval_evaluator
 
         logger.info("[재시도] Level 2 (MULTI_QUERY): %s", domain)
         ctx.level = RetryLevel.MULTI_QUERY
@@ -572,7 +566,7 @@ class GraduatedRetryHandler:
             )
             scores = [doc.metadata.get("score", 0.0) for doc in documents]
 
-            evaluator = RuleBasedRetrievalEvaluator()
+            evaluator = get_retrieval_evaluator()
             evaluation = evaluator.evaluate(query, documents, scores)
 
             new_result = RetrievalResult(
@@ -606,7 +600,7 @@ class GraduatedRetryHandler:
         ctx: RetryContext,
     ) -> RetrievalResult:
         """Level 3: 인접 도메인 검색."""
-        from utils.retrieval_evaluator import RuleBasedRetrievalEvaluator
+        from utils.retrieval_evaluator import get_retrieval_evaluator
 
         adjacent = ADJACENT_DOMAINS.get(domain, [])
         if not adjacent:
@@ -644,7 +638,7 @@ class GraduatedRetryHandler:
 
         if len(combined_docs) > len(result.documents):
             scores = [doc.metadata.get("score", 0.0) for doc in combined_docs]
-            evaluator = RuleBasedRetrievalEvaluator()
+            evaluator = get_retrieval_evaluator()
             evaluation = evaluator.evaluate(query, combined_docs, scores)
 
             return RetrievalResult(
@@ -760,149 +754,7 @@ class RetrievalAgent:
         self.retry_handler = GraduatedRetryHandler(agents, rag_chain)
         self.merger = DocumentMerger()
 
-    # ----- 메인 엔트리포인트 (동기) ----------------------------------------
-
-    def retrieve(self, state: dict) -> dict:
-        """동기 검색 오케스트레이션.
-
-        Args:
-            state: RouterState dict
-
-        Returns:
-            업데이트된 RouterState dict
-        """
-        start = time.time()
-        sub_queries: list = state["sub_queries"]
-        query: str = state["query"]
-        domains: list[str] = state["domains"]
-
-        # 1. 쿼리 분석
-        query_chars = self.strategy_selector.analyze(query, domains)
-        logger.info(
-            "[RetrievalAgent] 쿼리 분석: mode=%s, K=%d, length=%d",
-            query_chars.recommended_mode.value,
-            query_chars.recommended_k,
-            query_chars.length,
-        )
-
-        # 2. 예산 할당
-        budgets = self.budget_calculator.calculate(
-            domains=domains,
-            query_chars=query_chars,
-            max_total=self.settings.max_retrieval_docs,
-            primary_ratio=self.settings.primary_domain_budget_ratio,
-        )
-        logger.info(
-            "[RetrievalAgent] 예산 할당: %s",
-            {d: b.allocated_k for d, b in budgets.items()},
-        )
-
-        # 3. 도메인별 검색
-        retrieval_results: dict[str, RetrievalResult] = {}
-        all_documents: list[Document] = []
-        agent_timings: list[dict] = []
-
-        for sq in sub_queries:
-            if sq.domain not in self.agents:
-                continue
-
-            agent = self.agents[sq.domain]
-            budget = budgets.get(sq.domain)
-            k_value = budget.allocated_k if budget else self.settings.retrieval_k
-
-            logger.info("[RetrievalAgent] 에이전트 [%s] 검색 시작 (K=%d)", sq.domain, k_value)
-            agent_start = time.time()
-
-            # 적응형 검색 모드 적용
-            result = self._retrieve_with_strategy(
-                agent=agent,
-                query=sq.query,
-                domain=sq.domain,
-                k=k_value,
-                query_chars=query_chars,
-            )
-
-            # 평가 실패 시 단계적 재시도
-            if (
-                not result.evaluation.passed
-                and self.settings.enable_graduated_retry
-                and budget
-            ):
-                max_retry = RetryLevel(
-                    min(self.settings.max_retry_level, RetryLevel.PARTIAL_ANSWER.value)
-                )
-                result = self.retry_handler.retry(
-                    query=sq.query,
-                    domain=sq.domain,
-                    current_result=result,
-                    budget=budget,
-                    max_level=max_retry,
-                )
-
-            agent_elapsed = time.time() - agent_start
-            retrieval_results[sq.domain] = result
-            all_documents.extend(result.documents)
-            agent_timings.append({
-                "domain": sq.domain,
-                "retrieve_time": result.retrieve_time,
-                "doc_count": len(result.documents),
-                "total_time": agent_elapsed,
-            })
-
-            logger.info(
-                "[RetrievalAgent] 에이전트 [%s] 완료: %d건, 평가=%s (%.3fs)",
-                sq.domain,
-                len(result.documents),
-                "PASS" if result.evaluation.passed else "FAIL",
-                agent_elapsed,
-            )
-
-        # 4. 법률 보충 검색
-        self._perform_legal_supplement(
-            query=query,
-            documents=all_documents,
-            domains=domains,
-            retrieval_results=retrieval_results,
-            all_documents=all_documents,
-            agent_timings=agent_timings,
-            sub_queries=sub_queries,
-        )
-
-        # 5. 복합 도메인 문서 병합 (2+ 도메인)
-        if len(retrieval_results) > 1:
-            # supplement 제외한 본 검색 결과만 병합 대상
-            main_results = {
-                d: r for d, r in retrieval_results.items()
-                if d != "law_common_supplement"
-            }
-            if len(main_results) > 1:
-                merged = self._merge_with_optional_rerank(
-                    query=query,
-                    main_results=main_results,
-                    budgets=budgets,
-                )
-                # supplement 문서 뒤에 추가
-                supplement = retrieval_results.get("law_common_supplement")
-                if supplement:
-                    merged.extend(supplement.documents)
-                all_documents = merged
-
-        state["retrieval_results"] = retrieval_results
-        state["documents"] = all_documents
-
-        retrieve_time = time.time() - start
-        state["timing_metrics"]["retrieve_time"] = retrieve_time
-        state["timing_metrics"]["agents"] = agent_timings
-
-        logger.info(
-            "[RetrievalAgent] 전체 완료: %d건, %.3fs",
-            len(all_documents),
-            retrieve_time,
-        )
-
-        return state
-
-    # ----- 메인 엔트리포인트 (비동기) --------------------------------------
+    # ----- 메인 엔트리포인트 ------------------------------------------------
 
     async def aretrieve(self, state: dict) -> dict:
         """비동기 검색 오케스트레이션 (asyncio.gather로 병렬).
@@ -1051,62 +903,6 @@ class RetrievalAgent:
 
     # ----- 내부 헬퍼 -------------------------------------------------------
 
-    def _merge_with_optional_rerank(
-        self,
-        query: str,
-        main_results: dict[str, RetrievalResult],
-        budgets: dict[str, DocumentBudget],
-    ) -> list[Document]:
-        """복합 도메인 병합 후 선택적 cross-domain reranking (동기).
-
-        Args:
-            query: 사용자 질문
-            main_results: supplement 제외 도메인별 검색 결과
-            budgets: 도메인별 문서 할당량
-
-        Returns:
-            병합(+rerank) 된 문서 리스트
-        """
-        if self.settings.enable_cross_domain_rerank:
-            # rerank 후보를 넉넉히 확보
-            candidate_total = sum(
-                b.allocated_k for b in budgets.values()
-                if b.domain in main_results
-            )
-            merged = self.merger.merge_and_prioritize(
-                retrieval_results=main_results,
-                budgets=budgets,
-                max_total=candidate_total,
-            )
-            # 모든 도메인 예산 합계를 final_k로 사용 (max_retrieval_docs로 상한)
-            final_k = min(
-                sum(b.allocated_k for b in budgets.values() if b.domain in main_results),
-                self.settings.max_retrieval_docs,
-            )
-            reranker = self.rag_chain.reranker
-            if reranker and len(merged) > final_k:
-                logger.info(
-                    "[RetrievalAgent] cross-domain rerank: %d건 → %d건",
-                    len(merged),
-                    final_k,
-                )
-                merged = reranker.rerank(query, merged, top_k=final_k)
-            else:
-                if not reranker:
-                    logger.warning(
-                        "[RetrievalAgent] cross-domain rerank 활성화됐지만 "
-                        "reranker 없음 (enable_reranking=False?). 점수순 슬라이스로 대체"
-                    )
-                merged = merged[:final_k]
-            return merged
-
-        # 기존 방식: 우선순위 기반 병합
-        return self.merger.merge_and_prioritize(
-            retrieval_results=main_results,
-            budgets=budgets,
-            max_total=self.settings.max_retrieval_docs,
-        )
-
     async def _amerge_with_optional_rerank(
         self,
         query: str,
@@ -1181,8 +977,8 @@ class RetrievalAgent:
         Returns:
             RetrievalResult
         """
-        from utils.retrieval_evaluator import RuleBasedRetrievalEvaluator
-        from utils.query import MultiQueryRetriever
+        from utils.retrieval_evaluator import get_retrieval_evaluator
+        from utils.query import get_multi_query_retriever
 
         start = time.time()
 
@@ -1197,7 +993,7 @@ class RetrievalAgent:
         use_mmr = mode == SearchMode.MMR_DIVERSE
 
         try:
-            multi_retriever = MultiQueryRetriever(self.rag_chain)
+            multi_retriever = get_multi_query_retriever(self.rag_chain)
             documents, expanded_queries = multi_retriever.retrieve(
                 query=query,
                 domain=domain,
@@ -1213,7 +1009,7 @@ class RetrievalAgent:
 
         scores = [doc.metadata.get("score", 0.0) for doc in documents]
 
-        evaluator = RuleBasedRetrievalEvaluator()
+        evaluator = get_retrieval_evaluator()
         evaluation = evaluator.evaluate(query, documents, scores)
 
         elapsed = time.time() - start

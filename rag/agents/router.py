@@ -426,7 +426,7 @@ class MainRouter:
         Returns:
             최고 점수 답변으로 교체된 라우터 상태
         """
-        from utils.query import MultiQueryRetriever
+        from utils.query import get_multi_query_retriever
 
         start = time.time()
         state["retry_count"] = state.get("retry_count", 0) + 1
@@ -448,7 +448,7 @@ class MainRouter:
         )
 
         # 대체 쿼리 생성
-        multi_query_retriever = MultiQueryRetriever(self.rag_chain)
+        multi_query_retriever = get_multi_query_retriever(self.rag_chain)
         all_queries = await asyncio.to_thread(
             multi_query_retriever._generate_queries, query
         )

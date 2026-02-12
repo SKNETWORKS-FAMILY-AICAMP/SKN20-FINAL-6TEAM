@@ -111,6 +111,9 @@ class RuleBasedRetrievalEvaluator:
         query: str,
         documents: list[Document],
         scores: list[float] | None = None,
+        *,
+        min_keyword_override: float | None = None,
+        min_similarity_override: float | None = None,
     ) -> RetrievalEvaluationResult:
         """검색 결과를 평가합니다.
 
@@ -118,10 +121,15 @@ class RuleBasedRetrievalEvaluator:
             query: 사용자 질문
             documents: 검색된 문서 리스트
             scores: 유사도 점수 리스트 (없으면 메타데이터에서 추출)
+            min_keyword_override: 최소 키워드 매칭 비율 override (None이면 기본값 사용)
+            min_similarity_override: 최소 유사도 점수 override (None이면 기본값 사용)
 
         Returns:
             검색 평가 결과
         """
+        min_keyword = min_keyword_override if min_keyword_override is not None else self.min_keyword_match_ratio
+        min_similarity = min_similarity_override if min_similarity_override is not None else self.min_avg_similarity
+
         doc_count = len(documents)
         reasons = []
 
@@ -133,9 +141,9 @@ class RuleBasedRetrievalEvaluator:
         keyword_ratio, matched, all_keywords = self._calculate_keyword_match_ratio(
             query, documents
         )
-        if keyword_ratio < self.min_keyword_match_ratio:
+        if keyword_ratio < min_keyword:
             reasons.append(
-                f"키워드 매칭 부족 ({keyword_ratio:.1%} < {self.min_keyword_match_ratio:.1%})"
+                f"키워드 매칭 부족 ({keyword_ratio:.1%} < {min_keyword:.1%})"
             )
 
         # 3. 유사도 점수 체크
@@ -169,9 +177,9 @@ class RuleBasedRetrievalEvaluator:
             if quality_score_source == "legacy_score" and avg_similarity > 1.0:
                 avg_similarity = max(0, 1 - avg_similarity / 2)
 
-            if avg_similarity < self.min_avg_similarity:
+            if avg_similarity < min_similarity:
                 reasons.append(
-                    f"유사도 점수 낮음 ({avg_similarity:.2f} < {self.min_avg_similarity})"
+                    f"유사도 점수 낮음 ({avg_similarity:.2f} < {min_similarity})"
                 )
         else:
             # score가 전혀 없으면 유사도 체크 스킵

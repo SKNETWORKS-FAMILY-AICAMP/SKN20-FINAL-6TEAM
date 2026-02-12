@@ -1,7 +1,7 @@
 ---
 name: rag-specialist
 description: "LangChain/LangGraph 기반 RAG 개발 전문가. 에이전트 구현, 프롬프트 설계, 벡터DB 관리 시 사용. Use this agent when working on RAG pipelines, LangChain agents, prompt engineering, or ChromaDB vector operations.\n\n<example>\nContext: User wants to create a new RAG agent.\nuser: \"RAG 에이전트 구현해줘\" or \"새로운 도메인 에이전트 만들어줘\"\nassistant: \"I'll use the rag-specialist agent to implement the new domain agent with proper RAG chain and vector search.\"\n</example>\n\n<example>\nContext: User needs to work on vector database.\nuser: \"벡터DB 관련 작업\" or \"임베딩 설정 변경\"\nassistant: \"I'll use the rag-specialist agent to handle the vector database configuration.\"\n</example>\n\n<example>\nContext: User wants to improve RAG quality.\nuser: \"RAG 답변 품질을 개선해줘\"\nassistant: \"I'll use the rag-specialist agent to optimize the retrieval and prompt engineering.\"\n</example>"
-model: sonnet
+model: opus
 color: purple
 ---
 

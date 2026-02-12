@@ -234,9 +234,9 @@ class BaseAgent(ABC):
         Returns:
             검색된 문서 리스트
         """
-        from utils.query import MultiQueryRetriever
+        from utils.query import get_multi_query_retriever
 
-        multi_query_retriever = MultiQueryRetriever(self.rag_chain)
+        multi_query_retriever = get_multi_query_retriever(self.rag_chain)
         documents, _ = multi_query_retriever.retrieve(
             query=query,
             domain=self.domain,
@@ -264,7 +264,7 @@ class BaseAgent(ABC):
         Returns:
             RetrievalResult (문서, 점수, 평가 결과 포함)
         """
-        from utils.retrieval_evaluator import RuleBasedRetrievalEvaluator
+        from utils.retrieval_evaluator import get_retrieval_evaluator
 
         logger.info("[retrieve_only] %s 검색 시작: '%s'", self.domain, query[:50])
         start = time.time()
@@ -272,9 +272,9 @@ class BaseAgent(ABC):
         # Multi-Query 검색 (항상 기본 경로)
         rewritten_query: str | None = None
         try:
-            from utils.query import MultiQueryRetriever
+            from utils.query import get_multi_query_retriever
 
-            multi_query_retriever = MultiQueryRetriever(self.rag_chain)
+            multi_query_retriever = get_multi_query_retriever(self.rag_chain)
             documents, rewritten_query = multi_query_retriever.retrieve(
                 query=query,
                 domain=self.domain,
@@ -290,7 +290,7 @@ class BaseAgent(ABC):
         scores = [doc.metadata.get("score", 0.0) for doc in documents]
 
         # 규칙 기반 평가
-        evaluator = RuleBasedRetrievalEvaluator()
+        evaluator = get_retrieval_evaluator()
         evaluation = evaluator.evaluate(query, documents, scores)
 
         elapsed = time.time() - start

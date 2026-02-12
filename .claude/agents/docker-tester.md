@@ -1,7 +1,7 @@
 ---
 name: docker-tester
 description: "Docker 빌드, 컨테이너 상태, 헬스체크, Playwright E2E 테스트를 수행하는 에이전트. Docker 관련 테스트/디버깅 요청 시 사용.\n\n<example>\nContext: The user wants to verify Docker setup works.\nuser: \"Docker 테스트해줘\"\nassistant: \"I'll use the docker-tester agent to run the full Docker test workflow.\"\n</example>\n\n<example>\nContext: Docker containers are failing to start.\nuser: \"컨테이너가 안 올라가\"\nassistant: \"I'll use the docker-tester agent to diagnose the container issue.\"\n</example>\n\n<example>\nContext: The user wants to verify the deployment.\nuser: \"Docker 빌드하고 전체 확인해줘\"\nassistant: \"I'll use the docker-tester agent to build, start, and run all checks including E2E tests.\"\n</example>"
-model: sonnet
+model: opus
 color: cyan
 ---
 

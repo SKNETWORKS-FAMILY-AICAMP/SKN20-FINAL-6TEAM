@@ -569,13 +569,13 @@ class TestGraduatedRetryHandler:
         result = _make_result(passed=False)
         budget = DocumentBudget("finance_tax", 5, True, 1)
 
-        with patch("utils.query.MultiQueryRetriever") as mock_mq_cls:
+        with patch("utils.query.get_multi_query_retriever") as mock_mq_fn:
             mock_mq = MagicMock()
             mock_mq.retrieve.return_value = (
                 [_make_doc(f"재검색 문서 {i}", 0.8) for i in range(6)],
                 "확장 쿼리",
             )
-            mock_mq_cls.return_value = mock_mq
+            mock_mq_fn.return_value = mock_mq
 
             handler.retry(
                 "테스트 쿼리",
@@ -601,13 +601,13 @@ class TestGraduatedRetryHandler:
         result = _make_result(passed=False)
         budget = DocumentBudget("finance_tax", 5, True, 1)
 
-        with patch("utils.query.MultiQueryRetriever") as mock_mq_cls:
+        with patch("utils.query.get_multi_query_retriever") as mock_mq_fn:
             mock_mq = MagicMock()
             mock_mq.retrieve.return_value = (
                 [_make_doc("MQ 결과", 0.8)],
                 "재작성된 쿼리",
             )
-            mock_mq_cls.return_value = mock_mq
+            mock_mq_fn.return_value = mock_mq
 
             handler.retry(
                 "테스트 쿼리",
@@ -617,7 +617,7 @@ class TestGraduatedRetryHandler:
                 max_level=RetryLevel.MULTI_QUERY,
             )
 
-            # Level 1(RELAX_PARAMS)과 Level 2(MULTI_QUERY) 모두 MultiQueryRetriever 사용
+            # Level 1(RELAX_PARAMS)과 Level 2(MULTI_QUERY) 모두 get_multi_query_retriever 사용
             assert mock_mq.retrieve.call_count >= 1
 
     @patch("agents.retrieval_agent.get_settings")
@@ -633,14 +633,14 @@ class TestGraduatedRetryHandler:
         )
         budget = DocumentBudget("hr_labor", 5, True, 1)
 
-        with patch("utils.query.MultiQueryRetriever") as mock_mq_cls:
+        with patch("utils.query.get_multi_query_retriever") as mock_mq_fn:
             mock_mq = MagicMock()
             mock_mq.retrieve.side_effect = [
                 ([], "L1"),  # Level 1
                 ([], "L2"),  # Level 2
                 ([_make_doc("인접 도메인 결과", 0.7)], "L3"),  # Level 3
             ]
-            mock_mq_cls.return_value = mock_mq
+            mock_mq_fn.return_value = mock_mq
 
             output = handler.retry(
                 "근로 관련 질문",

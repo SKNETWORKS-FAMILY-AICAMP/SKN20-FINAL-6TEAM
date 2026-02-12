@@ -42,13 +42,13 @@ class TestRAGChainRetrieve:
 
     def test_retrieve_default(self, rag_chain, mock_vector_store):
         """기본 검색 테스트."""
-        with patch("utils.query.MultiQueryRetriever") as mock_mq_cls:
+        with patch("utils.query.get_multi_query_retriever") as mock_mq_fn:
             mock_mq = MagicMock()
             mock_mq.retrieve.return_value = (
                 [Document(page_content="MQ 결과", metadata={"score": 0.9})],
                 "확장 쿼리 1 | 확장 쿼리 2",
             )
-            mock_mq_cls.return_value = mock_mq
+            mock_mq_fn.return_value = mock_mq
 
             docs = rag_chain.retrieve(
                 query="테스트 쿼리",

@@ -1,7 +1,7 @@
 ---
 name: fastapi-architect
 description: "FastAPI 백엔드 개발 전문가. 라우터, 서비스, 스키마 구현 시 사용. Use this agent when creating or modifying FastAPI endpoints, services, or Pydantic schemas in the backend.\n\n<example>\nContext: User wants to add a new API endpoint.\nuser: \"API 엔드포인트 만들어줘\" or \"백엔드 기능 구현해줘\"\nassistant: \"I'll use the fastapi-architect agent to create the endpoint with proper router, service, and schema structure.\"\n</example>\n\n<example>\nContext: User needs to modify backend business logic.\nuser: \"기업 프로필 수정 API를 변경해줘\"\nassistant: \"I'll use the fastapi-architect agent to update the companies service and router.\"\n</example>"
-model: sonnet
+model: opus
 color: orange
 ---
 

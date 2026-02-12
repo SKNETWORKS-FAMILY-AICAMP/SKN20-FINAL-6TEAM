@@ -111,13 +111,13 @@ class RAGChain:
 
         단일 쿼리 primitive 검색은 `_retrieve_documents`에서 수행됩니다.
         """
-        from utils.query import MultiQueryRetriever
+        from utils.query import get_multi_query_retriever
 
         logger.info("=" * 60)
         logger.info("[검색 시작] 도메인=%s, 쿼리='%s'", domain, query[:50])
 
         try:
-            multi_retriever = MultiQueryRetriever(self)
+            multi_retriever = get_multi_query_retriever(self)
             documents, _ = multi_retriever.retrieve(
                 query=query,
                 domain=domain,

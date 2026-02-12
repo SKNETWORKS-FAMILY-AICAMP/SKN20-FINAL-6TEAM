@@ -46,7 +46,7 @@
 
 ### P0 (Critical) -- 결과에 직접적 영향
 
-#### P0-1: 벡터 유사도 복합 도메인 탐지 임계값이 고정적 (0.1) (구현)
+#### P0-1: 벡터 유사도 복합 도메인 탐지 임계값이 고정적 (0.1)
 
 **파일**: `rag/utils/domain_classifier.py` L274-278
 
@@ -65,7 +65,7 @@ for domain, score in sorted_domains[1:]:
 
 **근본 원인**: 벡터 유사도만으로 복합 도메인을 탐지하는 구조적 한계. 키워드 매칭 결과를 도메인 리스트 보강에 적극 활용하지 않는다.
 
-#### P0-2: 키워드+벡터 조합 시 도메인 리스트 병합 로직 결함
+#### P0-2: 키워드+벡터 조합 시 도메인 리스트 병합 로직 결함 
 
 **파일**: `rag/utils/domain_classifier.py` L395-416
 
@@ -81,7 +81,7 @@ if vector_result.is_relevant or boosted_confidence >= threshold:
 - 예: 키워드가 [hr_labor, finance_tax, law_common] 3개를 감지했지만, 벡터가 [hr_labor]만 통과하면 최종 결과는 [hr_labor]만 된다.
 - 키워드 결과와 벡터 결과의 **합집합**이 아닌 **택일** 방식으로, 복합 도메인 질문에서 핵심 도메인이 누락된다.
 
-#### P0-3: Cross-Domain Reranking이 문서 수를 주 도메인 K로 축소 (구현)
+#### P0-3: Cross-Domain Reranking이 문서 수를 주 도메인 K로 축소
 
 **파일**: `rag/agents/retrieval_agent.py` L1074-1086
 
@@ -102,7 +102,7 @@ if reranker and len(merged) > final_k:
 
 ### P1 (Important) -- 품질에 유의미한 영향
 
-#### P1-1: 질문 분해(decompose) 시 도메인 간 연결 맥락 유실 (구현)
+#### P1-1: 질문 분해(decompose) 시 도메인 간 연결 맥락 유실
 
 **파일**: `rag/utils/question_decomposer.py`, `rag/utils/prompts.py` L464-519
 
@@ -114,7 +114,7 @@ if reranker and len(merged) > final_k:
   - law_common: "직원 해고 시 법적 절차"
 - 각 하위 질문은 독립적이지만, "퇴직금에 대한 세금"이라는 **도메인 간 연결점**이 명시되지 않아 검색이 일반적인 세금 문서를 가져올 수 있다.
 
-#### P1-2: 법률 보충 검색이 복합 도메인에서 이중 검색 유발 (구현)
+#### P1-2: 법률 보충 검색이 복합 도메인에서 이중 검색 유발
 
 **파일**: `rag/agents/retrieval_agent.py` L1003-1011, `rag/utils/legal_supplement.py` L44-92
 
@@ -128,7 +128,7 @@ if reranker and len(merged) > final_k:
   - 분류가 [hr_labor, finance_tax]로만 됐을 때(P0-1/P0-2 문제로 law_common 누락), 질문에 "법적 절차"라는 법률 키워드가 있어 법률 보충 검색이 트리거된다.
   - 이때 법률 보충은 원본 query 전체("직원 해고 시 퇴직금 세금 처리와 법적 절차는?")로 검색하는데, 이는 법률에 특화된 하위 질문이 아니라 복합 질문 전체이므로 검색 정밀도가 떨어진다.
 
-#### P1-3: 복합 도메인 통합 프롬프트에 하위 질문 정보 미전달 (구현)
+#### P1-3: 복합 도메인 통합 프롬프트에 하위 질문 정보 미전달
 
 **파일**: `rag/agents/generator.py` L624-686, `rag/utils/prompts.py` L562-607
 
@@ -142,7 +142,7 @@ if reranker and len(merged) > final_k:
 - LLM은 각 도메인에 대해 어떤 하위 질문이 분해되었는지 모른 채, 원본 복합 질문과 뒤섞인 문서만 보고 답변을 생성한다.
 - 이로 인해 도메인별 답변 구조가 모호해지고, 특정 도메인의 답변이 누락되거나 불균형해질 수 있다.
 
-#### P1-4: DocumentBudget의 bounded 방식에서 복합 도메인 총 문서량 미제어 (구현)
+#### P1-4: DocumentBudget의 bounded 방식에서 복합 도메인 총 문서량 미제어
 
 **파일**: `rag/agents/retrieval_agent.py` L265-302
 
@@ -162,7 +162,7 @@ def _calculate_bounded(self, domains, recommended_k, retrieval_k):
 - `max_retrieval_docs=10`(기본값)이 있지만 이것은 `_calculate_bounded`에서 참조되지 않는다.
 - LLM 컨텍스트 윈도우에 과도한 문서가 들어가 노이즈가 증가한다.
 
-#### P1-5: 스트리밍 경로에서 복합 도메인 평가(evaluate) 단계 누락 (구현)
+#### P1-5: 스트리밍 경로에서 복합 도메인 평가(evaluate) 단계 누락
 
 **파일**: `rag/agents/router.py` L876-926
 
