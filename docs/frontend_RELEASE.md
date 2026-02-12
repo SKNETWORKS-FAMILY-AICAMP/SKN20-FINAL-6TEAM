@@ -1,5 +1,14 @@
 # Release Notes
 
+## [2026-02-12] - Admin 페이지 분리 및 관리자 로그인
+
+### Features
+- Admin 페이지 분리: `AdminDashboardPage` (통계 + 서버 상태) + `AdminLogPage` (상담 로그)
+- 로그인 페이지에 관리자 로그인 버튼 추가 (`POST /auth/test-login`)
+- Sidebar 관리자 메뉴 2개로 분리 (대시보드, 상담 로그)
+- `ServerStatusResponse`, `ServiceStatus` TypeScript 타입 추가
+- 라우팅 업데이트: `/admin` (대시보드), `/admin/log` (상담 로그)
+
 ## [2026-02-11] - JWT HttpOnly 쿠키 전환 + 보안 강화
 
 ### Security
