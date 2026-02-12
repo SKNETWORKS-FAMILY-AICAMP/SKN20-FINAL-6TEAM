@@ -9,7 +9,8 @@ import {
   MainPage,
   CompanyPage,
   SchedulePage,
-  AdminPage,
+  AdminDashboardPage,
+  AdminLogPage,
   UsageGuidePage,
 } from './pages';
 import { useAuthStore } from './stores/authStore';
@@ -43,7 +44,8 @@ const App: React.FC = () => {
 
               {/* 관리자 전용 */}
               <Route element={<ProtectedRoute requiredTypeCode="U0000001" />}>
-                <Route path="/admin" element={<AdminPage />} />
+                <Route path="/admin" element={<AdminDashboardPage />} />
+                <Route path="/admin/log" element={<AdminLogPage />} />
               </Route>
             </Route>
 

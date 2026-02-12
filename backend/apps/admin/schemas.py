@@ -5,6 +5,24 @@ from datetime import datetime
 from typing import Any
 
 
+class ServiceStatus(BaseModel):
+    """개별 서비스 상태."""
+
+    name: str = Field(description="서비스 이름 (backend/rag/database)")
+    status: str = Field(description="healthy/degraded/unhealthy")
+    response_time_ms: float | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class ServerStatusResponse(BaseModel):
+    """서버 상태 응답."""
+
+    overall_status: str = Field(description="전체 상태 (healthy/degraded/unhealthy)")
+    services: list[ServiceStatus]
+    uptime_seconds: float
+    checked_at: datetime
+
+
 class HistoryListItem(BaseModel):
     """관리자용 상담 이력 목록 항목."""
 

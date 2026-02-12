@@ -11,6 +11,7 @@ from apps.admin.schemas import (
     HistoryListResponse,
     EvaluationStats,
     HistoryFilterParams,
+    ServerStatusResponse,
 )
 from apps.histories.schemas import HistoryDetailResponse
 
@@ -27,6 +28,18 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.type_code != "U0000001":
         raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다")
     return current_user
+
+
+@router.get("/status", response_model=ServerStatusResponse)
+async def get_server_status(
+    service: AdminService = Depends(get_admin_service),
+    _: User = Depends(require_admin),
+) -> ServerStatusResponse:
+    """서버 상태 조회.
+
+    Backend, RAG, Database 상태를 반환합니다.
+    """
+    return await service.get_server_status()
 
 
 @router.get("/histories", response_model=HistoryListResponse)

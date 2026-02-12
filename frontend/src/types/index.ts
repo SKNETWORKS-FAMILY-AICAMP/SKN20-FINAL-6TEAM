@@ -238,6 +238,21 @@ export interface AdminHistoryFilters {
   user_id?: number;
 }
 
+// Server status types
+export interface ServiceStatus {
+  name: string;
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  response_time_ms: number | null;
+  details: Record<string, unknown>;
+}
+
+export interface ServerStatusResponse {
+  overall_status: 'healthy' | 'degraded' | 'unhealthy';
+  services: ServiceStatus[];
+  uptime_seconds: number;
+  checked_at: string;
+}
+
 // Domain names for display
 export const DOMAIN_NAMES: Record<string, string> = {
   startup_funding: '창업/지원',

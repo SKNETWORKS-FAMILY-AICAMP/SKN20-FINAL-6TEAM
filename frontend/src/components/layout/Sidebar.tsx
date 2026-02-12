@@ -20,7 +20,8 @@ import {
   ArrowRightOnRectangleIcon,
   PlusIcon,
   BookOpenIcon,
-  ShieldCheckIcon,
+  ChartBarIcon,
+  ClipboardDocumentListIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/outline';
@@ -32,14 +33,15 @@ import { ChatHistoryPanel } from './ChatHistoryPanel';
 import { ProfileDialog } from '../profile/ProfileDialog';
 
 /** Routes that require authentication to access */
-const AUTH_REQUIRED_PATHS = new Set(['/company', '/schedule', '/admin']);
+const AUTH_REQUIRED_PATHS = new Set(['/company', '/schedule', '/admin', '/admin/log']);
 
 const menuItems = [
   { path: '/', label: '채팅', icon: ChatBubbleLeftRightIcon },
   { path: '/company', label: '기업 정보', icon: BuildingOfficeIcon },
   { path: '/schedule', label: '일정 관리', icon: CalendarDaysIcon },
   { path: '/guide', label: '사용 설명서', icon: BookOpenIcon },
-  { path: '/admin', label: '관리자', icon: ShieldCheckIcon, adminOnly: true },
+  { path: '/admin', label: '대시보드', icon: ChartBarIcon, adminOnly: true },
+  { path: '/admin/log', label: '상담 로그', icon: ClipboardDocumentListIcon, adminOnly: true },
 ];
 
 interface SidebarProps {
