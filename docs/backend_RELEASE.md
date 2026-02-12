@@ -1,5 +1,15 @@
 # Release Notes
 
+## [2026-02-12] - Admin 페이지 분리 및 서버 상태 모니터링
+
+### Features
+- Admin 페이지 분리: `/admin` (대시보드) + `/admin/log` (상담 로그)
+- `GET /admin/status` 엔드포인트 추가 — Backend/RAG/DB 상태 및 응답시간 반환
+- `ServiceStatus`, `ServerStatusResponse` Pydantic 스키마 추가
+- `AdminService.get_server_status()`: DB ping, RAG health check, uptime 측정
+- `httpx` 의존성 추가 (RAG 서비스 비동기 HTTP 호출용)
+- `docker-compose.yaml`에 `ENABLE_TEST_LOGIN` 환경변수 전달 추가
+
 ## [2026-02-11] - AWS RDS 마이그레이션 + Nginx 리버스 프록시 + DB 안전성 강화
 
 ### Infrastructure

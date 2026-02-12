@@ -1,5 +1,14 @@
 # Release Notes
 
+## [2026-02-12] - VectorDB 적재 + 복합 도메인 질의 처리 개선
+
+### Features
+- VectorDB 적재 파이썬 코드 추가
+- 복합 도메인 질의 처리 개선 (P0/P1 8개 항목 구현)
+
+### Chores
+- origin/main과 config.py 충돌 해결
+
 ## [2026-02-12] - RAG 설정 토글 + 청킹 전략 개선
 
 ### Features

@@ -64,6 +64,7 @@ services:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - ENABLE_TEST_LOGIN=${ENABLE_TEST_LOGIN:-false}
     depends_on:
       ssh-tunnel:
         condition: service_healthy

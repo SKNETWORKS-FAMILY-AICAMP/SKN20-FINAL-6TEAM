@@ -4,7 +4,10 @@ import {
   Card,
   CardBody,
   Typography,
+  Button,
+  Spinner,
 } from '@material-tailwind/react';
+import { ShieldCheckIcon } from '@heroicons/react/24/outline';
 import { GoogleLogin, CredentialResponse } from '@react-oauth/google';
 import { useAuthStore } from '../stores/authStore';
 import api from '../lib/api';
@@ -13,6 +16,7 @@ const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
+  const [adminLoading, setAdminLoading] = useState(false);
 
   const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
     setError(null);
@@ -34,6 +38,27 @@ const LoginPage: React.FC = () => {
 
   const handleGoogleError = () => {
     setError('Google 로그인에 실패했습니다. 다시 시도해주세요.');
+  };
+
+  const handleAdminLogin = async () => {
+    setError(null);
+    setAdminLoading(true);
+    try {
+      const response = await api.post('/auth/test-login', {
+        email: 'admin@bizi.com',
+        username: '관리자',
+        type_code: 'U0000001',
+      });
+      const { user } = response.data;
+      login(user);
+      navigate('/admin');
+    } catch (err: unknown) {
+      console.error('Admin login error:', err);
+      const error = err as { response?: { data?: { detail?: string } } };
+      setError(error.response?.data?.detail || '관리자 로그인에 실패했습니다.');
+    } finally {
+      setAdminLoading(false);
+    }
   };
 
   return (
@@ -84,6 +109,32 @@ const LoginPage: React.FC = () => {
               shape="rectangular"
             />
           </div>
+
+          {/* 구분선 */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 border-t border-gray-300" />
+            <Typography variant="small" color="gray">
+              또는
+            </Typography>
+            <div className="flex-1 border-t border-gray-300" />
+          </div>
+
+          {/* 관리자 로그인 버튼 */}
+          <Button
+            variant="outlined"
+            color="blue-gray"
+            fullWidth
+            className="flex items-center justify-center gap-2"
+            onClick={handleAdminLogin}
+            disabled={adminLoading}
+          >
+            {adminLoading ? (
+              <Spinner className="h-4 w-4" />
+            ) : (
+              <ShieldCheckIcon className="h-5 w-5" />
+            )}
+            관리자 로그인
+          </Button>
         </CardBody>
       </Card>
     </div>

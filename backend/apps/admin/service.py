@@ -1,6 +1,10 @@
 """관리자 서비스."""
 
-from sqlalchemy import select, func, and_, or_
+import os
+import time
+
+import httpx
+from sqlalchemy import select, func, and_, or_, text
 from sqlalchemy.orm import Session
 from datetime import datetime
 
@@ -10,8 +14,14 @@ from apps.admin.schemas import (
     HistoryListResponse,
     EvaluationStats,
     HistoryFilterParams,
+    ServiceStatus,
+    ServerStatusResponse,
 )
 from apps.histories.schemas import HistoryDetailResponse, EvaluationData
+
+_START_TIME = time.time()
+
+RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag:8001")
 
 
 class AdminService:
@@ -19,6 +29,94 @@ class AdminService:
 
     def __init__(self, db: Session):
         self.db = db
+
+    async def get_server_status(self) -> ServerStatusResponse:
+        """서버 상태를 조회합니다.
+
+        Backend DB ping, RAG 서비스 health check을 수행합니다.
+
+        Returns:
+            서버 상태 응답
+        """
+        services: list[ServiceStatus] = []
+
+        # 1. Database 상태
+        db_status = self._check_database()
+        services.append(db_status)
+
+        # 2. RAG 서비스 상태
+        rag_status = await self._check_rag_service()
+        services.append(rag_status)
+
+        # 3. Backend 자체 (응답 가능하면 healthy)
+        services.insert(0, ServiceStatus(
+            name="backend",
+            status="healthy",
+            response_time_ms=0,
+            details={"version": "1.0.0"},
+        ))
+
+        # 전체 상태 결정
+        statuses = [s.status for s in services]
+        if all(s == "healthy" for s in statuses):
+            overall = "healthy"
+        elif any(s == "unhealthy" for s in statuses):
+            overall = "degraded"
+        else:
+            overall = "degraded"
+
+        return ServerStatusResponse(
+            overall_status=overall,
+            services=services,
+            uptime_seconds=time.time() - _START_TIME,
+            checked_at=datetime.now(),
+        )
+
+    def _check_database(self) -> ServiceStatus:
+        """DB ping으로 데이터베이스 상태를 확인합니다."""
+        try:
+            start = time.time()
+            self.db.execute(text("SELECT 1"))
+            elapsed_ms = (time.time() - start) * 1000
+            return ServiceStatus(
+                name="database",
+                status="healthy",
+                response_time_ms=round(elapsed_ms, 2),
+            )
+        except Exception as e:
+            return ServiceStatus(
+                name="database",
+                status="unhealthy",
+                details={"error": str(e)},
+            )
+
+    async def _check_rag_service(self) -> ServiceStatus:
+        """RAG 서비스 health check을 수행합니다."""
+        try:
+            start = time.time()
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(f"{RAG_SERVICE_URL}/health")
+            elapsed_ms = (time.time() - start) * 1000
+
+            if resp.status_code == 200:
+                return ServiceStatus(
+                    name="rag",
+                    status="healthy",
+                    response_time_ms=round(elapsed_ms, 2),
+                    details=resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {},
+                )
+            return ServiceStatus(
+                name="rag",
+                status="degraded",
+                response_time_ms=round(elapsed_ms, 2),
+                details={"status_code": resp.status_code},
+            )
+        except Exception as e:
+            return ServiceStatus(
+                name="rag",
+                status="unhealthy",
+                details={"error": str(e)},
+            )
 
     def get_histories(
         self,
