@@ -175,8 +175,9 @@ def _get_langchain_embeddings():
     if not hasattr(_get_langchain_embeddings, "_instance"):
         try:
             from langchain_openai import OpenAIEmbeddings as LangchainOpenAIEmbeddings
+            from utils.config import get_settings
             _get_langchain_embeddings._instance = LangchainOpenAIEmbeddings(
-                model="text-embedding-3-small"
+                model=get_settings().ragas_embedding_model
             )
         except Exception:
             logger.warning("langchain_openai OpenAIEmbeddings 초기화 실패")
@@ -196,16 +197,18 @@ def _get_ragas_llm():
             _get_ragas_llm._instance = None
             return None
         try:
-            import os
             from openai import OpenAI
+            from utils.config import get_settings
 
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            settings = get_settings()
+            client = OpenAI(api_key=settings.openai_api_key)
             _get_ragas_llm._instance = _ragas_llm_factory(
-                "gpt-4o-mini",
+                settings.ragas_llm_model,
                 client=client,
-                max_tokens=8192,
+                max_tokens=settings.ragas_max_tokens,
             )
-            logger.info("[RAGAS] 커스텀 LLM 생성 완료 (max_tokens=8192)")
+            logger.info("[RAGAS] 커스텀 LLM 생성 완료 (model=%s, max_tokens=%d)",
+                        settings.ragas_llm_model, settings.ragas_max_tokens)
         except Exception as e:
             logger.warning(f"RAGAS 커스텀 LLM 생성 실패: {e}")
             _get_ragas_llm._instance = None

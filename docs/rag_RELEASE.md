@@ -1,5 +1,19 @@
 # Release Notes
 
+## [2026-02-12] - RAG 설정 토글 + 청킹 전략 개선
+
+### Features
+- RAG 품질 기능 환경변수 토글 추가 (RAGAS 모델/max_tokens, 로그 레벨 등)
+- `.env.example`에 RAG 토글 환경변수 일괄 추가
+
+### Refactoring
+- 전체 도메인 청킹 전략 개선: 법령 조문 단위 분할, 해석례 Q&A 보존, 판례 summary/detail 분리
+- table_aware / qa_aware splitter 추가
+- chunk_size 1500~2000 상향 (bge-m3 활용률 개선)
+- format_context_length 500→2000, source_content_length 300→500
+- RAGAS evaluator: 하드코딩 모델명/max_tokens → `get_settings()` 기반 설정 참조
+- `main.py` 로그 레벨 `get_settings().log_level` 기반으로 변경
+
 ## [2026-02-11] - DB 설정 bizi_db 통일
 
 ### Refactoring
