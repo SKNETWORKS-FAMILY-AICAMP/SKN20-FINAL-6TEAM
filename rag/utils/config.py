@@ -207,9 +207,9 @@ class Settings(BaseSettings):
     mmr_fetch_k_multiplier: int = Field(default=4, gt=0, description="MMR 검색 시 초기 후보 배수")
     mmr_lambda_mult: float = Field(default=0.6, ge=0.0, le=1.0, description="MMR 다양성 파라미터 (0=최대 다양성, 1=최대 유사도)")
 
-    # 컨텍스트 길이 설정
-    format_context_length: int = Field(default=500, description="컨텍스트 포맷팅 시 문서 내용 최대 길이")
-    source_content_length: int = Field(default=300, description="SourceDocument 변환 시 내용 최대 길이")
+    # 컨텍스트 길이 설정 (조문 단위 청크 평균 500~2,000자를 온전히 LLM에 전달)
+    format_context_length: int = Field(default=2000, description="컨텍스트 포맷팅 시 문서 내용 최대 길이")
+    source_content_length: int = Field(default=500, description="SourceDocument 변환 시 내용 최대 길이")
     evaluator_context_length: int = Field(default=2000, description="평가 시 컨텍스트 최대 길이")
 
     # ===== RAG Feature Flags =====

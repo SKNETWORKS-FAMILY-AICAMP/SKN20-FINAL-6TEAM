@@ -35,12 +35,12 @@ COLLECTION_NAMES = {
     "law_common": "law_common_db",
 }
 
-# 데이터 소스 경로 매핑
+# 데이터 소스 경로 매핑 (실제 폴더 구조에 맞춤)
 DATA_SOURCES = {
     "startup_funding": DATA_PREPROCESSED_DIR / "startup_support",
-    "finance_tax": DATA_PREPROCESSED_DIR / "finance",
-    "hr_labor": DATA_PREPROCESSED_DIR / "labor",
-    "law_common": DATA_PREPROCESSED_DIR / "law",
+    "finance_tax": DATA_PREPROCESSED_DIR / "finance_tax",
+    "hr_labor": DATA_PREPROCESSED_DIR / "hr_labor",
+    "law_common": DATA_PREPROCESSED_DIR / "law_common",
 }
 
 
@@ -55,11 +55,13 @@ class ChunkingConfig:
         chunk_size: 청크의 최대 문자 수
         chunk_overlap: 청크 간 겹치는 문자 수 (문맥 유지용)
         separators: 텍스트 분할에 사용할 구분자 목록 (우선순위 순)
+        splitter_type: 분할기 타입 (default, table_aware, qa_aware)
     """
 
-    chunk_size: int = 800
-    chunk_overlap: int = 100
+    chunk_size: int = 1500
+    chunk_overlap: int = 150
     separators: list[str] = field(default_factory=lambda: ["\n\n", "\n", ".", " "])
+    splitter_type: str = "default"
 
     # 청킹하지 않을 파일 목록
     NO_CHUNK_FILES: list[str] = field(default_factory=lambda: [
@@ -73,13 +75,13 @@ class ChunkingConfig:
         "laws_full.jsonl",
         "interpretations.jsonl",
         "labor_interpretation.jsonl",
-        "hr_major_insurance.jsonl"
+        "hr_insurance_edu.jsonl",
+        "tax_support.jsonl",
     ])
 
     # 필수 청킹 파일 목록
     CHUNK_FILES: list[str] = field(default_factory=lambda: [
         "court_cases_tax.jsonl",
-        "extracted_documents_final.jsonl",
         "court_cases_labor.jsonl",
     ])
 
@@ -128,45 +130,52 @@ class VectorDBConfig:
         return key
 
 
-# 파일별 컬렉션 매핑
+# 파일별 컬렉션 매핑 (실제 전처리 출력에 맞춤)
 FILE_TO_COLLECTION_MAPPING = {
-    # startup_funding_db 컬렉션
+    # startup_funding_db 컬렉션 (startup_support/)
     "announcements.jsonl": "startup_funding",
     "industry_startup_guide_filtered.jsonl": "startup_funding",
     "startup_procedures_filtered.jsonl": "startup_funding",
 
-    # finance_tax_db 컬렉션
-    "court_cases_tax.jsonl": "finance_tax",
-    "extracted_documents_final.jsonl": "finance_tax",
+    # finance_tax_db 컬렉션 (finance_tax/)
+    "tax_support.jsonl": "finance_tax",
 
-    # hr_labor_db 컬렉션
-    "court_cases_labor.jsonl": "hr_labor",
+    # hr_labor_db 컬렉션 (hr_labor/)
     "labor_interpretation.jsonl": "hr_labor",
-    "hr_major_insurance.jsonl": "hr_labor",
+    "hr_insurance_edu.jsonl": "hr_labor",
 
-    # law_common_db 컬렉션
+    # law_common_db 컬렉션 (law_common/)
     "laws_full.jsonl": "law_common",
     "interpretations.jsonl": "law_common",
+    "court_cases_tax.jsonl": "law_common",
+    "court_cases_labor.jsonl": "law_common",
 }
 
 # 파일별 청킹 설정
-FILE_CHUNKING_CONFIG = {
+# chunk_size 근거: bge-m3 최대 8,192 토큰, 한글 1자 ≈ 0.5~0.7 토큰
+# 1,500자 ≈ 750~1,050 토큰 (모델 용량의 ~13%), 검색 정밀도와 문맥 보존의 균형점
+FILE_CHUNKING_CONFIG: dict[str, ChunkingConfig | None] = {
     # 청킹 안함
     "announcements.jsonl": None,
     "industry_startup_guide_filtered.jsonl": None,
 
-    # 조건부 청킹 (콘텐츠가 임계값 초과 시 청킹)
-    "startup_procedures_filtered.jsonl": ChunkingConfig(chunk_size=1000, chunk_overlap=200),
-    "laws_full.jsonl": ChunkingConfig(chunk_size=800, chunk_overlap=100),
-    "interpretations.jsonl": ChunkingConfig(chunk_size=800, chunk_overlap=100),
-    "labor_interpretation.jsonl": ChunkingConfig(chunk_size=800, chunk_overlap=100),
-    "hr_major_insurance.jsonl": ChunkingConfig(chunk_size=800, chunk_overlap=100),
+    # 조건부 청킹 — 전처리에서 의미 단위 분할 완료, 안전망으로 유지
+    "startup_procedures_filtered.jsonl": ChunkingConfig(chunk_size=1500, chunk_overlap=200),
+    "laws_full.jsonl": ChunkingConfig(chunk_size=2000, chunk_overlap=200),
+    "interpretations.jsonl": ChunkingConfig(chunk_size=2000, chunk_overlap=200),
+    "labor_interpretation.jsonl": ChunkingConfig(
+        chunk_size=1500, chunk_overlap=150, splitter_type="qa_aware",
+    ),
+    "hr_insurance_edu.jsonl": ChunkingConfig(chunk_size=1500, chunk_overlap=150),
+    "tax_support.jsonl": ChunkingConfig(
+        chunk_size=1500, chunk_overlap=150, splitter_type="table_aware",
+    ),
 
     # 필수 청킹
-    "court_cases_tax.jsonl": ChunkingConfig(chunk_size=800, chunk_overlap=100),
-    "extracted_documents_final.jsonl": ChunkingConfig(chunk_size=800, chunk_overlap=100),
-    "court_cases_labor.jsonl": ChunkingConfig(chunk_size=800, chunk_overlap=100),
+    "court_cases_tax.jsonl": ChunkingConfig(chunk_size=1500, chunk_overlap=150),
+    "court_cases_labor.jsonl": ChunkingConfig(chunk_size=1500, chunk_overlap=150),
 }
 
 # 조건부 청킹 임계값 (문자 수)
-OPTIONAL_CHUNK_THRESHOLD = 1500
+# 전처리에서 조문 단위(MAX_ARTICLE_CHUNK=3000)로 제어하므로 안전망 상향
+OPTIONAL_CHUNK_THRESHOLD = 3500
