@@ -1,0 +1,130 @@
+# ===========================================
+# 로컬 개발용 Docker Compose (로컬 MySQL 사용)
+# 사용법: docker-compose -f docker-compose.local.yaml up --build
+# 삭제 시: 이 파일만 삭제하면 됨
+# ===========================================
+services:
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: bizi-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - backend
+      - rag
+
+  # 로컬 MySQL (AWS RDS 대체)
+  mysql:
+    image: mysql:8.0
+    container_name: bizi-mysql-local
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-bizi1234}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-bizi_db}
+      MYSQL_USER: ${MYSQL_USER:-bizi}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-bizi1234}
+    ports:
+      - "3306:3306"
+    volumes:
+      - bizi-mysql-data:/var/lib/mysql
+      - ./backend/database.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-bizi1234}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    expose:
+      - "3306"
+
+  # FastAPI Backend
+  backend:
+    build: ./backend
+    container_name: bizi-backend
+    restart: unless-stopped
+    volumes:
+      - ./backend:/app
+    expose:
+      - "8000"
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-bizi_db}
+      - MYSQL_USER=${MYSQL_USER:-bizi}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-bizi1234}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-local-dev-secret-key-at-least-32-chars-long}
+      - ENABLE_TEST_LOGIN=true
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # React Frontend (Vite)
+  frontend:
+    build: ./frontend
+    container_name: bizi-frontend
+    restart: unless-stopped
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    expose:
+      - "5173"
+    environment:
+      - VITE_API_URL=/api
+      - VITE_RAG_URL=/rag
+      - VITE_RAG_ENABLED=${RAG_ENABLED:-true}
+      - VITE_RAG_STREAMING=${VITE_RAG_STREAMING:-true}
+      - VITE_RAG_API_KEY=${RAG_API_KEY:-}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+    depends_on:
+      - backend
+    command: npm run dev -- --host
+
+  # RAG Service (LangChain/FastAPI)
+  rag:
+    build: ./rag
+    container_name: bizi-rag
+    restart: unless-stopped
+    volumes:
+      - ./rag:/app
+    expose:
+      - "8001"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - RAG_API_KEY=${RAG_API_KEY:-}
+      - BIZINFO_API_KEY=${BIZINFO_API_KEY:-}
+      - KSTARTUP_API_KEY=${KSTARTUP_API_KEY:-}
+      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      # MySQL (로컬)
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-bizi_db}
+      - MYSQL_USER=${MYSQL_USER:-bizi}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-bizi1234}
+      # RAG 설정
+      - ENABLE_HYBRID_SEARCH=${ENABLE_HYBRID_SEARCH:-true}
+      - ENABLE_RERANKING=${ENABLE_RERANKING:-true}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    command: uvicorn main:app --host 0.0.0.0 --port 8001
+
+volumes:
+  bizi-mysql-data:
