@@ -1,117 +1,160 @@
-# 전체 도메인 청킹 전략 개선 계획
+# Bizi RAG 청킹 전략 개선 계획
 
-## 목표
-
-1. 법령 조문 경계 파괴 문제 해결 (P0)
-2. LLM에 전달되는 컨텍스트 잘림 문제 해결 (P0)
-3. 판례 하드커트, 테이블 파괴, Q&A 분리 등 비법률 도메인 개선 (P1)
-4. bge-m3 모델 용량에 맞는 chunk_size 재조정 (P2)
-5. Parent Document Retrieval을 위한 메타데이터 기반 마련 (P2)
-
-## 예상 효과
-
-| 메트릭 | 개선 전 | 개선 후 |
-|--------|---------|---------|
-| 법령 조문 검색 정확도 | 조문 경계 파괴로 낮음 | 조문 단위 독립 검색 |
-| LLM 컨텍스트 활용 | 800자 청크 중 500자만 전달 | 2000자까지 온전히 전달 |
-| 판례 전문 활용 | 5,000자 하드커트 | 전문 보존 (summary/detail 분리) |
-| 테이블 데이터 무결성 | 분할 시 파괴 가능 | 테이블 블록 보존 |
-| Q&A 쌍 무결성 | 1,500자 초과 시 분리 | 질의-회답 쌍 보존 |
+> **상태**: 코드 구현 완료 (커밋 `ad2053f`)
+> **작성일**: 2026-02-12
+> **수정 대상**: `vectorstores/config.py`, `vectorstores/loader.py`, `utils/config.py`, `scripts/preprocessing/preprocess_laws.py`
 
 ---
 
-## 핵심 문제 상세
+## 1. 배경 및 목표
 
-### 문제 1: 법령 조문 경계 파괴 (P0)
+Bizi RAG 시스템은 4개 도메인(창업·지원사업, 재무·세무, 인사·노무, 법률)의 전처리된 JSONL 데이터를 ChromaDB에 적재하여 검색합니다. 기존 청킹 전략에 여러 구조적 문제가 있어, 검색 품질을 근본적으로 개선하기 위한 전면 재설계를 수행했습니다.
 
-**현상**: `process_laws()`에서 법령 1건의 모든 조문을 하나의 `content`로 합친 후, `RecursiveCharacterTextSplitter(800자, 100자 overlap)`로 일률 분할. 조문 경계와 무관하게 800자 단위로 잘려 "제56조 ① 사용자는 연장근로에 대하여..." 같은 조문이 중간에서 끊김.
+### 핵심 목표
 
-**영향**: law_common_db 전체. "근로기준법 제56조 내용 알려줘" 같은 질문에 정확한 조문 검색 불가.
-
-**해결**: 조문 단위 분할 → 법령 1건을 N개 JSONL 레코드로 분리.
-
-### 문제 2: format_context_length=500 (P0)
-
-**현상**: `rag/chains/rag_chain.py`에서 `doc.page_content[:settings.format_context_length]`로 LLM에 전달할 컨텍스트를 자름. chunk_size=800이어도 실제 LLM에는 500자만 전달.
-
-**영향**: 모든 도메인. chunk_size를 올려도 효과 없음.
-
-**해결**: `format_context_length` 500 → 2000, `source_content_length` 300 → 500.
-
-### 문제 3: 판례 full_text[:5000] 하드커트 (P1)
-
-**현상**: `process_court_cases()`에서 판례 전문이 5,000자 초과 시 `full_text[:5000]`으로 자른 후 800자 분할. 판결 이유의 핵심 논증이 후반부에 있을 경우 유실.
-
-**영향**: finance_tax_db, hr_labor_db의 판례 검색 품질.
-
-**해결**: summary(판시사항+판결요지)와 detail(판례 전문) 2개 레코드로 분리.
-
-### 문제 4: 세무 가이드 마크다운 테이블 파괴 (P1)
-
-**현상**: `extracted_documents_final.jsonl`에 포함된 마크다운 테이블(`|` 구분 행)이 RecursiveCharacterTextSplitter에 의해 행 중간에서 분할될 수 있음.
-
-**영향**: finance_tax_db의 세무 가이드 검색 품질.
-
-**해결**: 테이블 인식 splitter(`table_aware`) 추가.
-
-### 문제 5: Q&A 쌍 분리 (P1)
-
-**현상**: 노무 해석례(`labor_interpretation.jsonl`)의 질의-회시 쌍이 1,500자 초과 시 중간에서 분리. 질의와 회시가 다른 청크에 배치되어 검색 시 맥락 유실.
-
-**영향**: hr_labor_db의 해석례 검색 품질.
-
-**해결**: Q&A 보존 splitter(`qa_aware`) 추가.
-
-### 문제 6: 4대보험 파일명 불일치 (P1)
-
-**현상**: `vectorstores/config.py`에서 `hr_major_insurance.jsonl`을 참조하지만, 실제 전처리 스크립트 출력은 `hr_4insurance_documents.jsonl`과 `hr_insurance_edu.jsonl`.
-
-**영향**: hr_labor_db에 4대보험 데이터가 로드되지 않음.
-
-**해결**: config의 파일명 매핑을 실제 출력에 맞게 수정.
-
-### 문제 7: chunk_size=800이 bge-m3 대비 과도하게 보수적 (P2)
-
-**현상**: bge-m3 최대 8,192토큰 대비 800자(≈400~560토큰)는 모델 용량의 ~6%만 활용. 문맥 보존 부족.
-
-**근거**: 한글 1자 ≈ 0.5~0.7 토큰. 1,500자 ≈ 750~1,050 토큰(모델 용량의 ~13%). 검색 정밀도와 문맥 보존의 균형점.
-
-**해결**: 전체 chunk_size를 1,500~2,000으로 상향.
+1. 법령 조문 경계 보존 (P0)
+2. LLM 컨텍스트 잘림 해소 (P0)
+3. 판례 하드커트 제거 및 구조적 분리 (P1)
+4. 마크다운 테이블 무결성 보존 (P1)
+5. Q&A(질의-회시) 쌍 보존 (P1)
+6. bge-m3 임베딩 모델 용량에 맞는 chunk_size 재조정 (P2)
+7. Parent Document Retrieval용 메타데이터 기반 마련 (P2)
 
 ---
 
-## 수정 대상 파일
+## 2. 문제 분석
 
-| 파일 | 변경 내용 | Phase |
-|------|----------|-------|
-| `scripts/preprocessing/preprocess_laws.py` | 법령 조문 단위 분할, 해석례 Q&A 보존, 판례 summary/detail 분리 | 1, 2 |
-| `rag/vectorstores/config.py` | 청킹 설정 전면 개편, chunk_size 상향, splitter_type 추가 | 1, 2 |
-| `rag/vectorstores/loader.py` | 테이블 인식 splitter, Q&A 보존 splitter 추가 | 2 |
-| `rag/utils/config.py` | `format_context_length`, `source_content_length` 상향 | 1 |
+### 2-1. 법령 조문 경계 파괴 (P0)
+
+| 항목 | 내용 |
+|------|------|
+| **현상** | `process_laws()`에서 법령 1건의 모든 조문을 하나의 `content`로 합친 후, `RecursiveCharacterTextSplitter(800자, 100자 overlap)`로 일률 분할. 조문 경계와 무관하게 800자마다 절단됨 |
+| **영향** | `law_common_db` 전체. "근로기준법 제56조 내용 알려줘" 같은 질문에 정확한 조문 검색 불가 |
+| **해결** | 전처리 단계에서 조문 단위로 분할 → 법령 1건을 N개 JSONL 레코드로 출력 |
+
+### 2-2. format_context_length=500 (P0)
+
+| 항목 | 내용 |
+|------|------|
+| **현상** | `rag/chains/rag_chain.py`에서 `doc.page_content[:settings.format_context_length]`로 LLM에 전달할 텍스트를 자름. chunk_size=800이어도 실제로 LLM에는 500자만 전달 |
+| **영향** | 모든 도메인. chunk_size를 올려도 효과 없음 |
+| **해결** | `format_context_length` 500 → 2000, `source_content_length` 300 → 500 |
+
+### 2-3. 판례 5,000자 하드커트 (P1)
+
+| 항목 | 내용 |
+|------|------|
+| **현상** | `process_court_cases()`에서 판례 전문이 5,000자 초과 시 `full_text[:5000]`으로 절단한 후 800자 분할. 판결 이유의 핵심 논증이 후반부에 있으면 유실 |
+| **영향** | `law_common_db`의 판례 검색 품질 |
+| **해결** | summary(판시사항+판결요지)와 detail(판례 전문) 2개 레코드로 구조적 분리 |
+
+### 2-4. 마크다운 테이블 파괴 (P1)
+
+| 항목 | 내용 |
+|------|------|
+| **현상** | 세무 가이드(`tax_support.jsonl`)에 포함된 마크다운 테이블(`\|` 구분 행)이 RecursiveCharacterTextSplitter에 의해 행 중간에서 분할 |
+| **영향** | `finance_tax_db`의 세무 가이드 검색 품질 |
+| **해결** | 테이블 인식 splitter(`table_aware`) 추가 |
+
+### 2-5. Q&A 쌍 분리 (P1)
+
+| 항목 | 내용 |
+|------|------|
+| **현상** | 노무 해석례(`labor_interpretation.jsonl`)의 질의-회시 쌍이 chunk_size 초과 시 중간에서 분리. 질의와 회시가 다른 청크에 배치 |
+| **영향** | `hr_labor_db`의 해석례 검색 품질 |
+| **해결** | Q&A 보존 splitter(`qa_aware`) 추가 |
+
+### 2-6. chunk_size=800이 bge-m3 대비 과도하게 보수적 (P2)
+
+| 항목 | 내용 |
+|------|------|
+| **현상** | bge-m3 최대 8,192토큰 대비 800자(≈400~560토큰)는 모델 용량의 ~6%만 활용 |
+| **근거** | 한글 1자 ≈ 0.5~0.7 토큰. 1,500자 ≈ 750~1,050 토큰(~13%). 검색 정밀도와 문맥 보존의 균형점 |
+| **해결** | 전체 chunk_size를 1,500~2,000으로 상향 |
 
 ---
 
-## Phase 1: 법령 조문 단위 분할 + context length 수정 (P0)
+## 3. 아키텍처 개요
 
-### 1-A. `preprocess_laws.py` — `process_laws()` 재구현
+### 데이터 흐름
+
+```
+원본 데이터 (PDF, 크롤링)
+    │
+    ▼
+전처리 스크립트 (scripts/preprocessing/)
+    │  - process_laws(): 조문 단위 분할
+    │  - process_interpretations(): Q&A core/reason 분리
+    │  - process_court_cases(): summary/detail 분리
+    ▼
+전처리 완료 데이터 (data/preprocessed/*.jsonl)
+    │
+    ▼
+벡터DB 로더 (rag/vectorstores/loader.py)
+    │  - DataLoader._should_chunk(): 청킹 여부 결정
+    │  - DataLoader._split_text(): splitter_type 라우팅
+    │    ├─ "default": RecursiveCharacterTextSplitter
+    │    ├─ "table_aware": _split_with_table_awareness()
+    │    └─ "qa_aware": _split_preserving_qa()
+    ▼
+ChromaDB 벡터 인덱스 (rag/vectordb/)
+    │  - startup_funding_db
+    │  - finance_tax_db
+    │  - hr_labor_db
+    │  - law_common_db
+    ▼
+RAG 검색 & 생성 (rag/agents/, rag/chains/)
+    │  - format_context_length=2000 으로 LLM에 전달
+    ▼
+사용자 응답
+```
+
+### 컬렉션-파일-폴더 매핑
+
+```
+data/preprocessed/
+├── startup_support/                 → startup_funding_db
+│   ├── announcements.jsonl              (청킹 안함)
+│   ├── industry_startup_guide_filtered.jsonl  (청킹 안함)
+│   └── startup_procedures_filtered.jsonl      (조건부, 1500/200)
+│
+├── finance_tax/                     → finance_tax_db
+│   └── tax_support.jsonl                (조건부, 1500/150, table_aware)
+│
+├── hr_labor/                        → hr_labor_db
+│   ├── labor_interpretation.jsonl       (조건부, 1500/150, qa_aware)
+│   └── hr_insurance_edu.jsonl           (조건부, 1500/150)
+│
+└── law_common/                      → law_common_db
+    ├── laws_full.jsonl                  (조건부, 2000/200)
+    ├── interpretations.jsonl            (조건부, 2000/200)
+    ├── court_cases_tax.jsonl            (필수, 1500/150)
+    └── court_cases_labor.jsonl          (필수, 1500/150)
+```
+
+---
+
+## 4. 구현 상세
+
+### Phase 1: 전처리 개선 (`scripts/preprocessing/preprocess_laws.py`)
+
+#### 4-1-A. 법령 조문 단위 분할 — `process_laws()`
 
 **변경 전**: 법령 1건 → JSONL 1행 (모든 조문을 하나의 content로 합침)
 **변경 후**: 법령 1건 → JSONL N행 (조문 단위 독립 레코드)
 
-#### 상수 정의
-
+**상수**:
 ```python
-MIN_ARTICLE_CHUNK = 200   # 이 미만이면 인접 조문과 병합 (부칙 등)
+MIN_ARTICLE_CHUNK = 200   # 이 미만이면 인접 조문과 병합 (부칙, 삭제 조문 등)
 MAX_ARTICLE_CHUNK = 3000  # 이 초과면 항(clause) 단위로 분할 (제2조 정의 등)
 ```
 
-#### 분할 전략
-
+**분할 알고리즘**:
 ```
-조문 순회:
+각 조문을 순회:
   if len(조문) > MAX_ARTICLE_CHUNK (3000):
-      → 버퍼 출력 → 항(clause) 단위로 분할
-  elif 버퍼 + 조문 > MAX_ARTICLE_CHUNK:
+      → 버퍼 출력 → 항(clause) 단위로 분할하여 개별 레코드 생성
+  elif 버퍼 누적 + 조문 > MAX_ARTICLE_CHUNK:
       → 버퍼 출력 → 새 버퍼 시작
   elif len(조문) < MIN_ARTICLE_CHUNK (200):
       → 인접 조문과 병합 (버퍼에 축적)
@@ -119,238 +162,196 @@ MAX_ARTICLE_CHUNK = 3000  # 이 초과면 항(clause) 단위로 분할 (제2조 
       → 버퍼 출력 → 독립 레코드로 출력
 ```
 
-#### 출력 JSONL 구조
-
-일반 조문 (독립 레코드):
+**출력 JSONL 구조** (일반 조문):
 ```json
 {
   "id": "LAW_010719_A56",
   "type": "law_article",
   "domain": "hr_labor",
   "title": "근로기준법 제56조 (연장·야간 및 휴일 근로)",
-  "content": "[근로기준법]\n소관부처: 고용노동부\n시행일: 2024-02-09\n\n제56조(연장·야간 및 휴일 근로)\n① 사용자는 연장근로에 대하여...",
+  "content": "[근로기준법]\n소관부처: 고용노동부\n시행일: 2024-02-09\n\n제56조(연장·야간 및 휴일 근로)\n① ...",
   "metadata": {
     "law_id": "010719",
     "law_name": "근로기준법",
-    "ministry": "고용노동부",
     "article_number": "56",
-    "article_title": "연장·야간 및 휴일 근로",
     "article_range": "56",
-    "parent_id": "LAW_010719",
-    "filter_method": "org_mapping",
-    "filter_reason": "소관부처: 고용노동부"
-  }
-}
-```
-
-병합된 소형 조문 (부칙 등):
-```json
-{
-  "id": "LAW_010719_A120-122",
-  "title": "근로기준법 제120조~제122조",
-  "metadata": {
-    "article_range": "120-122",
     "parent_id": "LAW_010719"
   }
 }
 ```
 
-대형 조문 항 단위 분할 (제2조 정의 등):
-```json
-{
-  "id": "LAW_010719_A2-part1",
-  "title": "근로기준법 제2-1조",
-  "metadata": {
-    "article_range": "2-part1",
-    "parent_id": "LAW_010719"
-  }
-}
-```
-
-#### 핵심 함수
+**핵심 함수**:
 
 | 함수 | 역할 |
 |------|------|
 | `_format_article_text(article)` | 조문 1개를 포맷팅된 텍스트로 변환 |
-| `_split_large_article_by_clauses(...)` | 대형 조문을 항 단위로 분할하여 기록 |
+| `_split_large_article_by_clauses(...)` | 대형 조문을 항 단위로 분할 |
 | `_build_article_doc(...)` | 조문 단위 JSONL 레코드 생성 |
 | `_determine_filter_info(ministry, domain)` | 필터 메서드/이유 결정 |
-| `process_laws(...)` | 메인 처리 — 조문 순회, 분할/병합 판단, 출력 |
-
-#### 도메인 분류
-
-조문 단위 분할 후에도 도메인 분류는 **법령 전체 텍스트 기반**으로 수행. 같은 법령의 모든 조문은 동일 도메인으로 분류됨.
 
 ---
 
-### 1-B. `preprocess_laws.py` — `process_interpretations()` Q&A 보존
+#### 4-1-B. 해석례 Q&A 보존 — `process_interpretations()`
 
 **변경 전**: 질의요지 + 회답 + 이유를 하나의 content로 합침
 **변경 후**: core(질의+회답) + reason(이유) 분리
 
-#### 분리 전략
-
 ```
-1. Core 청크: "[제목]\n\n질의요지:\n{질의}\n\n회답:\n{회답}"
-   - id: INTERP_{item_id}
-   - metadata.chunk_type: "core"
-   - 절대 분리 금지
+Core 청크 (항상 생성):
+  id: INTERP_{item_id}
+  content: "[제목]\n\n질의요지:\n{질의}\n\n회답:\n{회답}"
+  metadata.chunk_type: "core"
+  ※ 절대 분리 금지
 
-2. Reason 청크 (이유가 300자 이상일 때만):
-   - id: INTERP_{item_id}_reason
-   - content: "[제목]\n질의: {질의 앞 150자}...\n\n이유:\n{이유}"
-   - metadata.chunk_type: "reason"
-   - metadata.parent_id: INTERP_{item_id}
+Reason 청크 (이유가 300자 이상일 때만):
+  id: INTERP_{item_id}_reason
+  content: "[제목]\n질의: {질의 앞 150자}...\n\n이유:\n{이유}"
+  metadata.chunk_type: "reason"
+  metadata.parent_id: INTERP_{item_id}
 ```
 
-**근거**: 해석례에서 "질의요지"와 "회답"은 불가분의 관계. 분리되면 검색 시 "이 회답이 어떤 질의에 대한 것인지" 맥락이 유실됨. 이유(reason)는 보충 설명으로, 별도 검색 단위로도 유의미함.
+**근거**: 해석례에서 "질의요지"와 "회답"은 불가분의 관계. 분리되면 검색 시 "이 회답이 어떤 질의에 대한 것인지" 맥락이 유실됨. 이유(reason)는 보충 설명으로 별도 검색 단위로도 유의미.
 
 ---
 
-### 1-C. `vectorstores/config.py` — 법률 파일 청킹 설정 변경
+#### 4-1-C. 판례 summary/detail 분리 — `process_court_cases()`
 
-전처리에서 조문 단위로 분할 완료했으므로, 벡터 빌드 시 추가 청킹은 안전망 역할:
-
-```python
-"laws_full.jsonl": ChunkingConfig(chunk_size=2000, chunk_overlap=200),
-"interpretations.jsonl": ChunkingConfig(chunk_size=2000, chunk_overlap=200),
-```
-
-`OPTIONAL_CHUNK_THRESHOLD`: 1500 → **3500** (전처리에서 MAX_ARTICLE_CHUNK=3000으로 제어)
-
----
-
-### 2-A. `rag/utils/config.py` — format_context_length 상향
-
-```python
-# 변경 전
-format_context_length: int = Field(default=500, ...)
-source_content_length: int = Field(default=300, ...)
-
-# 변경 후
-format_context_length: int = Field(default=2000, ...)
-source_content_length: int = Field(default=500, ...)
-```
-
-**근거**: 조문 단위 청크의 평균 길이는 500~2,000자. `format_context_length=500`이면 chunk_size를 올려도 LLM에 500자만 전달되어 개선 효과가 없음. 2,000으로 상향하여 조문 내용을 온전히 LLM에 전달.
-
-**영향 범위**: `rag/chains/rag_chain.py:369`에서 `doc.page_content[:settings.format_context_length]`로 사용됨.
-
----
-
-## Phase 2: 비법률 도메인 개선 (P1)
-
-### 3-A. `preprocess_laws.py` — 판례 summary/detail 분리
-
-**변경 전**: 판례 전문(`full_text`)이 5,000자 초과 시 `full_text[:5000]`으로 하드커트
+**변경 전**: `full_text[:5000]` 하드커트 후 800자 분할
 **변경 후**: 판례 1건 → 2개 JSONL 레코드
 
 ```
-1. Summary 청크 (항상 생성):
-   - id: CASE_{item_id}_summary
-   - content: 사건 헤더 + 판시사항 + 판결요지
-   - metadata.chunk_type: "summary"
-   - metadata.parent_id: CASE_{item_id}
+Summary 청크 (항상 생성):
+  id: CASE_{item_id}_summary
+  content: 사건 헤더 + 판시사항 + 판결요지
+  metadata.chunk_type: "summary"
+  metadata.parent_id: CASE_{item_id}
 
-2. Detail 청크 (full_text가 있을 때만):
-   - id: CASE_{item_id}_detail
-   - content: 사건 헤더 + 판례내용 전문 (하드커트 없음)
-   - metadata.chunk_type: "detail"
-   - metadata.parent_id: CASE_{item_id}
+Detail 청크 (full_text가 있을 때만):
+  id: CASE_{item_id}_detail
+  content: 사건 헤더 + 판례내용 전문 (하드커트 없음)
+  metadata.chunk_type: "detail"
+  metadata.parent_id: CASE_{item_id}
 ```
 
-**근거**: 판결요지는 짧고 검색 적합성이 높음 → summary 청크로 분리. 판례 전문은 상세 근거가 필요할 때 활용 → detail 청크로 보존. 하드커트 제거로 판결 이유 후반부 유실 방지.
+**근거**: 판결요지는 짧고 검색 적합성이 높음. 판례 전문은 상세 근거가 필요할 때 활용. 하드커트 제거로 판결 이유 후반부 유실 방지.
 
 ---
 
-### 3-B. `loader.py` — 테이블 인식 splitter (`table_aware`)
+### Phase 2: 벡터DB 청킹 설정 (`rag/vectorstores/config.py`)
 
-`_split_with_table_awareness()` 메서드 추가. `extracted_documents_final.jsonl`에 적용.
+#### 4-2-A. 청킹 전략 요약표
 
-#### 알고리즘
+| 파일 | 컬렉션 | 청킹 유형 | chunk_size | overlap | splitter_type | 비고 |
+|------|--------|----------|-----------|---------|---------------|------|
+| `announcements.jsonl` | startup_funding | 청킹 안함 | - | - | - | 공고 원문 보존 |
+| `industry_startup_guide_filtered.jsonl` | startup_funding | 청킹 안함 | - | - | - | 가이드 원문 보존 |
+| `startup_procedures_filtered.jsonl` | startup_funding | 조건부 | 1,500 | 200 | default | >3500자만 분할 |
+| `tax_support.jsonl` | finance_tax | 조건부 | 1,500 | 150 | **table_aware** | 테이블 보존 |
+| `labor_interpretation.jsonl` | hr_labor | 조건부 | 1,500 | 150 | **qa_aware** | Q&A 쌍 보존 |
+| `hr_insurance_edu.jsonl` | hr_labor | 조건부 | 1,500 | 150 | default | >3500자만 분할 |
+| `laws_full.jsonl` | law_common | 조건부 | 2,000 | 200 | default | 조문 안전망 |
+| `interpretations.jsonl` | law_common | 조건부 | 2,000 | 200 | default | Q&A 안전망 |
+| `court_cases_tax.jsonl` | law_common | **필수** | 1,500 | 150 | default | 판례 항상 분할 |
+| `court_cases_labor.jsonl` | law_common | **필수** | 1,500 | 150 | default | 판례 항상 분할 |
+
+#### 4-2-B. 청킹 결정 로직 (`_should_chunk()`)
 
 ```
-1. 텍스트를 행 단위로 순회하며 테이블 블록과 일반 텍스트 블록으로 분리
-   - 테이블 행: "|"로 시작하고 "|"로 끝나는 연속 행
-   - 일반 텍스트: 그 외
-
-2. 블록을 chunk_size 이내로 병합:
-   - 테이블 블록: 절대 분할하지 않음 (chunk_size 초과해도 보존)
-   - 일반 텍스트: RecursiveCharacterTextSplitter로 분할
-   - 테이블 + 주변 텍스트가 chunk_size 이내면 하나의 청크로 병합
+1. FILE_CHUNKING_CONFIG에서 파일별 설정 조회
+2. config가 None → 청킹 안함 (announcements, industry_startup_guide)
+3. NO_CHUNK_FILES에 포함 → 청킹 안함
+4. OPTIONAL_CHUNK_FILES에 포함 → len(content) > 3500 일 때만 청킹
+5. CHUNK_FILES에 포함 → 항상 청킹 (court_cases_*)
 ```
 
-#### config 설정
+`OPTIONAL_CHUNK_THRESHOLD` = **3500** (전처리에서 MAX_ARTICLE_CHUNK=3000으로 제어하므로 안전망 상향)
 
-```python
-"extracted_documents_final.jsonl": ChunkingConfig(
-    chunk_size=1500, chunk_overlap=150, splitter_type="table_aware",
-),
+---
+
+### Phase 3: 특수 Splitter (`rag/vectorstores/loader.py`)
+
+#### 4-3-A. table_aware — 마크다운 테이블 보존 splitter
+
+**적용 대상**: `tax_support.jsonl`
+
+**알고리즘** (`_split_with_table_awareness()`):
+
+```
+1단계: 블록 분리
+  - 행 단위로 순회
+  - "|"로 시작하고 "|"로 끝나는 연속 행 → "table" 블록
+  - 그 외 → "text" 블록
+
+2단계: 블록 병합
+  - table 블록: 절대 분할하지 않음 (chunk_size 초과해도 보존)
+  - text 블록: RecursiveCharacterTextSplitter로 분할
+  - table + 주변 text가 chunk_size 이내면 하나의 청크로 병합
+  - 초과 시 축적된 텍스트를 먼저 출력 후 새 청크 시작
+```
+
+**예시**:
+```
+일반 텍스트 (300자)           ─┐
+| 헤더1 | 헤더2 | 헤더3 |      │ → 하나의 청크 (800자 < 1500)
+| 데이터 | 데이터 | 데이터 |    │
+| 데이터 | 데이터 | 데이터 |    │
+일반 텍스트 (200자)           ─┘
 ```
 
 ---
 
-### 3-C. `loader.py` — Q&A 보존 splitter (`qa_aware`)
+#### 4-3-B. qa_aware — Q&A 보존 splitter
 
-`_split_preserving_qa()` 메서드 추가. `labor_interpretation.jsonl`에 적용.
+**적용 대상**: `labor_interpretation.jsonl`
 
-#### 알고리즘
+**알고리즘** (`_split_preserving_qa()`):
 
 ```
-1. "질의 :" / "회시 :" 패턴으로 텍스트를 블록 분리
-2. 질의-회시 쌍을 하나의 단위로 보존
-3. 쌍이 chunk_size 이내: 그대로 하나의 청크
-4. 쌍이 chunk_size 초과:
-   - 회시 부분만 RecursiveCharacterTextSplitter로 분할
-   - 각 분할 청크에 질의를 prefix로 유지 (맥락 보존)
-5. Q&A 패턴이 없으면 기본 splitter로 fallback
+1단계: 패턴 감지
+  - 정규식: (?=질의\s*:)|(?=회시\s*:) 로 텍스트를 블록 분리
+  - Q&A 패턴이 없으면 기본 splitter로 fallback
+
+2단계: 쌍 구성
+  - "질의"로 시작하는 블록 + "회시"로 시작하는 블록 = 하나의 Q&A 쌍
+  - Q&A 이전 텍스트는 header로 보존
+
+3단계: 청크 생성
+  - Q&A 쌍이 chunk_size 이내 → 그대로 하나의 청크
+  - Q&A 쌍이 chunk_size 초과:
+    └─ 회시 부분만 RecursiveCharacterTextSplitter로 분할
+    └─ 각 분할 청크에 "header + 질의" 를 prefix로 유지 (맥락 보존)
 ```
 
-#### config 설정
+**예시**:
+```
+[제목]                                 ← header
 
-```python
-"labor_interpretation.jsonl": ChunkingConfig(
-    chunk_size=1500, chunk_overlap=150, splitter_type="qa_aware",
-),
+질의 : 연차유급휴가 미사용수당의      ← question (보존)
+산정 기준이 어떻게 되나요?
+
+회시 : 1. 근로기준법 제60조에         ← answer (필요 시 분할)
+따르면... (이하 장문)
+
+→ 청크1: [제목]\n\n질의 : ...\n\n회시 : 1. 근로기준법 제60조에...
+→ 청크2: [제목]\n\n질의 : ...\n\n(회시 후반부)
 ```
 
 ---
 
-### 3-D. 4대보험 파일명 통일
+### Phase 4: LLM 컨텍스트 길이 상향 (`rag/utils/config.py`)
 
-| 위치 | 변경 전 | 변경 후 |
-|------|---------|---------|
-| `vectorstores/config.py` FILE_TO_COLLECTION_MAPPING | `hr_major_insurance.jsonl` | `hr_4insurance_documents.jsonl`, `hr_insurance_edu.jsonl` |
-| `vectorstores/config.py` FILE_CHUNKING_CONFIG | `hr_major_insurance.jsonl` | `hr_4insurance_documents.jsonl`, `hr_insurance_edu.jsonl` |
-| `vectorstores/config.py` ChunkingConfig.OPTIONAL_CHUNK_FILES | `hr_major_insurance.jsonl` | `hr_4insurance_documents.jsonl`, `hr_insurance_edu.jsonl` |
+| 설정 | 변경 전 | 변경 후 | 사용 위치 |
+|------|---------|---------|----------|
+| `format_context_length` | 500 | **2000** | `rag/chains/rag_chain.py` — LLM에 전달할 문서 내용 최대 길이 |
+| `source_content_length` | 300 | **500** | `rag/chains/rag_chain.py` — SourceDocument 변환 시 내용 최대 길이 |
 
-실제 전처리 스크립트 출력:
-- `preprocess_hr_insurance.py` → `hr_4insurance_documents.jsonl`
-- `preprocess_hr_insurance_edu.py` → `hr_insurance_edu.jsonl`
+**근거**: 조문 단위 청크의 평균 길이는 500~2,000자. format_context_length=500이면 chunk_size를 올려도 LLM에 500자만 전달되어 개선 효과가 사라짐. 2,000으로 상향하여 조문 전체를 온전히 전달.
 
 ---
 
-### 3-E. chunk_size 전면 재검토
+### Phase 5: Parent Document Retrieval 메타데이터 (P2)
 
-| 파일 | 변경 전 | 변경 후 | splitter | 근거 |
-|------|---------|---------|----------|------|
-| `laws_full.jsonl` | 800/100 | 2000/200 | default | 조문 단위 평균 500~2,000자, 안전망 |
-| `interpretations.jsonl` | 800/100 | 2000/200 | default | Q&A 쌍 보존 |
-| `court_cases_tax.jsonl` | 800/100 | 1500/150 | default | 판례 요지+이유 장문 |
-| `court_cases_labor.jsonl` | 800/100 | 1500/150 | default | 판례 요지+이유 장문 |
-| `extracted_documents_final.jsonl` | 800/100 | 1500/150 | table_aware | 테이블 포함 중문 |
-| `labor_interpretation.jsonl` | 800/100 | 1500/150 | qa_aware | Q&A 쌍 보존 |
-| `startup_procedures_filtered.jsonl` | 1000/200 | 1500/200 | default | 현행과 유사, 소폭 상향 |
-| `hr_4insurance_documents.jsonl` | - (신규) | 1500/150 | default | 섹션 기반 |
-| `hr_insurance_edu.jsonl` | - (신규) | 1500/150 | default | 섹션 기반 |
-
-`OPTIONAL_CHUNK_THRESHOLD`: 1500 → **3500**
-
----
-
-## Phase 3: Parent Document Retrieval 메타데이터 (P2)
-
-현재 구현에서는 **메타데이터만 준비** (실제 retrieval 로직 구현은 향후 과제):
+현재 구현에서는 **메타데이터만 준비** (실제 retrieval 로직은 향후 과제):
 
 | 데이터 유형 | parent_id 형식 | 용도 |
 |------------|---------------|------|
@@ -358,105 +359,81 @@ source_content_length: int = Field(default=500, ...)
 | 해석례 reason | `INTERP_{item_id}` | core ↔ reason 연결 |
 | 판례 detail | `CASE_{item_id}` | summary ↔ detail 연결 |
 
-향후 활용 시나리오:
+**향후 활용 시나리오**:
 - "근로기준법 제56조" 검색 → 해당 조문 + 같은 법령의 인접 조문 컨텍스트 제공
 - 판례 summary 검색 → 연결된 detail 청크를 추가 컨텍스트로 활용
 
 ---
 
-## 구현 순서 및 의존성
+## 5. chunk_size 근거
+
+### 임베딩 모델 용량 분석
 
 ```
-Phase 1 (P0 — 법률 + context length):
-  ├─ 1-A. preprocess_laws.py — process_laws() 조문 단위 분할
-  ├─ 1-B. preprocess_laws.py — process_interpretations() Q&A 보존
-  ├─ 1-C. vectorstores/config.py — 법률 청킹 설정 변경
-  └─ 2-A. rag/utils/config.py — format_context_length 상향
+bge-m3 최대 토큰: 8,192
+한글 1자 ≈ 0.5~0.7 토큰 (BPE 기준)
 
-Phase 2 (P1 — 비법률 도메인):
-  ├─ 3-A. preprocess_laws.py — process_court_cases() 판례 분리
-  ├─ 3-B. loader.py — 테이블 인식 splitter 추가
-  ├─ 3-C. loader.py — Q&A 보존 splitter 추가
-  ├─ 3-D. vectorstores/config.py — 파일명 불일치 해결
-  └─ 3-E. vectorstores/config.py — chunk_size 전면 재검토
-
-Phase 3 (P2 — 메타데이터):
-  └─ parent_id 메타데이터 일관 적용 (Phase 1, 2에서 함께 구현)
+chunk_size  | 예상 토큰수     | 모델 활용률
+----------- | -------------- | ----------
+800자       | 400~560토큰    | ~6%   (기존)
+1,500자     | 750~1,050토큰  | ~13%  (개선)
+2,000자     | 1,000~1,400토큰| ~17%  (법률)
 ```
+
+### 도메인별 chunk_size 선정 근거
+
+| 도메인 | chunk_size | 근거 |
+|--------|-----------|------|
+| 법률 (laws, interpretations) | 2,000 | 조문 단위 평균 500~2,000자. 전처리에서 MAX_ARTICLE_CHUNK=3000으로 제어하므로 안전망 역할 |
+| 판례 (court_cases) | 1,500 | summary는 짧지만 detail은 장문. 필수 청킹으로 분할 보장 |
+| 세무 (tax_support) | 1,500 | 테이블 포함 중문. table_aware가 테이블 보존 담당 |
+| 노무 (labor_interpretation) | 1,500 | Q&A 쌍 보존. qa_aware가 쌍 보존 담당 |
+| 그 외 | 1,500 | 기본값. 검색 정밀도와 문맥 보존의 균형 |
 
 ---
 
-## 예상 문서 수 변화
+## 6. 수정 파일 요약
 
-| 컬렉션 | 변경 전 (추정) | 변경 후 (추정) | 변화 |
-|--------|--------------|--------------|------|
-| law_common_db | 법령 5,539건 → ~14,000 청크 | 조문 ~55,000건 | +294% |
-| finance_tax_db | ~3,000 청크 | ~4,000 | +33% |
-| hr_labor_db | ~3,000 청크 | ~3,500 | +17% |
-| startup_funding_db | ~2,000 | ~2,000 | 변경 없음 |
-
-**주의**: law_common_db의 문서 수가 크게 증가하므로 벡터DB 빌드 시간과 저장 용량 증가 예상.
+| 파일 | 변경 내용 |
+|------|----------|
+| `scripts/preprocessing/preprocess_laws.py` | 법령 조문 단위 분할, 해석례 Q&A core/reason 분리, 판례 summary/detail 분리, 하드커트 제거 |
+| `rag/vectorstores/config.py` | DATA_SOURCES 실제 폴더 구조에 맞춤, FILE_TO_COLLECTION_MAPPING 실제 파일명에 맞춤, chunk_size 1500~2000 상향, splitter_type 필드 추가, OPTIONAL_CHUNK_THRESHOLD 3500 |
+| `rag/vectorstores/loader.py` | `_split_text()` 라우터, `_split_with_table_awareness()`, `_split_preserving_qa()` 추가 |
+| `rag/utils/config.py` | format_context_length 500→2000, source_content_length 300→500 |
 
 ---
 
-## 검증 방법
+## 7. 검증 결과
 
-### 전처리 검증
+### 데이터 로드 검증 (기존 전처리 데이터 기준)
 
-```bash
-# 1. 전처리 실행
-python scripts/preprocessing/preprocess_laws.py
+| 컬렉션 | 문서 수 | 상태 |
+|--------|--------|------|
+| startup_funding_db | 2,109 | OK |
+| finance_tax_db | 134 | OK |
+| hr_labor_db | 493 | OK |
+| law_common_db | 68,143 | OK |
 
-# 2. 조문 단위 분할 확인 (레코드 수가 법령 수보다 크게 증가해야 함)
-wc -l data/preprocessed/law/laws_full.jsonl
+### 테스트 결과
 
-# 3. 해석례 Q&A 보존 확인
-python -c "
-import json
-with open('data/preprocessed/law/interpretations.jsonl') as f:
-    for line in f:
-        doc = json.loads(line)
-        if doc['metadata'].get('chunk_type') == 'core':
-            assert '질의요지' in doc['content']
-            assert '회답' in doc['content']
-            print(f'OK: {doc[\"id\"]} - Q&A preserved')
-            break
-"
-
-# 4. 판례 summary/detail 분리 확인
-python -c "
-import json
-with open('data/preprocessed/law/court_cases_tax.jsonl') as f:
-    for line in f:
-        doc = json.loads(line)
-        if '_summary' in doc['id']:
-            print(f'Summary: {doc[\"id\"]}, len={len(doc[\"content\"])}')
-        elif '_detail' in doc['id']:
-            print(f'Detail: {doc[\"id\"]}, len={len(doc[\"content\"])}')
-            break
-"
+```
+376 passed, 11 failed (기존 미관련 실패), 5 skipped
 ```
 
-### 벡터DB 빌드 및 테스트
+기존 실패 11건은 이번 변경과 무관한 테스트 (domain_config_comparison, domain_config_db, reranker, retrieval_agent).
 
-```bash
-# 벡터DB 재빌드
-cd rag
-.venv/Scripts/python -m vectorstores.build_vectordb --all --force
+---
 
-# RAG 테스트
-.venv/Scripts/python -m pytest tests/ -v
+## 8. 후속 작업
 
-# CLI 테스트 (수동)
-.venv/Scripts/python -m main --cli
-# → "근로기준법 제56조 내용 알려줘"
-# → "최저임금 위반 시 처벌은?"
-# → "법인세 세무조정이란?"
-```
+| 작업 | 상태 | 설명 |
+|------|------|------|
+| 전처리 재실행 | 미실행 | 원본 데이터(law-raw/)로 `preprocess_laws.py` 실행하여 조문 단위 JSONL 생성 |
+| 벡터DB 재빌드 | 미실행 | `python -m vectorstores.build_vectordb --all --force` |
+| Parent Document Retrieval 구현 | 미구현 | parent_id 메타데이터 기반 인접 문서 검색 로직 |
+| 검색 품질 A/B 테스트 | 미실행 | 개선 전/후 동일 질의에 대한 검색 결과 비교 |
 
-### 검색 품질 비교
-
-개선 전/후 동일 질의에 대한 검색 결과를 비교:
+### 검색 품질 테스트 질의 예시
 
 | 질의 | 기대 변화 |
 |------|----------|
@@ -464,22 +441,3 @@ cd rag
 | "최저임금 위반 시 처벌" | 판례 summary에서 처벌 관련 요지 검색 |
 | "연차유급휴가 해석례" | 질의-회답 쌍이 온전히 검색 |
 | "부가세 신고 절차" | 테이블 포함 가이드가 온전히 검색 |
-
----
-
-## 구현 상태
-
-| 단계 | 상태 | 비고 |
-|------|------|------|
-| 1-A. 법령 조문 단위 분할 | **완료** | `_format_article_text`, `_split_large_article_by_clauses` 등 5개 함수 추가 |
-| 1-B. 해석례 Q&A 보존 | **완료** | core/reason 분리, chunk_type 메타데이터 |
-| 1-C. 법률 청킹 설정 변경 | **완료** | chunk_size=2000, overlap=200, threshold=3500 |
-| 2-A. format_context_length 상향 | **완료** | 500→2000, 300→500 |
-| 3-A. 판례 summary/detail 분리 | **완료** | 하드커트 제거, 2개 레코드 분리 |
-| 3-B. 테이블 인식 splitter | **완료** | `_split_with_table_awareness()` |
-| 3-C. Q&A 보존 splitter | **완료** | `_split_preserving_qa()` |
-| 3-D. 파일명 통일 | **완료** | hr_major_insurance → hr_4insurance_documents + hr_insurance_edu |
-| 3-E. chunk_size 전면 재검토 | **완료** | 전 파일 1500~2000으로 상향 |
-| 테스트 | **완료** | 376 passed (11 failed는 기존 실패, 이번 변경과 무관) |
-| 전처리 재실행 | **미실행** | 원본 데이터(law-raw/) 필요 |
-| 벡터DB 재빌드 | **미실행** | 전처리 완료 후 실행 필요 |
