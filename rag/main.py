@@ -20,15 +20,11 @@ LOG_DIR = Path(__file__).parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 LOG_FILE_PATH = LOG_DIR / "chat.log"
 
-# 로깅 설정 (환경변수 LOG_LEVEL로 제어 가능)
-def _get_log_level() -> int:
-    """환경변수에서 로그 레벨을 결정합니다."""
-    import os
-    level_name = os.getenv("LOG_LEVEL", "INFO").upper()
-    return getattr(logging, level_name, logging.INFO)
+# 로깅 설정 (Settings.log_level로 제어)
+from utils.config import get_settings
 
 logging.basicConfig(
-    level=_get_log_level(),
+    level=getattr(logging, get_settings().log_level, logging.INFO),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
@@ -61,7 +57,6 @@ from schemas import (
     DocumentResponse,
 )
 from schemas.response import HealthResponse, StreamResponse
-from utils.config import get_settings
 from utils.middleware import (
     RateLimitMiddleware,
     MetricsMiddleware,
