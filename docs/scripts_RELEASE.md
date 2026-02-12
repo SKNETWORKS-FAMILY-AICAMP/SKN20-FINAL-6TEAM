@@ -1,5 +1,14 @@
 # Release Notes
 
+## [2026-02-12] - 법령 전처리 대폭 개선 + 4대보험/세정세무 전처리 추가
+
+### Features
+- 4대보험 PDF 전처리 스크립트 추가 (`preprocess_hr_insurance_edu.py`)
+- 세정세무 전처리 Upstage+OpenAI 연동 대폭 확장 (`preprocess_tax.py`)
+
+### Refactoring
+- 법령 전처리 대폭 개선: 조문 단위 분할, 소형 병합/대형 항 분할 로직 추가 (`preprocess_laws.py`)
+
 ## [2026-02-09] - 전처리 스크립트 추가 및 개선
 
 ### Features
