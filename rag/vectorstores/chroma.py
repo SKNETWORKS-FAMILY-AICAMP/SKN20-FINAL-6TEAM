@@ -174,12 +174,30 @@ class ChromaVectorStore:
 
         # 문서 로드
         documents: list[Document] = []
+        file_counts: dict[str, int] = {}
         for doc in self.loader.load_db_documents(domain):
             documents.append(doc)
+            sf = doc.metadata.get("source_file", "unknown")
+            file_counts[sf] = file_counts.get(sf, 0) + 1
 
         if not documents:
             logger.warning(f"{domain}에 대한 문서를 찾을 수 없습니다")
             return 0
+
+        # 파일별 통계 출력
+        for sf, cnt in file_counts.items():
+            logger.info("  %-40s → %d건", sf, cnt)
+
+        # 중복 ID 감지
+        seen_ids: set[str] = set()
+        duplicates = 0
+        for doc in documents:
+            doc_id = doc.metadata.get("id", "")
+            if doc_id in seen_ids:
+                duplicates += 1
+            seen_ids.add(doc_id)
+        if duplicates:
+            logger.warning("중복 ID %d건 감지 (domain: %s)", duplicates, domain)
 
         logger.info(f"{len(documents)}개 문서를 {collection_name}에 추가 중...")
 

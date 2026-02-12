@@ -10,6 +10,7 @@
 """
 
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Any, Iterator
@@ -17,10 +18,13 @@ from typing import Any, Iterator
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
+logger = logging.getLogger(__name__)
+
 from .config import (
     ChunkingConfig,
     DATA_SOURCES,
     FILE_CHUNKING_CONFIG,
+    FILE_SOURCE_DIR,
     FILE_TO_COLLECTION_MAPPING,
     OPTIONAL_CHUNK_THRESHOLD,
 )
@@ -69,11 +73,15 @@ class DataLoader:
             )
         return self._splitters[key]
 
-    def _parse_jsonl_line(self, line: str) -> dict[str, Any] | None:
+    def _parse_jsonl_line(
+        self, line: str, line_num: int = 0, file_name: str = ""
+    ) -> dict[str, Any] | None:
         """JSONL 한 줄을 파싱합니다.
 
         Args:
             line: JSON 문자열 한 줄
+            line_num: 줄 번호 (에러 로깅용)
+            file_name: 파일 이름 (에러 로깅용)
 
         Returns:
             파싱된 딕셔너리 또는 유효하지 않으면 None
@@ -83,7 +91,8 @@ class DataLoader:
             return None
         try:
             return json.loads(line)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.warning("JSONL 파싱 실패 [%s:%d]: %s", file_name, line_num, e)
             return None
 
     def _create_document(
@@ -91,6 +100,7 @@ class DataLoader:
         data: dict[str, Any],
         file_name: str,
         chunk_index: int | None = None,
+        collection_domain: str = "",
     ) -> Document:
         """데이터로부터 LangChain Document를 생성합니다.
 
@@ -98,6 +108,7 @@ class DataLoader:
             data: 문서 데이터 딕셔너리
             file_name: 원본 파일 이름
             chunk_index: 청킹된 경우 청크 인덱스
+            collection_domain: 적재 대상 컬렉션 도메인 키
 
         Returns:
             LangChain Document 인스턴스
@@ -107,6 +118,7 @@ class DataLoader:
             "id": data.get("id", ""),
             "type": data.get("type", ""),
             "domain": data.get("domain", ""),
+            "collection": collection_domain,
             "title": data.get("title", ""),
             "source_file": file_name,
         }
@@ -349,7 +361,9 @@ class DataLoader:
 
         return [c for c in chunks if c.strip()]
 
-    def load_file(self, file_path: Path) -> Iterator[Document]:
+    def load_file(
+        self, file_path: Path, collection_domain: str = ""
+    ) -> Iterator[Document]:
         """파일에서 문서를 로드합니다.
 
         JSONL 파일을 읽어 각 줄을 Document로 변환합니다.
@@ -357,6 +371,7 @@ class DataLoader:
 
         Args:
             file_path: 파일 경로
+            collection_domain: 적재 대상 컬렉션 도메인 키
 
         Yields:
             LangChain Document 인스턴스
@@ -365,8 +380,8 @@ class DataLoader:
         chunk_config = FILE_CHUNKING_CONFIG.get(file_name)
 
         with open(file_path, "r", encoding="utf-8") as f:
-            for line in f:
-                data = self._parse_jsonl_line(line)
+            for line_num, line in enumerate(f, start=1):
+                data = self._parse_jsonl_line(line, line_num, file_name)
                 if data is None:
                     continue
 
@@ -379,14 +394,20 @@ class DataLoader:
                     for i, chunk in enumerate(chunks):
                         chunk_data = data.copy()
                         chunk_data["content"] = chunk
-                        yield self._create_document(chunk_data, file_name, chunk_index=i)
+                        yield self._create_document(
+                            chunk_data, file_name,
+                            chunk_index=i, collection_domain=collection_domain,
+                        )
                 else:
-                    yield self._create_document(data, file_name)
+                    yield self._create_document(
+                        data, file_name, collection_domain=collection_domain,
+                    )
 
     def load_db_documents(self, domain: str) -> Iterator[Document]:
         """특정 도메인의 모든 문서를 로드합니다.
 
         도메인에 매핑된 모든 데이터 파일을 읽어 Document로 변환합니다.
+        FILE_SOURCE_DIR로 소스 디렉토리를 명시적으로 결정합니다.
 
         Args:
             domain: 도메인 키 (startup_funding, finance_tax, hr_labor, law_common)
@@ -395,29 +416,28 @@ class DataLoader:
             LangChain Document 인스턴스
 
         Raises:
-            ValueError: 유효하지 않은 도메인이거나 소스 디렉토리가 없는 경우
+            ValueError: 유효하지 않은 도메인인 경우
         """
-        source_dir = DATA_SOURCES.get(domain)
-        if source_dir is None or not source_dir.exists():
-            raise ValueError(f"유효하지 않은 도메인이거나 소스 디렉토리가 없습니다: {domain}")
+        if domain not in DATA_SOURCES:
+            raise ValueError(f"유효하지 않은 도메인: {domain}")
 
-        # 도메인에 해당하는 모든 파일 찾기
         for file_name, target_domain in FILE_TO_COLLECTION_MAPPING.items():
             if target_domain != domain:
                 continue
 
+            source_key = FILE_SOURCE_DIR.get(file_name, domain)
+            source_dir = DATA_SOURCES.get(source_key)
+            if source_dir is None:
+                logger.warning("소스 디렉토리 없음: %s (key: %s)", file_name, source_key)
+                continue
+
             file_path = source_dir / file_name
             if not file_path.exists():
-                # Check other directories
-                for _, other_dir in DATA_SOURCES.items():
-                    alt_path = other_dir / file_name
-                    if alt_path.exists():
-                        file_path = alt_path
-                        break
+                logger.warning("파일 없음: %s (경로: %s)", file_name, file_path)
+                continue
 
-            if file_path.exists():
-                print(f"Loading {file_name}...")
-                yield from self.load_file(file_path)
+            logger.info("Loading %s → %s_db [source: %s/]", file_name, domain, source_key)
+            yield from self.load_file(file_path, collection_domain=domain)
 
     def get_file_stats(self, domain: str) -> dict[str, int]:
         """도메인의 파일별 문서 수 통계를 반환합니다.
@@ -428,26 +448,23 @@ class DataLoader:
         Returns:
             파일 이름별 문서 수 딕셔너리
         """
-        stats = {}
-        source_dir = DATA_SOURCES.get(domain)
+        stats: dict[str, int] = {}
 
-        if source_dir is None or not source_dir.exists():
+        if domain not in DATA_SOURCES:
             return stats
 
         for file_name, target_domain in FILE_TO_COLLECTION_MAPPING.items():
             if target_domain != domain:
                 continue
 
-            file_path = source_dir / file_name
-            if not file_path.exists():
-                for _, other_dir in DATA_SOURCES.items():
-                    alt_path = other_dir / file_name
-                    if alt_path.exists():
-                        file_path = alt_path
-                        break
+            source_key = FILE_SOURCE_DIR.get(file_name, domain)
+            source_dir = DATA_SOURCES.get(source_key)
+            if source_dir is None:
+                continue
 
+            file_path = source_dir / file_name
             if file_path.exists():
-                count = sum(1 for doc in self.load_file(file_path))
+                count = sum(1 for _ in self.load_file(file_path, collection_domain=domain))
                 stats[file_name] = count
 
         return stats

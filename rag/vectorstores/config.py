@@ -118,6 +118,10 @@ class VectorDBConfig:
     def openai_api_key(self) -> str:
         """환경변수에서 OpenAI API 키를 가져옵니다.
 
+        NOTE: build_vectordb 스크립트는 FastAPI 런타임과 독립 실행되므로
+        의도적으로 os.getenv()를 사용합니다.
+        런타임 설정은 utils.config.get_settings()를 사용하세요.
+
         Returns:
             OpenAI API 키 문자열
 
@@ -130,7 +134,7 @@ class VectorDBConfig:
         return key
 
 
-# 파일별 컬렉션 매핑 (실제 전처리 출력에 맞춤)
+# 파일별 컬렉션 매핑 (적재 대상 컬렉션)
 FILE_TO_COLLECTION_MAPPING = {
     # startup_funding_db 컬렉션 (startup_support/)
     "announcements.jsonl": "startup_funding",
@@ -139,17 +143,30 @@ FILE_TO_COLLECTION_MAPPING = {
 
     # finance_tax_db 컬렉션 (finance_tax/)
     "tax_support.jsonl": "finance_tax",
+    "court_cases_tax.jsonl": "finance_tax",
 
     # hr_labor_db 컬렉션 (hr_labor/)
     "labor_interpretation.jsonl": "hr_labor",
     "hr_insurance_edu.jsonl": "hr_labor",
+    "court_cases_labor.jsonl": "hr_labor",
 
     # law_common_db 컬렉션 (law_common/)
     "laws_full.jsonl": "law_common",
     "interpretations.jsonl": "law_common",
-    "court_cases_tax.jsonl": "law_common",
-    "court_cases_labor.jsonl": "law_common",
 }
+
+# 소스 디렉토리가 컬렉션 도메인과 다른 파일의 실제 위치
+# 여기 없는 파일은 FILE_TO_COLLECTION_MAPPING의 도메인 키와 동일한 소스 디렉토리 사용
+FILE_SOURCE_DIR: dict[str, str] = {
+    "court_cases_tax.jsonl": "finance_tax",
+    "court_cases_labor.jsonl": "hr_labor",
+}
+
+# 의도적으로 벡터DB에서 제외하는 파일 (범위 외 데이터)
+EXCLUDED_FILES: list[str] = [
+    "laws_etc.jsonl",
+    "interpretations_etc.jsonl",
+]
 
 # 파일별 청킹 설정
 # chunk_size 근거: bge-m3 최대 8,192 토큰, 한글 1자 ≈ 0.5~0.7 토큰

@@ -33,6 +33,7 @@ from dotenv import load_dotenv
 
 from vectorstores.chroma import ChromaVectorStore
 from vectorstores.config import COLLECTION_NAMES
+from vectorstores.loader import DataLoader
 
 
 def main():
@@ -80,13 +81,23 @@ def main():
         action="store_true",
         help="모든 데이터베이스 통계 표시",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="실제 임베딩/저장 없이 로드+청킹 통계만 출력",
+    )
 
     args = parser.parse_args()
 
     # 인자 유효성 검사
-    if not any([args.all, args.domain, args.stats]):
+    if not any([args.all, args.domain, args.stats, args.dry_run]):
         parser.print_help()
         sys.exit(1)
+
+    # dry-run 모드
+    if args.dry_run:
+        _run_dry_run(args)
+        return
 
     # 벡터 스토어 초기화
     store = ChromaVectorStore()
@@ -133,6 +144,45 @@ def main():
         print(f"\n{args.domain} 빌드 중...")
         count = store.build_vectordb(args.domain, force_rebuild=args.force)
         print(f"\n완료: {count}개 문서")
+
+
+def _run_dry_run(args: argparse.Namespace) -> None:
+    """실제 임베딩 없이 로드+청킹 통계만 출력합니다.
+
+    Args:
+        args: argparse 네임스페이스 (--all 또는 --domain 포함)
+    """
+    loader = DataLoader()
+
+    domains: list[str] = []
+    if args.all:
+        domains = list(COLLECTION_NAMES.keys())
+    elif args.domain:
+        domains = [args.domain]
+    else:
+        domains = list(COLLECTION_NAMES.keys())
+
+    print("\n" + "=" * 60)
+    print("[DRY-RUN] 로드 + 청킹 통계 (임베딩 없음)")
+    print("=" * 60)
+
+    grand_total = 0
+    for domain in domains:
+        collection_name = COLLECTION_NAMES[domain]
+        print(f"\n{domain} 빌드 시뮬레이션...")
+
+        file_stats = loader.get_file_stats(domain)
+        domain_total = 0
+        for file_name, count in file_stats.items():
+            print(f"  {file_name:<40} → {count:>6,}건")
+            domain_total += count
+
+        print(f"  {'합계':<40}   {domain_total:>6,}건 → {collection_name}")
+        grand_total += domain_total
+
+    print(f"\n{'=' * 60}")
+    print(f"전체 합계: {grand_total:,}건")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
