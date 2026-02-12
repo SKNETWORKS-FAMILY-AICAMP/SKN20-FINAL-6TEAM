@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     )
     enable_llm_domain_classification: bool = Field(
         default=False,
-        description="LLM 기반 도메인 분류 활성화 (벡터 분류와 비교용, 추가 비용 발생)"
+        description="LLM 기반 도메인 분류 활성화 (true 시 LLM이 1차 분류기, 추가 비용 발생)"
     )
 
     # -- 평가 & 재시도 --

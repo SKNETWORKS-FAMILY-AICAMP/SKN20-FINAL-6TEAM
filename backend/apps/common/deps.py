@@ -1,4 +1,5 @@
 from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from jose import jwt, JWTError
 from config.database import get_db
@@ -49,7 +50,8 @@ def get_current_user(
             detail="Invalid authentication credentials",
         )
 
-    user = db.query(User).filter(User.google_email == user_email, User.use_yn == True).first()
+    stmt = select(User).where(User.google_email == user_email, User.use_yn == True)
+    user = db.execute(stmt).scalar_one_or_none()
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -1,78 +1,60 @@
+"""기업 API 라우터."""
+
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from typing import List
-import os
-import uuid
-from datetime import datetime
+
+from config.database import get_db
+from apps.common.models import User
+from apps.common.deps import get_current_user
+from apps.companies.service import CompanyService, ALLOWED_EXTENSIONS, ALLOWED_CONTENT_TYPES, MAX_FILE_SIZE
+from .schemas import CompanyCreate, CompanyUpdate, CompanyResponse
 
 limiter = Limiter(key_func=get_remote_address)
 
-from config.database import get_db
-from apps.common.models import User, Company
-from apps.common.deps import get_current_user
-from .schemas import CompanyCreate, CompanyUpdate, CompanyResponse
-
 router = APIRouter(prefix="/companies", tags=["companies"])
 
-UPLOAD_DIR = "uploads/companies"
-ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png"}
-ALLOWED_CONTENT_TYPES = {"application/pdf", "image/jpeg", "image/png"}
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+
+def get_company_service(db: Session = Depends(get_db)) -> CompanyService:
+    """CompanyService 의존성 주입."""
+    return CompanyService(db)
 
 
 @router.get("", response_model=List[CompanyResponse])
 async def get_companies(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    service: CompanyService = Depends(get_company_service),
+    current_user: User = Depends(get_current_user),
 ):
     """현재 사용자의 기업 목록 조회"""
-    companies = db.query(Company).filter(
-        Company.user_id == current_user.user_id,
-        Company.use_yn == True
-    ).all()
-    return companies
+    return service.get_companies_by_user(current_user.user_id)
 
 
 @router.post("", response_model=CompanyResponse, status_code=status.HTTP_201_CREATED)
 async def create_company(
     company_data: CompanyCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    service: CompanyService = Depends(get_company_service),
+    current_user: User = Depends(get_current_user),
 ):
     """기업 정보 등록"""
-    company = Company(
-        user_id=current_user.user_id,
-        com_name=company_data.com_name,
-        biz_num=company_data.biz_num,
-        addr=company_data.addr,
-        open_date=company_data.open_date,
-        biz_code=company_data.biz_code
-    )
-    db.add(company)
-    db.commit()
-    db.refresh(company)
-    return company
+    return service.create_company(company_data, current_user.user_id)
 
 
 @router.get("/{company_id}", response_model=CompanyResponse)
 async def get_company(
     company_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    service: CompanyService = Depends(get_company_service),
+    current_user: User = Depends(get_current_user),
 ):
     """기업 상세 정보 조회"""
-    company = db.query(Company).filter(
-        Company.company_id == company_id,
-        Company.user_id == current_user.user_id,
-        Company.use_yn == True
-    ).first()
-
+    company = service.get_company(company_id, current_user.user_id)
     if not company:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Company not found"
+            detail="Company not found",
         )
     return company
 
@@ -81,52 +63,31 @@ async def get_company(
 async def update_company(
     company_id: int,
     company_data: CompanyUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    service: CompanyService = Depends(get_company_service),
+    current_user: User = Depends(get_current_user),
 ):
     """기업 정보 수정"""
-    company = db.query(Company).filter(
-        Company.company_id == company_id,
-        Company.user_id == current_user.user_id,
-        Company.use_yn == True
-    ).first()
-
+    company = service.update_company(company_id, company_data, current_user.user_id)
     if not company:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Company not found"
+            detail="Company not found",
         )
-
-    update_data = company_data.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(company, key, value)
-
-    db.commit()
-    db.refresh(company)
     return company
 
 
 @router.delete("/{company_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_company(
     company_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    service: CompanyService = Depends(get_company_service),
+    current_user: User = Depends(get_current_user),
 ):
     """기업 삭제 (소프트 삭제)"""
-    company = db.query(Company).filter(
-        Company.company_id == company_id,
-        Company.user_id == current_user.user_id,
-        Company.use_yn == True
-    ).first()
-
-    if not company:
+    if not service.delete_company(company_id, current_user.user_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Company not found"
+            detail="Company not found",
         )
-
-    company.use_yn = False
-    db.commit()
     return None
 
 
@@ -136,22 +97,10 @@ async def upload_business_registration(
     request: Request,
     company_id: int,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
+    service: CompanyService = Depends(get_company_service),
     current_user: User = Depends(get_current_user),
 ):
     """사업자등록증 파일 업로드"""
-    company = db.query(Company).filter(
-        Company.company_id == company_id,
-        Company.user_id == current_user.user_id,
-        Company.use_yn == True
-    ).first()
-
-    if not company:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Company not found"
-        )
-
     # 파일 검증
     file_ext = os.path.splitext(file.filename or "")[1].lower()
     if file_ext not in ALLOWED_EXTENSIONS:
@@ -173,15 +122,12 @@ async def upload_business_registration(
             detail=f"File size exceeds {MAX_FILE_SIZE // (1024 * 1024)}MB limit",
         )
 
-    # 파일 저장
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    file_name = f"{uuid.uuid4()}{file_ext}"
-    file_path = os.path.join(UPLOAD_DIR, file_name)
-
-    with open(file_path, "wb") as buffer:
-        buffer.write(content)
-
-    company.file_path = file_path
-    db.commit()
-    db.refresh(company)
+    company = await service.upload_business_registration(
+        company_id, current_user.user_id, content, file_ext
+    )
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found",
+        )
     return company

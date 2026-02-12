@@ -9,6 +9,7 @@ from utils.config import (  # noqa: F401 — backward compatibility re-export
     _DEFAULT_DOMAIN_COMPOUND_RULES,
     _DEFAULT_DOMAIN_KEYWORDS,
 )
+from utils.sanitizer import PROMPT_INJECTION_GUARD
 
 # Re-ranking 프롬프트 (LLM Reranker용)
 RERANK_PROMPT = """주어진 질문과 문서의 관련성을 0-10 점수로 평가하세요.
@@ -128,7 +129,7 @@ STARTUP_FUNDING_PROMPT = """당신은 Bizi의 창업 및 지원사업 전문 상
 
 주의: 본문 내용이 아닌 참고 자료의 제목만 작성하세요.
 참고 자료를 전혀 사용하지 않은 경우에만 "답변 근거 없음"이라고 작성하세요.
-"""
+""" + PROMPT_INJECTION_GUARD
 
 # 재무/세무 에이전트 프롬프트
 FINANCE_TAX_PROMPT = """당신은 Bizi의 재무 및 세무 전문 상담사입니다.
@@ -201,7 +202,7 @@ FINANCE_TAX_PROMPT = """당신은 Bizi의 재무 및 세무 전문 상담사입�
 
 주의: 본문 내용이 아닌 참고 자료의 제목만 작성하세요.
 참고 자료를 전혀 사용하지 않은 경우에만 "답변 근거 없음"이라고 작성하세요.
-"""
+""" + PROMPT_INJECTION_GUARD
 
 # 인사/노무 에이전트 프롬프트
 HR_LABOR_PROMPT = """당신은 Bizi의 인사 및 노무 전문 상담사입니다.
@@ -276,7 +277,7 @@ HR_LABOR_PROMPT = """당신은 Bizi의 인사 및 노무 전문 상담사입니�
 
 주의: 본문 내용이 아닌 참고 자료의 제목만 작성하세요.
 참고 자료를 전혀 사용하지 않은 경우에만 "답변 근거 없음"이라고 작성하세요.
-"""
+""" + PROMPT_INJECTION_GUARD
 
 # 법률 에이전트 프롬프트
 LEGAL_PROMPT = """당신은 Bizi의 법률 전문 상담사입니다.
@@ -351,7 +352,7 @@ LEGAL_PROMPT = """당신은 Bizi의 법률 전문 상담사입니다.
 
 주의: 본문 내용이 아닌 참고 자료의 제목만 작성하세요.
 참고 자료를 전혀 사용하지 않은 경우에만 "답변 근거 없음"이라고 작성하세요.
-"""
+""" + PROMPT_INJECTION_GUARD
 
 # 평가 에이전트 프롬프트
 EVALUATOR_PROMPT = """당신은 Bizi의 답변 품질 평가자입니다.
@@ -610,7 +611,7 @@ MULTI_DOMAIN_SYNTHESIS_PROMPT = """당신은 Bizi의 통합 답변 생성 전문
 - [1] 참고 문서 제목
 - [2] ...
 ---
-"""
+""" + PROMPT_INJECTION_GUARD
 
 # 단일 도메인 액션 힌트 주입 템플릿
 ACTION_HINT_TEMPLATE = """

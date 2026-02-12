@@ -3,6 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
@@ -115,7 +116,7 @@ async def login_google(
             detail="Email address is not verified by Google",
         )
 
-    user = db.query(User).filter(User.google_email == email).first()
+    user = db.execute(select(User).where(User.google_email == email)).scalar_one_or_none()
     if user and not user.use_yn:
         logger.warning("LOGIN_BLOCKED email=%s reason=deactivated", email)
         raise HTTPException(
@@ -155,7 +156,7 @@ async def test_login(
     test_username = request.username if request and request.username else "테스트 사용자"
     test_type_code = request.type_code if request and request.type_code else "U0000002"
 
-    user = db.query(User).filter(User.google_email == test_email).first()
+    user = db.execute(select(User).where(User.google_email == test_email)).scalar_one_or_none()
     if not user:
         user = User(
             google_email=test_email,
@@ -240,7 +241,7 @@ async def refresh(
     if not email:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
 
-    user = db.query(User).filter(User.google_email == email, User.use_yn == True).first()
+    user = db.execute(select(User).where(User.google_email == email, User.use_yn == True)).scalar_one_or_none()
     if not user:
         clear_auth_cookies(response)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")

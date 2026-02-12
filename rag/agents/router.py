@@ -44,6 +44,7 @@ from utils.domain_classifier import DomainClassificationResult, get_domain_class
 from utils.legal_supplement import needs_legal_supplement
 from utils.prompts import REJECTION_RESPONSE
 from utils.question_decomposer import SubQuery, get_question_decomposer
+from utils.sanitizer import sanitize_query
 from vectorstores.chroma import ChromaVectorStore
 
 logger = logging.getLogger(__name__)
@@ -267,6 +268,16 @@ class MainRouter:
         start = time.time()
         query = state["query"]
         history = state.get("history", [])
+
+        # 프롬프트 인젝션 새니타이징
+        sanitize_result = sanitize_query(query)
+        if sanitize_result.is_injection_detected:
+            logger.warning(
+                "[분류] 프롬프트 인젝션 탐지: patterns=%s",
+                sanitize_result.detected_patterns,
+            )
+            query = sanitize_result.sanitized_query
+            state["query"] = query
 
         # 대명사/지시어 질문 보강 (분류용, 원본 query는 유지)
         augmented_query = self._augment_query_for_classification(query, history)
@@ -778,6 +789,15 @@ class MainRouter:
         Yields:
             스트리밍 응답 딕셔너리
         """
+        # 프롬프트 인젝션 새니타이징 (스트리밍 경로)
+        sanitize_result = sanitize_query(query)
+        if sanitize_result.is_injection_detected:
+            logger.warning(
+                "[스트리밍] 프롬프트 인젝션 탐지: patterns=%s",
+                sanitize_result.detected_patterns,
+            )
+            query = sanitize_result.sanitized_query
+
         # 대명사/지시어 질문 보강 (분류용)
         augmented_query = self._augment_query_for_classification(query, history or [])
 

@@ -20,6 +20,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./.ssh/bizi-key.pem:/tmp/bizi-key.pem:ro
+      - ssh-known-hosts:/root/.ssh
     entrypoint:
       - sh
       - -c
@@ -31,7 +32,8 @@ services:
         echo "Starting SSH tunnel to RDS..."
         ssh -N \
           -L 0.0.0.0:3306:${MYSQL_HOST}:${MYSQL_PORT:-3306} \
-          -o StrictHostKeyChecking=no \
+          -o StrictHostKeyChecking=accept-new \
+          -o UserKnownHostsFile=/root/.ssh/known_hosts \
           -o ServerAliveInterval=30 \
           -o ServerAliveCountMax=3 \
           -o ExitOnForwardFailure=yes \
@@ -125,3 +127,6 @@ services:
       retries: 3
       start_period: 120s
     command: uvicorn main:app --host 0.0.0.0 --port 8001
+
+volumes:
+  ssh-known-hosts:
