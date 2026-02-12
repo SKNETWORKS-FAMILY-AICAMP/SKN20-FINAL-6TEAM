@@ -20,7 +20,7 @@ from langchain_core.documents import Document
 
 from agents.base import RetrievalResult, RetrievalStatus, RetrievalEvaluationResult
 from utils.config import get_settings
-from utils.legal_supplement import needs_legal_supplement
+from utils.legal_supplement import LEGAL_SUPPLEMENT_KEYWORDS, needs_legal_supplement
 
 if TYPE_CHECKING:
     from agents.base import BaseAgent
@@ -290,7 +290,12 @@ class DocumentBudgetCalculator:
                 )
             }
 
-        # 복합 도메인: 각 도메인에 min(recommended_k, retrieval_k) 균등 할당
+        # 복합 도메인: 각 도메인에 균등 할당하되, 총량이 max_retrieval_docs를 초과하지 않도록 조정
+        settings = get_settings()
+        total = k * len(domains)
+        if total > settings.max_retrieval_docs:
+            k = max(2, settings.max_retrieval_docs // len(domains))
+
         budgets: dict[str, DocumentBudget] = {}
         for i, domain in enumerate(domains):
             budgets[domain] = DocumentBudget(
@@ -860,6 +865,7 @@ class RetrievalAgent:
             retrieval_results=retrieval_results,
             all_documents=all_documents,
             agent_timings=agent_timings,
+            sub_queries=sub_queries,
         )
 
         # 5. 복합 도메인 문서 병합 (2+ 도메인)
@@ -1008,6 +1014,7 @@ class RetrievalAgent:
             retrieval_results=retrieval_results,
             all_documents=all_documents,
             agent_timings=agent_timings,
+            sub_queries=sub_queries,
         )
 
         # 5. 복합 도메인 문서 병합
@@ -1071,11 +1078,11 @@ class RetrievalAgent:
                 budgets=budgets,
                 max_total=candidate_total,
             )
-            # primary domain의 allocated_k를 final_k로 사용 (recommended_k 반영)
-            primary_budget = next(
-                (b for b in budgets.values() if b.is_primary), None
+            # 모든 도메인 예산 합계를 final_k로 사용 (max_retrieval_docs로 상한)
+            final_k = min(
+                sum(b.allocated_k for b in budgets.values() if b.domain in main_results),
+                self.settings.max_retrieval_docs,
             )
-            final_k = primary_budget.allocated_k if primary_budget else self.settings.retrieval_k
             reranker = self.rag_chain.reranker
             if reranker and len(merged) > final_k:
                 logger.info(
@@ -1126,10 +1133,11 @@ class RetrievalAgent:
                 budgets=budgets,
                 max_total=candidate_total,
             )
-            primary_budget = next(
-                (b for b in budgets.values() if b.is_primary), None
+            # 모든 도메인 예산 합계를 final_k로 사용 (max_retrieval_docs로 상한)
+            final_k = min(
+                sum(b.allocated_k for b in budgets.values() if b.domain in main_results),
+                self.settings.max_retrieval_docs,
             )
-            final_k = primary_budget.allocated_k if primary_budget else self.settings.retrieval_k
             reranker = self.rag_chain.reranker
             if reranker and len(merged) > final_k:
                 logger.info(
@@ -1222,6 +1230,44 @@ class RetrievalAgent:
             rewritten_query=expanded_queries,
         )
 
+    @staticmethod
+    def _select_legal_query(
+        query: str,
+        sub_queries: list["SubQuery"],
+    ) -> str:
+        """법률 보충 검색에 사용할 최적 쿼리를 선택합니다.
+
+        하위 질문 중 법률 키워드가 가장 많이 포함된 질문을 선택합니다.
+        복합 질문 전체가 아닌 법률 특화 하위 질문을 사용하여 검색 정밀도를 높입니다.
+
+        Args:
+            query: 원본 복합 질문
+            sub_queries: 분해된 하위 질문 리스트
+
+        Returns:
+            법률 보충 검색에 사용할 쿼리 문자열
+        """
+        if not sub_queries or len(sub_queries) <= 1:
+            return query
+
+        best_query = query
+        best_count = 0
+
+        for sq in sub_queries:
+            count = sum(1 for kw in LEGAL_SUPPLEMENT_KEYWORDS if kw in sq.query)
+            if count > best_count:
+                best_count = count
+                best_query = sq.query
+
+        if best_count > 0 and best_query != query:
+            logger.info(
+                "[법률 보충] 하위 질문 선택: '%s' (법률 키워드 %d개)",
+                best_query[:50],
+                best_count,
+            )
+
+        return best_query
+
     def _perform_legal_supplement(
         self,
         query: str,
@@ -1230,6 +1276,7 @@ class RetrievalAgent:
         retrieval_results: dict[str, RetrievalResult],
         all_documents: list[Document],
         agent_timings: list[dict],
+        sub_queries: list["SubQuery"] | None = None,
     ) -> None:
         """법률 보충 검색을 수행합니다 (동기).
 
@@ -1240,6 +1287,7 @@ class RetrievalAgent:
             retrieval_results: 검색 결과 딕셔너리 (in-place 수정)
             all_documents: 전체 문서 리스트 (in-place 수정)
             agent_timings: 에이전트 타이밍 리스트 (in-place 수정)
+            sub_queries: 분해된 하위 질문 리스트 (법률 특화 쿼리 선택용)
         """
         if not self.settings.enable_legal_supplement:
             return
@@ -1252,10 +1300,13 @@ class RetrievalAgent:
         if not legal_agent:
             return
 
+        # 복합 질문 시 법률 특화 하위 질문 선택
+        search_query = self._select_legal_query(query, sub_queries or [])
+
         agent_start = time.time()
 
         try:
-            result = legal_agent.retrieve_only(query)
+            result = legal_agent.retrieve_only(search_query)
             if len(result.documents) > self.settings.legal_supplement_k:
                 result.documents = result.documents[: self.settings.legal_supplement_k]
                 result.sources = result.sources[: self.settings.legal_supplement_k]
@@ -1287,10 +1338,12 @@ class RetrievalAgent:
         retrieval_results: dict[str, RetrievalResult],
         all_documents: list[Document],
         agent_timings: list[dict],
+        sub_queries: list["SubQuery"] | None = None,
     ) -> None:
         """법률 보충 검색을 비동기로 수행합니다 (동기 메서드에 위임)."""
         await asyncio.to_thread(
             self._perform_legal_supplement,
             query, documents, domains,
             retrieval_results, all_documents, agent_timings,
+            sub_queries,
         )

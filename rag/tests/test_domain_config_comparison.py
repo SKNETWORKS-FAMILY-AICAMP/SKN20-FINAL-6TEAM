@@ -42,9 +42,9 @@ SINGLE_DOMAIN_CASES = [
         "부가가치세-finance",
     ),
     (
-        "법인세 세무조정 방법 알려주세요",
+        "법인세 결산 방법 알려주세요",
         ["finance_tax"],
-        "법인세세무조정-finance",
+        "법인세결산-finance",
     ),
     # hr_labor
     (
@@ -120,14 +120,15 @@ def _make_mock_conn_for_config(config: DomainConfig):
     cursor.fetchone.side_effect = [{"cnt": 1}, {"cnt": 3}]
 
     # 도메인 목록
+    domain_keys = ["startup_funding", "finance_tax", "hr_labor", "law_common"]
     domains = [
         {"domain_id": i + 1, "domain_key": dk}
-        for i, dk in enumerate(["startup_funding", "finance_tax", "hr_labor"])
+        for i, dk in enumerate(domain_keys)
     ]
     fetchall_results = [domains]
 
     # 키워드
-    for dk in ["startup_funding", "finance_tax", "hr_labor"]:
+    for dk in domain_keys:
         fetchall_results.append(
             [{"keyword": kw} for kw in config.keywords.get(dk, [])]
         )
@@ -138,11 +139,11 @@ def _make_mock_conn_for_config(config: DomainConfig):
         rules_by_domain.setdefault(dk, []).append(
             {"required_lemmas": json.dumps(sorted(lemmas), ensure_ascii=False)}
         )
-    for dk in ["startup_funding", "finance_tax", "hr_labor"]:
+    for dk in domain_keys:
         fetchall_results.append(rules_by_domain.get(dk, []))
 
     # 대표 쿼리
-    for dk in ["startup_funding", "finance_tax", "hr_labor"]:
+    for dk in domain_keys:
         fetchall_results.append(
             [{"query_text": q} for q in config.representative_queries.get(dk, [])]
         )

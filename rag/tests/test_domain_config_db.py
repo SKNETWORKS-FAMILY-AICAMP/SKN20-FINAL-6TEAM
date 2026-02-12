@@ -46,6 +46,7 @@ def _make_mock_conn(
             {"domain_id": 1, "domain_key": "startup_funding"},
             {"domain_id": 2, "domain_key": "finance_tax"},
             {"domain_id": 3, "domain_key": "hr_labor"},
+            {"domain_id": 4, "domain_key": "law_common"},
         ]
 
     if keywords is None:
@@ -70,7 +71,8 @@ def _make_mock_conn(
 
     # 도메인별 키워드
     domain_key_map = {d["domain_key"]: d["domain_id"] for d in domains}
-    for dk in ["startup_funding", "finance_tax", "hr_labor"]:
+    domain_keys = [d["domain_key"] for d in domains]
+    for dk in domain_keys:
         if dk in keywords:
             fetchall_results.append(
                 [{"keyword": kw} for kw in keywords[dk]]
@@ -82,11 +84,11 @@ def _make_mock_conn(
         rules_by_domain.setdefault(dk, []).append(
             {"required_lemmas": json.dumps(sorted(lemmas), ensure_ascii=False)}
         )
-    for dk in ["startup_funding", "finance_tax", "hr_labor"]:
+    for dk in domain_keys:
         fetchall_results.append(rules_by_domain.get(dk, []))
 
     # 도메인별 대표 쿼리
-    for dk in ["startup_funding", "finance_tax", "hr_labor"]:
+    for dk in domain_keys:
         if dk in rep_queries:
             fetchall_results.append(
                 [{"query_text": q} for q in rep_queries[dk]]
@@ -161,6 +163,7 @@ class TestLoadDomainConfig:
             "startup_funding",
             "finance_tax",
             "hr_labor",
+            "law_common",
         }
         assert "창업" in config.keywords["startup_funding"]
         assert "세금" in config.keywords["finance_tax"]

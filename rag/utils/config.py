@@ -359,6 +359,10 @@ class Settings(BaseSettings):
         default=True,
         description="복합 도메인 병합 후 Cross-Domain Reranking 활성화"
     )
+    multi_domain_gap_threshold: float = Field(
+        default=0.15, ge=0.0, le=1.0,
+        description="벡터 유사도 복합 도메인 탐지 갭 임계값 (best_score - score < 이 값이면 추가 도메인 포함)"
+    )
     dynamic_k_min: int = Field(
         default=3, gt=0, description="동적 K 최소값"
     )

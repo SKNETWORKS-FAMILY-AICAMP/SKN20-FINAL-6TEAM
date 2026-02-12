@@ -425,6 +425,10 @@ class ResponseGeneratorAgent:
             DOMAIN_LABELS.get(d, d) for d in domains
         )
         actions_context = self._format_actions_context(actions or [])
+        sub_queries_text = "\n".join(
+            f"- [{DOMAIN_LABELS.get(sq.domain, sq.domain)}] {sq.query}"
+            for sq in sub_queries
+        ) if sub_queries else "없음"
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", MULTI_DOMAIN_SYNTHESIS_PROMPT),
@@ -442,6 +446,7 @@ class ResponseGeneratorAgent:
             "company_context": company_context,
             "domains_description": domains_description,
             "actions_context": actions_context,
+            "sub_queries_text": sub_queries_text,
         }):
             content_buffer += token
             yield {"type": "token", "content": token}
@@ -541,6 +546,10 @@ class ResponseGeneratorAgent:
         domains_description = ", ".join(
             DOMAIN_LABELS.get(d, d) for d in domains
         )
+        sub_queries_text = "\n".join(
+            f"- [{DOMAIN_LABELS.get(sq.domain, sq.domain)}] {sq.query}"
+            for sq in sub_queries
+        ) if sub_queries else "없음"
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", MULTI_DOMAIN_SYNTHESIS_PROMPT),
@@ -557,6 +566,7 @@ class ResponseGeneratorAgent:
             "company_context": company_context,
             "domains_description": domains_description,
             "actions_context": actions_context,
+            "sub_queries_text": sub_queries_text,
         })
 
     # ── 내부 헬퍼 (비동기) ──
@@ -658,6 +668,10 @@ class ResponseGeneratorAgent:
         domains_description = ", ".join(
             DOMAIN_LABELS.get(d, d) for d in domains
         )
+        sub_queries_text = "\n".join(
+            f"- [{DOMAIN_LABELS.get(sq.domain, sq.domain)}] {sq.query}"
+            for sq in sub_queries
+        ) if sub_queries else "없음"
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", MULTI_DOMAIN_SYNTHESIS_PROMPT),
@@ -676,6 +690,7 @@ class ResponseGeneratorAgent:
                     "company_context": company_context,
                     "domains_description": domains_description,
                     "actions_context": actions_context,
+                    "sub_queries_text": sub_queries_text,
                 }),
                 timeout=self.settings.llm_timeout,
             )

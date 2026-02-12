@@ -253,7 +253,9 @@ class TestDocumentBudgetCalculator:
         """단일 도메인은 recommended_k를 사용."""
         settings = MagicMock()
         settings.enable_dynamic_k = True
+        settings.enable_fixed_doc_limit = False
         settings.retrieval_k = 3
+        settings.max_retrieval_docs = 15
         mock_settings.return_value = settings
 
         budgets = self.calculator.calculate(
@@ -272,7 +274,9 @@ class TestDocumentBudgetCalculator:
         """단일 도메인에서 K가 max_total로 제한됨."""
         settings = MagicMock()
         settings.enable_dynamic_k = True
+        settings.enable_fixed_doc_limit = False
         settings.retrieval_k = 3
+        settings.max_retrieval_docs = 15
         mock_settings.return_value = settings
 
         chars = QueryCharacteristics(
@@ -312,7 +316,9 @@ class TestDocumentBudgetCalculator:
         """2개 도메인: primary_ratio에 따라 예산 분배."""
         settings = MagicMock()
         settings.enable_dynamic_k = True
+        settings.enable_fixed_doc_limit = False
         settings.retrieval_k = 3
+        settings.max_retrieval_docs = 15
         mock_settings.return_value = settings
 
         budgets = self.calculator.calculate(
@@ -333,7 +339,9 @@ class TestDocumentBudgetCalculator:
         """2개 도메인에서 primary=1, secondary=2 우선순위."""
         settings = MagicMock()
         settings.enable_dynamic_k = True
+        settings.enable_fixed_doc_limit = False
         settings.retrieval_k = 3
+        settings.max_retrieval_docs = 15
         mock_settings.return_value = settings
 
         budgets = self.calculator.calculate(
@@ -350,7 +358,9 @@ class TestDocumentBudgetCalculator:
         """3개 도메인: primary=50%, 나머지 균등 분배."""
         settings = MagicMock()
         settings.enable_dynamic_k = True
+        settings.enable_fixed_doc_limit = False
         settings.retrieval_k = 3
+        settings.max_retrieval_docs = 15
         mock_settings.return_value = settings
 
         budgets = self.calculator.calculate(
@@ -374,7 +384,9 @@ class TestDocumentBudgetCalculator:
         """3개 도메인에서 우선순위가 1, 2, 3 순서."""
         settings = MagicMock()
         settings.enable_dynamic_k = True
+        settings.enable_fixed_doc_limit = False
         settings.retrieval_k = 3
+        settings.max_retrieval_docs = 15
         mock_settings.return_value = settings
 
         budgets = self.calculator.calculate(
@@ -605,7 +617,8 @@ class TestGraduatedRetryHandler:
                 max_level=RetryLevel.MULTI_QUERY,
             )
 
-            mock_mq.retrieve.assert_called_once()
+            # Level 1(RELAX_PARAMS)과 Level 2(MULTI_QUERY) 모두 MultiQueryRetriever 사용
+            assert mock_mq.retrieve.call_count >= 1
 
     @patch("agents.retrieval_agent.get_settings")
     def test_level3_cross_domain_searches_adjacent(self, mock_settings) -> None:

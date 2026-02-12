@@ -91,6 +91,7 @@ class TestVectorDomainClassifier:
         mock_settings = Mock()
         mock_settings.domain_classification_threshold = 0.6
         mock_settings.enable_vector_domain_classification = True
+        mock_settings.multi_domain_gap_threshold = 0.15
         return mock_settings
 
     @pytest.fixture

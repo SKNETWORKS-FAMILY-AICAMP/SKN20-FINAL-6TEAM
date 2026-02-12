@@ -271,10 +271,11 @@ class VectorDomainClassifier:
                 method="vector",
             )
 
-        # 복수 도메인 탐지: 최고 점수와 0.1 이내 차이인 도메인 포함
+        # 복수 도메인 탐지: 최고 점수와 gap 이내 차이인 도메인 포함
+        gap = self.settings.multi_domain_gap_threshold
         detected_domains = [best_domain]
         for domain, score in sorted_domains[1:]:
-            if best_score - score < 0.1 and score >= threshold:
+            if best_score - score < gap and score >= threshold:
                 detected_domains.append(domain)
 
         return DomainClassificationResult(
@@ -400,9 +401,15 @@ class VectorDomainClassifier:
                 if vector_result.is_relevant or boosted_confidence >= threshold:
                     # 보정된 신뢰도로 재판정
                     if boosted_confidence >= threshold:
-                        # 키워드 도메인 기준으로 결과 생성
-                        final_domains = keyword_result.domains if not vector_result.is_relevant else vector_result.domains
-                        vector_result.domains = final_domains
+                        # 키워드+벡터 도메인 합집합 (벡터 도메인 우선, 키워드 추가분 병합)
+                        if vector_result.is_relevant:
+                            merged_domains = list(dict.fromkeys(
+                                vector_result.domains +
+                                [d for d in keyword_result.domains if d not in vector_result.domains]
+                            ))
+                        else:
+                            merged_domains = keyword_result.domains
+                        vector_result.domains = merged_domains
                         vector_result.confidence = boosted_confidence
                         vector_result.is_relevant = True
                         vector_result.method = "keyword+vector"

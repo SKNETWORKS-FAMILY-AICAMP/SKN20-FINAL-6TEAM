@@ -674,20 +674,32 @@ class MainRouter:
         retrieval_evaluation = None
 
         if retrieval_results:
-            # 첫 번째 도메인의 검색 결과 사용 (또는 집계)
+            # 전체 도메인 검색 결과 집계
+            total_doc_count = 0
+            total_keyword_ratio = 0.0
+            total_similarity = 0.0
+            any_multi_query = False
+            all_passed = True
+            eval_count = 0
+
             for domain, result in retrieval_results.items():
                 if result and result.evaluation:
                     eval_result = result.evaluation
-                    # RetrievalEvaluationResult는 passed (bool) 속성만 있음
-                    status = "PASS" if eval_result.passed else "FAIL"
-                    retrieval_evaluation = RetrievalEvaluationData(
-                        status=status,
-                        doc_count=eval_result.doc_count,
-                        keyword_match_ratio=eval_result.keyword_match_ratio,
-                        avg_similarity=eval_result.avg_similarity_score,
-                        used_multi_query=result.used_multi_query,
-                    )
-                    break
+                    total_doc_count += eval_result.doc_count
+                    total_keyword_ratio += eval_result.keyword_match_ratio
+                    total_similarity += eval_result.avg_similarity_score
+                    any_multi_query = any_multi_query or result.used_multi_query
+                    all_passed = all_passed and eval_result.passed
+                    eval_count += 1
+
+            if eval_count > 0:
+                retrieval_evaluation = RetrievalEvaluationData(
+                    status="PASS" if all_passed else "FAIL",
+                    doc_count=total_doc_count,
+                    keyword_match_ratio=total_keyword_ratio / eval_count,
+                    avg_similarity=total_similarity / eval_count,
+                    used_multi_query=any_multi_query,
+                )
 
         return EvaluationDataForDB(
             faithfulness=ragas_metrics.get("faithfulness"),
@@ -916,6 +928,24 @@ class MainRouter:
                 elif chunk["type"] == "generation_done":
                     content = chunk["content"]
 
+            # 복수 도메인 스트리밍 경로에서도 평가 수행 (비동기, 스트리밍 완료 후)
+            evaluation = None
+            if self.settings.enable_llm_evaluation and content:
+                try:
+                    eval_context = "\n".join([s.content for s in all_sources_multi[:5]])
+                    evaluation = await self.evaluator.aevaluate(
+                        question=query,
+                        answer=content,
+                        context=eval_context,
+                    )
+                    logger.info(
+                        "[스트리밍 평가] 복수 도메인 점수=%d/100, %s",
+                        evaluation.total_score,
+                        "PASS" if evaluation.passed else "FAIL",
+                    )
+                except Exception as e:
+                    logger.warning("[스트리밍 평가] 복수 도메인 평가 실패: %s", e)
+
             yield {
                 "type": "done",
                 "content": content,
@@ -923,4 +953,5 @@ class MainRouter:
                 "domains": domains,
                 "sources": all_sources_multi,
                 "actions": pre_actions,
+                "evaluation": evaluation,
             }
