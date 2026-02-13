@@ -646,7 +646,7 @@ CREATE TABLE IF NOT EXISTS `history` (
     `question` LONGTEXT COMMENT '질문',
     `answer` LONGTEXT COMMENT 'JSON 형태 저장 가능',
     `parent_history_id` INT DEFAULT NULL COMMENT '부모 히스토리 ID (대화 연결)',
-    `evaluation_data` JSON DEFAULT NULL COMMENT 'RAGAS 평가 결과 (faithfulness, answer_relevancy, context_precision, contexts)',
+    `evaluation_data` JSON DEFAULT NULL COMMENT 'RAG 평가 결과 JSON (faithfulness, answer_relevancy, context_precision, context_recall, llm_score, llm_passed, contexts, domains, retrieval_evaluation, response_time)',
     -- `sequence` INT NOT NULL DEFAULT 0 COMMENT '순서',
     `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

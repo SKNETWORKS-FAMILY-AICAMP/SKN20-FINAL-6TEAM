@@ -131,6 +131,7 @@ export interface RagStreamResponse {
     domain?: string;
     domains?: string[];
     response_time?: number;
+    evaluation_data?: EvaluationData | null;
   };
 }
 
@@ -168,6 +169,7 @@ export interface EvaluationData {
   faithfulness: number | null;
   answer_relevancy: number | null;
   context_precision: number | null;
+  context_recall: number | null;
   llm_score: number | null;
   llm_passed: boolean | null;
   contexts: string[];
@@ -180,13 +182,17 @@ export interface AdminHistoryListItem {
   history_id: number;
   user_id: number;
   agent_code: string | null;
+  agent_name: string | null;
   question: string | null;
   answer_preview: string | null;
   create_date: string | null;
   faithfulness: number | null;
   answer_relevancy: number | null;
+  context_precision: number | null;
+  context_recall: number | null;
   llm_score: number | null;
   llm_passed: boolean | null;
+  response_time: number | null;
   domains: string[];
   user_email: string | null;
   username: string | null;
@@ -204,6 +210,7 @@ export interface AdminHistoryDetail {
   history_id: number;
   user_id: number;
   agent_code: string | null;
+  agent_name: string | null;
   question: string | null;
   answer: string | null;
   parent_history_id: number | null;

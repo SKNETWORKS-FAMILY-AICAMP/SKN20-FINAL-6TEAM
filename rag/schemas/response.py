@@ -137,6 +137,9 @@ class EvaluationDataForDB(BaseModel):
     context_precision: float | None = Field(
         default=None, description="Context Precision 점수 (0-1)"
     )
+    context_recall: float | None = Field(
+        default=None, description="Context Recall 점수 (0-1)"
+    )
     llm_score: int | None = Field(default=None, description="LLM 평가 점수 (0-100)")
     llm_passed: bool | None = Field(default=None, description="LLM 평가 통과 여부")
     contexts: list[str] = Field(default_factory=list, description="검색된 문서 내용 (발췌)")

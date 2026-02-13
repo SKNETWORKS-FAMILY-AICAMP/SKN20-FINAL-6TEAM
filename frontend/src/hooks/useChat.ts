@@ -3,7 +3,7 @@ import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
 import ragApi, { isRagEnabled, isStreamingEnabled, checkRagHealth, streamChat } from '../lib/rag';
 import api from '../lib/api';
-import type { ChatMessage, AgentCode, RagChatResponse } from '../types';
+import type { ChatMessage, AgentCode, RagChatResponse, EvaluationData } from '../types';
 import { GUEST_MESSAGE_LIMIT, domainToAgentCode } from '../lib/constants';
 
 const ERROR_MESSAGE = '죄송합니다. 응답을 생성하는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
@@ -59,6 +59,7 @@ export const useChat = () => {
       try {
         let response: string;
         let agentCode: AgentCode;
+        let evaluationData: EvaluationData | null = null;
 
         // Check if RAG service is available
         const ragAvailable = isRagEnabled() && await checkRagHealth();
@@ -110,6 +111,7 @@ export const useChat = () => {
                 }
                 setStreaming(false);
                 finalDomain = metadata?.domain || 'general';
+                evaluationData = (metadata?.evaluation_data as EvaluationData) || null;
                 const finalAgentCode = domainToAgentCode(finalDomain);
 
                 // Build multi-domain agent_codes from metadata.domains
@@ -150,6 +152,7 @@ export const useChat = () => {
             });
             response = ragResponse.data.content;
             agentCode = domainToAgentCode(ragResponse.data.domain);
+            evaluationData = ((ragResponse.data as unknown as Record<string, unknown>).evaluation_data as EvaluationData | undefined) ?? null;
 
             // Build multi-domain agent_codes
             const ragDomains = ragResponse.data.domains;
@@ -195,6 +198,7 @@ export const useChat = () => {
               question: message,
               answer: response,
               parent_history_id: lastHistoryId,
+              evaluation_data: evaluationData,
             });
             setLastHistoryId(historyResponse.data.history_id);
           } catch {

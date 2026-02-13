@@ -167,6 +167,145 @@ class CrossEncoderReranker(BaseReranker):
         return await asyncio.to_thread(self.rerank, query, documents, top_k)
 
 
+class RunPodReranker(BaseReranker):
+    """RunPod Serverless를 통한 Re-ranking.
+
+    RunPod GPU 엔드포인트에 HTTP 요청을 보내 문서를 재정렬합니다.
+    임베딩과 동일한 엔드포인트를 사용합니다 (task="rerank").
+
+    Attributes:
+        api_url: RunPod runsync API URL
+        headers: HTTP 요청 헤더 (인증 포함)
+    """
+
+    def __init__(self, api_key: str, endpoint_id: str) -> None:
+        """RunPodReranker를 초기화합니다.
+
+        Args:
+            api_key: RunPod API 키
+            endpoint_id: RunPod Serverless Endpoint ID
+        """
+        self.api_url = f"https://api.runpod.ai/v2/{endpoint_id}/runsync"
+        self.headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+
+    def rerank(
+        self,
+        query: str,
+        documents: list[Document],
+        top_k: int = 5,
+    ) -> list[Document]:
+        """문서를 동기로 재정렬합니다.
+
+        Args:
+            query: 검색 쿼리
+            documents: 문서 리스트
+            top_k: 반환할 문서 수
+
+        Returns:
+            재정렬된 문서 리스트
+        """
+        if len(documents) <= top_k:
+            return documents
+
+        import httpx
+
+        logger.info("[리랭킹] RunPod 시작: %d건 → top_%d", len(documents), top_k)
+
+        doc_texts = [doc.page_content[:500] for doc in documents]
+        payload = {
+            "input": {
+                "task": "rerank",
+                "query": query,
+                "documents": doc_texts,
+            }
+        }
+
+        try:
+            with httpx.Client(timeout=60.0) as client:
+                response = client.post(self.api_url, json=payload, headers=self.headers)
+                response.raise_for_status()
+                result = response.json()
+
+            if result.get("status") != "COMPLETED":
+                logger.warning("[리랭킹] RunPod 실패: status=%s (원본 순서 유지)", result.get("status"))
+                return documents[:top_k]
+
+            scores = [float(s) for s in result["output"]["scores"]]
+            scored_docs = sorted(zip(documents, scores), key=lambda x: x[1], reverse=True)
+
+            logger.info(
+                "[리랭킹] RunPod 완료: 점수 범위 %.4f~%.4f",
+                min(scores), max(scores),
+            )
+
+            return [doc for doc, _ in scored_docs[:top_k]]
+
+        except Exception as e:
+            logger.warning("[리랭킹] RunPod 실패: %s (원본 순서 유지)", e)
+            return documents[:top_k]
+
+    async def arerank(
+        self,
+        query: str,
+        documents: list[Document],
+        top_k: int = 5,
+        max_concurrent: int = 5,
+    ) -> list[Document]:
+        """문서를 비동기로 재정렬합니다.
+
+        Args:
+            query: 검색 쿼리
+            documents: 문서 리스트
+            top_k: 반환할 문서 수
+            max_concurrent: 최대 동시 처리 수 (RunPod에서는 미사용)
+
+        Returns:
+            재정렬된 문서 리스트
+        """
+        if len(documents) <= top_k:
+            return documents
+
+        import httpx
+
+        logger.info("[리랭킹] RunPod 비동기 시작: %d건 → top_%d", len(documents), top_k)
+
+        doc_texts = [doc.page_content[:500] for doc in documents]
+        payload = {
+            "input": {
+                "task": "rerank",
+                "query": query,
+                "documents": doc_texts,
+            }
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(self.api_url, json=payload, headers=self.headers)
+                response.raise_for_status()
+                result = response.json()
+
+            if result.get("status") != "COMPLETED":
+                logger.warning("[리랭킹] RunPod 실패: status=%s (원본 순서 유지)", result.get("status"))
+                return documents[:top_k]
+
+            scores = [float(s) for s in result["output"]["scores"]]
+            scored_docs = sorted(zip(documents, scores), key=lambda x: x[1], reverse=True)
+
+            logger.info(
+                "[리랭킹] RunPod 완료: 점수 범위 %.4f~%.4f",
+                min(scores), max(scores),
+            )
+
+            return [doc for doc, _ in scored_docs[:top_k]]
+
+        except Exception as e:
+            logger.warning("[리랭킹] RunPod 실패: %s (원본 순서 유지)", e)
+            return documents[:top_k]
+
+
 class LLMReranker(BaseReranker):
     """LLM 기반 Reranker.
 
@@ -296,6 +435,9 @@ _reranker: BaseReranker | None = None
 def get_reranker(reranker_type: str | None = None) -> BaseReranker:
     """Reranker 인스턴스를 반환합니다 (싱글톤).
 
+    EMBEDDING_PROVIDER=runpod이면 RunPodReranker를 반환합니다.
+    그 외에는 reranker_type에 따라 CrossEncoderReranker 또는 LLMReranker를 반환합니다.
+
     Args:
         reranker_type: Reranker 타입 ("cross-encoder" 또는 "llm")
                        None이면 설정값 사용
@@ -309,6 +451,19 @@ def get_reranker(reranker_type: str | None = None) -> BaseReranker:
     global _reranker
 
     settings = get_settings()
+
+    # RunPod 모드: 임베딩과 동일 엔드포인트로 리랭킹
+    if settings.embedding_provider == "runpod":
+        if _reranker is not None and isinstance(_reranker, RunPodReranker):
+            return _reranker
+        _reranker = RunPodReranker(
+            api_key=settings.runpod_api_key,
+            endpoint_id=settings.runpod_endpoint_id,
+        )
+        logger.info("[Reranker] RunPodReranker 초기화 (endpoint: %s)", settings.runpod_endpoint_id)
+        return _reranker
+
+    # 로컬 모드
     requested_type = reranker_type or settings.reranker_type
 
     # 이미 생성된 인스턴스가 있고 타입이 일치하면 재사용

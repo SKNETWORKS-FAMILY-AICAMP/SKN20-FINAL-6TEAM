@@ -158,6 +158,23 @@ class Settings(BaseSettings):
     bizinfo_api_key: str = Field(default="", description="기업마당 API 키")
     kstartup_api_key: str = Field(default="", description="K-Startup API 키")
 
+    # -- RunPod Inference --
+    embedding_provider: str = Field(
+        default="local",
+        description="임베딩 제공자 ('local' 또는 'runpod')"
+    )
+    runpod_api_key: str = Field(default="", description="RunPod API 키")
+    runpod_endpoint_id: str = Field(default="", description="RunPod Serverless Endpoint ID")
+
+    @field_validator("embedding_provider")
+    @classmethod
+    def validate_embedding_provider(cls, v: str) -> str:
+        """임베딩 제공자 검증."""
+        allowed = {"local", "runpod"}
+        if v not in allowed:
+            raise ValueError(f"embedding_provider는 {allowed} 중 하나여야 합니다 (입력: {v})")
+        return v
+
     # -- 인증 --
     rag_api_key: str = Field(
         default="", description="RAG API 키 (비어있으면 인증 비활성화)"

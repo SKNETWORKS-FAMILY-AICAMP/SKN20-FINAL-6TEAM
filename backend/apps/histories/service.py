@@ -79,6 +79,7 @@ class HistoryService:
             question=data.question,
             answer=data.answer,
             parent_history_id=data.parent_history_id,
+            evaluation_data=data.evaluation_data.model_dump() if data.evaluation_data else None,
         )
         self.db.add(history)
         self.db.commit()

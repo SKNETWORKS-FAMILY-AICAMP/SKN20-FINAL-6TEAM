@@ -19,6 +19,7 @@ class EvaluationData(BaseModel):
     faithfulness: float | None = Field(default=None, description="Faithfulness 점수 (0-1)")
     answer_relevancy: float | None = Field(default=None, description="Answer Relevancy 점수 (0-1)")
     context_precision: float | None = Field(default=None, description="Context Precision 점수 (0-1)")
+    context_recall: float | None = Field(default=None, description="Context Recall 점수 (0-1)")
     llm_score: int | None = Field(default=None, description="LLM 평가 점수 (0-100)")
     llm_passed: bool | None = Field(default=None, description="LLM 평가 통과 여부")
     contexts: list[str] = Field(default_factory=list, description="검색된 문서 내용 (발췌)")
@@ -58,6 +59,7 @@ class HistoryDetailResponse(BaseModel):
     history_id: int
     user_id: int
     agent_code: str | None = None
+    agent_name: str | None = Field(default=None, description="에이전트 이름 (Code 테이블 JOIN)")
     question: str | None = None
     answer: str | None = None
     parent_history_id: int | None = None

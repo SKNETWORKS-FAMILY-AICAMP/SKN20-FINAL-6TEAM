@@ -8,7 +8,7 @@ from sqlalchemy import select, func, and_, or_, text
 from sqlalchemy.orm import Session
 from datetime import datetime
 
-from apps.common.models import History, User
+from apps.common.models import Code, History, User
 from apps.admin.schemas import (
     HistoryListItem,
     HistoryListResponse,
@@ -136,10 +136,11 @@ class AdminService:
         Returns:
             상담 이력 목록 응답
         """
-        # 기본 쿼리
+        # 기본 쿼리 (Code 테이블 JOIN으로 agent_name 조회)
         stmt = (
-            select(History, User.google_email, User.username)
+            select(History, User.google_email, User.username, Code.name.label("agent_name"))
             .join(User, History.user_id == User.user_id)
+            .outerjoin(Code, History.agent_code == Code.code)
             .where(History.use_yn == True)
         )
 
@@ -201,13 +202,14 @@ class AdminService:
 
         # 결과 변환
         items = []
-        for history, user_email, username in results:
+        for history, user_email, username, agent_name in results:
             eval_data = history.evaluation_data or {}
 
             item = HistoryListItem(
                 history_id=history.history_id,
                 user_id=history.user_id,
                 agent_code=history.agent_code,
+                agent_name=agent_name,
                 question=history.question,
                 answer_preview=(
                     history.answer[:200] + "..."
@@ -217,8 +219,11 @@ class AdminService:
                 create_date=history.create_date,
                 faithfulness=eval_data.get("faithfulness"),
                 answer_relevancy=eval_data.get("answer_relevancy"),
+                context_precision=eval_data.get("context_precision"),
+                context_recall=eval_data.get("context_recall"),
                 llm_score=eval_data.get("llm_score"),
                 llm_passed=eval_data.get("llm_passed"),
+                response_time=eval_data.get("response_time"),
                 domains=eval_data.get("domains", []),
                 user_email=user_email,
                 username=username,
@@ -245,8 +250,9 @@ class AdminService:
             상담 이력 상세 응답 또는 None
         """
         stmt = (
-            select(History, User.google_email, User.username)
+            select(History, User.google_email, User.username, Code.name.label("agent_name"))
             .join(User, History.user_id == User.user_id)
+            .outerjoin(Code, History.agent_code == Code.code)
             .where(History.history_id == history_id, History.use_yn == True)
         )
 
@@ -254,13 +260,14 @@ class AdminService:
         if not result:
             return None
 
-        history, user_email, username = result
+        history, user_email, username, agent_name = result
         eval_data = history.evaluation_data
 
         return HistoryDetailResponse(
             history_id=history.history_id,
             user_id=history.user_id,
             agent_code=history.agent_code,
+            agent_name=agent_name,
             question=history.question,
             answer=history.answer,
             parent_history_id=history.parent_history_id,

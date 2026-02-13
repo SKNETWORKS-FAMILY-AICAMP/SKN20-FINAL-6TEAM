@@ -31,6 +31,7 @@ class HistoryListItem(BaseModel):
     history_id: int
     user_id: int
     agent_code: str | None = None
+    agent_name: str | None = Field(default=None, description="에이전트 이름 (Code 테이블 JOIN)")
     question: str | None = None
     answer_preview: str | None = Field(default=None, description="답변 미리보기 (처음 200자)")
     create_date: datetime | None = None
@@ -38,8 +39,11 @@ class HistoryListItem(BaseModel):
     # 평가 요약
     faithfulness: float | None = None
     answer_relevancy: float | None = None
+    context_precision: float | None = None
+    context_recall: float | None = None
     llm_score: int | None = None
     llm_passed: bool | None = None
+    response_time: float | None = None
     domains: list[str] = Field(default_factory=list)
 
     # 사용자 정보

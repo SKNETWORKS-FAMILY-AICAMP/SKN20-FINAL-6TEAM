@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from kiwipiepy import Kiwi
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_core.embeddings import Embeddings
 
 from utils.config import (
     DOMAIN_REPRESENTATIVE_QUERIES,
@@ -116,7 +116,7 @@ class VectorDomainClassifier:
     - true: 순수 LLM 분류만 사용. LLM 실패 시에만 키워드+벡터로 fallback.
 
     Attributes:
-        embeddings: HuggingFace 임베딩 모델
+        embeddings: 임베딩 모델 (HuggingFaceEmbeddings 또는 RunPodEmbeddings)
         settings: RAG 설정
         _domain_vectors: 도메인별 대표 쿼리 임베딩 벡터
 
@@ -131,11 +131,11 @@ class VectorDomainClassifier:
     _DOMAIN_VECTORS_CACHE: dict[str, np.ndarray] | None = None
     _VECTORS_LOCK = threading.Lock()
 
-    def __init__(self, embeddings: HuggingFaceEmbeddings):
+    def __init__(self, embeddings: Embeddings) -> None:
         """VectorDomainClassifier를 초기화합니다.
 
         Args:
-            embeddings: HuggingFace 임베딩 인스턴스
+            embeddings: LangChain Embeddings 인스턴스 (로컬 또는 RunPod)
         """
         self.embeddings = embeddings
         self.settings = get_settings()

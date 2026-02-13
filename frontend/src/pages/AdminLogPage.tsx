@@ -21,6 +21,8 @@ import {
   CheckCircleIcon,
   XCircleIcon,
 } from '@heroicons/react/24/outline';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import api from '../lib/api';
 import type {
   AdminHistoryListResponse,
@@ -28,6 +30,25 @@ import type {
   AdminHistoryFilters,
 } from '../types';
 import { DOMAIN_NAMES } from '../types';
+
+const DOMAIN_CHIP_COLORS: Record<string, 'green' | 'purple' | 'amber' | 'red' | 'blue'> = {
+  startup_funding: 'green',
+  finance_tax: 'purple',
+  hr_labor: 'amber',
+  law_common: 'red',
+};
+
+const calcF1 = (cp: number | null, cr: number | null): number | null => {
+  if (cp === null || cr === null || cp + cr === 0) return null;
+  return (2 * cp * cr) / (cp + cr);
+};
+
+const scoreColor = (score: number | null): 'green' | 'amber' | 'red' | 'blue' => {
+  if (score === null) return 'blue';
+  if (score >= 0.7) return 'green';
+  if (score >= 0.4) return 'amber';
+  return 'red';
+};
 
 const AdminLogPage: React.FC = () => {
   const [data, setData] = useState<AdminHistoryListResponse | null>(null);
@@ -107,6 +128,7 @@ const AdminLogPage: React.FC = () => {
                 <Option value="startup_funding">창업/지원</Option>
                 <Option value="finance_tax">재무/세무</Option>
                 <Option value="hr_labor">인사/노무</Option>
+                <Option value="law_common">법률</Option>
               </Select>
               <Input
                 label="최소 LLM 점수"
@@ -186,78 +208,86 @@ const AdminLogPage: React.FC = () => {
                       <th className="border-b border-blue-gray-100 bg-blue-gray-50 p-4">도메인</th>
                       <th className="border-b border-blue-gray-100 bg-blue-gray-50 p-4">질문</th>
                       <th className="border-b border-blue-gray-100 bg-blue-gray-50 p-4">LLM 점수</th>
-                      <th className="border-b border-blue-gray-100 bg-blue-gray-50 p-4">RAGAS</th>
+                      <th className="border-b border-blue-gray-100 bg-blue-gray-50 p-4">RAGAS F1</th>
+                      <th className="border-b border-blue-gray-100 bg-blue-gray-50 p-4">응답시간</th>
                       <th className="border-b border-blue-gray-100 bg-blue-gray-50 p-4">일시</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data?.items.map((item) => (
-                      <tr
-                        key={item.history_id}
-                        className="hover:bg-blue-gray-50 cursor-pointer"
-                        onClick={() => fetchHistoryDetail(item.history_id)}
-                      >
-                        <td className="p-4 border-b border-blue-gray-50">
-                          <Typography variant="small" color="blue-gray" className="font-normal">
-                            {item.history_id}
-                          </Typography>
-                        </td>
-                        <td className="p-4 border-b border-blue-gray-50">
-                          <Typography variant="small" color="blue-gray" className="font-normal">
-                            {item.username || item.user_email || '-'}
-                          </Typography>
-                        </td>
-                        <td className="p-4 border-b border-blue-gray-50">
-                          <div className="flex flex-wrap gap-1">
-                            {item.domains.map((domain) => (
-                              <Chip
-                                key={domain}
-                                value={DOMAIN_NAMES[domain] || domain}
-                                size="sm"
-                                variant="ghost"
-                                color="blue"
-                              />
-                            ))}
-                          </div>
-                        </td>
-                        <td className="p-4 border-b border-blue-gray-50 max-w-xs">
-                          <Typography
-                            variant="small"
-                            color="blue-gray"
-                            className="font-normal truncate"
-                          >
-                            {item.question?.slice(0, 50)}...
-                          </Typography>
-                        </td>
-                        <td className="p-4 border-b border-blue-gray-50">
-                          <div className="flex items-center gap-2">
-                            {item.llm_passed !== null && (
-                              item.llm_passed ? (
-                                <CheckCircleIcon className="h-4 w-4 text-green-500" />
-                              ) : (
-                                <XCircleIcon className="h-4 w-4 text-red-500" />
-                              )
-                            )}
+                    {data?.items.map((item) => {
+                      const f1 = calcF1(item.context_precision, item.context_recall);
+                      return (
+                        <tr
+                          key={item.history_id}
+                          className="hover:bg-blue-gray-50 cursor-pointer"
+                          onClick={() => fetchHistoryDetail(item.history_id)}
+                        >
+                          <td className="p-4 border-b border-blue-gray-50">
                             <Typography variant="small" color="blue-gray" className="font-normal">
-                              {item.llm_score !== null ? `${item.llm_score}/100` : '-'}
+                              {item.history_id}
                             </Typography>
-                          </div>
-                        </td>
-                        <td className="p-4 border-b border-blue-gray-50">
-                          <Typography variant="small" color="blue-gray" className="font-normal">
-                            F: {item.faithfulness?.toFixed(2) || '-'} / A:{' '}
-                            {item.answer_relevancy?.toFixed(2) || '-'}
-                          </Typography>
-                        </td>
-                        <td className="p-4 border-b border-blue-gray-50">
-                          <Typography variant="small" color="blue-gray" className="font-normal">
-                            {item.create_date
-                              ? new Date(item.create_date).toLocaleString('ko-KR')
-                              : '-'}
-                          </Typography>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="p-4 border-b border-blue-gray-50">
+                            <Typography variant="small" color="blue-gray" className="font-normal">
+                              {item.username || item.user_email || '-'}
+                            </Typography>
+                          </td>
+                          <td className="p-4 border-b border-blue-gray-50">
+                            <div className="flex flex-wrap gap-1">
+                              {item.domains.map((domain) => (
+                                <Chip
+                                  key={domain}
+                                  value={DOMAIN_NAMES[domain] || domain}
+                                  size="sm"
+                                  variant="ghost"
+                                  color={DOMAIN_CHIP_COLORS[domain] || 'blue'}
+                                />
+                              ))}
+                            </div>
+                          </td>
+                          <td className="p-4 border-b border-blue-gray-50 max-w-xs">
+                            <Typography
+                              variant="small"
+                              color="blue-gray"
+                              className="font-normal truncate"
+                            >
+                              {item.question?.slice(0, 50)}{item.question && item.question.length > 50 ? '...' : ''}
+                            </Typography>
+                          </td>
+                          <td className="p-4 border-b border-blue-gray-50">
+                            <div className="flex items-center gap-2">
+                              {item.llm_passed !== null && (
+                                item.llm_passed ? (
+                                  <CheckCircleIcon className="h-4 w-4 text-green-500" />
+                                ) : (
+                                  <XCircleIcon className="h-4 w-4 text-red-500" />
+                                )
+                              )}
+                              <Typography variant="small" color="blue-gray" className="font-normal">
+                                {item.llm_score !== null ? `${item.llm_score}/100` : '-'}
+                              </Typography>
+                            </div>
+                          </td>
+                          <td className="p-4 border-b border-blue-gray-50">
+                            <Typography variant="small" color="blue-gray" className="font-normal">
+                              {f1 !== null ? f1.toFixed(2) : '-'}
+                            </Typography>
+                          </td>
+                          <td className="p-4 border-b border-blue-gray-50">
+                            <Typography variant="small" color="blue-gray" className="font-normal">
+                              {item.response_time !== null ? `${item.response_time.toFixed(1)}s` : '-'}
+                            </Typography>
+                          </td>
+                          <td className="p-4 border-b border-blue-gray-50">
+                            <Typography variant="small" color="blue-gray" className="font-normal">
+                              {item.create_date
+                                ? new Date(item.create_date).toLocaleString('ko-KR')
+                                : '-'}
+                            </Typography>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
 
@@ -324,7 +354,7 @@ const AdminLogPage: React.FC = () => {
                     </div>
                     <div>
                       <span className="text-gray-500">에이전트:</span>{' '}
-                      {selectedHistory.agent_code || '-'}
+                      {selectedHistory.agent_name || selectedHistory.agent_code || '-'}
                     </div>
                     <div>
                       <span className="text-gray-500">생성일:</span>{' '}
@@ -349,28 +379,27 @@ const AdminLogPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* 답변 */}
+                {/* 답변 (Markdown 렌더링) */}
                 <div>
                   <Typography variant="h6" color="blue-gray" className="mb-2">
                     답변
                   </Typography>
-                  <div className="bg-blue-50 p-4 rounded-lg whitespace-pre-wrap max-h-60 overflow-y-auto">
-                    {selectedHistory.answer}
+                  <div className="bg-blue-50 p-4 rounded-lg max-h-60 overflow-y-auto markdown-body">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {selectedHistory.answer || ''}
+                    </ReactMarkdown>
                   </div>
                 </div>
 
-                {/* 평가 결과 */}
+                {/* LLM 평가 */}
                 {selectedHistory.evaluation_data && (
                   <div>
                     <Typography variant="h6" color="blue-gray" className="mb-2">
-                      평가 결과
+                      LLM 평가
                     </Typography>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <Card className="p-4 text-center">
-                        <Typography variant="small" className="text-gray-500">
-                          LLM 점수
-                        </Typography>
-                        <Typography variant="h5" color="blue">
+                    <Card className="p-4">
+                      <div className="flex items-center gap-4">
+                        <Typography variant="h4" color="blue">
                           {selectedHistory.evaluation_data.llm_score ?? '-'}/100
                         </Typography>
                         {selectedHistory.evaluation_data.llm_passed !== null && (
@@ -378,40 +407,49 @@ const AdminLogPage: React.FC = () => {
                             value={selectedHistory.evaluation_data.llm_passed ? 'PASS' : 'FAIL'}
                             color={selectedHistory.evaluation_data.llm_passed ? 'green' : 'red'}
                             size="sm"
-                            className="mt-2"
                           />
                         )}
-                      </Card>
-                      <Card className="p-4 text-center">
-                        <Typography variant="small" className="text-gray-500">
-                          Faithfulness
-                        </Typography>
-                        <Typography variant="h5" color="blue">
-                          {selectedHistory.evaluation_data.faithfulness?.toFixed(2) ?? '-'}
-                        </Typography>
-                      </Card>
-                      <Card className="p-4 text-center">
-                        <Typography variant="small" className="text-gray-500">
-                          Answer Relevancy
-                        </Typography>
-                        <Typography variant="h5" color="blue">
-                          {selectedHistory.evaluation_data.answer_relevancy?.toFixed(2) ?? '-'}
-                        </Typography>
-                      </Card>
-                      <Card className="p-4 text-center">
-                        <Typography variant="small" className="text-gray-500">
-                          Context Precision
-                        </Typography>
-                        <Typography variant="h5" color="blue">
-                          {selectedHistory.evaluation_data.context_precision?.toFixed(2) ?? '-'}
-                        </Typography>
-                      </Card>
+                      </div>
+                    </Card>
+                  </div>
+                )}
+
+                {/* RAGAS 평가 */}
+                {selectedHistory.evaluation_data && (
+                  <div>
+                    <Typography variant="h6" color="blue-gray" className="mb-2">
+                      RAGAS 평가
+                    </Typography>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                      {([
+                        { label: 'Faithfulness', value: selectedHistory.evaluation_data.faithfulness },
+                        { label: 'Answer Relevancy', value: selectedHistory.evaluation_data.answer_relevancy },
+                        { label: 'Context Precision', value: selectedHistory.evaluation_data.context_precision },
+                        { label: 'Context Recall', value: selectedHistory.evaluation_data.context_recall },
+                        {
+                          label: 'F1-Score',
+                          value: calcF1(
+                            selectedHistory.evaluation_data.context_precision,
+                            selectedHistory.evaluation_data.context_recall,
+                          ),
+                        },
+                      ] as { label: string; value: number | null }[]).map(({ label, value }) => (
+                        <Card key={label} className="p-4 text-center">
+                          <Typography variant="small" className="text-gray-500">
+                            {label}
+                          </Typography>
+                          <Typography variant="h5" color={scoreColor(value)}>
+                            {value !== null && value !== undefined ? value.toFixed(2) : 'N/A'}
+                          </Typography>
+                        </Card>
+                      ))}
                     </div>
                   </div>
                 )}
 
                 {/* 도메인 */}
-                {selectedHistory.evaluation_data?.domains && (
+                {selectedHistory.evaluation_data?.domains &&
+                  selectedHistory.evaluation_data.domains.length > 0 && (
                   <div>
                     <Typography variant="h6" color="blue-gray" className="mb-2">
                       도메인
@@ -421,7 +459,7 @@ const AdminLogPage: React.FC = () => {
                         <Chip
                           key={domain}
                           value={DOMAIN_NAMES[domain] || domain}
-                          color="blue"
+                          color={DOMAIN_CHIP_COLORS[domain] || 'blue'}
                         />
                       ))}
                     </div>

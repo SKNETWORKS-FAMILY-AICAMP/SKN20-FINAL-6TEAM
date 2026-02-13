@@ -718,6 +718,7 @@ class MainRouter:
             faithfulness=ragas_metrics.get("faithfulness"),
             answer_relevancy=ragas_metrics.get("answer_relevancy"),
             context_precision=ragas_metrics.get("context_precision"),
+            context_recall=ragas_metrics.get("context_recall"),
             llm_score=llm_score,
             llm_passed=llm_passed,
             contexts=contexts,
@@ -900,23 +901,36 @@ class MainRouter:
                     content = chunk["content"]
                     all_actions = pre_actions
 
-            # 단일 도메인 스트리밍 경로에서도 평가 수행 (스트리밍 완료 후)
-            evaluation = None
+            # 단일 도메인 스트리밍에서도 평가 수행
+            single_evaluation = None
+            single_ragas_metrics = None
+
             if self.settings.enable_llm_evaluation and content:
                 try:
                     eval_context = "\n".join([s.content for s in all_sources[:5]])
-                    evaluation = await self.evaluator.aevaluate(
+                    single_evaluation = await self.evaluator.aevaluate(
                         question=query,
                         answer=content,
                         context=eval_context,
                     )
                     logger.info(
                         "[스트리밍 평가] 단일 도메인 점수=%d/100, %s",
-                        evaluation.total_score,
-                        "PASS" if evaluation.passed else "FAIL",
+                        single_evaluation.total_score,
+                        "PASS" if single_evaluation.passed else "FAIL",
                     )
                 except Exception as e:
                     logger.warning("[스트리밍 평가] 단일 도메인 평가 실패: %s", e)
+
+            if self.settings.enable_ragas_evaluation and self.ragas_evaluator and content:
+                try:
+                    contexts = [s.content for s in all_sources]
+                    single_ragas_metrics = await self.ragas_evaluator.aevaluate_answer_quality(
+                        question=query,
+                        answer=content,
+                        contexts=contexts,
+                    )
+                except Exception as e:
+                    logger.warning("[스트리밍 RAGAS] 단일 도메인 RAGAS 평가 실패: %s", e)
 
             yield {
                 "type": "done",
@@ -925,7 +939,9 @@ class MainRouter:
                 "domains": domains,
                 "sources": all_sources,
                 "actions": all_actions,
-                "evaluation": evaluation,
+                "evaluation": single_evaluation,
+                "ragas_metrics": single_ragas_metrics,
+                "retrieval_results": retrieval_results_map,
             }
         else:
             # 복수 도메인: 통합 생성 에이전트로 LLM 토큰 스트리밍
@@ -972,6 +988,8 @@ class MainRouter:
 
             # 복수 도메인 스트리밍 경로에서도 평가 수행 (비동기, 스트리밍 완료 후)
             evaluation = None
+            multi_ragas_metrics = None
+
             if self.settings.enable_llm_evaluation and content:
                 try:
                     eval_context = "\n".join([s.content for s in all_sources_multi[:5]])
@@ -988,6 +1006,17 @@ class MainRouter:
                 except Exception as e:
                     logger.warning("[스트리밍 평가] 복수 도메인 평가 실패: %s", e)
 
+            if self.settings.enable_ragas_evaluation and self.ragas_evaluator and content:
+                try:
+                    contexts = [s.content for s in all_sources_multi]
+                    multi_ragas_metrics = await self.ragas_evaluator.aevaluate_answer_quality(
+                        question=query,
+                        answer=content,
+                        contexts=contexts,
+                    )
+                except Exception as e:
+                    logger.warning("[스트리밍 RAGAS] 복수 도메인 RAGAS 평가 실패: %s", e)
+
             yield {
                 "type": "done",
                 "content": content,
@@ -996,4 +1025,6 @@ class MainRouter:
                 "sources": all_sources_multi,
                 "actions": pre_actions,
                 "evaluation": evaluation,
+                "ragas_metrics": multi_ragas_metrics,
+                "retrieval_results": retrieval_results,
             }
