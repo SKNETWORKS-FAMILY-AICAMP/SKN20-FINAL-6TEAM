@@ -1,5 +1,12 @@
 # Release Notes
 
+## [2026-02-13] - 관리자 로그 페이지 개선
+
+### Features
+- 관리자 상담 로그에 에이전트 이름 표시 (Code 테이블 JOIN)
+- RAGAS 평가 지표 확장: `context_precision`, `context_recall` 추가
+- 상담 응답시간(`response_time`) 필드 추가 (history 테이블 + API 응답)
+
 ## [2026-02-13] - 감사보고서 26건 일괄 구현 + 프로덕션 배포 환경
 
 ### Features

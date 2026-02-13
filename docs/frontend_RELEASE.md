@@ -1,5 +1,11 @@
 # Release Notes
 
+## [2026-02-13] - 관리자 로그 페이지 개선
+
+### Features
+- AdminLogPage 대폭 개선: 에이전트명 표시, RAGAS 평가 지표 확장 (context_precision, context_recall), 응답시간 표시
+- 채팅 스트리밍 메타데이터 타입 추가 (토큰 사용량, 응답시간)
+
 ## [2026-02-13] - 감사보고서 26건 일괄 구현 + 프로덕션 빌드 최적화
 
 ### Features

@@ -1,5 +1,21 @@
 # Release Notes
 
+## [2026-02-13] - RunPod GPU 임베딩/리랭킹 통합 + 관리자 로그 개선
+
+### Features
+- RunPod Serverless GPU 임베딩/리랭킹 통합
+  - `RunPodEmbeddings`: LangChain `Embeddings` 인터페이스 구현 (httpx sync/async)
+  - `RunPodReranker`: `BaseReranker` 상속, RunPod API 기반 리랭킹
+  - `EMBEDDING_PROVIDER` 환경변수로 `local`/`runpod` 전환
+  - RunPod 모드 시 CrossEncoder 프리로드 스킵
+- 스트리밍 응답에 토큰 사용량/응답시간 메타데이터 추가
+- 라우터에 토큰 사용량/비용/응답시간 로깅 추가
+
+### Infrastructure
+- `runpod-inference/` 핸들러 코드 추가 (Dockerfile, handler.py)
+- `httpx>=0.27.0` 의존성 추가
+- `.env.example`에 RunPod 환경변수 예시 추가
+
 ## [2026-02-13] - 감사보고서 26건 + RAG 리팩토링 19건
 
 ### Features

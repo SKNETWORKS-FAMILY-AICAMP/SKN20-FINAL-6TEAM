@@ -180,6 +180,16 @@ LEGAL_SUPPLEMENT_K=3                   # 법률 보충 검색 문서 수
 RAG_API_KEY=                          # 설정 시 /api/* 경로에 X-API-Key 헤더 검증 (미설정 시 인증 없이 통과)
 ```
 
+### RunPod GPU Inference (선택)
+```
+EMBEDDING_PROVIDER=local              # "local" (CPU/GPU 로컬 모델) | "runpod" (RunPod Serverless GPU)
+RUNPOD_API_KEY=                       # RunPod API 키 (rpa_xxx 형식)
+RUNPOD_ENDPOINT_ID=                   # RunPod Serverless Endpoint ID
+```
+- `runpod` 모드: `RunPodEmbeddings` (vectorstores/embeddings.py) + `RunPodReranker` (utils/reranker.py) 사용
+- `local` 모드: 기존 HuggingFace 로컬 모델 (BAAI/bge-m3, bge-reranker-base) 사용
+- 동일 RunPod 엔드포인트에서 embed/rerank 모두 처리 (task 필드로 구분)
+
 필수 환경 변수(`OPENAI_API_KEY`, `CHROMA_HOST` 등)는 [README.md](./README.md) 참조.
 
 ---

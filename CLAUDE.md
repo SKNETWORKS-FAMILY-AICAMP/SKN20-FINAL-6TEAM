@@ -16,7 +16,7 @@ Bizi는 예비 창업자, 스타트업 CEO, 중소기업 대표를 위한 AI 기
 - **RAG Service**: FastAPI, LangChain, LangGraph, OpenAI GPT-4
 - **Database**: MySQL 8.0 (AWS RDS, 스키마: bizi_db)
 - **Vector DB**: ChromaDB
-- **Infra**: Docker Compose, Nginx (리버스 프록시), SSH Tunnel (Bastion → RDS)
+- **Infra**: Docker Compose, Nginx (리버스 프록시), SSH Tunnel (Bastion → RDS), RunPod Serverless (GPU 임베딩/리랭킹)
 
 ## 프로젝트 구조
 ```
@@ -74,6 +74,11 @@ SKN20-FINAL-6TEAM/
 │   ├── vectorstores/      # 벡터 DB 관리
 │   ├── schemas/           # Pydantic 스키마
 │   └── Dockerfile
+│
+├── runpod-inference/       # RunPod Serverless 핸들러
+│   ├── handler.py         # embed + rerank 핸들러
+│   ├── Dockerfile         # RunPod 워커 이미지
+│   └── requirements.txt
 │
 ├── scripts/               # 데이터 크롤링 및 전처리 스크립트
 │   ├── CLAUDE.md          # Scripts 개발 가이드
@@ -226,7 +231,7 @@ Agentic RAG 구조로 6개 에이전트 운영:
 - `data/CLAUDE.md`: 데이터 폴더 가이드
 
 ### 환경 변수
-`.env.example` 파일 참조. 주요 키: `MYSQL_*`, `JWT_SECRET_KEY`, `GOOGLE_CLIENT_ID/SECRET`, `OPENAI_API_KEY`, `CHROMA_HOST/PORT`, `BIZINFO_API_KEY`, `KSTARTUP_API_KEY`, `RAG_API_KEY`, `ENVIRONMENT`
+`.env.example` 파일 참조. 주요 키: `MYSQL_*`, `JWT_SECRET_KEY`, `GOOGLE_CLIENT_ID/SECRET`, `OPENAI_API_KEY`, `CHROMA_HOST/PORT`, `BIZINFO_API_KEY`, `KSTARTUP_API_KEY`, `RAG_API_KEY`, `ENVIRONMENT`, `EMBEDDING_PROVIDER`, `RUNPOD_API_KEY`, `RUNPOD_ENDPOINT_ID`
 
 ## 테스트를 위해 생성하여 프로젝트에 포함되지 않는 파일/폴더
 /test
