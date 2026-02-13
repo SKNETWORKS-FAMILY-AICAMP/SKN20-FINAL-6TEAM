@@ -578,6 +578,7 @@ async def chat_stream(request: ChatRequest):
             token_usage = None
 
             # 진정한 스트리밍 (MainRouter.astream 사용)
+            final_evaluation = None
             async with RequestTokenTracker() as tracker:
                 token_index = 0
                 async for chunk in router_agent.astream(
@@ -606,6 +607,7 @@ async def chat_stream(request: ChatRequest):
                         final_sources = chunk.get("sources", [])
                         final_domains = chunk.get("domains", [])
                         final_actions = chunk.get("actions", [])
+                        final_evaluation = chunk.get("evaluation")
                 token_usage = tracker.get_usage()
 
             # 응답 시간 계산
@@ -618,7 +620,7 @@ async def chat_stream(request: ChatRequest):
                 sources=final_sources,
                 domains=final_domains,
                 response_time=response_time,
-                evaluation=chunk.get("evaluation"),
+                evaluation=final_evaluation,
                 token_usage=token_usage,
             )
 

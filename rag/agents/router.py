@@ -459,7 +459,7 @@ class MainRouter:
         )
 
         # 대체 쿼리 생성
-        multi_query_retriever = get_multi_query_retriever(self.rag_chain)
+        multi_query_retriever = get_multi_query_retriever(self.generator.rag_chain)
         all_queries = await asyncio.to_thread(
             multi_query_retriever._generate_queries, query
         )
@@ -898,6 +898,24 @@ class MainRouter:
                     content = chunk["content"]
                     all_actions = pre_actions
 
+            # 단일 도메인 스트리밍 경로에서도 평가 수행 (스트리밍 완료 후)
+            evaluation = None
+            if self.settings.enable_llm_evaluation and content:
+                try:
+                    eval_context = "\n".join([s.content for s in all_sources[:5]])
+                    evaluation = await self.evaluator.aevaluate(
+                        question=query,
+                        answer=content,
+                        context=eval_context,
+                    )
+                    logger.info(
+                        "[스트리밍 평가] 단일 도메인 점수=%d/100, %s",
+                        evaluation.total_score,
+                        "PASS" if evaluation.passed else "FAIL",
+                    )
+                except Exception as e:
+                    logger.warning("[스트리밍 평가] 단일 도메인 평가 실패: %s", e)
+
             yield {
                 "type": "done",
                 "content": content,
@@ -905,6 +923,7 @@ class MainRouter:
                 "domains": domains,
                 "sources": all_sources,
                 "actions": all_actions,
+                "evaluation": evaluation,
             }
         else:
             # 복수 도메인: 통합 생성 에이전트로 LLM 토큰 스트리밍
