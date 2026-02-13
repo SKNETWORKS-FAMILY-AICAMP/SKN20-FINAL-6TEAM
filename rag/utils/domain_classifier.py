@@ -4,8 +4,8 @@
 1. 기본 모드 (ENABLE_LLM_DOMAIN_CLASSIFICATION=false):
    키워드 매칭 + 벡터 유사도 기반 분류. 벡터가 최종 결정권을 가집니다.
 2. LLM 모드 (ENABLE_LLM_DOMAIN_CLASSIFICATION=true):
-   OpenAI LLM이 1차 분류기로 동작. 실패 시 기본 모드로 자동 fallback.
-   비교 로깅으로 LLM vs 벡터 분류 일치율을 모니터링합니다.
+   순수 LLM 분류만 사용. 키워드/벡터 계산 없이 LLM이 직접 도메인을 판별합니다.
+   LLM 호출 실패 시에만 키워드+벡터 방식으로 자동 fallback합니다.
 
 키워드 매칭은 kiwipiepy 형태소 분석기를 사용하여 원형(lemma) 기반으로 수행합니다.
 
@@ -113,7 +113,7 @@ class VectorDomainClassifier:
 
     ENABLE_LLM_DOMAIN_CLASSIFICATION 설정에 따라 두 가지 모드로 동작:
     - false (기본): 키워드 매칭 + 벡터 유사도 분류. 벡터가 최종 결정권.
-    - true: LLM이 1차 분류기. 실패 시 키워드+벡터로 자동 fallback.
+    - true: 순수 LLM 분류만 사용. LLM 실패 시에만 키워드+벡터로 fallback.
 
     Attributes:
         embeddings: HuggingFace 임베딩 모델
@@ -383,7 +383,7 @@ class VectorDomainClassifier:
     def classify(self, query: str) -> DomainClassificationResult:
         """질문을 분류하여 관련 도메인과 신뢰도를 반환합니다.
 
-        ENABLE_LLM_DOMAIN_CLASSIFICATION=true 시 LLM이 1차 분류기로 동작합니다.
+        ENABLE_LLM_DOMAIN_CLASSIFICATION=true 시 순수 LLM 분류만 사용합니다.
         LLM 실패 시 기존 키워드+벡터 방식으로 자동 fallback합니다.
 
         Args:
@@ -392,18 +392,10 @@ class VectorDomainClassifier:
         Returns:
             도메인 분류 결과
         """
-        # 0. LLM 분류 모드: LLM이 1차 분류기, 실패 시 keyword+vector fallback
+        # 0. LLM 분류 모드: 순수 LLM만 사용, 실패 시에만 keyword+vector fallback
         if self.settings.enable_llm_domain_classification:
             llm_result = self._llm_classify(query)
             if llm_result.method != "llm_error":
-                # 기존 분류도 실행하여 비교 로깅 (키워드+벡터는 로컬 모델이라 빠름)
-                keyword_result = self._keyword_classify(query)
-                if self.settings.enable_vector_domain_classification:
-                    vector_result = self._vector_classify(query)
-                    self._log_classification_comparison(vector_result, llm_result)
-                elif keyword_result:
-                    self._log_classification_comparison(keyword_result, llm_result)
-
                 logger.info(
                     "[도메인 분류] LLM 분류 확정: %s (신뢰도: %.2f)",
                     llm_result.domains,
