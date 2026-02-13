@@ -1,5 +1,15 @@
 # Release Notes
 
+## [2026-02-13] - 프로덕션 배포 환경 구성 + 코드 품질 개선
+
+### Features
+- `.dockerignore` 추가: 프론트엔드 빌드 컨텍스트 최소화
+- `ErrorBoundary` 컴포넌트 추가 (React Error Boundary)
+
+### Refactoring
+- console.log 제거, Vite 빌드 최적화
+- CSP에 Google OAuth 도메인 추가 (accounts.google.com, *.googleusercontent.com)
+
 ## [2026-02-12] - Admin 페이지 분리 및 관리자 로그인
 
 ### Features

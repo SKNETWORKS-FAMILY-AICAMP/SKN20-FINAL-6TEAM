@@ -1,5 +1,22 @@
 # Release Notes
 
+## [2026-02-13] - 프로덕션 배포 환경 구성 + 코드 품질 개선
+
+### Features
+- `Dockerfile.prod` 추가: 멀티스테이지 빌드 + BGE-M3/Reranker 모델 프리다운로드
+- `.dockerignore` 확장: 프로덕션 빌드 컨텍스트 최소화
+- ChromaDB `HttpClient`/`PersistentClient` 자동 전환 (`CHROMA_HOST` 기반)
+- SSE 스트리밍 헤더 추가 (X-Accel-Buffering, chunked_transfer_encoding)
+- LLM 도메인 분류 `classify()`에 연결 (.env 토글로 전환 가능)
+
+### Refactoring
+- config.py 967줄 → `config/` 패키지 분할 (settings, llm, domain_data, domain_config)
+- dead code 제거: generator.py (-192줄), retrieval_agent.py (-204줄)
+- Singleton 패턴 통일: `get_multi_query_retriever()`, `get_retrieval_evaluator()`
+- ASGI 미들웨어 전환 (SSE 호환), 스레드 안전 분류기
+- 매직넘버 상수화, 법률 보충 문서 제한, 토큰 트래킹 개선
+- 프롬프트 인젝션 방어 (sanitizer 24패턴 + prompt guard)
+
 ## [2026-02-12] - VectorDB 적재 + 복합 도메인 질의 처리 개선
 
 ### Features

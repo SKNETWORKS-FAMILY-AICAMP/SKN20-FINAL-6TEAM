@@ -1,5 +1,20 @@
 # Release Notes
 
+## [2026-02-13] - 프로덕션 배포 환경 구성 + 코드 품질 개선
+
+### Features
+- `Dockerfile.prod` 추가: gunicorn + uvicorn worker (2 workers, t3.medium 기준)
+- `.dockerignore` 확장: 프로덕션 빌드 컨텍스트 최소화
+- `is_blacklisted(jti, db)` 호출 버그 수정 (db 파라미터 누락)
+
+### Refactoring
+- 서비스 레이어 추가: companies, histories, schedules, users (라우터에서 비즈니스 로직 분리)
+- SQLAlchemy 2.0 `select()` 스타일 통일 (auth 포함 15건)
+- Session DI 전환, 입력 검증 강화 (Pydantic 스키마)
+- CORS 프로덕션 검증, 에러 메시지 한국어 통일
+- 감사 로깅 미들웨어 추가
+- 프롬프트 인젝션 방어 (sanitizer 24패턴)
+
 ## [2026-02-12] - Admin 페이지 분리 및 서버 상태 모니터링
 
 ### Features
