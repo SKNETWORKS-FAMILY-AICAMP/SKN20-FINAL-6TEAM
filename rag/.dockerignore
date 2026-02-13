@@ -1,6 +1,64 @@
-__pycache__
+# =============================================================================
+# RAG .dockerignore
+# =============================================================================
+
+# --- Python 아티팩트 ---
+__pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# --- 가상환경 ---
+.venv/
+venv/
+.rag/
+
+# --- 환경/시크릿 ---
 .env
+.env.*
+!.env.example
+
+# --- 테스트 ---
 tests/
+test/
+conftest.py
+pytest.ini
+
+# --- 로그 ---
 logs/
+*.log
+
+# --- 로컬 VectorDB (프로덕션에서는 ChromaDB 서버 사용) ---
 vectordb/
+
+# --- IDE/에디터 ---
+.vscode/
+.idea/
+*.sw?
+
+# --- 문서/AI ---
+.claude/
+CLAUDE.md
+AGENTS.md
+ARCHITECTURE.md
+README.md
+*.md
+!requirements.txt
+
+# --- Docker ---
+Dockerfile
+Dockerfile.*
+docker-compose*.yaml
+.dockerignore
+
+# --- OS 아티팩트 ---
+.DS_Store
+__MACOSX/
+Thumbs.db
+
+# --- Git ---
+.git
+.gitignore

@@ -1,0 +1,181 @@
+# =============================================================================
+# Bizi 프로덕션 Docker Compose
+# 대상: EC2 t3.medium (4GB RAM)
+# 컨테이너: nginx, backend, rag, chromadb, ssh-tunnel (5개)
+# =============================================================================
+
+services:
+  # --- Nginx (리버스 프록시 + React 정적 파일 서빙) ---
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+      args:
+        VITE_API_URL: /api
+        VITE_RAG_URL: /rag
+        VITE_RAG_ENABLED: ${RAG_ENABLED:-true}
+        VITE_RAG_STREAMING: ${VITE_RAG_STREAMING:-true}
+        VITE_RAG_API_KEY: ${RAG_API_KEY:-}
+        GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    container_name: bizi-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certbot_conf:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+    depends_on:
+      - backend
+      - rag
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # --- SSH Tunnel (Bastion → AWS RDS) ---
+  ssh-tunnel:
+    image: alpine:latest
+    container_name: bizi-ssh-tunnel
+    restart: unless-stopped
+    volumes:
+      - ./.ssh/bizi-key.pem:/tmp/bizi-key.pem:ro
+    entrypoint:
+      - sh
+      - -c
+      - |
+        apk add --no-cache openssh-client > /dev/null 2>&1
+        mkdir -p /root/.ssh
+        cp /tmp/bizi-key.pem /root/.ssh/bizi-key.pem
+        chmod 600 /root/.ssh/bizi-key.pem
+        echo "Starting SSH tunnel to RDS..."
+        ssh -N \
+          -L 0.0.0.0:3306:${MYSQL_HOST}:${MYSQL_PORT:-3306} \
+          -o StrictHostKeyChecking=no \
+          -o ServerAliveInterval=30 \
+          -o ServerAliveCountMax=3 \
+          -o ExitOnForwardFailure=yes \
+          -i /root/.ssh/bizi-key.pem \
+          ubuntu@${BASTION_HOST}
+    healthcheck:
+      test: ["CMD-SHELL", "netstat -tln | grep -q ':3306 ' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    expose:
+      - "3306"
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+  # --- FastAPI Backend (gunicorn + uvicorn workers) ---
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: bizi-backend
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      - ENVIRONMENT=production
+      - MYSQL_HOST=ssh-tunnel
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-bizi_db}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      - COOKIE_SECURE=true
+      - COOKIE_SAMESITE=lax
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - ENABLE_TEST_LOGIN=false
+    depends_on:
+      ssh-tunnel:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # --- RAG Service (LangChain + BGE-M3) ---
+  rag:
+    build:
+      context: ./rag
+      dockerfile: Dockerfile.prod
+    container_name: bizi-rag
+    restart: unless-stopped
+    expose:
+      - "8001"
+    environment:
+      - ENVIRONMENT=production
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - RAG_API_KEY=${RAG_API_KEY:-}
+      - BIZINFO_API_KEY=${BIZINFO_API_KEY:-}
+      - KSTARTUP_API_KEY=${KSTARTUP_API_KEY:-}
+      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      # ChromaDB 서버 연결
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      # MySQL (via SSH tunnel)
+      - MYSQL_HOST=ssh-tunnel
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-bizi_db}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      # RAG 검색 설정
+      - ENABLE_HYBRID_SEARCH=${ENABLE_HYBRID_SEARCH:-true}
+      - ENABLE_RERANKING=${ENABLE_RERANKING:-true}
+      - ENABLE_DOMAIN_REJECTION=${ENABLE_DOMAIN_REJECTION:-true}
+      - ENABLE_LLM_EVALUATION=${ENABLE_LLM_EVALUATION:-true}
+      - ENABLE_LEGAL_SUPPLEMENT=${ENABLE_LEGAL_SUPPLEMENT:-true}
+      - UPSTAGE_API_KEY=${UPSTAGE_API_KEY:-}
+    depends_on:
+      ssh-tunnel:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 2560M
+
+  # --- ChromaDB (벡터 데이터베이스 서버) ---
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: bizi-chromadb
+    restart: unless-stopped
+    expose:
+      - "8000"
+    volumes:
+      - chromadb_data:/chroma/chroma
+    environment:
+      - ANONYMIZED_TELEMETRY=false
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+volumes:
+  chromadb_data:
+    driver: local
+  certbot_conf:
+    driver: local
+  certbot_www:
+    driver: local

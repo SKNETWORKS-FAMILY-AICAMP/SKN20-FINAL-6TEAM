@@ -1,14 +1,83 @@
-.env
-__pycache__
+# =============================================================================
+# Root .dockerignore (Dockerfile.nginx 빌드 컨텍스트)
+# frontend/ 와 nginx.prod.conf 만 필요, 나머지 전부 제외
+# =============================================================================
 
-# =============================================
-# 가상환경
-# =============================================
+# --- 불필요한 서비스 디렉토리 ---
+backend/
+rag/
+scripts/
+data/
+deploy/
+docs/
+test/
+
+# --- 환경/시크릿 ---
+.env
+.env.*
+!.env.example
+.ssh/
+*.pem
+
+# --- 가상환경 ---
 .backend
 .rag
+.react
 .venv
+venv
+final
 
-proposal/
-.claude
+# --- Git ---
+.git
+.gitignore
+.gitattributes
+
+# --- IDE/에디터 ---
+.vscode/
+.idea/
+.cursor/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# --- Claude/AI ---
+.claude/
+.agents/
 CLAUDE.md
+AGENTS.md
 PRD.md
+*.md
+!nginx.prod.conf
+!frontend/**
+
+# --- OS 아티팩트 ---
+.DS_Store
+__MACOSX/
+Thumbs.db
+
+# --- Python 아티팩트 ---
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# --- Node (루트 레벨) ---
+node_modules/
+
+# --- Docker ---
+docker-compose*.yaml
+Dockerfile.*
+!Dockerfile.nginx
+
+# --- VectorDB/데이터 ---
+vectordb/
+vectordb.zip
+raw/
+
+# --- 기타 ---
+proposal/
+vercel-react-best-practices/
+web-design-guidelines/
+*.log

@@ -13,6 +13,7 @@
 """
 
 import logging
+import os
 import threading
 from collections import OrderedDict
 from typing import Any
@@ -63,32 +64,63 @@ class ChromaVectorStore:
         self.config = config or VectorDBConfig()
         self.embeddings = get_embeddings(self.config.embedding_model)
         self.loader = DataLoader()
-        self._client: chromadb.PersistentClient | None = None
+        self._client: chromadb.ClientAPI | None = None
         # LRU 캐시 방식의 OrderedDict 사용
         self._stores: OrderedDict[str, Chroma] = OrderedDict()
         self._store_lock = threading.Lock()
 
-        # 저장 디렉토리 생성
-        self.config.persist_directory.mkdir(parents=True, exist_ok=True)
+        # 저장 디렉토리 생성 (로컬 모드용)
+        if not self._is_remote_mode():
+            self.config.persist_directory.mkdir(parents=True, exist_ok=True)
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True)
-    def _get_client(self) -> chromadb.PersistentClient:
-        """ChromaDB 클라이언트를 가져옵니다 (싱글톤).
+    def _is_remote_mode(self) -> bool:
+        """원격 ChromaDB 서버 모드 여부를 판단합니다.
 
-        하나의 persist_directory를 사용하여 모든 컬렉션을 관리합니다.
-        연결 실패 시 최대 3회 재시도합니다 (지수 백오프).
+        CHROMA_HOST가 설정되어 있고 localhost/127.0.0.1이 아니면 원격 모드입니다.
 
         Returns:
-            ChromaDB PersistentClient 인스턴스
+            원격 모드이면 True
+        """
+        chroma_host = os.getenv("CHROMA_HOST", "")
+        return bool(chroma_host) and chroma_host not in ("localhost", "127.0.0.1")
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True)
+    def _get_client(self) -> chromadb.ClientAPI:
+        """ChromaDB 클라이언트를 가져옵니다 (싱글톤).
+
+        CHROMA_HOST 환경변수에 따라 클라이언트 유형을 자동 선택합니다:
+        - 미설정 또는 localhost: PersistentClient (로컬 파일 기반)
+        - 그 외: HttpClient (원격 ChromaDB 서버)
+
+        Returns:
+            ChromaDB ClientAPI 인스턴스
         """
         if self._client is None:
-            self._client = chromadb.PersistentClient(
-                path=str(self.config.persist_directory),
-                settings=Settings(
-                    anonymized_telemetry=False,
-                    allow_reset=True,
-                ),
-            )
+            if self._is_remote_mode():
+                chroma_host = os.getenv("CHROMA_HOST", "")
+                chroma_port = int(os.getenv("CHROMA_PORT", "8000"))
+                logger.info(
+                    "ChromaDB HttpClient 연결: %s:%d", chroma_host, chroma_port
+                )
+                self._client = chromadb.HttpClient(
+                    host=chroma_host,
+                    port=chroma_port,
+                    settings=Settings(
+                        anonymized_telemetry=False,
+                    ),
+                )
+            else:
+                logger.info(
+                    "ChromaDB PersistentClient 사용: %s",
+                    self.config.persist_directory,
+                )
+                self._client = chromadb.PersistentClient(
+                    path=str(self.config.persist_directory),
+                    settings=Settings(
+                        anonymized_telemetry=False,
+                        allow_reset=True,
+                    ),
+                )
         return self._client
 
     def _get_collection_name(self, domain: str) -> str:

@@ -129,6 +129,8 @@ services:
       # RAG 고급 검색 설정
       - ENABLE_HYBRID_SEARCH=${ENABLE_HYBRID_SEARCH:-true}
       - ENABLE_RERANKING=${ENABLE_RERANKING:-true}
+      - ENABLE_VECTOR_DOMAIN_CLASSIFICATION=${ENABLE_VECTOR_DOMAIN_CLASSIFICATION:-true}
+      - ENABLE_LLM_DOMAIN_CLASSIFICATION=${ENABLE_LLM_DOMAIN_CLASSIFICATION:-false}
     depends_on:
       ssh-tunnel:
         condition: service_healthy

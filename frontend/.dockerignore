@@ -1,20 +1,12 @@
 # =============================================================================
-# Backend .dockerignore
+# Frontend .dockerignore
 # =============================================================================
 
-# --- Python 아티팩트 ---
-__pycache__/
-*.pyc
-*.pyo
-.pytest_cache/
-*.egg-info/
+# --- Node ---
+node_modules/
 dist/
-build/
-
-# --- 가상환경 ---
-.venv/
-venv/
-.backend/
+dist-ssr/
+*.local
 
 # --- 환경/시크릿 ---
 .env
@@ -24,12 +16,18 @@ venv/
 # --- 테스트 ---
 tests/
 test/
-conftest.py
-pytest.ini
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+vitest.config.*
+playwright.config.*
+playwright-report/
+test-results/
 
 # --- 로그 ---
-logs/
 *.log
+npm-debug.log*
 
 # --- IDE/에디터 ---
 .vscode/
@@ -41,13 +39,10 @@ logs/
 CLAUDE.md
 AGENTS.md
 README.md
-*.md
-!requirements.txt
 
 # --- Docker ---
 Dockerfile
 Dockerfile.*
-docker-compose*.yaml
 .dockerignore
 
 # --- OS 아티팩트 ---

@@ -32,7 +32,7 @@ def get_current_user(
             )
 
         jti = payload.get("jti")
-        if jti and is_blacklisted(jti):
+        if jti and is_blacklisted(jti, db):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token revoked",

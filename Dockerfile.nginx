@@ -1,0 +1,42 @@
+# =============================================================================
+# Nginx + Frontend 프로덕션 이미지 (멀티스테이지 빌드)
+# Stage 1: React 빌드 (node:20-alpine)
+# Stage 2: Nginx 정적 파일 서빙 (nginx:alpine)
+# =============================================================================
+
+# --- Stage 1: Build ---
+FROM node:20-alpine AS build
+
+WORKDIR /app
+
+# 빌드 시 주입할 환경변수 (ARG → Vite define)
+ARG VITE_API_URL=/api
+ARG VITE_RAG_URL=/rag
+ARG VITE_RAG_ENABLED=true
+ARG VITE_RAG_STREAMING=true
+ARG VITE_RAG_API_KEY=
+ARG GOOGLE_CLIENT_ID=
+
+# 의존성 설치 (캐시 레이어 활용)
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci --ignore-scripts
+
+# 소스 복사 및 빌드
+COPY frontend/ .
+RUN npm run build
+
+# --- Stage 2: Serve ---
+FROM nginx:alpine
+
+# 빌드 결과물 복사
+COPY --from=build /app/dist /usr/share/nginx/html
+
+# Nginx 설정 복사
+COPY nginx.prod.conf /etc/nginx/conf.d/default.conf
+
+# Certbot webroot 디렉토리 생성
+RUN mkdir -p /var/www/certbot
+
+EXPOSE 80 443
+
+CMD ["nginx", "-g", "daemon off;"]

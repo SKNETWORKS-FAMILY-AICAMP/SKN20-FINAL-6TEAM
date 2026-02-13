@@ -1,0 +1,38 @@
+# =============================================================================
+# Backend 프로덕션 이미지
+# gunicorn + uvicorn worker (멀티프로세스)
+# =============================================================================
+
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# 시스템 패키지 (mysqlclient 등 빌드 의존성)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    default-libmysqlclient-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python 의존성 설치
+RUN pip install --no-cache-dir --upgrade pip
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir gunicorn
+
+# 소스 코드 복사
+COPY . .
+
+# 업로드 디렉토리 생성
+RUN mkdir -p uploads/companies
+
+EXPOSE 8000
+
+# gunicorn + uvicorn worker: 2 workers (t3.medium 기준)
+CMD ["gunicorn", "main:app", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--workers", "2", \
+     "--bind", "0.0.0.0:8000", \
+     "--timeout", "120", \
+     "--graceful-timeout", "30", \
+     "--access-logfile", "-"]
