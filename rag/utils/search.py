@@ -422,7 +422,7 @@ class HybridSearcher:
         """
         documents = self._build_search_results(query, domain, k, vector_weight)
 
-        if use_rerank and len(documents) > k:
+        if use_rerank and self.reranker and len(documents) > k:
             documents = self.reranker.rerank(query, documents, top_k=k)
         else:
             documents = documents[:k]
@@ -453,7 +453,7 @@ class HybridSearcher:
             self._build_search_results, query, domain, k, vector_weight,
         )
 
-        if use_rerank and len(documents) > k:
+        if use_rerank and self.reranker and len(documents) > k:
             documents = await self.reranker.arerank(query, documents, top_k=k)
         else:
             documents = documents[:k]

@@ -14,6 +14,9 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from starlette.types import ASGIApp as _ASGIApp, Receive as _Receive, Scope as _Scope, Send as _Send
 
 # 로그 파일 설정
 LOG_DIR = Path(__file__).parent / "logs"
@@ -46,8 +49,6 @@ chat_handler = RotatingFileHandler(
 chat_handler.setFormatter(logging.Formatter("%(message)s"))
 chat_logger.addHandler(chat_handler)
 chat_logger.propagate = False
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
 
 from agents import ActionExecutor, MainRouter
 from schemas import (
@@ -299,7 +300,6 @@ app.add_middleware(
 
 
 # API Key 인증 미들웨어 (순수 ASGI — StreamingResponse 버퍼링 방지)
-from starlette.types import ASGIApp as _ASGIApp, Receive as _Receive, Scope as _Scope, Send as _Send
 
 
 class APIKeyMiddleware:

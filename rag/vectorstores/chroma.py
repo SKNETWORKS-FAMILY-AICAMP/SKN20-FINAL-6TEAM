@@ -13,7 +13,6 @@
 """
 
 import logging
-import os
 import threading
 from collections import OrderedDict
 from typing import Any
@@ -81,7 +80,9 @@ class ChromaVectorStore:
         Returns:
             원격 모드이면 True
         """
-        chroma_host = os.getenv("CHROMA_HOST", "")
+        from utils.config import get_settings
+
+        chroma_host = get_settings().chroma_host or ""
         return bool(chroma_host) and chroma_host not in ("localhost", "127.0.0.1")
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True)
@@ -97,8 +98,11 @@ class ChromaVectorStore:
         """
         if self._client is None:
             if self._is_remote_mode():
-                chroma_host = os.getenv("CHROMA_HOST", "")
-                chroma_port = int(os.getenv("CHROMA_PORT", "8000"))
+                from utils.config import get_settings as _get_settings
+
+                _s = _get_settings()
+                chroma_host = _s.chroma_host or ""
+                chroma_port = _s.chroma_port
                 logger.info(
                     "ChromaDB HttpClient 연결: %s:%d", chroma_host, chroma_port
                 )

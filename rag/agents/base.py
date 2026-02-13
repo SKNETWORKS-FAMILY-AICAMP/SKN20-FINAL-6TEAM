@@ -218,33 +218,6 @@ class BaseAgent(ABC):
 
         return actions
 
-    def retrieve_context(
-        self,
-        query: str,
-        k: int | None = None,
-        include_common: bool = False,
-    ) -> list[Document]:
-        """컨텍스트 문서를 검색합니다.
-
-        Args:
-            query: 검색 쿼리
-            k: 검색 결과 개수
-            include_common: 공통 법령 DB 포함 여부
-
-        Returns:
-            검색된 문서 리스트
-        """
-        from utils.query import get_multi_query_retriever
-
-        multi_query_retriever = get_multi_query_retriever(self.rag_chain)
-        documents, _ = multi_query_retriever.retrieve(
-            query=query,
-            domain=self.domain,
-            k=k,
-            include_common=include_common,
-        )
-        return documents
-
     def retrieve_only(
         self,
         query: str,
@@ -271,6 +244,7 @@ class BaseAgent(ABC):
 
         # Multi-Query 검색 (항상 기본 경로)
         rewritten_query: str | None = None
+        used_multi_query = True
         try:
             from utils.query import get_multi_query_retriever
 
@@ -285,6 +259,7 @@ class BaseAgent(ABC):
             logger.warning("[retrieve_only] Multi-Query 검색 실패: %s", e)
             documents = []
             rewritten_query = None
+            used_multi_query = False
 
         # 점수 추출 (메타데이터에서)
         scores = [doc.metadata.get("score", 0.0) for doc in documents]
@@ -299,7 +274,7 @@ class BaseAgent(ABC):
             self.domain,
             len(documents),
             elapsed,
-            True,
+            used_multi_query,
         )
 
         return RetrievalResult(
@@ -307,7 +282,7 @@ class BaseAgent(ABC):
             scores=scores,
             sources=self.rag_chain.documents_to_sources(documents),
             evaluation=evaluation,
-            used_multi_query=True,
+            used_multi_query=used_multi_query,
             retrieve_time=elapsed,
             domain=self.domain,
             query=query,
