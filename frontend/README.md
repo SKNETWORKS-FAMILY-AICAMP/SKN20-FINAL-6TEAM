@@ -17,7 +17,7 @@
 |------|------|
 | 프레임워크 | React 18 + Vite 5 + TypeScript 5 |
 | 라우팅 | React Router v6 |
-| 상태 관리 | Zustand (전역), TanStack Query (서버) |
+| 상태 관리 | Zustand (전역 + 서버) + axios |
 | HTTP | axios |
 | 스타일링 | TailwindCSS |
 | 마크다운 | react-markdown + remark-gfm |
@@ -86,7 +86,8 @@ frontend/src/
 | `/company` | 기업 프로필 | 기업 정보 등록/수정, 사업자등록증 업로드 |
 | `/schedule` | 일정 관리 | 일정 CRUD |
 | `/guide` | 사용 설명서 | 서비스 사용법 안내 |
-| `/admin` | 관리자 | 상담 로그, 평가 통계 (관리자 전용) |
+| `/admin` | 관리자 대시보드 | 통계 + 서버 상태 (관리자 전용) |
+| `/admin/log` | 관리자 상담 로그 | 상담 로그 조회/필터링 (관리자 전용) |
 
 프로필 관리는 Sidebar 설정 아이콘 > `ProfileDialog` 모달로 접근합니다.
 

@@ -18,7 +18,7 @@
 - **스키마**: `schemas/request.py`, `schemas/response.py`
 - **유틸리티**: `utils/*.py` (config, prompts, cache, search 등)
 - **프롬프트**: `utils/prompts.py` (모든 프롬프트 집중 관리)
-- **설정**: `utils/config.py` (Pydantic BaseSettings)
+- **설정**: `utils/config/` 패키지 (settings.py, domain_data.py, domain_config.py, llm.py)
 - **벡터DB 설정**: `vectorstores/config.py` (컬렉션별 청킹/소스 매핑)
 
 ### 새 에이전트 추가
@@ -200,5 +200,5 @@ RAG_API_KEY=                          # 설정 시 /api/* 경로에 X-API-Key �
 
 RAG 고유 규칙:
 - 프롬프트는 반드시 `utils/prompts.py`에 정의 (하드코딩 금지)
-- 설정값은 `utils/config.py`로 관리 (chunk_size, temperature 등)
+- 설정값은 `utils/config/settings.py`로 관리 (chunk_size, temperature 등)
 - 도메인 키워드, 에이전트 코드는 상수로 정의

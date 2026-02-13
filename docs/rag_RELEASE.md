@@ -1,6 +1,6 @@
 # Release Notes
 
-## [2026-02-13] - 프로덕션 배포 환경 구성 + 코드 품질 개선
+## [2026-02-13] - 감사보고서 26건 + RAG 리팩토링 19건
 
 ### Features
 - `Dockerfile.prod` 추가: 멀티스테이지 빌드 + BGE-M3/Reranker 모델 프리다운로드
@@ -8,14 +8,52 @@
 - ChromaDB `HttpClient`/`PersistentClient` 자동 전환 (`CHROMA_HOST` 기반)
 - SSE 스트리밍 헤더 추가 (X-Accel-Buffering, chunked_transfer_encoding)
 - LLM 도메인 분류 `classify()`에 연결 (.env 토글로 전환 가능)
+- 도메인 분류 순수 LLM 모드 전환 — `ENABLE_LLM_DOMAIN_CLASSIFICATION=true` 시 벡터 임베딩 계산 생략 (c69e4a8)
+- 거부 응답도 토큰 스트리밍으로 전환 (3a7de70)
+
+### Security
+- 프롬프트 인젝션 방어 (sanitizer 24패턴 + prompt guard)
 
 ### Refactoring
 - config.py 967줄 → `config/` 패키지 분할 (settings, llm, domain_data, domain_config)
 - dead code 제거: generator.py (-192줄), retrieval_agent.py (-204줄)
 - Singleton 패턴 통일: `get_multi_query_retriever()`, `get_retrieval_evaluator()`
-- ASGI 미들웨어 전환 (SSE 호환), 스레드 안전 분류기
-- 매직넘버 상수화, 법률 보충 문서 제한, 토큰 트래킹 개선
-- 프롬프트 인젝션 방어 (sanitizer 24패턴 + prompt guard)
+- ASGI 미들웨어 전환 (SSE 호환) — `BaseHTTPMiddleware` → 순수 ASGI `__call__`
+- `threading.Lock()` + double-check 패턴으로 스레드 안전 분류기
+- 매직넘버 상수화 (`retry_k_increment`, `cross_domain_k`, `min_domain_k`)
+- 법률 보충 문서 병합 제한 (`max_retrieval_docs` 슬라이싱)
+- 문서 생성 엔드포인트 토큰 트래킹 (`RequestTokenTracker`)
+- ChromaDB `tenacity` 재시도 (@retry 3회, exponential backoff)
+- `mysql_host`, `mysql_database` 필수 환경변수 검증 + VectorDB 경로 경고
+- `token_tracker.py` ContextVar `.reset()` ValueError 예외 처리
+
+### Bug Fixes — RAG High 3건 (b54c245)
+- chunk unbound 위험 제거 (`retrieval_agent.py`)
+- `self.rag_chain` 속성 수정 (`base_agent.py`)
+- 단일 도메인 스트리밍 평가 누락 수정
+
+### Bug Fixes — RAG Medium 10건 (3af6e92)
+- EvaluatorAgent 헬퍼 메서드 추출 (`_format_evaluation_result`, `_build_feedback_messages`)
+- BaseAgent dead code 제거 (`retrieve_context` 삭제)
+- LLM 인스턴스 캐싱 (`_cached_llm` 속성)
+- APIKeyMiddleware 개선 (health/monitoring 경로 예외)
+- 캐시 키 domain 버그 수정 (`_generate_cache_key`)
+- `classify_node` async 전환
+- 로그 emoji 제거
+
+### Bug Fixes — RAG Low 6건 (5486466)
+- `bank_account` 정규식 정밀화 (오탐 방지)
+- `retrieve_context` dead code 제거
+- `multi_query` 실패 처리 개선
+- reranker `None` 체크 추가
+- `chroma.py` `get_settings()` 통일
+- import 정리
+
+### Stability — 스트리밍 안정성 개선 (3a7de70)
+- health check 경량화 (OpenAI API 호출 제거)
+
+### Tests
+- 테스트 결과: **386 passed, 5 skipped** (21개 테스트 파일)
 
 ## [2026-02-12] - VectorDB 적재 + 복합 도메인 질의 처리 개선
 

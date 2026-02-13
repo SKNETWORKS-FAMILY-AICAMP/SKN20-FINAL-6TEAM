@@ -15,7 +15,7 @@ rag/
 ├── evaluation/              # RAGAS 정량 평가
 ├── vectorstores/            # VectorDB 관리 (config, chroma, embeddings, loader, build)
 ├── schemas/                 # Pydantic 스키마 (request, response)
-├── utils/                   # config, prompts, cache, feedback, middleware, query, search, legal_supplement, retrieval_evaluator, token_tracker
+├── utils/                   # config/ (설정 패키지), prompts, cache, feedback, middleware, query, search, legal_supplement, retrieval_evaluator, token_tracker
 └── tests/                   # pytest 테스트
 ```
 
@@ -48,7 +48,7 @@ rag/
 
 ## MUST NOT
 
-- **하드코딩 금지**: API 키, ChromaDB 연결 정보 → `utils/config.py` 사용
+- **하드코딩 금지**: API 키, ChromaDB 연결 정보 → `utils/config/settings.py` 사용
 - **프롬프트 하드코딩 금지** → `utils/prompts.py`에 정의
 - **매직 넘버 금지**: chunk_size, temperature 등 → 설정 파일 사용
 - **API 키 노출 금지**: 코드/로그에 OpenAI 키 노출 금지

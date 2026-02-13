@@ -64,8 +64,7 @@
 4. **스타일**: TailwindCSS 유틸리티 클래스 사용
 5. **상태 선택 기준**:
    - 로컬 상태 → `useState`, `useReducer`
-   - 전역 상태 → Zustand
-   - 서버 상태 → TanStack Query
+   - 전역/서버 상태 → Zustand + axios 직접 호출
 6. **마크다운**: 어시스턴트 응답은 `react-markdown` + `remark-gfm`으로 렌더링, 스타일은 `src/index.css`의 `.markdown-body` 클래스
 
 ---
@@ -83,7 +82,7 @@
 
 ### 새 API 함수 추가
 - 커스텀 훅으로 작성: `src/hooks/useMyApi.ts`
-- TanStack Query 사용 권장
+- Zustand + axios 직접 호출 패턴 사용 (`src/hooks/` 참조)
 
 ### 타입 정의 추가
 - 도메인별: `src/types/{domain}.ts`

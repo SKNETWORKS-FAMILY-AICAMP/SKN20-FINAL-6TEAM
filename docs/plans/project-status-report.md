@@ -1,38 +1,43 @@
 # Bizi 프로젝트 종합 상태 보고서
 
 > 작성일: 2026-02-13
-> 최종 갱신: 2026-02-13 (CRITICAL 수정 + LLM 도메인 분류 반영)
+> 최종 갱신: 2026-02-13 (감사보고서 26건 + RAG 리팩토링 19건 반영)
 > 분석 방법: PM Orchestrator가 각 서비스별 전문 분석을 종합 수행
-> 분석 대상 커밋: `8761667` (main branch)
+> 분석 대상 커밋: `5486466` (main branch)
 
 ---
 
 ## 1. 각 서비스별 현황
 
-### 1.1 Backend (FastAPI) -- 완성도: 85% → 90% ↑
+### 1.1 Backend (FastAPI) -- 완성도: 85% → 92% ↑
 
 **구현 완료된 기능:**
 | 모듈 | 파일 | 기능 | 상태 |
 |------|------|------|------|
 | `auth/` | router.py, services.py, schemas.py, token_blacklist.py | Google OAuth2, 테스트 로그인, JWT(HttpOnly Cookie), 로그아웃+블랙리스트, 토큰 리프레시(Rotation) | 완료 |
 | `users/` | router.py, **service.py**, schemas.py | 사용자 프로필 조회/수정 | 완료 |
-| `companies/` | router.py, **service.py**, schemas.py | 기업 프로필 CRUD, 사업자등록증 업로드, 대표기업 설정 | 완료 |
+| `companies/` | router.py, **service.py**, schemas.py | 기업 프로필 CRUD, 사업자등록증 업로드, 대표기업 설정, **사업자번호 형식 검증** | 완료 |
 | `histories/` | router.py, **service.py**, schemas.py | 상담 이력 저장/조회, 대화 연결(parent_history_id), 벌크 저장 | 완료 |
-| `schedules/` | router.py, **service.py**, schemas.py | 일정 CRUD, 기업별 일정 조회 | 완료 |
+| `schedules/` | router.py, **service.py**, schemas.py | 일정 CRUD, 기업별 일정 조회, **날짜 범위 검증** | 완료 |
 | `admin/` | router.py, service.py, schemas.py | 서버 상태 모니터링, 상담 이력 관리(필터/페이지네이션), 평가 통계 | 완료 |
 | `common/` | models.py, deps.py | SQLAlchemy 모델 8개, JWT 인증 의존성 | 완료 |
-| `config/` | settings.py, database.py | Pydantic BaseSettings, DB 연결 풀 설정 | 완료 |
+| `config/` | settings.py, database.py | Pydantic BaseSettings, DB 연결 풀 설정, **RAG_SERVICE_URL**, **CORS 프로덕션 검증** | 완료 |
 
-**2026-02-13 수정 사항:**
+**Phase 5 감사보고서 수정 사항 (7건):**
 - ~~서비스 레이어 부재~~: **전 모듈 service.py 패턴 적용 완료** (C5)
-- ~~SQLAlchemy 쿼리 스타일 불일치~~: **전체 `select()` 2.0 스타일 통일 완료** (C6, auth 포함 15건 변환, 잔존 0건)
+- ~~SQLAlchemy 쿼리 스타일 불일치~~: **전체 `select()` 2.0 스타일 통일 완료** (C6)
+- ~~토큰 블랙리스트 세션 누수~~: **Session DI 전환 완료** (H3) -- `db: Session` 파라미터 추가, `SessionLocal()` 직접 생성 제거
+- ~~입력 유효성 검증 미흡~~: **사업자번호 `@field_validator` + 일정 날짜 `@model_validator` 추가** (H4)
+- ~~하드코딩된 RAG_SERVICE_URL~~: **`settings.py`로 이관 완료** (M3)
+- ~~감사 로깅 없음~~: **`AuditLoggingMiddleware` 추가** (M9) -- POST/PUT/DELETE/PATCH 구조화 로깅
+- ~~에러 메시지 언어 불일치~~: **`auth/router.py` 전체 한국어 통일** (L2)
+- ~~CORS 프로덕션 설정~~: **`@model_validator`로 production 환경 localhost 경고** (M10)
 
 **미완성/개선 필요 기능:**
 - **파일 관리 API 미구현**: DB에 `file` 테이블 정의되어 있으나 전용 라우터/서비스 없음
 - **공고(Announce) 관리 API 미구현**: DB에 `announce` 테이블 정의되어 있으나 전용 라우터/서비스 없음
 - **Google OAuth2 실 연동 미완료**: `.env.example`에 "미구현 - 테스트 로그인 사용" 명시
-- **입력 검증 미흡**: 사업자등록번호 형식 검증 없음, 일정 날짜 범위(end > start) 검증 없음
-- **토큰 블랙리스트 세션 관리**: `SessionLocal()` 직접 생성 → DI 전환 필요
+- Backend 단위/통합 테스트 미존재
 
 **코드 품질:**
 - Python 타입 힌트: 대부분 적용됨
@@ -42,10 +47,15 @@
 - 커넥션 풀: `pool_pre_ping=True`, `pool_recycle=1800` 설정됨
 - **서비스 레이어**: 전 모듈 적용 (admin 패턴 통일)
 - **쿼리 스타일**: SQLAlchemy 2.0 `select()` 100% 통일
+- **입력 검증**: Pydantic `@field_validator`, `@model_validator` 활용
+- **감사 로깅**: `AuditLoggingMiddleware` (상태 변경 요청 구조화 로깅)
+- **Session DI**: 토큰 블랙리스트 포함 전체 DI 패턴 적용
+
+**파일 통계:** Python 파일 34개
 
 ---
 
-### 1.2 RAG Service (LangChain/LangGraph) -- 완성도: 95% → 97% ↑
+### 1.2 RAG Service (LangChain/LangGraph) -- 완성도: 95% → 98% ↑
 
 **구현 완료된 기능:**
 | 컴포넌트 | 파일 | 기능 | 상태 |
@@ -58,37 +68,53 @@
 | 생성 에이전트 | agents/generator.py | 단일/복수 도메인 통합 생성, 스트리밍 지원 | 완료 |
 | Hybrid Search | utils/search.py | BM25 + Vector + RRF 앙상블 | 완료 |
 | Reranker | utils/reranker.py | Cross-encoder 기반 재정렬 | 완료 |
-| 도메인 분류기 | utils/domain_classifier.py | 벡터 유사도 + 키워드 매칭 + **LLM 분류** | 완료 |
+| 도메인 분류기 | utils/domain_classifier.py | **순수 LLM 모드 + 키워드/벡터 fallback**, threading.Lock | 완료 |
 | 질문 분해기 | utils/question_decomposer.py | 복합 질문 도메인별 분해 | 완료 |
-| 캐시 | utils/cache.py | LRU 캐시 (500건, 1시간 TTL) | 완료 |
+| 캐시 | utils/cache.py | LRU 캐시 (500건, 1시간 TTL), **domain 키 버그 수정** | 완료 |
 | 법률 보충 검색 | utils/legal_supplement.py | 타 도메인 답변 시 법률 DB 보충 검색 | 완료 |
 | RAGAS 평가 | evaluation/ragas_evaluator.py | 정량 품질 평가 (faithfulness, relevancy) | 완료 |
-| 메트릭/미들웨어 | utils/middleware.py | Rate Limiting, 메트릭 수집 | 완료 |
-| 토큰 추적 | utils/token_tracker.py | OpenAI API 토큰 사용량/비용 추적 | 완료 |
-| 민감정보 마스킹 | utils/logging_utils.py | 로그 내 개인정보 마스킹 | 완료 |
+| 메트릭/미들웨어 | utils/middleware.py | **순수 ASGI 미들웨어** (SSE 호환), Rate Limiting, 메트릭 수집 | 완료 |
+| 토큰 추적 | utils/token_tracker.py | OpenAI API 토큰 사용량/비용 추적, **ContextVar reset 예외 처리** | 완료 |
+| 민감정보 마스킹 | utils/logging_utils.py | 로그 내 개인정보 마스킹, **bank_account 정규식 정밀화** | 완료 |
 | 도메인 설정 DB | utils/config/domain_config.py, domain_data.py | MySQL 기반 도메인 키워드/규칙 관리 | 완료 |
 | 벡터DB 빌더 | vectorstores/build_vectordb.py | JSONL -> ChromaDB 컬렉션 빌드 | 완료 |
-| SSE 스트리밍 | main.py `/api/chat/stream` | 실시간 토큰 스트리밍 | 완료 |
-| **프롬프트 인젝션 방어** | **utils/sanitizer.py** | **24개 패턴 탐지 + 마스킹** | **신규** |
+| ChromaDB 클라이언트 | vectorstores/chroma.py | **tenacity 재시도 (3회, exponential backoff)** | 완료 |
+| SSE 스트리밍 | main.py `/api/chat/stream` | 실시간 토큰 스트리밍, **거부 응답도 토큰 스트리밍** | 완료 |
+| 프롬프트 인젝션 방어 | utils/sanitizer.py | 24개 패턴 탐지 + 마스킹 | 완료 |
 
-**2026-02-13 수정/추가 사항:**
-- **LLM 도메인 분류 활성화**: `classify()` 메서드에 LLM 분기 연결. `.env`에서 `ENABLE_LLM_DOMAIN_CLASSIFICATION=true`로 토글 가능. LLM 실패 시 자동 fallback. 비교 로깅으로 일치율 모니터링.
-- **프롬프트 인젝션 방어**: `sanitizer.py` 신규 생성 + 5개 도메인 프롬프트에 가드 추가 + 파이프라인 진입점에 sanitizer 적용
-- **SSE 헤더 수정**: `StreamingResponse`에 `X-Accel-Buffering: no` 등 헤더 추가
+**Phase 5 감사보고서 수정 사항 (6건):**
+- ~~SSE 미들웨어 버퍼링~~: **순수 ASGI 미들웨어로 전환** (Batch 1) -- `BaseHTTPMiddleware` 사용 금지
+- ~~법률 문서 병합 무제한~~: **`max_retrieval_docs` 슬라이싱 적용** (H5)
+- ~~매직 넘버~~: **`retry_k_increment`, `cross_domain_k`, `min_domain_k` 상수화** (M4)
+- ~~도메인 분류기 레이스 컨디션~~: **`threading.Lock()` + double-check 패턴** (H6)
+- ~~ChromaDB 재시도 없음~~: **`@retry(stop=stop_after_attempt(3), wait=wait_exponential)` 적용** (H7)
+- ~~환경변수 검증 없음~~: **`mysql_host`, `mysql_database` 필수 검증 + VectorDB 경로 경고** (H8)
+- ~~문서 생성 토큰 트래킹 누락~~: **`RequestTokenTracker` 적용** (M5)
+
+**Phase 5 이후 추가 리팩토링 (19건):**
+- **도메인 분류 순수 LLM 모드**: `ENABLE_LLM_DOMAIN_CLASSIFICATION=true` 시 벡터 임베딩 계산 생략, LLM 실패 시에만 fallback (c69e4a8)
+- **스트리밍 안정성 개선**: health check 경량화 (OpenAI API 호출 제거), 거부 응답 토큰 스트리밍 (3a7de70)
+- **RAG High 3건**: chunk unbound 위험 제거, `self.rag_chain` 속성 수정, 단일 도메인 스트리밍 평가 추가 (b54c245)
+- **RAG Medium 10건**: EvaluatorAgent 헬퍼 추출, BaseAgent dead code 제거, LLM 인스턴스 캐싱, APIKeyMiddleware 개선, 캐시 키 domain 버그 수정, classify_node async 전환, 로그 emoji 제거 (3af6e92)
+- **RAG Low 6건**: bank_account 정규식 정밀화, retrieve_context dead code 제거, multi_query 실패 처리, reranker None 체크, chroma.py get_settings() 통일, import 정리 (5486466)
 
 **코드 품질:**
-- 프롬프트 중앙 관리: `utils/prompts.py` + **인젝션 가드 적용**
+- 프롬프트 중앙 관리: `utils/prompts.py` + 인젝션 가드 적용
 - 설정 중앙 관리: `utils/config/settings.py` (Pydantic BaseSettings, 40+ 환경변수)
 - 싱글톤 패턴 일관: `get_settings()`, `get_reranker()`, `get_domain_classifier()` 등
 - 지연 로딩: 도메인 분류기, 질문 분해기, RAGAS 평가기 모두 `@property` 지연 로딩
 - 에러 핸들링: try-except + fallback 메시지 패턴 일관 적용
-- 비동기 지원: `asyncio.to_thread()` + `asyncio.gather()` 병렬 처리
+- **async 전용**: MainRouter, BaseAgent, RAGChain, Generator, Retrieval 전부 비동기
+- **미들웨어**: 순수 ASGI 패턴 (SSE 버퍼링 문제 해결)
+- **스레드 안전**: 도메인 분류기 `threading.Lock()` + double-check
+- **재시도 로직**: ChromaDB 연결/검색에 tenacity exponential backoff
+- **테스트**: 21개 테스트 파일, 386 passed, 5 skipped
+
+**파일 통계:** Python 파일 73개 (테스트 21개 포함)
 
 ---
 
-### 1.3 Frontend (React + Vite + TypeScript) -- 완성도: 85%
-
-(변경 없음 - 이전 보고서와 동일)
+### 1.3 Frontend (React + Vite + TypeScript) -- 완성도: 85% → 88% ↑
 
 **구현 완료된 기능:**
 | 페이지/컴포넌트 | 파일 | 기능 | 상태 |
@@ -107,15 +133,25 @@
 | CompanyDashboard | components/company/CompanyDashboard.tsx | 기업 대시보드 | 완료 |
 | RegionSelect | components/common/RegionSelect.tsx | 시도/시군구 2단 선택 | 완료 |
 | ProtectedRoute | components/common/ProtectedRoute.tsx | 인증/관리자 라우트 가드 | 완료 |
+| **ErrorBoundary** | **components/common/ErrorBoundary.tsx** | **글로벌 에러 바운더리 (App.tsx 래핑)** | **신규** |
 | NotificationBell | components/layout/NotificationBell.tsx | 알림 드롭다운 | 완료 |
 | ResponseProgress | components/chat/ResponseProgress.tsx | 응답 생성 중 진행률 | 완료 |
 
+**Phase 5 감사보고서 수정 사항 (3건):**
+- ~~console.log 잔존~~: **`CompanyForm.tsx` console.log 삭제 + `vite.config.ts` production에서 console/debugger drop** (M1)
+- ~~글로벌 에러 바운더리 없음~~: **`ErrorBoundary.tsx` 생성 + `App.tsx`에 `<ErrorBoundary>` 래핑** (M7)
+- ~~데드 코드~~: **`authStore.ts`에서 `localStorage.removeItem` 삭제** (L4)
+- ~~TanStack Query 문서 불일치~~: **`frontend/CLAUDE.md` 미사용 상태로 수정** (L3)
+
+**추가 수정 사항:**
+- **Vite 빌드 최적화**: `vite.config.ts`에 production `sourcemap: false`, `esbuild.drop: ['console', 'debugger']`
+- **health check 타임아웃**: `rag.ts`에서 5s -> 10s 증가 (스트리밍 안정성)
+
 **미완성/개선 필요:**
 - **단위 테스트 없음**: Vitest 미설치, 컴포넌트 테스트 파일 0건
-- **TanStack Query 미사용**: CLAUDE.md에 언급되나 실제 미사용 (Zustand + 직접 axios 호출)
-- **글로벌 에러 바운더리 없음**: 예외 발생 시 흰 화면
-- **console.log 잔존**: 10+ 건의 디버그 로그 잔존
 - **선제적 알림 시스템 미구현**: NotificationBell UI는 있으나 D-7/D-3 알림 로직 없음
+
+**파일 통계:** TypeScript/TSX 파일 38개
 
 ---
 
@@ -131,24 +167,32 @@
 
 ---
 
-### 1.6 Infra (Docker/Nginx) -- 완성도: 80% → 85% ↑
+### 1.6 Infra (Docker/Nginx) -- 완성도: 80% → 90% ↑
 
-**2026-02-13 수정 사항:**
-- **SSE 스트리밍**: `rag/main.py`에 `X-Accel-Buffering: no` 헤더 추가, `nginx.conf`에 `chunked_transfer_encoding on` 추가
+**Phase 5 감사보고서 수정 사항:**
+- **Nginx 보안 헤더 추가** (H1): `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `X-XSS-Protection`, `Referrer-Policy`, `CSP`
+- **Nginx 레이트 리밋** (H2): `limit_req_zone` (api: 10r/s burst=20, rag: 5r/s burst=10)
+- **Docker 헬스체크** (M6): Backend, Frontend, RAG 헬스체크 추가
+- **Docker RAG --reload** (M2): `docker-compose.local.yaml`에 RAG `--reload` 추가
 - **SSH 터널 보안**: `StrictHostKeyChecking=accept-new` + `ssh-known-hosts` 볼륨 영속화
+
+**프로덕션 배포 환경 구성:**
+- `Dockerfile.prod` (Backend + RAG): 멀티스테이지 빌드, gunicorn/uvicorn worker
+- `docker-compose.prod.yaml`: 프로덕션 Docker Compose
+- `nginx.prod.conf`: 프로덕션 Nginx 설정
+- `Dockerfile.nginx`: Nginx 프로덕션 이미지
+- `.dockerignore` 확장: 프로덕션 빌드 컨텍스트 최소화
 
 **Nginx 설정:**
 - 리버스 프록시: `/api/*` -> backend:8000, `/rag/*` -> rag:8001, `/*` -> frontend:5173
-- SSE 지원: `proxy_buffering off`, `proxy_cache off`, `proxy_read_timeout 300s`, **`chunked_transfer_encoding on`** ✅
+- SSE 지원: `proxy_buffering off`, `proxy_cache off`, `proxy_read_timeout 300s`, `chunked_transfer_encoding on`
 - WebSocket (HMR): `Upgrade`, `Connection "upgrade"` 헤더 설정
 - `client_max_body_size 10M`
+- **보안 헤더 5종**: X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, Referrer-Policy, CSP
+- **레이트 리밋**: api 10r/s, rag 5r/s
 
 **미비 사항:**
-- **TLS/HTTPS 미설정** (HTTP 80만) — CRITICAL, SSL 인증서 필요
-- 보안 헤더 누락 (X-Frame-Options, CSP 등)
-- Nginx 레이트 리밋 없음
-- 프로덕션 빌드 구성 없음 (전체 dev 모드)
-- backend, frontend에 Docker 헬스체크 없음
+- **TLS/HTTPS 미설정** (HTTP 80만) -- CRITICAL, SSL 인증서 필요
 
 ---
 
@@ -157,9 +201,11 @@
 (기본 구조는 변경 없음 - 이전 보고서 참조)
 
 **주요 변경점:**
-- **도메인 분류기**: 벡터 유사도 + 키워드 매칭 → `.env` 토글로 LLM 1차 분류 전환 가능
+- **도메인 분류기**: 순수 LLM 모드 전환 가능 (벡터 임베딩 계산 생략, cold start 8초 절감)
 - **Backend 쿼리**: 전체 SQLAlchemy 2.0 `select()` 스타일 통일
-- **서비스 구조**: 전 모듈 Router → Service → DB 3계층 아키텍처 적용
+- **서비스 구조**: 전 모듈 Router -> Service -> DB 3계층 아키텍처 적용
+- **미들웨어**: RAG 순수 ASGI 전환 (SSE 버퍼링 해결), Backend 감사 로깅 추가
+- **인프라**: 프로덕션 Docker 배포 환경 구성 (Dockerfile.prod, docker-compose.prod.yaml)
 
 ### 4.3 품질 기능 활성화 상태 (갱신)
 
@@ -172,7 +218,7 @@
 | Cross-Domain Rerank | ENABLE_CROSS_DOMAIN_RERANK | true | 완료 |
 | 도메인 외 질문 거부 | ENABLE_DOMAIN_REJECTION | true | 완료 |
 | 벡터 도메인 분류 | ENABLE_VECTOR_DOMAIN_CLASSIFICATION | true | 완료 |
-| **LLM 도메인 분류** | ENABLE_LLM_DOMAIN_CLASSIFICATION | false | **완료 (1차 분류기 + fallback + 비교 로깅)** |
+| **LLM 도메인 분류** | ENABLE_LLM_DOMAIN_CLASSIFICATION | false | **완료 (순수 LLM 모드 + fallback)** |
 | LLM 답변 평가 | ENABLE_LLM_EVALUATION | true | 완료 |
 | RAGAS 정량 평가 | ENABLE_RAGAS_EVALUATION | false | 완료 (옵션) |
 | 평가 후 재시도 | ENABLE_POST_EVAL_RETRY | true | 완료 |
@@ -186,9 +232,13 @@
 
 ---
 
-## 6. 테스트 분석
+## 6. 테스트 분석 (갱신)
 
-(변경 없음 - Backend/Frontend 테스트 미존재, RAG 17파일 양호)
+| 서비스 | 테스트 파일 | 테스트 결과 | 비고 |
+|--------|-----------|-----------|------|
+| RAG | 21개 | **386 passed, 5 skipped** | 단위/통합 테스트 양호 |
+| Backend | 0개 | 미존재 | 테스트 스위트 작성 필요 |
+| Frontend | 0개 | 미존재 | Vitest 설정 필요 |
 
 ---
 
@@ -198,68 +248,64 @@
 
 | 규칙 파일 | 준수 상태 | 비고 |
 |----------|----------|------|
-| coding-style.md | 80% | Python 타입힌트 대부분 적용, TS strict 완벽 |
+| coding-style.md | **85%** ↑ | Python 타입힌트 적용, TS strict 완벽, **입력 검증 Pydantic validator 적용** |
 | git-workflow.md | 90% | 커밋 메시지 컨벤션 준수, Co-Author 포함 |
 | testing.md | 30% | **규칙은 상세하나 Backend/Frontend 테스트 미존재** |
-| security.md | **85%** ↑ | HttpOnly JWT, CSRF 적용. **SSH accept-new, 프롬프트 인젝션 방어 적용**. TLS 미적용 |
-| patterns.md | **95%** ↑ | Pydantic, Zustand, Router 패턴 준수. **Service Layer 패턴 전 모듈 적용** |
+| security.md | **90%** ↑ | HttpOnly JWT, CSRF, SSH accept-new, 프롬프트 인젝션 방어, **Nginx 보안 헤더/레이트 리밋**, **감사 로깅**. TLS만 미적용 |
+| patterns.md | **95%** | Pydantic, Zustand, Router 패턴 준수. Service Layer 패턴 전 모듈 적용 |
 | agents.md | 95% | 에이전트 라우팅 규칙 정확 |
-| performance.md | 80% | 모델 선택 전략, 지연 로딩 적용 |
+| performance.md | **85%** ↑ | 모델 선택 전략, 지연 로딩 적용, **순수 LLM 분류로 cold start 단축** |
 
 ---
 
 ## 8. 개선 필요 사항 (갱신)
 
-### ~~P0 -- 즉시 수정~~ ✅ 완료
-- ~~SSE 스트리밍 헤더~~ → 완료
-- ~~SSH StrictHostKeyChecking~~ → 완료
-- ~~프롬프트 인젝션 방어~~ → 완료
-- ~~서비스 레이어 추가~~ → 완료
-- ~~SQLAlchemy 2.0 통일~~ → 완료
+### ~~P0 -- 즉시 수정~~ -- 전체 완료
+- ~~SSE 스트리밍 헤더~~ -> 완료
+- ~~SSH StrictHostKeyChecking~~ -> 완료
+- ~~프롬프트 인젝션 방어~~ -> 완료
+- ~~서비스 레이어 추가~~ -> 완료
+- ~~SQLAlchemy 2.0 통일~~ -> 완료
+
+### ~~P1 -- 감사보고서 HIGH/MEDIUM (보안+안정성)~~ -- 전체 완료
+- ~~Nginx 보안 헤더 추가 (H1)~~ -> 완료
+- ~~Nginx 레이트 리밋 (H2)~~ -> 완료
+- ~~토큰 블랙리스트 DI 전환 (H3)~~ -> 완료
+- ~~입력 유효성 검증 강화 (H4)~~ -> 완료
+- ~~RAG 문서 병합 제한 (H5)~~ -> 완료
+- ~~도메인 분류기 Lock (H6)~~ -> 완료
+- ~~ChromaDB 재시도 로직 (H7)~~ -> 완료
+- ~~환경변수 검증 (H8)~~ -> 완료
+- ~~Frontend 에러 바운더리 (M7)~~ -> 완료
+- ~~console.log 정리 (M1)~~ -> 완료
+- ~~감사 로깅 미들웨어 (M9)~~ -> 완료
+- ~~RAG 매직 넘버 상수화 (M4)~~ -> 완료
+- ~~에러 메시지 언어 통일 (L2)~~ -> 완료
+- ~~데드 코드 제거 (L4)~~ -> 완료
 
 ### P0 -- 남은 CRITICAL (인프라)
 
 | # | 항목 | 영향 범위 | 필요 조치 |
 |---|------|---------|----------|
-| 1 | **TLS/HTTPS 설정** (C2) | Infra | SSL 인증서 발급 → nginx.conf SSL 설정 → docker-compose 443 포트 → COOKIE_SECURE=True |
+| 1 | **TLS/HTTPS 설정** (C2) | Infra | SSL 인증서 발급 -> nginx.conf SSL 설정 -> docker-compose 443 포트 -> COOKIE_SECURE=True |
 
 ### P1 -- 높은 우선순위 (다음 단계)
 
 | # | 항목 | 영향 범위 | 예상 작업량 |
 |---|------|---------|-----------|
-| 1 | Nginx 보안 헤더 추가 (H1) | Infra | 2h |
-| 2 | Nginx 레이트 리밋 (H2) | Infra | 3h |
-| 3 | 토큰 블랙리스트 DI 전환 (H3) | Backend | 2h |
-| 4 | 입력 유효성 검증 강화 (H4) | Backend | 4h |
-| 5 | RAG 문서 병합 제한 (H5) | RAG | 2h |
-| 6 | 도메인 분류기 Lock (H6) | RAG | 2h |
-| 7 | ChromaDB 재시도 로직 (H7) | RAG | 4h |
-| 8 | 환경변수 검증 (H8) | Backend+RAG | 3h |
-| 9 | Frontend 에러 바운더리 (M7) | Frontend | 2h |
-
-### P2 -- 중간 우선순위
-
-| # | 항목 | 영향 범위 | 예상 작업량 |
-|---|------|---------|-----------|
 | 1 | Backend 단위/통합 테스트 작성 | Backend | 3-5d |
 | 2 | Frontend Vitest 단위 테스트 설정 | Frontend | 2-3d |
-| 3 | Docker 프로덕션 빌드 (M2) | Infra | 4h |
-| 4 | File/Announce 관리 API 구현 | Backend | 2-3d |
-| 5 | 선제적 알림 시스템 (D-7, D-3) | Frontend+Backend | 2-3d |
-| 6 | console.log 정리 (M1) | Frontend | 1h |
-| 7 | Google OAuth2 실 연동 완료 | Backend | 1d |
-| 8 | 감사 로깅 미들웨어 (M9) | Backend | 4h |
+| 3 | File/Announce 관리 API 구현 | Backend | 2-3d |
+| 4 | 선제적 알림 시스템 (D-7, D-3) | Frontend+Backend | 2-3d |
+| 5 | Google OAuth2 실 연동 완료 | Backend | 1d |
 
-### P3 -- 낮은 우선순위
+### P2 -- 낮은 우선순위
 
 | # | 항목 | 영향 범위 | 예상 작업량 |
 |---|------|---------|-----------|
 | 1 | 데이터 갱신 자동화 (크롤링 스케줄러) | Scripts | 2-3d |
-| 2 | RAG 매직 넘버 상수화 (M4) | RAG | 2h |
-| 3 | Dockerfile 최적화 (multi-stage) | Infra | 2h |
-| 4 | Nginx gzip 압축 설정 | Infra | 1h |
-| 5 | 에러 메시지 언어 통일 (L2) | Backend | 2h |
-| 6 | 데드 코드 제거 (L4) | Frontend | 0.5h |
+| 2 | 게스트 모드 우회 방지 (M8) | Frontend+Backend | 1d |
+| 3 | Nginx gzip 압축 설정 | Infra | 1h |
 
 ---
 
@@ -270,30 +316,32 @@
 | 영역 | 이전 | 현재 | 변동 | 판단 근거 |
 |------|------|------|------|----------|
 | 아키텍처 설계 | 9/10 | **9/10** | - | 마이크로서비스 구조, 관심사 분리, 명확한 통신 경로 |
-| Backend 구현 | 7/10 | **8/10** | **↑1** | **서비스 레이어 전 모듈 적용, SQLAlchemy 2.0 통일** |
-| RAG 시스템 | 9/10 | **9.5/10** | **↑0.5** | **LLM 도메인 분류 토글, 프롬프트 인젝션 방어, SSE 헤더 수정** |
-| Frontend 구현 | 8/10 | **8/10** | - | 기능 완성도 높음, 타입 안전성 우수. 테스트/에러 처리 부족 |
-| 인프라 | 6/10 | **6.5/10** | **↑0.5** | **SSH 보안 강화, SSE Nginx 설정 완료**. TLS 미적용 |
-| 테스트 | 4/10 | **4/10** | - | RAG만 양호, Backend/Frontend 테스트 전무 |
+| Backend 구현 | 8/10 | **8.5/10** | **+0.5** | **Session DI, 입력 검증, 감사 로깅, CORS 검증 추가** |
+| RAG 시스템 | 9.5/10 | **9.8/10** | **+0.3** | **High 3건+Medium 10건+Low 6건 수정, 순수 LLM 분류, 캐시 버그 수정** |
+| Frontend 구현 | 8/10 | **8.5/10** | **+0.5** | **ErrorBoundary 추가, console.log 제거, Vite 최적화** |
+| 인프라 | 6.5/10 | **8/10** | **+1.5** | **보안 헤더, 레이트 리밋, 헬스체크, 프로덕션 Docker 구성**. TLS만 미적용 |
+| 테스트 | 4/10 | **4.5/10** | **+0.5** | RAG 386 passed (21파일). Backend/Frontend 테스트 전무 |
 | 문서화 | 9/10 | **9/10** | - | 매우 상세한 CLAUDE.md, ARCHITECTURE.md, 규칙 체계 |
-| 보안 | 6/10 | **7.5/10** | **↑1.5** | **프롬프트 인젝션 방어, SSH accept-new 적용**. TLS 미적용 |
-| **종합** | **7.3/10** | **7.8/10** | **↑0.5** | **CRITICAL 5건 해결로 프로덕션 준비도 향상. TLS + 테스트가 주요 잔여 과제** |
+| 보안 | 7.5/10 | **8.5/10** | **+1** | **Nginx 보안 헤더/레이트 리밋, 감사 로깅, 입력 검증**. TLS만 미적용 |
+| **종합** | **7.8/10** | **8.5/10** | **+0.7** | **감사보고서 26건 + RAG 리팩토링 19건 완료. TLS + 테스트가 주요 잔여 과제** |
 
 ### 핵심 강점
-1. RAG 시스템의 높은 완성도 (5단계 파이프라인, 20+ 설정 가능 품질 기능)
+1. RAG 시스템의 높은 완성도 (5단계 파이프라인, 20+ 설정 가능 품질 기능, 386 테스트)
 2. TypeScript strict 모드 완벽 준수 (any 0건)
 3. HttpOnly JWT + CSRF 미들웨어의 견고한 인증 아키텍처
-4. SSE 기반 실시간 스트리밍 채팅
+4. SSE 기반 실시간 스트리밍 채팅 (순수 ASGI 미들웨어)
 5. 매우 상세한 문서화 체계 (CLAUDE.md, ARCHITECTURE.md, rules/)
-6. **Backend 전 모듈 서비스 레이어 + SQLAlchemy 2.0 통일** (신규)
-7. **프롬프트 인젝션 방어 체계** (신규)
-8. **LLM 도메인 분류 .env 토글 전환** (신규)
+6. Backend 전 모듈 서비스 레이어 + SQLAlchemy 2.0 통일
+7. 프롬프트 인젝션 방어 체계 (sanitizer + prompt guard)
+8. Nginx 보안 헤더 5종 + 레이트 리밋 + Docker 헬스체크
+9. **프로덕션 Docker 배포 환경** (Dockerfile.prod, docker-compose.prod.yaml)
+10. **감사 로깅 미들웨어** (상태 변경 요청 추적)
 
 ### 핵심 약점 (잔여)
-1. **TLS/HTTPS 미적용** — 프로덕션 배포의 최대 블로커
+1. **TLS/HTTPS 미적용** -- 프로덕션 배포의 최대 블로커
 2. Backend/Frontend 테스트 전무 (규칙은 정의되어 있으나 미이행)
-3. 프로덕션 빌드/배포 파이프라인 미구성
-4. Nginx 보안 헤더/레이트 리밋 미설정
+3. File/Announce 관리 API 미구현
+4. 선제적 알림 시스템 미구현
 
 ---
 
@@ -303,3 +351,4 @@
 |------|----------|
 | 2026-02-13 | 초기 종합 상태 보고서 작성 (성숙도 7.3/10) |
 | 2026-02-13 | CRITICAL 5건 수정 + LLM 도메인 분류 연결 반영 (성숙도 7.8/10) |
+| 2026-02-13 | 감사보고서 26건 + RAG 리팩토링 19건 반영 (성숙도 8.5/10). 커밋 `5486466` 기준 |

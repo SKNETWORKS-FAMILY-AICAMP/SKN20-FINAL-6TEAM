@@ -64,11 +64,12 @@ backend/
 ├── scripts/
 │   └── generate_code_sql.py  # KSIC 업종코드/지역코드 SQL+TS 생성
 └── apps/
-    ├── auth/             # Google OAuth2 인증
+    ├── auth/             # Google OAuth2 인증, 토큰 블랙리스트
     ├── users/            # 사용자 관리
     ├── companies/        # 기업 프로필
     ├── histories/        # 상담 이력
     ├── schedules/        # 일정 관리
+    ├── admin/            # 관리자 대시보드, 서버 상태
     └── common/
         ├── models.py     # SQLAlchemy 모델
         └── deps.py       # 의존성 (get_db, get_current_user)
@@ -80,10 +81,11 @@ backend/
 
 | Method | Endpoint | 설명 |
 |--------|----------|------|
-| GET | `/auth/google` | Google OAuth 로그인 시작 |
-| GET | `/auth/google/callback` | OAuth 콜백 처리 |
+| POST | `/auth/google` | Google ID Token 검증 + 로그인 |
+| POST | `/auth/test-login` | 테스트 로그인 (ENABLE_TEST_LOGIN) |
 | POST | `/auth/logout` | 로그아웃 |
 | POST | `/auth/refresh` | 토큰 갱신 |
+| GET | `/auth/me` | 현재 사용자 정보 |
 
 ### 사용자
 
@@ -126,6 +128,7 @@ backend/
 
 | Method | Endpoint | 설명 |
 |--------|----------|------|
+| GET | `/admin/status` | 서버 상태 모니터링 (Backend/RAG/DB) |
 | GET | `/admin/histories` | 상담 이력 목록 (페이지네이션, 필터링) |
 | GET | `/admin/histories/stats` | 평가 통계 |
 | GET | `/admin/histories/{id}` | 상담 이력 상세 |
@@ -141,6 +144,7 @@ backend/
 | `file` | 파일 정보 |
 | `announce` | 지원사업 공고 |
 | `schedule` | 일정 |
+| `token_blacklist` | JWT 토큰 블랙리스트 (jti, expires_at, use_yn) |
 
 상세 스키마: [`database.sql`](./database.sql)
 

@@ -12,11 +12,12 @@ backend/
 ├── database.sql         # DB 스키마
 ├── config/              # settings.py, database.py
 └── apps/
-    ├── auth/            # Google OAuth2 인증
+    ├── auth/            # Google OAuth2 인증, 토큰 블랙리스트
     ├── users/           # 사용자 관리
     ├── companies/       # 기업 프로필
     ├── histories/       # 상담 이력
     ├── schedules/       # 일정 관리
+    ├── admin/           # 관리자 대시보드, 서버 상태
     └── common/          # models.py, deps.py
 ```
 
@@ -24,10 +25,11 @@ backend/
 
 | Module | Method | Endpoint | Description |
 |--------|--------|----------|-------------|
-| auth | GET | `/auth/google` | OAuth 로그인 시작 |
-| auth | GET | `/auth/google/callback` | OAuth 콜백 |
+| auth | POST | `/auth/google` | Google ID Token 검증 + 로그인 |
+| auth | POST | `/auth/test-login` | 테스트 로그인 (ENABLE_TEST_LOGIN) |
 | auth | POST | `/auth/logout` | 로그아웃 |
 | auth | POST | `/auth/refresh` | 토큰 갱신 |
+| auth | GET | `/auth/me` | 현재 사용자 정보 |
 | users | GET | `/users/me` | 내 정보 조회 |
 | users | PUT | `/users/me` | 내 정보 수정 |
 | users | PUT | `/users/me/type` | 유형 변경 |
@@ -38,6 +40,10 @@ backend/
 | histories | GET/POST | `/histories` | 상담 이력 조회/저장 |
 | schedules | GET/POST | `/schedules` | 일정 조회/등록 |
 | schedules | PUT/DELETE | `/schedules/{id}` | 일정 수정/삭제 |
+| admin | GET | `/admin/status` | 서버 상태 (Backend/RAG/DB) |
+| admin | GET | `/admin/histories` | 상담 로그 (페이지네이션/필터링) |
+| admin | GET | `/admin/histories/stats` | 평가 통계 |
+| admin | GET | `/admin/histories/{id}` | 상담 로그 상세 |
 
 ## Code Table (main_code)
 - `U`: 사용자 유형 (U0000001: 관리자, U0000002: 예비창업자, U0000003: 사업자)

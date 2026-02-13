@@ -92,20 +92,25 @@ export const useItemStore = create<StoreState>()(
 );
 ```
 
-### TanStack Query Hook Pattern
+### Custom Hook Pattern (Zustand + axios)
 ```typescript
-export const useItemQuery = (id: number) =>
-    useQuery({
-        queryKey: ['item', id],
-        queryFn: () => api.get(`/items/${id}`).then((r) => r.data),
-        enabled: !!id,
-    });
+// src/hooks/useMyData.ts
+export const useMyData = () => {
+    const [data, setData] = useState<Item[]>([]);
+    const [loading, setLoading] = useState(false);
 
-export const useCreateItemMutation = () =>
-    useMutation({
-        mutationFn: (data: ItemCreate) => api.post('/items', data),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['items'] }),
-    });
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        try {
+            const response = await api.get('/items');
+            setData(response.data);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    return { data, loading, fetchData };
+};
 ```
 
 ### Component Props Pattern

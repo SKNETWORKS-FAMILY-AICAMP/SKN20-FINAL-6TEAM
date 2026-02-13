@@ -141,8 +141,7 @@ class MainRouter:
     - ragas_evaluator: RagasEvaluator (지연 로딩)
     - retrieval_agent: RetrievalAgent (검색 파이프라인 전담)
     - generator: ResponseGeneratorAgent (응답 생성 전담)
-    - graph: 동기 StateGraph
-    - async_graph: 비동기 StateGraph
+    - async_graph: 비동기 StateGraph (async 전용, 동기 graph 제거됨)
 
     노드 메서드:
     - _classify_node(): 도메인 분류

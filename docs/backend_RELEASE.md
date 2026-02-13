@@ -1,19 +1,26 @@
 # Release Notes
 
-## [2026-02-13] - 프로덕션 배포 환경 구성 + 코드 품질 개선
+## [2026-02-13] - 감사보고서 26건 일괄 구현 + 프로덕션 배포 환경
 
 ### Features
 - `Dockerfile.prod` 추가: gunicorn + uvicorn worker (2 workers, t3.medium 기준)
 - `.dockerignore` 확장: 프로덕션 빌드 컨텍스트 최소화
-- `is_blacklisted(jti, db)` 호출 버그 수정 (db 파라미터 누락)
 
-### Refactoring
-- 서비스 레이어 추가: companies, histories, schedules, users (라우터에서 비즈니스 로직 분리)
-- SQLAlchemy 2.0 `select()` 스타일 통일 (auth 포함 15건)
-- Session DI 전환, 입력 검증 강화 (Pydantic 스키마)
-- CORS 프로덕션 검증, 에러 메시지 한국어 통일
-- 감사 로깅 미들웨어 추가
-- 프롬프트 인젝션 방어 (sanitizer 24패턴)
+### Security
+- `AuditLoggingMiddleware` 추가 (M9) — POST/PUT/DELETE/PATCH 요청의 req_id, method, path, status, ip, duration 구조화 로깅
+- CORS 프로덕션 검증 (M10) — `@model_validator(mode="after")`로 production 환경 localhost 포함 시 경고
+
+### Bug Fixes
+- `is_blacklisted(jti, db)` 호출 버그 수정 — db 파라미터 누락
+
+### Refactoring — 감사보고서 Backend 7건
+- **서비스 레이어 추가** (C5): companies, histories, schedules, users 4개 모듈에 service.py 생성, 라우터에서 비즈니스 로직 분리
+- **SQLAlchemy 2.0 통일** (C6): 15건의 `db.query()` → `select()` 변환 (auth 포함, 잔존 0건)
+- **토큰 블랙리스트 Session DI** (H3): `token_blacklist.py` 3개 함수에 `db: Session` 파라미터 추가, `SessionLocal()` 직접 생성 제거
+- **입력 유효성 검증** (H4): `companies/schemas.py` 사업자번호 `@field_validator`, `schedules/schemas.py` 날짜 범위 `@model_validator`
+- **하드코딩 제거** (M3): `admin/service.py`의 `RAG_SERVICE_URL` → `settings.py`의 `Settings.RAG_SERVICE_URL` 필드로 이관
+- **에러 메시지 한국어 통일** (L2): `auth/router.py`의 영어 에러 메시지 ~15건 한국어 변환
+- **RAG_SERVICE_URL 설정** (H8): `backend/config/settings.py`에 `RAG_SERVICE_URL` 필드 추가
 
 ## [2026-02-12] - Admin 페이지 분리 및 서버 상태 모니터링
 

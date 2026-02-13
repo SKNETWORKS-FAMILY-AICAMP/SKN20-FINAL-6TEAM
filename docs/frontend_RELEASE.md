@@ -1,13 +1,18 @@
 # Release Notes
 
-## [2026-02-13] - 프로덕션 배포 환경 구성 + 코드 품질 개선
+## [2026-02-13] - 감사보고서 26건 일괄 구현 + 프로덕션 빌드 최적화
 
 ### Features
+- `ErrorBoundary` 컴포넌트 추가 (M7) — Class 기반 React Error Boundary, `App.tsx`에 `<ErrorBoundary>` 래핑
 - `.dockerignore` 추가: 프론트엔드 빌드 컨텍스트 최소화
-- `ErrorBoundary` 컴포넌트 추가 (React Error Boundary)
 
-### Refactoring
-- console.log 제거, Vite 빌드 최적화
+### Refactoring — 감사보고서 Frontend 3건 + Vite 최적화
+- **console.log 제거** (M1): `CompanyForm.tsx` console.log 삭제
+- **Vite 빌드 최적화**: `vite.config.ts`에 production `esbuild.drop: ['console', 'debugger']`, `sourcemap: false`
+- **데드 코드 제거** (L4): `authStore.ts`에서 `localStorage.removeItem('accessToken')` 삭제
+- **문서 수정** (L3): `frontend/CLAUDE.md`의 TanStack Query 참조를 실제 상태(미사용, Zustand+axios)로 수정
+
+### Security
 - CSP에 Google OAuth 도메인 추가 (accounts.google.com, *.googleusercontent.com)
 
 ## [2026-02-12] - Admin 페이지 분리 및 관리자 로그인
@@ -68,7 +73,7 @@
 
 ### 기술 스택
 - React 18 + Vite 5 + TypeScript 5
-- Zustand (전역 상태) + TanStack Query (서버 상태)
+- Zustand (전역 상태 + 서버 상태) + axios
 - TailwindCSS + React Router v6
 - Playwright (E2E 테스트)
 

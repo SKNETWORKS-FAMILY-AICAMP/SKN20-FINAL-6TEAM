@@ -595,7 +595,7 @@ export function useCompanyForm(options: UseCompanyFormOptions = {}) {
 }
 ```
 
-### 3. API 통합 폼 훅 (TanStack Query 패턴)
+### 3. API 통합 폼 훅 (참고용 — 현재 TanStack Query 미사용, Zustand+axios 방식 사용 중)
 
 ```typescript
 // src/hooks/forms/useCompanyFormWithQuery.ts

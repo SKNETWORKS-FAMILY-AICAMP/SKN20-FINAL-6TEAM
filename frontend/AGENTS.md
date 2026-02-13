@@ -3,15 +3,15 @@
 > 상세 개발 가이드: [CLAUDE.md](./CLAUDE.md)
 
 ## Tech Stack
-React 18 / Vite 5 / TypeScript 5 / React Router v6 / TailwindCSS / Zustand / TanStack Query / axios / react-markdown + remark-gfm
+React 18 / Vite 5 / TypeScript 5 / React Router v6 / TailwindCSS / Zustand / axios / react-markdown + remark-gfm
 
 ## Project Structure
 ```
 frontend/src/
-├── pages/              # MainPage, LoginPage, CompanyPage, SchedulePage, UsageGuidePage, AdminPage
+├── pages/              # MainPage, LoginPage, CompanyPage, SchedulePage, UsageGuidePage, AdminDashboardPage, AdminLogPage
 ├── components/
 │   ├── chat/           # ChatWindow, MessageList, MessageInput, DomainTag
-│   ├── common/         # RegionSelect, Button, Input, Modal, Loading
+│   ├── common/         # RegionSelect, ProtectedRoute, ErrorBoundary, Button, Input, Modal
 │   ├── company/        # CompanyForm (준비중/운영중 토글)
 │   ├── profile/        # ProfileDialog (모달 기반)
 │   └── layout/         # MainLayout, Sidebar, ChatHistoryPanel, Footer
@@ -32,7 +32,8 @@ frontend/src/
 | `/company` | CompanyPage | 기업 프로필 관리 |
 | `/schedule` | SchedulePage | 일정 관리 |
 | `/guide` | UsageGuidePage | 사용 설명서 |
-| `/admin` | AdminPage | 관리자 (U001만) |
+| `/admin` | AdminDashboardPage | 관리자 대시보드 (U0000001만) |
+| `/admin/log` | AdminLogPage | 관리자 상담 로그 (U0000001만) |
 
 **Profile**: 별도 라우트 없음 → Sidebar 톱니바퀴 → `ProfileDialog` 모달
 

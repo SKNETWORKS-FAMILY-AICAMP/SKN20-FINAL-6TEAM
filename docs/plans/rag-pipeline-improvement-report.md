@@ -1,23 +1,27 @@
 # Bizi RAG 파이프라인 종합 개선 보고서
 
 > **작성일**: 2026-02-12
-> **분석 대상**: RAG 서비스 전체 파이프라인 (15개 핵심 모듈, 392개 테스트)
-> **기준선**: Phase 1-3 리팩토링 완료, Multi-Domain 12건 중 9건 완료 시점
+> **최종 갱신**: 2026-02-13 (Phase 4 품질개선 + Phase 5 감사보고서 + RAG 리팩토링 19건 반영)
+> **분석 대상**: RAG 서비스 전체 파이프라인 (15개 핵심 모듈, 386개 테스트)
+> **기준선**: Phase 1-5 완료, 커밋 `5486466` 기준
 
 ---
 
 ## 1. Executive Summary
 
-Bizi RAG 시스템은 LangGraph 기반 5단계 파이프라인(classify -> decompose -> retrieve -> generate -> evaluate)으로 4개 전문 도메인을 서비스합니다. 3차에 걸친 개선(Phase 1: Critical/Important 23건, Phase 2: 리팩토링 6건, Phase 3: Dead Code 정리 ~578줄)과 Multi-Domain 개선 9/12건이 완료되어 핵심 안정성과 품질 기반이 확립되었습니다.
+Bizi RAG 시스템은 LangGraph 기반 5단계 파이프라인(classify -> decompose -> retrieve -> generate -> evaluate)으로 4개 전문 도메인을 서비스합니다. 5차에 걸친 개선(Phase 1: Critical/Important 23건, Phase 2: 리팩토링 6건, Phase 3: Dead Code 정리 ~578줄, Phase 4: 품질개선 ~400줄 제거, Phase 5: 감사보고서 26건 + RAG 19건)이 완료되어 프로덕션 준비 수준에 도달했습니다.
 
 **현재 강점**:
 - 견고한 에러 처리 및 타임아웃 체계 (C1-C8 완료)
 - 하이브리드 검색(BM25+Vector+RRF) + Cross-encoder Reranking
-- 392개 테스트로 높은 회귀 방어력
+- 386개 테스트로 높은 회귀 방어력 (21개 파일)
 - 싱글톤 패턴 통일, Dead Code 제거로 유지보수성 향상
+- ~~Sync/Async 중복~~ 완전 제거 (Phase 4)
+- ~~config.py 비대~~ 4개 모듈로 분할 완료 (Phase 4)
+- 순수 ASGI 미들웨어 (SSE 호환), 스레드 안전 도메인 분류기 (Phase 5)
+- 프롬프트 인젝션 방어, tenacity 재시도, 환경변수 검증 (Phase 5)
 
-**주요 개선 기회**:
-- Sync/Async 코드 중복이 3개 모듈에 ~500줄 잔존 (generator.py, retrieval_agent.py, router.py)
+**잔여 개선 기회**:
 - 청킹 전략 코드는 구현되었으나 데이터 파이프라인 미실행 (전처리 재실행, 벡터DB 재빌드 필요)
 - BM25 한국어 토크나이저가 단순 정규식 기반 (형태소 분석 미사용)
 - Multi-Query가 단순 질문에도 항상 실행되어 불필요한 LLM 비용 발생
@@ -41,15 +45,15 @@ Bizi RAG 시스템은 LangGraph 기반 5단계 파이프라인(classify -> decom
 | **모니터링** | 단계별 소요시간 메트릭, 요청별 성능 추적, 관리자 API 엔드포인트 |
 | **보안** | PII 마스킹(주민번호, 사업자번호, 전화번호, 이메일), 관리자 API 인증, OpenAI API 키 검증 |
 
-### 2-2. 구조적 약점
+### 2-2. 구조적 약점 (갱신)
 
-| 영역 | 세부 사항 | 영향도 |
-|------|----------|--------|
-| **Sync/Async 중복** | `generator.py`, `retrieval_agent.py`에 sync/async 함수 쌍이 로직 동일한 채 병존. 총 ~500줄 중복 | 유지보수성 저하, 버그 수정 시 양쪽 수정 필요 |
-| **astream() 코드 분기** | `router.py`의 `astream()`(196줄)이 `aprocess()`와 별도 로직으로 단일/복합 도메인을 처리. 동일 파이프라인의 두 번째 구현체 | 일관성 리스크, 기능 추가 시 양쪽 수정 |
-| **객체 생성 비효율** | `MultiQueryRetriever`, `RuleBasedRetrievalEvaluator`가 매 요청마다 새로 생성 | 메모리 할당 오버헤드 |
-| **BM25 토크나이저** | 단순 정규식 기반(`r'[가-힣]+|[a-zA-Z]+|\d+'`). 형태소 분석 없이 어절 단위 매칭 | "퇴직금"과 "퇴직" 별개 토큰, 복합어/파생어 검색 누락 |
-| **설정 파일 비대** | `config.py`가 926줄. Settings, DomainConfig, DB 관리, 상수, 팩토리 함수가 한 파일에 집중 | 변경 영향 범위 과대 |
+| 영역 | 세부 사항 | 상태 |
+|------|----------|------|
+| ~~**Sync/Async 중복**~~ | ~~`generator.py`, `retrieval_agent.py` sync 함수 쌍 ~500줄 중복~~ | **✅ Phase 4 해결** -- generator -192줄, retrieval_agent -204줄 제거 |
+| **astream() 코드 분기** | `router.py`의 `astream()`이 그래프 실행과 별도 로직으로 스트리밍 처리 | 잔존 -- 스트리밍 경로 리팩토링 미완 |
+| ~~**객체 생성 비효율**~~ | ~~`MultiQueryRetriever`, `RuleBasedRetrievalEvaluator` 매 요청 생성~~ | **✅ Phase 4 해결** -- `get_multi_query_retriever()`, `get_retrieval_evaluator()` 싱글톤 |
+| **BM25 토크나이저** | 단순 정규식 기반. 형태소 분석 없이 어절 단위 매칭 | 잔존 -- kiwipiepy 적용 미완 |
+| ~~**설정 파일 비대**~~ | ~~`config.py` 926줄~~ | **✅ Phase 4 해결** -- `config/` 패키지 4모듈 분할 (settings, llm, domain_data, domain_config) |
 
 ---
 
@@ -91,25 +95,19 @@ Bizi RAG 시스템은 LangGraph 기반 5단계 파이프라인(classify -> decom
 
 ### P1 (Important) -- 코드 품질 및 유지보수성
 
-#### P1-1: generator.py Sync/Async 중복 제거
+#### ~~P1-1: generator.py Sync/Async 중복 제거~~ -- ✅ Phase 4 완료
 
 | 항목 | 내용 |
 |------|------|
-| **문제** | `generate()`/`agenerate()` (80줄+78줄), `_generate_single()`/`_agenerate_single()` (52줄+59줄), `_generate_multi()`/`_agenerate_multi()` (60줄+68줄) -- 총 6개 함수 쌍이 거의 동일한 로직을 sync/async로 중복 |
-| **영향** | ~200줄 중복. 로직 변경 시 양쪽 동시 수정 필요, 불일치 리스크 |
-| **해결** | sync 함수를 제거하고 `asyncio.run()` 또는 `asyncio.to_thread()` 래퍼로 대체. Phase 3에서 base.py, router.py, rag_chain.py에 적용한 것과 동일 패턴 |
-| **예상 효과** | ~200줄 코드 제거, 단일 변경점으로 유지보수성 향상 |
-| **관련 파일** | `rag/agents/generator.py` |
+| **수정일** | 2026-02-12 (Phase 4) |
+| **결과** | sync 함수 6개 제거, generator.py **-192줄**. async 전용으로 통일 |
 
-#### P1-2: retrieval_agent.py Sync/Async 중복 제거
+#### ~~P1-2: retrieval_agent.py Sync/Async 중복 제거~~ -- ✅ Phase 4 완료
 
 | 항목 | 내용 |
 |------|------|
-| **문제** | `retrieve()`/`aretrieve()` (138줄+143줄), `_merge_with_optional_rerank()`/`_amerge_with_optional_rerank()` (55줄+53줄), `_retrieve_with_strategy()` (68줄, sync만 존재) -- 총 ~300줄 중복 |
-| **영향** | 가장 큰 단일 모듈(1303줄) 중 ~300줄이 중복. 검색 로직 수정 시 retrieve()와 aretrieve() 양쪽 모두 수정 필요 |
-| **해결** | `retrieve()` sync 버전을 제거하고 `aretrieve()`만 유지. 호출부가 sync인 경우 `asyncio.run()` 래퍼 사용 |
-| **예상 효과** | ~300줄 코드 제거, RetrievalAgent 코드 1303줄 -> ~1000줄 |
-| **관련 파일** | `rag/agents/retrieval_agent.py` |
+| **수정일** | 2026-02-12 (Phase 4) |
+| **결과** | sync 함수 제거, retrieval_agent.py **-204줄**. async 전용으로 통일 |
 
 #### P1-3: router.py astream() 리팩토링
 
@@ -121,25 +119,19 @@ Bizi RAG 시스템은 LangGraph 기반 5단계 파이프라인(classify -> decom
 | **예상 효과** | 스트리밍과 비스트리밍 경로의 일관성 보장, ~150줄 제거 가능 |
 | **관련 파일** | `rag/agents/router.py` |
 
-#### P1-4: MultiQueryRetriever / RuleBasedRetrievalEvaluator 싱글톤화
+#### ~~P1-4: MultiQueryRetriever / RuleBasedRetrievalEvaluator 싱글톤화~~ -- ✅ Phase 4 완료
 
 | 항목 | 내용 |
 |------|------|
-| **문제** | `MultiQueryRetriever`가 `rag_chain.py`의 `_retrieve_documents()`에서 매 호출마다 새로 생성. `RuleBasedRetrievalEvaluator`도 `retrieval_agent.py`에서 매번 생성. 두 클래스 모두 상태를 갖지 않으므로 재사용 가능 |
-| **영향** | 메모리 할당/해제 오버헤드, GC 압력. 성능 영향은 미미하나 프로젝트의 싱글톤 패턴 통일(C-1에서 확립)에 위배 |
-| **해결** | `global + reset_*()` 패턴(C-1에서 확립된 프로젝트 표준)으로 싱글톤화 |
-| **예상 효과** | 패턴 일관성 확보, 미미한 성능 개선 |
-| **관련 파일** | `rag/chains/rag_chain.py`, `rag/agents/retrieval_agent.py`, `rag/utils/retrieval_evaluator.py` |
+| **수정일** | 2026-02-12 (Phase 4) |
+| **결과** | `get_multi_query_retriever()`, `get_retrieval_evaluator()` 싱글톤 함수 적용. `global + reset_*()` 패턴 통일 |
 
-#### P1-5: config.py 모듈 분리
+#### ~~P1-5: config.py 모듈 분리~~ -- ✅ Phase 4 완료
 
 | 항목 | 내용 |
 |------|------|
-| **문제** | `config.py`가 926줄. `Settings` 클래스(~60개 필드), `DomainConfig` 데이터클래스, MySQL 기반 도메인 설정 관리(`init_db`, `load_domain_config`, `_create_tables`, `_seed_data`), 도메인 키워드/규칙 상수, `create_llm()` 팩토리 함수가 한 파일에 집중 |
-| **영향** | 변경 시 영향 범위 파악 어려움. 모듈 간 순환 참조 리스크. 테스트 격리 어려움 |
-| **해결** | `config.py` -> `settings.py`(Settings 클래스), `domain_config.py`(DomainConfig, DB 관리), `constants.py`(키워드, 규칙), `llm_factory.py`(create_llm) 4개 모듈로 분리 |
-| **예상 효과** | 각 모듈 200줄 내외로 가독성 향상, 테스트 격리 용이 |
-| **관련 파일** | `rag/utils/config.py` |
+| **수정일** | 2026-02-12 (Phase 4) |
+| **결과** | `config.py` 967줄 → `config/` 패키지 4모듈 분할: `settings.py`(Settings), `llm.py`(create_llm), `domain_data.py`(키워드/규칙), `domain_config.py`(DomainConfig, DB) |
 
 #### P1-6: Embedding Similarity 필터 개선
 
@@ -254,14 +246,14 @@ Bizi RAG 시스템은 LangGraph 기반 5단계 파이프라인(classify -> decom
 
 ## 5. 테스트 커버리지 분석
 
-### 현재 상태
+### 현재 상태 (갱신)
 
 | 지표 | 값 |
 |------|-----|
-| 총 테스트 수 | **392개** |
+| 총 테스트 수 | **386 passed, 5 skipped** |
 | 테스트 파일 수 | **21개** |
 | 테스트 프레임워크 | pytest + pytest-asyncio |
-| 마지막 전체 통과 | Phase 3 완료 시점 (369 passed -> 현재 392 passed) |
+| 마지막 전체 통과 | Phase 5 완료 시점 (커밋 `5486466`) |
 
 ### 모듈별 테스트 커버리지
 
@@ -319,15 +311,15 @@ Bizi RAG 시스템은 LangGraph 기반 5단계 파이프라인(classify -> decom
 | A-2 | 벡터DB 재빌드 (build_vectordb --all --force) | 30분 | A-1 |
 | A-3 | 검색 품질 A/B 테스트 (테스트 질의 4건) | 20분 | A-2 |
 
-### Phase B: 코드 품질 개선 (1-2일)
+### ~~Phase B: 코드 품질 개선~~ -- ✅ 대부분 완료 (Phase 4)
 
-| 순서 | 작업 | 예상 변경량 | 선행 조건 |
-|------|------|-----------|----------|
-| B-1 | generator.py sync 함수 제거 (P1-1) | -200줄 | 없음 |
-| B-2 | retrieval_agent.py sync 함수 제거 (P1-2) | -300줄 | 없음 |
-| B-3 | MultiQueryRetriever/Evaluator 싱글톤화 (P1-4) | ~30줄 | 없음 |
-| B-4 | generator.py 테스트 작성 | +200줄 | B-1 |
-| B-5 | astream() 리팩토링 (P1-3) | -150줄 | B-1, B-2 |
+| 순서 | 작업 | 상태 |
+|------|------|------|
+| B-1 | ~~generator.py sync 함수 제거 (P1-1)~~ | ✅ -192줄 |
+| B-2 | ~~retrieval_agent.py sync 함수 제거 (P1-2)~~ | ✅ -204줄 |
+| B-3 | ~~MultiQueryRetriever/Evaluator 싱글톤화 (P1-4)~~ | ✅ 완료 |
+| B-4 | generator.py 테스트 작성 | ⏳ 미완 |
+| B-5 | astream() 리팩토링 (P1-3) | ⏳ 미완 |
 
 ### Phase C: 검색 품질 고도화 (2-3일)
 
@@ -339,14 +331,14 @@ Bizi RAG 시스템은 LangGraph 기반 5단계 파이프라인(classify -> decom
 | C-4 | Multi-Domain 미완료 3건 (P2-2,3,4) | ~40줄 | 없음 |
 | C-5 | BM25 인덱스 사전 구축 (P2-5) | ~30줄 | C-1 |
 
-### Phase D: 구조 개선 (3-5일)
+### Phase D: 구조 개선 (3-5일) -- 부분 완료
 
-| 순서 | 작업 | 예상 변경량 | 선행 조건 |
-|------|------|-----------|----------|
-| D-1 | config.py 모듈 분리 (P1-5) | ~0줄 (리팩토링) | 없음 |
-| D-2 | Parent Document Retrieval 구현 (P2-1) | ~100줄 | Phase A |
-| D-3 | 도메인 프롬프트 구조 개선 (P2-6) | ~0줄 (리팩토링) | 없음 |
-| D-4 | splitter 단위 테스트 작성 | +100줄 | 없음 |
+| 순서 | 작업 | 상태 |
+|------|------|------|
+| D-1 | ~~config.py 모듈 분리 (P1-5)~~ | ✅ Phase 4 완료 |
+| D-2 | Parent Document Retrieval 구현 (P2-1) | ⏳ 미완 |
+| D-3 | 도메인 프롬프트 구조 개선 (P2-6) | ⏳ 미완 |
+| D-4 | splitter 단위 테스트 작성 | ⏳ 미완 |
 
 ---
 
@@ -376,25 +368,30 @@ Bizi RAG 시스템은 LangGraph 기반 5단계 파이프라인(classify -> decom
 
 ---
 
-## 8. 수정 대상 파일 총괄
+## 8. 수정 대상 파일 총괄 (갱신)
 
-| 파일 | 관련 개선 항목 | 예상 변경 |
-|------|-------------|----------|
-| `rag/agents/generator.py` | P1-1 | sync 함수 6개 제거 (-200줄) |
-| `rag/agents/retrieval_agent.py` | P1-2, P2-2 | sync 함수 제거 (-300줄), 해시 수정 |
-| `rag/agents/router.py` | P1-3, P2-4 | astream() 리팩토링, evaluation_data 수정 |
-| `rag/utils/search.py` | P0-2, P2-5 | kiwipiepy 토크나이저, BM25 사전 구축 |
-| `rag/utils/query.py` | P0-3, P1-4, P1-6 | Multi-Query 조건부, 싱글톤, 필터 개선 |
-| `rag/utils/config.py` | P1-5 | 모듈 분리 |
-| `rag/utils/domain_classifier.py` | P0-2 | extract_lemmas 공유화 |
-| `rag/utils/prompts.py` | P2-6 | 공통 프롬프트 추출 |
-| `rag/chains/rag_chain.py` | P1-4, P2-1 | 싱글톤, Parent Document Retrieval |
-| `rag/utils/retrieval_evaluator.py` | P1-4 | 싱글톤화 |
-| `rag/utils/question_decomposer.py` | P2-3 | 캐시 키 히스토리 처리 |
-| `scripts/preprocessing/preprocess_laws.py` | P0-1 | (변경 없음, 실행만) |
-| `rag/vectorstores/config.py` | P0-1 | (변경 없음, 재빌드만) |
-| `rag/vectorstores/loader.py` | P0-1 | (변경 없음, 재빌드만) |
+| 파일 | 관련 개선 항목 | 상태 |
+|------|-------------|------|
+| ~~`rag/agents/generator.py`~~ | ~~P1-1~~ | ✅ sync 제거 완료 (-192줄) |
+| ~~`rag/agents/retrieval_agent.py`~~ | ~~P1-2~~ | ✅ sync 제거 완료 (-204줄) + Phase 5 매직넘버/문서제한 |
+| `rag/agents/router.py` | P1-3, P2-4 | ⏳ astream() 리팩토링 미완 |
+| `rag/utils/search.py` | P0-2, P2-5 | ⏳ kiwipiepy 토크나이저, BM25 사전 구축 미완 |
+| `rag/utils/query.py` | P0-3, P1-6 | ⏳ Multi-Query 조건부, 필터 개선 미완 |
+| ~~`rag/utils/config.py`~~ | ~~P1-5~~ | ✅ `config/` 패키지 4모듈 분할 완료 |
+| `rag/utils/domain_classifier.py` | P0-2 | ⏳ extract_lemmas 공유화 미완 (Phase 5에서 Lock 추가 완료) |
+| `rag/utils/prompts.py` | P2-6 | ⏳ 공통 프롬프트 추출 미완 |
+| ~~`rag/chains/rag_chain.py`~~ | ~~P1-4~~ | ✅ 싱글톤 완료 |
+| ~~`rag/utils/retrieval_evaluator.py`~~ | ~~P1-4~~ | ✅ 싱글톤 완료 |
+| `rag/utils/question_decomposer.py` | P2-3 | ⏳ 캐시 키 히스토리 처리 미완 |
+| `scripts/preprocessing/preprocess_laws.py` | P0-1 | ⏳ 전처리 재실행 필요 |
+| `rag/vectorstores/config.py` | P0-1 | ⏳ 벡터DB 재빌드 필요 |
+| `rag/vectorstores/loader.py` | P0-1 | ⏳ 벡터DB 재빌드 필요 |
 
 ---
 
-*이 보고서는 2026-02-12 기준 RAG 파이프라인 전체 분석을 기반으로 작성되었습니다.*
+## 변경 이력
+
+| 날짜 | 변경 내용 |
+|------|----------|
+| 2026-02-12 | 초기 RAG 파이프라인 종합 개선 보고서 작성 |
+| 2026-02-13 | Phase 4(품질개선) + Phase 5(감사보고서 26건 + RAG 19건) 완료 상태 반영. P1-1/P1-2/P1-4/P1-5 완료 체크, 테스트 386 passed |
