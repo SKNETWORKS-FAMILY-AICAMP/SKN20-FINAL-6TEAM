@@ -159,7 +159,7 @@ class MainRouter:
         workflow = StateGraph(RouterState)
 
         # 비동기 노드 추가
-        workflow.add_node("classify", self._classify_node)
+        workflow.add_node("classify", self._aclassify_node)
         workflow.add_node("decompose", self._adecompose_node)
         workflow.add_node("retrieve", self._aretrieve_node)
         workflow.add_node("generate", self._agenerate_node)
@@ -263,8 +263,8 @@ class MainRouter:
 
         return query
 
-    def _classify_node(self, state: RouterState) -> RouterState:
-        """분류 노드: 벡터 유사도 기반으로 도메인을 식별합니다."""
+    async def _aclassify_node(self, state: RouterState) -> RouterState:
+        """비동기 분류 노드: 벡터 유사도 기반으로 도메인을 식별합니다."""
         start = time.time()
         query = state["query"]
         history = state.get("history", [])
@@ -282,8 +282,10 @@ class MainRouter:
         # 대명사/지시어 질문 보강 (분류용, 원본 query는 유지)
         augmented_query = self._augment_query_for_classification(query, history)
 
-        # 벡터 유사도 기반 도메인 분류
-        classification = self.domain_classifier.classify(augmented_query)
+        # 벡터 유사도 기반 도메인 분류 (CPU-bound → 스레드 위임)
+        classification = await asyncio.to_thread(
+            self.domain_classifier.classify, augmented_query
+        )
         state["classification_result"] = classification
         state["domains"] = classification.domains
 

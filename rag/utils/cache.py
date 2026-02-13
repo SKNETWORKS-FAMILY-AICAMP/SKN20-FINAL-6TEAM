@@ -232,11 +232,11 @@ class ResponseCache:
         """캐시 키를 생성합니다.
 
         QueryProcessor.generate_cache_key에 위임합니다.
-        domain이 None이면 "unknown"을 사용합니다.
+        domain은 캐시 키에 포함하지 않습니다 (get 시점에 도메인을 알 수 없으므로).
         """
         from utils.query import QueryProcessor
 
-        return QueryProcessor.generate_cache_key(query, domain=domain or "unknown")
+        return QueryProcessor.generate_cache_key(query)
 
     def get(
         self,
@@ -258,13 +258,13 @@ class ResponseCache:
         stats = self._cache.get_stats()
         if result:
             logger.info(
-                "[캐시] ✓ 히트 - '%s...' (도메인: %s, 히트율: %.1f%%)",
-                query[:30], domain or "전체", stats["hit_rate"] * 100
+                "[캐시] HIT '%s...' (히트율: %.1f%%)",
+                query[:30], stats["hit_rate"] * 100
             )
         else:
             logger.info(
-                "[캐시] ✗ 미스 - '%s...' (도메인: %s)",
-                query[:30], domain or "전체"
+                "[캐시] MISS '%s...'",
+                query[:30]
             )
 
         return result
@@ -288,8 +288,8 @@ class ResponseCache:
         self._cache.set(key, response, ttl)
         stats = self._cache.get_stats()
         logger.info(
-            "[캐시] + 저장 - '%s...' (도메인: %s, 현재 크기: %d/%d)",
-            query[:30], domain or "전체", stats["size"], stats["max_size"]
+            "[캐시] SET '%s...' (크기: %d/%d)",
+            query[:30], stats["size"], stats["max_size"]
         )
 
     def invalidate(

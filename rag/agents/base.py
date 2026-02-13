@@ -10,7 +10,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, AsyncGenerator, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from langchain_core.documents import Document
 
@@ -337,76 +337,3 @@ class BaseAgent(ABC):
             include_common,
         )
 
-    async def astream(
-        self,
-        query: str,
-        user_context: UserContext | None = None,
-        supplementary_documents: list[Document] | None = None,
-    ) -> AsyncGenerator[dict[str, Any], None]:
-        """질문을 스트리밍으로 처리합니다.
-
-        Args:
-            query: 사용자 질문
-            user_context: 사용자 컨텍스트
-            supplementary_documents: 보충 문서 리스트 (법률 보충 검색 등)
-
-        Yields:
-            스트리밍 응답 (token, sources, actions, done)
-        """
-        user_type, company_context = self._extract_user_context(user_context)
-
-        # 문서 검색 (스트리밍 전에 1회 수행)
-        try:
-            retrieval_result = await asyncio.wait_for(
-                self.aretrieve_only(
-                    query=query,
-                    search_strategy=None,
-                    include_common=False,
-                ),
-                timeout=30.0,
-            )
-            documents = retrieval_result.documents
-            sources = retrieval_result.sources
-        except (asyncio.TimeoutError, Exception) as e:
-            logger.error("[스트리밍] 검색 실패 (%s): %s", self.domain, e)
-            documents = []
-            sources = []
-
-        # 보충 문서 병합
-        if supplementary_documents:
-            documents = documents + supplementary_documents
-            logger.info(
-                "[스트리밍] 보충 문서 %d건 병합 (총 %d건)",
-                len(supplementary_documents),
-                len(documents),
-            )
-            sources = self.rag_chain.documents_to_sources(documents)
-
-        # 검색된 결과를 그대로 사용하기 위해 컨텍스트를 직접 전달
-        context_override = self.rag_chain.format_context(documents)
-
-        # 토큰 스트리밍
-        content_buffer = ""
-        async for token in self.rag_chain.astream(
-            query=query,
-            domain=self.domain,
-            system_prompt=self.get_system_prompt(),
-            user_type=user_type,
-            company_context=company_context,
-            context_override=context_override,
-        ):
-            content_buffer += token
-            yield {"type": "token", "content": token}
-
-        # 액션 제안
-        actions = self.suggest_actions(query, content_buffer)
-
-        # 메타데이터 전송
-        yield {
-            "type": "done",
-            "content": content_buffer,
-            "domain": self.domain,
-            "sources": sources,
-            "actions": actions,
-            "documents": documents,
-        }

@@ -216,10 +216,6 @@ class Settings(BaseSettings):
     rerank_top_k: int = Field(default=5, description="Re-ranking 후 반환할 문서 수")
 
     # -- 도메인 분류 파라미터 --
-    domain_confidence_threshold: float = Field(
-        default=0.5, ge=0.0, le=1.0,
-        description="도메인 분류 신뢰도 임계값 (미만 시 도메인 외 질문으로 판단)"
-    )
     domain_classification_threshold: float = Field(
         default=0.6, ge=0.0, le=1.0, description="벡터 유사도 기반 도메인 분류 임계값"
     )

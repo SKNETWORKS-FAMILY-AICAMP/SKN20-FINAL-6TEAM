@@ -320,7 +320,7 @@ class APIKeyMiddleware:
             await self.app(scope, receive, send)
             return
 
-        api_key = _settings.rag_api_key
+        api_key = get_settings().rag_api_key
         if api_key and api_key.strip():
             path = scope.get("path", "")
             if any(path.startswith(prefix) for prefix in self.PROTECTED_PREFIXES):

@@ -126,48 +126,30 @@ class EvaluatorAgent:
             "feedback": None,
         }
 
-    def evaluate(
-        self,
-        question: str,
-        answer: str,
-        context: str = "",
-    ) -> EvaluationResult:
-        """답변을 평가합니다.
-
-        Args:
-            question: 사용자 질문
-            answer: 에이전트 답변
-            context: 검색된 컨텍스트 (참고용)
-
-        Returns:
-            평가 결과
-        """
-        logger.info(
-            "[평가] 평가 시작: 질문='%s', 답변=%d자, 컨텍스트=%d자",
-            question[:50], len(answer), len(context),
-        )
-
-        # 프롬프트 구성
+    def _build_chain(self):
+        """평가 체인을 생성합니다."""
         prompt = ChatPromptTemplate.from_messages([
             ("system", EVALUATOR_PROMPT),
             ("human", "위 기준에 따라 답변을 평가하세요."),
         ])
+        return prompt | self.llm | StrOutputParser()
 
-        # 체인 실행
-        chain = prompt | self.llm | StrOutputParser()
-
+    def _build_invoke_kwargs(
+        self, question: str, answer: str, context: str
+    ) -> dict[str, str]:
+        """체인 호출 인자를 생성합니다."""
         max_context_len = self.settings.evaluator_context_length
-        response = chain.invoke({
+        return {
             "question": question,
             "answer": answer,
             "context": context[:max_context_len] if context else "컨텍스트 없음",
-        })
+        }
 
-        # 응답 파싱 (tuple 언패킹: dict, success)
+    def _build_result(self, response: str) -> EvaluationResult:
+        """LLM 응답을 파싱하여 EvaluationResult를 생성합니다."""
         parsed, parse_success = self._parse_evaluation_response(response)
         logger.info("[평가] LLM 응답 파싱 %s", "성공" if parse_success else "실패")
 
-        # EvaluationResult 생성
         scores = parsed.get("scores", {})
         total_score = parsed.get("total_score", sum(scores.values()))
         passed = total_score >= self.threshold
@@ -189,6 +171,31 @@ class EvaluatorAgent:
             passed=passed,
             feedback=parsed.get("feedback") if not passed else None,
         )
+
+    def evaluate(
+        self,
+        question: str,
+        answer: str,
+        context: str = "",
+    ) -> EvaluationResult:
+        """답변을 평가합니다.
+
+        Args:
+            question: 사용자 질문
+            answer: 에이전트 답변
+            context: 검색된 컨텍스트 (참고용)
+
+        Returns:
+            평가 결과
+        """
+        logger.info(
+            "[평가] 평가 시작: 질문='%s', 답변=%d자, 컨텍스트=%d자",
+            question[:50], len(answer), len(context),
+        )
+
+        chain = self._build_chain()
+        response = chain.invoke(self._build_invoke_kwargs(question, answer, context))
+        return self._build_result(response)
 
     async def aevaluate(
         self,
@@ -211,48 +218,9 @@ class EvaluatorAgent:
             question[:50], len(answer), len(context),
         )
 
-        # 프롬프트 구성
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", EVALUATOR_PROMPT),
-            ("human", "위 기준에 따라 답변을 평가하세요."),
-        ])
-
-        # 체인 실행
-        chain = prompt | self.llm | StrOutputParser()
-
-        max_context_len = self.settings.evaluator_context_length
-        response = await chain.ainvoke({
-            "question": question,
-            "answer": answer,
-            "context": context[:max_context_len] if context else "컨텍스트 없음",
-        })
-
-        # 응답 파싱 (tuple 언패킹: dict, success)
-        parsed, parse_success = self._parse_evaluation_response(response)
-        logger.info("[평가] LLM 응답 파싱 %s", "성공" if parse_success else "실패")
-
-        # EvaluationResult 생성
-        scores = parsed.get("scores", {})
-        total_score = parsed.get("total_score", sum(scores.values()))
-        passed = total_score >= self.threshold
-
-        logger.info(
-            "[평가] 기준별 점수: 검색품질=%d, 정확성=%d, 완성도=%d, 관련성=%d, 출처=%d",
-            scores.get("retrieval_quality", 0), scores.get("accuracy", 0),
-            scores.get("completeness", 0), scores.get("relevance", 0),
-            scores.get("citation", 0),
-        )
-        logger.info(
-            "[평가] 총점=%d/100, 임계값=%d → %s",
-            total_score, self.threshold, "PASS" if passed else "FAIL",
-        )
-
-        return EvaluationResult(
-            scores=scores,
-            total_score=total_score,
-            passed=passed,
-            feedback=parsed.get("feedback") if not passed else None,
-        )
+        chain = self._build_chain()
+        response = await chain.ainvoke(self._build_invoke_kwargs(question, answer, context))
+        return self._build_result(response)
 
     def needs_retry(self, evaluation: EvaluationResult) -> bool:
         """재시도가 필요한지 판단합니다.

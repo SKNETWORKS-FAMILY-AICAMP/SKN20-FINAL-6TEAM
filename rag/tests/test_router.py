@@ -250,7 +250,7 @@ class TestShouldContinueAfterClassify:
 
 
 class TestClassifyNode:
-    """_classify_node 메서드 테스트."""
+    """_aclassify_node 메서드 테스트."""
 
     @pytest.fixture
     def router_with_mocks(self):
@@ -266,7 +266,8 @@ class TestClassifyNode:
             mock_settings.return_value = Mock(enable_ragas_evaluation=False)
             yield MainRouter()
 
-    def test_classify_node_sets_classification_result(self, router_with_mocks):
+    @pytest.mark.asyncio
+    async def test_classify_node_sets_classification_result(self, router_with_mocks):
         """분류 노드가 classification_result 설정."""
         mock_classification = DomainClassificationResult(
             domains=["startup_funding"],
@@ -297,14 +298,15 @@ class TestClassifyNode:
             "timing_metrics": {},
         }
 
-        updated_state = router_with_mocks._classify_node(state)
+        updated_state = await router_with_mocks._aclassify_node(state)
 
         assert updated_state["classification_result"] is not None
         assert updated_state["classification_result"].is_relevant is True
         assert "startup_funding" in updated_state["classification_result"].domains
         mock_classifier.classify.assert_called_once_with(state["query"])
 
-    def test_classify_node_sets_domains(self, router_with_mocks):
+    @pytest.mark.asyncio
+    async def test_classify_node_sets_domains(self, router_with_mocks):
         """분류 노드가 도메인 리스트 설정."""
         mock_classification = DomainClassificationResult(
             domains=["finance_tax", "hr_labor"],
@@ -335,11 +337,12 @@ class TestClassifyNode:
             "timing_metrics": {},
         }
 
-        updated_state = router_with_mocks._classify_node(state)
+        updated_state = await router_with_mocks._aclassify_node(state)
 
         assert updated_state["domains"] == ["finance_tax", "hr_labor"]
 
-    def test_classify_node_sets_rejection_when_irrelevant(self, router_with_mocks):
+    @pytest.mark.asyncio
+    async def test_classify_node_sets_rejection_when_irrelevant(self, router_with_mocks):
         """비관련 질문 시 거부 응답 설정."""
         mock_classification = DomainClassificationResult(
             domains=[],
@@ -370,13 +373,14 @@ class TestClassifyNode:
             "timing_metrics": {},
         }
 
-        updated_state = router_with_mocks._classify_node(state)
+        updated_state = await router_with_mocks._aclassify_node(state)
 
         assert updated_state["final_response"] != ""
         assert updated_state["sources"] == []
         assert updated_state["actions"] == []
 
-    def test_classify_node_records_timing_metrics(self, router_with_mocks):
+    @pytest.mark.asyncio
+    async def test_classify_node_records_timing_metrics(self, router_with_mocks):
         """분류 노드가 타이밍 메트릭 기록."""
         mock_classification = DomainClassificationResult(
             domains=["startup_funding"],
@@ -407,7 +411,7 @@ class TestClassifyNode:
             "timing_metrics": {},
         }
 
-        updated_state = router_with_mocks._classify_node(state)
+        updated_state = await router_with_mocks._aclassify_node(state)
 
         assert "classify_time" in updated_state["timing_metrics"]
         assert updated_state["timing_metrics"]["classify_time"] >= 0

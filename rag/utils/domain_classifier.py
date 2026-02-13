@@ -140,6 +140,8 @@ class VectorDomainClassifier:
         self.embeddings = embeddings
         self.settings = get_settings()
         self._domain_vectors: dict[str, np.ndarray] | None = None
+        # LLM 분류용 인스턴스 캐시 (호출마다 재생성 방지)
+        self._llm_instance = None
 
     def _precompute_vectors(self) -> dict[str, np.ndarray]:
         """도메인별 대표 쿼리 벡터를 미리 계산합니다.
@@ -313,7 +315,9 @@ class VectorDomainClassifier:
             from langchain_core.output_parsers import StrOutputParser
             from langchain_core.prompts import ChatPromptTemplate
 
-            llm = create_llm("도메인분류", temperature=0.0)
+            if self._llm_instance is None:
+                self._llm_instance = create_llm("도메인분류", temperature=0.0)
+            llm = self._llm_instance
             prompt = ChatPromptTemplate.from_messages([
                 ("human", LLM_DOMAIN_CLASSIFICATION_PROMPT),
             ])

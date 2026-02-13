@@ -123,8 +123,8 @@ class TestResponseCache:
         # 공백/대소문자 다른 쿼리로도 조회 가능
         assert cache.get("창업 절차 알려주세요") is not None
 
-    def test_domain_separation(self):
-        """도메인별 캐시 분리."""
+    def test_same_query_overwrites(self):
+        """동일 쿼리는 도메인과 무관하게 동일 캐시 키 사용 (get 시 도메인 미확정)."""
         cache = ResponseCache(max_size=10, ttl=3600)
 
         response1 = {"content": "창업 답변"}
@@ -133,8 +133,8 @@ class TestResponseCache:
         cache.set("질문", response1, domain="startup_funding")
         cache.set("질문", response2, domain="finance_tax")
 
-        assert cache.get("질문", domain="startup_funding")["content"] == "창업 답변"
-        assert cache.get("질문", domain="finance_tax")["content"] == "세무 답변"
+        # 동일 쿼리 → 마지막 set 값 반환
+        assert cache.get("질문")["content"] == "세무 답변"
 
     def test_invalidate(self):
         """캐시 무효화 테스트."""
