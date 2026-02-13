@@ -298,33 +298,45 @@ app.add_middleware(
 )
 
 
-# API Key 인증 미들웨어
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request as StarletteRequest
-from starlette.responses import JSONResponse
+# API Key 인증 미들웨어 (순수 ASGI — StreamingResponse 버퍼링 방지)
+from starlette.types import ASGIApp as _ASGIApp, Receive as _Receive, Scope as _Scope, Send as _Send
 
 
-class APIKeyMiddleware(BaseHTTPMiddleware):
-    """RAG API Key 인증 미들웨어.
+class APIKeyMiddleware:
+    """RAG API Key 인증 미들웨어 (순수 ASGI).
 
     RAG_API_KEY가 설정되어 있으면 보호 경로에 X-API-Key 헤더를 요구합니다.
     미설정 시 인증 없이 통과합니다 (개발 환경).
+    BaseHTTPMiddleware 대신 순수 ASGI로 구현하여 SSE 스트리밍 버퍼링을 방지합니다.
     """
 
     PROTECTED_PREFIXES = ("/api/chat", "/api/documents", "/api/funding")
 
-    async def dispatch(self, request: StarletteRequest, call_next):
+    def __init__(self, app: _ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: _Scope, receive: _Receive, send: _Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
         api_key = _settings.rag_api_key
         if api_key and api_key.strip():
-            path = request.url.path
+            path = scope.get("path", "")
             if any(path.startswith(prefix) for prefix in self.PROTECTED_PREFIXES):
-                provided_key = request.headers.get("X-API-Key", "")
+                headers = dict(scope.get("headers", []))
+                provided_key = headers.get(b"x-api-key", b"").decode("latin-1")
                 if provided_key != api_key:
-                    return JSONResponse(
-                        status_code=403,
-                        content={"detail": "Invalid or missing API key"},
-                    )
-        return await call_next(request)
+                    body = b'{"detail":"Invalid or missing API key"}'
+                    await send({
+                        "type": "http.response.start",
+                        "status": 403,
+                        "headers": [[b"content-type", b"application/json"]],
+                    })
+                    await send({"type": "http.response.body", "body": body})
+                    return
+
+        await self.app(scope, receive, send)
 
 
 if _settings.rag_api_key:
@@ -711,7 +723,16 @@ async def generate_contract(request: ContractRequest) -> DocumentResponse:
         raise HTTPException(status_code=503, detail="서비스가 초기화되지 않았습니다")
 
     try:
-        return executor.generate_labor_contract(request)
+        async with RequestTokenTracker() as tracker:
+            result = executor.generate_labor_contract(request)
+            token_usage = tracker.get_usage()
+        if token_usage and token_usage.get("total_tokens", 0) > 0:
+            logger.info(
+                "[문서생성] 근로계약서 토큰 사용: %d (비용: $%.6f)",
+                token_usage["total_tokens"],
+                token_usage["cost"],
+            )
+        return result
     except Exception as e:
         logger.error(f"근로계약서 생성 실패: {e}", exc_info=True)
         raise HTTPException(
@@ -736,7 +757,16 @@ async def generate_business_plan(
         raise HTTPException(status_code=503, detail="서비스가 초기화되지 않았습니다")
 
     try:
-        return executor.generate_business_plan_template(format=format)
+        async with RequestTokenTracker() as tracker:
+            result = executor.generate_business_plan_template(format=format)
+            token_usage = tracker.get_usage()
+        if token_usage and token_usage.get("total_tokens", 0) > 0:
+            logger.info(
+                "[문서생성] 사업계획서 토큰 사용: %d (비용: $%.6f)",
+                token_usage["total_tokens"],
+                token_usage["cost"],
+            )
+        return result
     except Exception as e:
         logger.error(f"사업계획서 생성 실패: {e}", exc_info=True)
         raise HTTPException(

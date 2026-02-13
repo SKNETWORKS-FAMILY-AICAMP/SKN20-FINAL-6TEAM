@@ -1,6 +1,10 @@
-from pydantic import field_validator
+import logging
+
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+_settings_logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -47,8 +51,24 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/auth/google/callback"
 
+    # RAG Service
+    RAG_SERVICE_URL: str = "http://rag:8001"
+
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+
+    @model_validator(mode="after")
+    def warn_cors_in_production(self) -> "Settings":
+        """프로덕션 환경에서 CORS에 localhost가 포함되면 경고합니다."""
+        if self.ENVIRONMENT == "production":
+            for origin in self.CORS_ORIGINS:
+                if "localhost" in origin or "127.0.0.1" in origin:
+                    _settings_logger.warning(
+                        "프로덕션 환경에서 CORS_ORIGINS에 localhost가 포함되어 있습니다: %s",
+                        origin,
+                    )
+                    break
+        return self
 
     class Config:
         env_file = ".env"

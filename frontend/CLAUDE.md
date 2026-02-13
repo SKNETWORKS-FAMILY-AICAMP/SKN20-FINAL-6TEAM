@@ -34,7 +34,8 @@
 
 사용법: `src/stores/` 파일 참조
 
-#### TanStack Query 서버 상태
+#### 서버 상태
+현재 TanStack Query는 사용하지 않습니다. Zustand + axios 직접 호출 방식으로 서버 상태를 관리합니다.
 커스텀 훅 패턴: `src/hooks/` 참조 → 패턴: `.claude/rules/patterns.md`
 
 ### 타입 정의

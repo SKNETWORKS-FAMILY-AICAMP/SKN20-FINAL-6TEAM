@@ -15,6 +15,7 @@ DB 관리 기능(DomainConfig, init_db, load_domain_config 등)은 utils.config�
 
 import json
 import logging
+import threading
 import time as _time
 from dataclasses import dataclass
 
@@ -128,6 +129,7 @@ class VectorDomainClassifier:
 
     # 클래스 레벨 벡터 캐시 (모든 인스턴스에서 공유)
     _DOMAIN_VECTORS_CACHE: dict[str, np.ndarray] | None = None
+    _VECTORS_LOCK = threading.Lock()
 
     def __init__(self, embeddings: HuggingFaceEmbeddings):
         """VectorDomainClassifier를 초기화합니다.
@@ -143,11 +145,12 @@ class VectorDomainClassifier:
         """도메인별 대표 쿼리 벡터를 미리 계산합니다.
 
         클래스 레벨 캐시를 사용하여 인스턴스 간 중복 계산을 방지합니다.
+        threading.Lock으로 동시 호출 시 중복 계산을 방지합니다.
 
         Returns:
             도메인별 평균 임베딩 벡터
         """
-        # 1. 클래스 레벨 캐시 확인
+        # 1. 클래스 레벨 캐시 확인 (lock 없이 빠른 경로)
         if VectorDomainClassifier._DOMAIN_VECTORS_CACHE is not None:
             return VectorDomainClassifier._DOMAIN_VECTORS_CACHE
 
@@ -155,28 +158,33 @@ class VectorDomainClassifier:
         if self._domain_vectors is not None:
             return self._domain_vectors
 
-        logger.info("[도메인 분류] 대표 쿼리 벡터 계산 중... (첫 요청 시 지연 발생 가능)")
-        precompute_start = _time.time()
-        domain_vectors: dict[str, np.ndarray] = {}
+        with VectorDomainClassifier._VECTORS_LOCK:
+            # Double-check: lock 획득 사이에 다른 스레드가 이미 계산했을 수 있음
+            if VectorDomainClassifier._DOMAIN_VECTORS_CACHE is not None:
+                return VectorDomainClassifier._DOMAIN_VECTORS_CACHE
 
-        config = get_domain_config()
-        for domain, queries in config.representative_queries.items():
-            # 각 도메인의 대표 쿼리들 임베딩
-            vectors = self.embeddings.embed_documents(queries)
-            # 평균 벡터 계산 (centroid)
-            domain_vectors[domain] = np.mean(vectors, axis=0)
-            logger.debug(
-                "[도메인 분류] %s: %d개 쿼리 임베딩 완료",
-                domain,
-                len(queries),
-            )
+            logger.info("[도메인 분류] 대표 쿼리 벡터 계산 중... (첫 요청 시 지연 발생 가능)")
+            precompute_start = _time.time()
+            domain_vectors: dict[str, np.ndarray] = {}
 
-        # 클래스 레벨 캐시에 저장
-        VectorDomainClassifier._DOMAIN_VECTORS_CACHE = domain_vectors
-        self._domain_vectors = domain_vectors
-        elapsed = _time.time() - precompute_start
-        logger.info("[도메인 분류] 대표 쿼리 벡터 계산 완료 (%.2f초)", elapsed)
-        return domain_vectors
+            config = get_domain_config()
+            for domain, queries in config.representative_queries.items():
+                # 각 도메인의 대표 쿼리들 임베딩
+                vectors = self.embeddings.embed_documents(queries)
+                # 평균 벡터 계산 (centroid)
+                domain_vectors[domain] = np.mean(vectors, axis=0)
+                logger.debug(
+                    "[도메인 분류] %s: %d개 쿼리 임베딩 완료",
+                    domain,
+                    len(queries),
+                )
+
+            # 클래스 레벨 캐시에 저장
+            VectorDomainClassifier._DOMAIN_VECTORS_CACHE = domain_vectors
+            self._domain_vectors = domain_vectors
+            elapsed = _time.time() - precompute_start
+            logger.info("[도메인 분류] 대표 쿼리 벡터 계산 완료 (%.2f초)", elapsed)
+            return domain_vectors
 
     def _keyword_classify(self, query: str) -> DomainClassificationResult | None:
         """형태소 분석 + 키워드 기반 도메인 분류.

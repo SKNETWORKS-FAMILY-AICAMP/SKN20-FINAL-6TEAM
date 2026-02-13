@@ -563,7 +563,9 @@ class TestGraduatedRetryHandler:
     @patch("agents.retrieval_agent.get_settings")
     def test_level1_relax_params_retrieves_with_increased_k(self, mock_settings) -> None:
         """Level 1: K를 +3 증가하여 재검색."""
-        mock_settings.return_value = MagicMock()
+        mock_s = MagicMock()
+        mock_s.retry_k_increment = 3
+        mock_settings.return_value = mock_s
 
         handler = GraduatedRetryHandler(self.mock_agents, self.mock_rag_chain)
         result = _make_result(passed=False)
@@ -593,7 +595,10 @@ class TestGraduatedRetryHandler:
     @patch("agents.retrieval_agent.get_settings")
     def test_level2_multi_query_uses_multi_retriever(self, mock_settings) -> None:
         """Level 2: MultiQueryRetriever 사용."""
-        mock_settings.return_value = MagicMock()
+        mock_s = MagicMock()
+        mock_s.retry_k_increment = 3
+        mock_s.cross_domain_k = 3
+        mock_settings.return_value = mock_s
 
         self.mock_rag_chain.retrieve.return_value = []
 
@@ -623,7 +628,10 @@ class TestGraduatedRetryHandler:
     @patch("agents.retrieval_agent.get_settings")
     def test_level3_cross_domain_searches_adjacent(self, mock_settings) -> None:
         """Level 3: 인접 도메인을 검색."""
-        mock_settings.return_value = MagicMock()
+        mock_s = MagicMock()
+        mock_s.retry_k_increment = 3
+        mock_s.cross_domain_k = 3
+        mock_settings.return_value = mock_s
 
         handler = GraduatedRetryHandler(self.mock_agents, self.mock_rag_chain)
         result = _make_result(
@@ -656,7 +664,10 @@ class TestGraduatedRetryHandler:
     @patch("agents.retrieval_agent.get_settings")
     def test_max_level_none_returns_original(self, mock_settings) -> None:
         """max_level=NONE이면 재시도 없이 원본 반환."""
-        mock_settings.return_value = MagicMock()
+        mock_s = MagicMock()
+        mock_s.retry_k_increment = 3
+        mock_s.cross_domain_k = 3
+        mock_settings.return_value = mock_s
 
         handler = GraduatedRetryHandler(self.mock_agents, self.mock_rag_chain)
         result = _make_result(passed=False)

@@ -107,6 +107,22 @@ class Settings(BaseSettings):
     mysql_user: str = Field(default="root", description="MySQL 사용자")
     mysql_password: str = Field(default="", description="MySQL 비밀번호")
 
+    @field_validator("mysql_host")
+    @classmethod
+    def validate_mysql_host(cls, v: str) -> str:
+        """MySQL 호스트 검증."""
+        if not v or not v.strip():
+            raise ValueError("MYSQL_HOST가 설정되지 않았습니다.")
+        return v
+
+    @field_validator("mysql_database")
+    @classmethod
+    def validate_mysql_database(cls, v: str) -> str:
+        """MySQL 데이터베이스명 검증."""
+        if not v or not v.strip():
+            raise ValueError("MYSQL_DATABASE가 설정되지 않았습니다.")
+        return v
+
     # -- OpenAI --
     openai_api_key: str = Field(default="", description="OpenAI API 키 (필수)")
 
@@ -260,6 +276,15 @@ class Settings(BaseSettings):
     max_retry_level: int = Field(
         default=2, ge=0, le=4, description="최대 재시도 단계 (0=없음, 1=파라미터 완화, 2=Multi-Query, 3=인접 도메인, 4=부분 답변)"
     )
+    retry_k_increment: int = Field(
+        default=3, gt=0, description="재시도 시 K 증가량"
+    )
+    cross_domain_k: int = Field(
+        default=3, gt=0, description="인접 도메인 검색 시 문서 수"
+    )
+    min_domain_k: int = Field(
+        default=2, gt=0, description="복합 도메인 시 도메인당 최소 문서 수"
+    )
 
     # -- RAGAS --
     ragas_log_file: str = Field(
@@ -394,6 +419,14 @@ def get_settings() -> Settings:
     global _settings
     if _settings is None:
         _settings = Settings()
+        # chroma_persist_directory 경로 존재 여부 경고 (초기화 시 1회만)
+        vectordb_dir = _settings.vectordb_dir
+        if not vectordb_dir.exists():
+            logger.warning(
+                "VectorDB 디렉토리가 존재하지 않습니다: %s "
+                "(첫 빌드 시 자동 생성됩니다)",
+                vectordb_dir,
+            )
     return _settings
 
 

@@ -11,9 +11,7 @@ from dataclasses import dataclass, field
 from functools import wraps
 from typing import Any, Callable, TypeVar
 
-from fastapi import HTTPException, Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
 
@@ -141,54 +139,70 @@ class RateLimiter:
         self._states.clear()
 
 
-class RateLimitMiddleware(BaseHTTPMiddleware):
-    """FastAPI Rate Limiting 미들웨어."""
+class RateLimitMiddleware:
+    """순수 ASGI Rate Limiting 미들웨어.
+
+    BaseHTTPMiddleware를 사용하지 않아 StreamingResponse가 버퍼링되지 않습니다.
+    """
+
+    EXCLUDED_PATHS = {"/health", "/docs", "/openapi.json"}
 
     def __init__(
         self,
-        app,
+        app: ASGIApp,
         rate: float = 10.0,
         capacity: float = 100.0,
-        key_func: Callable[[Request], str] | None = None,
     ):
         """RateLimitMiddleware를 초기화합니다.
 
         Args:
-            app: FastAPI 앱
+            app: ASGI 앱
             rate: 초당 토큰 충전 속도
             capacity: 최대 토큰 수
-            key_func: 클라이언트 키 추출 함수
         """
-        super().__init__(app)
+        self.app = app
         self.limiter = RateLimiter(rate=rate, capacity=capacity)
-        self.key_func = key_func or self._default_key_func
 
     @staticmethod
-    def _default_key_func(request: Request) -> str:
-        """기본 키 함수: IP 주소."""
-        forwarded = request.headers.get("X-Forwarded-For")
+    def _extract_client_ip(scope: Scope) -> str:
+        """ASGI scope에서 클라이언트 IP를 추출합니다."""
+        headers = dict(scope.get("headers", []))
+        forwarded = headers.get(b"x-forwarded-for")
         if forwarded:
-            return forwarded.split(",")[0].strip()
-        return request.client.host if request.client else "unknown"
+            return forwarded.decode("latin-1").split(",")[0].strip()
+        client = scope.get("client")
+        if client:
+            return client[0]
+        return "unknown"
 
-    async def dispatch(self, request: Request, call_next) -> Response:
-        """요청을 처리합니다."""
-        # 특정 경로는 제외 (health check 등)
-        if request.url.path in ["/health", "/docs", "/openapi.json"]:
-            return await call_next(request)
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-        key = self.key_func(request)
+        path = scope.get("path", "")
+        if path in self.EXCLUDED_PATHS:
+            await self.app(scope, receive, send)
+            return
+
+        key = self._extract_client_ip(scope)
 
         if not self.limiter.is_allowed(key):
             retry_after = self.limiter.get_retry_after(key)
-            logger.warning(f"Rate limit exceeded: {key}")
-            raise HTTPException(
-                status_code=429,
-                detail=f"Too many requests. Retry after {retry_after:.1f} seconds.",
-                headers={"Retry-After": str(int(retry_after))},
-            )
+            logger.warning("Rate limit exceeded: %s", key)
+            body = f'{{"detail":"Too many requests. Retry after {retry_after:.1f} seconds."}}'.encode()
+            await send({
+                "type": "http.response.start",
+                "status": 429,
+                "headers": [
+                    [b"content-type", b"application/json"],
+                    [b"retry-after", str(int(retry_after)).encode()],
+                ],
+            })
+            await send({"type": "http.response.body", "body": body})
+            return
 
-        return await call_next(request)
+        await self.app(scope, receive, send)
 
 
 # =============================================================================
@@ -331,39 +345,48 @@ class MetricsCollector:
         return stats
 
 
-class MetricsMiddleware(BaseHTTPMiddleware):
-    """FastAPI 메트릭 수집 미들웨어."""
+class MetricsMiddleware:
+    """순수 ASGI 메트릭 수집 미들웨어.
 
-    def __init__(self, app, collector: MetricsCollector | None = None):
+    BaseHTTPMiddleware를 사용하지 않아 StreamingResponse가 버퍼링되지 않습니다.
+    """
+
+    def __init__(self, app: ASGIApp, collector: MetricsCollector | None = None):
         """MetricsMiddleware를 초기화합니다.
 
         Args:
-            app: FastAPI 앱
+            app: ASGI 앱
             collector: MetricsCollector 인스턴스
         """
-        super().__init__(app)
+        self.app = app
         self.collector = collector or MetricsCollector()
 
-    async def dispatch(self, request: Request, call_next) -> Response:
-        """요청을 처리하고 메트릭을 수집합니다."""
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
         start_time = time.time()
+        status_code = 500  # 기본값 (예외 시)
+
+        async def send_wrapper(message: dict) -> None:
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = message.get("status", 500)
+            await send(message)
 
         try:
-            response = await call_next(request)
-            status_code = response.status_code
-        except Exception as e:
-            status_code = 500
-            raise
+            await self.app(scope, receive, send_wrapper)
         finally:
             duration = time.time() - start_time
+            path = scope.get("path", "")
+            method = scope.get("method", "")
             self.collector.record_request(
-                endpoint=request.url.path,
-                method=request.method,
+                endpoint=path,
+                method=method,
                 status_code=status_code,
                 duration=duration,
             )
-
-        return response
 
 
 # =============================================================================

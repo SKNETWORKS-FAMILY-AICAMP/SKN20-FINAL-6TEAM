@@ -17,6 +17,8 @@ import threading
 from collections import OrderedDict
 from typing import Any
 
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 logger = logging.getLogger(__name__)
 
 import chromadb
@@ -69,10 +71,12 @@ class ChromaVectorStore:
         # 저장 디렉토리 생성
         self.config.persist_directory.mkdir(parents=True, exist_ok=True)
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True)
     def _get_client(self) -> chromadb.PersistentClient:
         """ChromaDB 클라이언트를 가져옵니다 (싱글톤).
 
         하나의 persist_directory를 사용하여 모든 컬렉션을 관리합니다.
+        연결 실패 시 최대 3회 재시도합니다 (지수 백오프).
 
         Returns:
             ChromaDB PersistentClient 인스턴스
@@ -241,6 +245,7 @@ class ChromaVectorStore:
 
         return results
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True)
     def similarity_search(
         self,
         query: str,
@@ -249,6 +254,8 @@ class ChromaVectorStore:
         filter: dict[str, Any] | None = None,
     ) -> list[Document]:
         """유사도 검색을 수행합니다.
+
+        연결 실패 시 최대 3회 재시도합니다 (지수 백오프).
 
         Args:
             query: 검색 쿼리 텍스트

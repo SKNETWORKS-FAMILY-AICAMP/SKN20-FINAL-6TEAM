@@ -294,7 +294,7 @@ class DocumentBudgetCalculator:
         settings = get_settings()
         total = k * len(domains)
         if total > settings.max_retrieval_docs:
-            k = max(2, settings.max_retrieval_docs // len(domains))
+            k = max(settings.min_domain_k, settings.max_retrieval_docs // len(domains))
 
         budgets: dict[str, DocumentBudget] = {}
         for i, domain in enumerate(domains):
@@ -498,8 +498,8 @@ class GraduatedRetryHandler:
         ctx.level = RetryLevel.RELAX_PARAMS
         ctx.attempts += 1
 
-        # K를 +3 증가하여 재검색
-        new_k = budget.allocated_k + 3
+        # K를 증가하여 재검색
+        new_k = budget.allocated_k + self.settings.retry_k_increment
         if domain in self.agents:
             try:
                 documents, expanded_queries = self._multi_query_retrieve(
@@ -624,7 +624,7 @@ class GraduatedRetryHandler:
                 adj_docs, _ = self._multi_query_retrieve(
                     query=query,
                     domain=adj_domain,
-                    k=3,
+                    k=self.settings.cross_domain_k,
                     include_common=False,
                 )
                 combined_docs.extend(adj_docs)
@@ -1109,6 +1109,9 @@ class RetrievalAgent:
 
             retrieval_results["law_common_supplement"] = result
             all_documents.extend(result.documents)
+            # H5: 법률 보충 추가 후 max_retrieval_docs 초과 시 슬라이싱
+            if len(all_documents) > self.settings.max_retrieval_docs:
+                all_documents[:] = all_documents[:self.settings.max_retrieval_docs]
 
             agent_elapsed = time.time() - agent_start
             agent_timings.append({

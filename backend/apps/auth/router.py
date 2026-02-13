@@ -107,13 +107,13 @@ async def login_google(
     if not email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email not found in Google token",
+            detail="Google 토큰에서 이메일을 찾을 수 없습니다",
         )
 
     if not id_info.get("email_verified"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Email address is not verified by Google",
+            detail="Google에서 이메일 인증이 완료되지 않았습니다",
         )
 
     user = db.execute(select(User).where(User.google_email == email)).scalar_one_or_none()
@@ -121,7 +121,7 @@ async def login_google(
         logger.warning("LOGIN_BLOCKED email=%s reason=deactivated", email)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This account has been deactivated",
+            detail="비활성화된 계정입니다",
         )
     if not user:
         user = User(
@@ -180,6 +180,7 @@ async def logout(
     request: Request,
     response: Response,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> dict[str, str]:
     """로그아웃 — 토큰 블랙리스트 등록 + 쿠키 삭제"""
     # access_token 블랙리스트 등록
@@ -190,7 +191,7 @@ async def logout(
             jti = payload.get("jti")
             exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
             if jti:
-                blacklist_token(jti, exp)
+                blacklist_token(jti, exp, db)
         except JWTError:
             pass
 
@@ -202,13 +203,13 @@ async def logout(
             jti = payload.get("jti")
             exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
             if jti:
-                blacklist_token(jti, exp)
+                blacklist_token(jti, exp, db)
         except JWTError:
             pass
 
     clear_auth_cookies(response)
     logger.info("LOGOUT user_id=%d", current_user.user_id)
-    return {"message": "Successfully logged out"}
+    return {"message": "로그아웃되었습니다"}
 
 
 @router.post("/refresh")
@@ -221,42 +222,42 @@ async def refresh(
     """Refresh Token으로 새 토큰 쌍 발급 (Token Rotation)"""
     refresh_raw = request.cookies.get("refresh_token")
     if not refresh_raw:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No refresh token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="리프레시 토큰이 없습니다")
 
     try:
         payload = jwt.decode(refresh_raw, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
     except JWTError:
         clear_auth_cookies(response)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 리프레시 토큰입니다")
 
     if payload.get("type") != "refresh":
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 토큰 유형입니다")
 
     jti = payload.get("jti")
-    if jti and is_blacklisted(jti):
+    if jti and is_blacklisted(jti, db):
         clear_auth_cookies(response)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token revoked")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="토큰이 만료되었습니다")
 
     email: str | None = payload.get("sub")
     if not email:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 토큰 정보입니다")
 
     user = db.execute(select(User).where(User.google_email == email, User.use_yn == True)).scalar_one_or_none()
     if not user:
         clear_auth_cookies(response)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="사용자를 찾을 수 없습니다")
 
     # 기존 refresh token 블랙리스트 등록 (rotation)
     if jti:
         exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
-        blacklist_token(jti, exp)
+        blacklist_token(jti, exp, db)
 
     new_access = create_access_token(data={"sub": email})
     new_refresh = create_refresh_token(data={"sub": email})
     set_auth_cookies(response, new_access, new_refresh)
 
     logger.info("TOKEN_REFRESH email=%s", email)
-    return {"message": "Token refreshed"}
+    return {"message": "토큰이 갱신되었습니다"}
 
 
 @router.get("/me", response_model=LoginResponse)

@@ -70,6 +70,12 @@ services:
     depends_on:
       ssh-tunnel:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   # React Frontend (Vite)
@@ -91,6 +97,12 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
     depends_on:
       - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5173/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     command: npm run dev -- --host
 
   # RAG Service (LangChain/FastAPI)

@@ -190,7 +190,10 @@ class RequestTokenTracker:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._log_totals()
         if self._token is not None:
-            _current_request_usage.reset(self._token)
+            try:
+                _current_request_usage.reset(self._token)
+            except ValueError:
+                pass
         return False
 
     async def __aenter__(self):
@@ -200,7 +203,10 @@ class RequestTokenTracker:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         self._log_totals()
         if self._token is not None:
-            _current_request_usage.reset(self._token)
+            try:
+                _current_request_usage.reset(self._token)
+            except ValueError:
+                pass
         return False
 
     def _log_totals(self) -> None:

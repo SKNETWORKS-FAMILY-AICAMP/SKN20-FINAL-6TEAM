@@ -21,7 +21,9 @@ from apps.histories.schemas import HistoryDetailResponse, EvaluationData
 
 _START_TIME = time.time()
 
-RAG_SERVICE_URL = os.getenv("RAG_SERVICE_URL", "http://rag:8001")
+from config.settings import settings as _app_settings
+
+RAG_SERVICE_URL = _app_settings.RAG_SERVICE_URL
 
 
 class AdminService:

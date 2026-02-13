@@ -4,6 +4,7 @@ import { ThemeProvider } from '@material-tailwind/react';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { MainLayout } from './components/layout';
 import ProtectedRoute from './components/common/ProtectedRoute';
+import ErrorBoundary from './components/common/ErrorBoundary';
 import {
   LoginPage,
   MainPage,
@@ -23,6 +24,7 @@ const App: React.FC = () => {
   }, []);
 
   return (
+    <ErrorBoundary>
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <ThemeProvider>
         <BrowserRouter>
@@ -55,6 +57,7 @@ const App: React.FC = () => {
         </BrowserRouter>
       </ThemeProvider>
     </GoogleOAuthProvider>
+    </ErrorBoundary>
   );
 };
 

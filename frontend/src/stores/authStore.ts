@@ -35,7 +35,6 @@ export const useAuthStore = create<AuthState>()(
         get().clearAuth();
       },
       clearAuth: () => {
-        localStorage.removeItem('accessToken');
         set({ isAuthenticated: false, user: null });
       },
       updateUser: (userData) =>

@@ -169,8 +169,6 @@ export const CompanyForm: React.FC = () => {
         addr: formData.addr,
         open_date: formData.open_date ? new Date(formData.open_date).toISOString() : null,
       };
-      console.log('[DEBUG] company save data:', data);
-
       if (editingCompany) {
         await api.put(`/companies/${editingCompany.company_id}`, data);
         setMessage({ type: 'success', text: '기업 정보가 수정되었습니다.' });

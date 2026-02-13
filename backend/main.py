@@ -1,3 +1,7 @@
+import logging
+import time
+import uuid
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -6,6 +10,8 @@ from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from config.settings import settings
+
+audit_logger = logging.getLogger("audit")
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -62,6 +68,38 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(CSRFMiddleware)
+
+
+# 감사 로깅 미들웨어 (M9)
+class AuditLoggingMiddleware(BaseHTTPMiddleware):
+    """요청을 구조화 감사 로깅하는 미들웨어."""
+
+    AUDIT_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
+
+    async def dispatch(self, request: Request, call_next):
+        start = time.time()
+        request_id = str(uuid.uuid4())[:8]
+        response = await call_next(request)
+        duration = time.time() - start
+
+        if request.method in self.AUDIT_METHODS:
+            client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+            if not client_ip:
+                client_ip = request.client.host if request.client else "unknown"
+            audit_logger.info(
+                "req_id=%s method=%s path=%s status=%d ip=%s duration=%.3fs",
+                request_id,
+                request.method,
+                request.url.path,
+                response.status_code,
+                client_ip,
+                duration,
+            )
+
+        return response
+
+
+app.add_middleware(AuditLoggingMiddleware)
 
 # Rate Limiting
 app.state.limiter = limiter

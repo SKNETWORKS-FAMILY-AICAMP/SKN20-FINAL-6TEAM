@@ -13,5 +13,11 @@ export default defineConfig(({ mode }) => {
     define: {
       'import.meta.env.VITE_GOOGLE_CLIENT_ID': JSON.stringify(googleClientId),
     },
+    build: {
+      sourcemap: false,
+    },
+    esbuild: {
+      drop: mode === 'production' ? ['console', 'debugger'] : [],
+    },
   }
 })
