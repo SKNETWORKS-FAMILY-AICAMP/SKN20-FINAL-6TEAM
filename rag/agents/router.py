@@ -804,11 +804,12 @@ class MainRouter:
         # 도메인 분류
         classification = self.domain_classifier.classify(augmented_query)
 
-        # 도메인 외 질문 거부
+        # 도메인 외 질문 거부 (LLM 토큰 스트리밍과 동일한 방식)
         if not classification.is_relevant:
             logger.info("[스트리밍] 도메인 외 질문 - 거부 응답 반환")
             for char in REJECTION_RESPONSE:
                 yield {"type": "token", "content": char}
+                await asyncio.sleep(0.02)
             yield {
                 "type": "done",
                 "content": REJECTION_RESPONSE,

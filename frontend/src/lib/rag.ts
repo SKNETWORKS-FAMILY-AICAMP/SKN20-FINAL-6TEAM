@@ -25,7 +25,7 @@ export const isStreamingEnabled = (): boolean => RAG_STREAMING;
 export const checkRagHealth = async (): Promise<boolean> => {
   if (!RAG_ENABLED) return false;
   try {
-    const response = await ragApi.get('/health', { timeout: 5000 });
+    const response = await ragApi.get('/health', { timeout: 10000 });
     return response.data?.status === 'healthy' || response.data?.status === 'degraded';
   } catch {
     return false;

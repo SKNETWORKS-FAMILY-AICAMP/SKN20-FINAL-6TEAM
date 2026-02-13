@@ -365,7 +365,8 @@ if _settings.enable_rate_limit:
 async def health_check() -> HealthResponse:
     """헬스체크 엔드포인트.
 
-    서비스 상태와 VectorDB 상태, OpenAI 연결 상태를 반환합니다.
+    서비스 상태와 VectorDB 상태를 반환합니다.
+    OpenAI 연결 확인은 매 요청마다 호출하면 느리므로 API 키 존재 여부만 확인합니다.
     """
     vectordb_status: dict[str, Any] = {}
     openai_status: dict[str, Any] = {"status": "unknown"}
@@ -384,25 +385,13 @@ async def health_check() -> HealthResponse:
             vectordb_status = {"error": str(e)}
             overall_status = "degraded"
 
-    # OpenAI API 연결 상태 확인 (비동기 + 타임아웃)
-    try:
-        import openai
-        settings = get_settings()
-        client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
-        await asyncio.wait_for(client.models.list(limit=1), timeout=5.0)
-        openai_status = {"status": "connected", "model": settings.openai_model}
-    except asyncio.TimeoutError:
-        openai_status = {"status": "error", "message": "OpenAI API 응답 타임아웃 (5초)"}
-        overall_status = "degraded"
-    except openai.AuthenticationError:
-        openai_status = {"status": "error", "message": "API 키가 유효하지 않습니다"}
+    # OpenAI API 키 존재 여부만 확인 (실제 API 호출은 하지 않음 — 속도 보장)
+    settings = get_settings()
+    if settings.openai_api_key and settings.openai_api_key.strip():
+        openai_status = {"status": "configured", "model": settings.openai_model}
+    else:
+        openai_status = {"status": "error", "message": "API 키가 설정되지 않았습니다"}
         overall_status = "unhealthy"
-    except openai.APIConnectionError:
-        openai_status = {"status": "error", "message": "OpenAI 서버에 연결할 수 없습니다"}
-        overall_status = "unhealthy"
-    except Exception as e:
-        openai_status = {"status": "error", "message": str(e)}
-        overall_status = "degraded"
 
     return HealthResponse(
         status=overall_status,
