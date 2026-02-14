@@ -60,6 +60,7 @@ data/preprocessed
 rag/vectordb/
 vectordb/
 vectordb.zip
+chromadb_backup.tar.gz
 
 # =============================================
 # macOS 아티팩트

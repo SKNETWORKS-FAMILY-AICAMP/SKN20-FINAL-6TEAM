@@ -152,7 +152,7 @@ class Settings(BaseSettings):
 
     # -- ChromaDB --
     chroma_host: str = Field(default="localhost", description="ChromaDB 호스트")
-    chroma_port: int = Field(default=8002, description="ChromaDB 포트")
+    chroma_port: int = Field(default=8000, description="ChromaDB 포트")
 
     # -- 외부 API --
     bizinfo_api_key: str = Field(default="", description="기업마당 API 키")

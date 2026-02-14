@@ -152,7 +152,7 @@ services:
 
   # --- ChromaDB (벡터 데이터베이스 서버) ---
   chromadb:
-    image: chromadb/chroma:latest
+    image: chromadb/chroma:0.5.23
     container_name: bizi-chromadb
     restart: unless-stopped
     expose:

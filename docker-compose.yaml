@@ -112,6 +112,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./rag:/app
+      - ./data/preprocessed:/data/preprocessed:ro
     expose:
       - "8001"
     environment:
@@ -120,6 +121,9 @@ services:
       - BIZINFO_API_KEY=${BIZINFO_API_KEY:-}
       - KSTARTUP_API_KEY=${KSTARTUP_API_KEY:-}
       - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      # ChromaDB 서버 연결
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
       # MySQL (via SSH tunnel)
       - MYSQL_HOST=ssh-tunnel
       - MYSQL_PORT=3306
@@ -134,6 +138,8 @@ services:
     depends_on:
       ssh-tunnel:
         condition: service_healthy
+      chromadb:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
       interval: 30s
@@ -142,5 +148,24 @@ services:
       start_period: 120s
     command: uvicorn main:app --host 0.0.0.0 --port 8001
 
+  # ChromaDB (벡터 데이터베이스 서버)
+  chromadb:
+    image: chromadb/chroma:0.5.23
+    container_name: bizi-chromadb
+    restart: unless-stopped
+    expose:
+      - "8000"
+    volumes:
+      - chromadb_data:/chroma/chroma
+    environment:
+      - ANONYMIZED_TELEMETRY=false
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
 volumes:
   ssh-known-hosts:
+  chromadb_data:

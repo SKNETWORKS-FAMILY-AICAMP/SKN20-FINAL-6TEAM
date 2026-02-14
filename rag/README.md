@@ -29,7 +29,7 @@
 ### 사전 요구사항
 
 - Python 3.10+
-- ChromaDB 서버 (포트: 8002)
+- ChromaDB 서버 (포트: 8000)
 - OpenAI API 키
 
 ### 서버 실행
@@ -66,7 +66,7 @@ python -m vectorstores.build_vectordb --stats         # 통계 확인
 |------|------|--------|
 | `OPENAI_API_KEY` | OpenAI API 키 | (필수) |
 | `CHROMA_HOST` | ChromaDB 호스트 | `localhost` |
-| `CHROMA_PORT` | ChromaDB 포트 | `8002` |
+| `CHROMA_PORT` | ChromaDB 포트 | `8000` |
 | `ENABLE_HYBRID_SEARCH` | BM25+Vector+RRF 앙상블 검색 | `true` |
 | `VECTOR_SEARCH_WEIGHT` | 벡터 검색 가중치 (0.0~1.0) | `0.7` |
 | `ENABLE_RERANKING` | Cross-encoder 재정렬 | `true` |
