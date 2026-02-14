@@ -113,7 +113,6 @@ class RAGChain:
         """
         from utils.query import get_multi_query_retriever
 
-        logger.info("=" * 60)
         logger.info("[검색 시작] 도메인=%s, 쿼리='%s'", domain, query[:50])
 
         try:
@@ -138,8 +137,7 @@ class RAGChain:
             source = doc.metadata.get("source_name") or doc.metadata.get("source_file") or "출처 없음"
             score = doc.metadata.get("score")
             score_str = f"{score:.4f}" if score is not None else "N/A"
-            logger.info("  [%d] %s (score: %s, 출처: %s)", idx + 1, title, score_str, source[:30])
-        logger.info("=" * 60)
+            logger.debug("  [%d] %s (score: %s, 출처: %s)", idx + 1, title, score_str, source[:30])
 
         return documents
 
@@ -154,7 +152,7 @@ class RAGChain:
         use_hybrid: bool | None = None,
         search_strategy: "SearchStrategy | None" = None,
     ) -> list[Document]:
-        """단일 쿼리 primitive 검색을 수행합니다 (Multi-Query 내부 전용)."""
+        """단일 쿼리 검색을 수행합니다 (Hybrid Search + Re-ranking)."""
         strategy_k_common: int | None = None
         strategy_use_rerank: bool | None = None
         strategy_use_mmr: bool | None = None
@@ -354,7 +352,7 @@ class RAGChain:
             return "관련 참고 자료가 없습니다."
 
         titles = [doc.metadata.get("title", "제목 없음") for doc in documents]
-        logger.info("[컨텍스트] 포맷팅 대상 %d건: %s", len(documents), titles)
+        logger.debug("[컨텍스트] 포맷팅 대상 %d건: %s", len(documents), titles)
 
         context_parts = []
         for i, doc in enumerate(documents, 1):

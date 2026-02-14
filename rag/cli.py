@@ -462,17 +462,27 @@ async def main() -> None:
     vector_store = ChromaVectorStore()
     router = MainRouter(vector_store=vector_store)
 
-    # 임베딩 디바이스 정보 출력
-    from vectorstores.embeddings import get_device
-    device = get_device()
-    device_label = {"cuda": "GPU (CUDA)", "mps": "GPU (Apple MPS)", "cpu": "CPU"}
-    print(f"  임베딩 디바이스: {device_label.get(device, device)}")
+    # 임베딩 모드 출력
+    if settings.embedding_provider == "runpod":
+        print(f"  임베딩: RunPod GPU (endpoint: {settings.runpod_endpoint_id})")
+    else:
+        from vectorstores.embeddings import _get_local_device
+        device = _get_local_device()
+        device_label = {"cuda": "GPU (CUDA)", "mps": "GPU (Apple MPS)", "cpu": "CPU"}
+        print(f"  임베딩: 로컬 {device_label.get(device, device)} ({settings.embedding_model})")
+
+    # 리랭킹 모드 출력
+    if not settings.enable_reranking:
+        rerank_label = "OFF"
+    elif settings.embedding_provider == "runpod":
+        rerank_label = "RunPod GPU"
+    else:
+        rerank_label = f"{settings.reranker_type} ({settings.cross_encoder_model})"
+    print(f"  Re-ranking: {rerank_label}")
 
     # 검색 기능 상태 출력
-    print(f"  Hybrid Search (BM25+RRF): {'ON' if settings.enable_hybrid_search else 'OFF'}")
-    rerank_label = settings.reranker_type if settings.enable_reranking else "OFF"
-    print(f"  Re-ranking: {rerank_label}")
-    print(f"  Query Expansion: Multi-Query Only (count={settings.multi_query_count})")
+    print(f"  Hybrid Search: {'ON' if settings.enable_hybrid_search else 'OFF'} (weight: {settings.vector_search_weight})")
+    print(f"  Query Expansion: Multi-Query (count={settings.multi_query_count})")
     print("초기화 완료.\n")
 
     user_context = UserContext(user_type=args.user_type)

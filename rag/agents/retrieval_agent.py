@@ -978,7 +978,6 @@ class RetrievalAgent:
             RetrievalResult
         """
         from utils.retrieval_evaluator import get_retrieval_evaluator
-        from utils.query import get_multi_query_retriever
 
         start = time.time()
 
@@ -993,8 +992,7 @@ class RetrievalAgent:
         use_mmr = mode == SearchMode.MMR_DIVERSE
 
         try:
-            multi_retriever = get_multi_query_retriever(self.rag_chain)
-            documents, expanded_queries = multi_retriever.retrieve(
+            documents = self.rag_chain._retrieve_documents(
                 query=query,
                 domain=domain,
                 k=k,
@@ -1005,7 +1003,6 @@ class RetrievalAgent:
         except Exception as e:
             logger.error("[RetrievalAgent] 검색 실패 (%s): %s", domain, e)
             documents = []
-            expanded_queries = None
 
         scores = [doc.metadata.get("score", 0.0) for doc in documents]
 
@@ -1019,11 +1016,11 @@ class RetrievalAgent:
             scores=scores,
             sources=self.rag_chain.documents_to_sources(documents),
             evaluation=evaluation,
-            used_multi_query=True,
+            used_multi_query=False,
             retrieve_time=elapsed,
             domain=domain,
             query=query,
-            rewritten_query=expanded_queries,
+            rewritten_query=None,
         )
 
     @staticmethod

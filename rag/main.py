@@ -271,6 +271,44 @@ async def lifespan(app: FastAPI):
     elif settings.enable_reranking and settings.embedding_provider == "runpod":
         logger.info("RunPod 모드: CrossEncoder 프리로드 스킵 (RunPod 워커가 모델 관리)")
 
+    # 설정 요약 로그
+    def _flag(v: bool) -> str:
+        return "ON" if v else "OFF"
+
+    if settings.embedding_provider == "runpod":
+        embed_info = f"RunPod GPU (endpoint: {settings.runpod_endpoint_id})"
+    else:
+        embed_info = f"로컬 CPU ({settings.embedding_model})"
+
+    if not settings.enable_reranking:
+        rerank_info = "OFF"
+    elif settings.embedding_provider == "runpod":
+        rerank_info = "RunPod GPU"
+    else:
+        rerank_info = f"CrossEncoder ({settings.cross_encoder_model})"
+
+    if settings.enable_llm_domain_classification:
+        classify_info = "LLM 기반"
+    elif settings.enable_vector_domain_classification:
+        classify_info = "벡터 기반"
+    else:
+        classify_info = "키워드만"
+
+    logger.info("=" * 60)
+    logger.info("[RAG 설정 요약]")
+    logger.info("  임베딩       : %s", embed_info)
+    logger.info("  리랭킹       : %s", rerank_info)
+    logger.info("  Hybrid Search : %s (weight: %.1f)", _flag(settings.enable_hybrid_search), settings.vector_search_weight)
+    logger.info("  도메인 분류   : %s", classify_info)
+    logger.info("  도메인 거부   : %s", _flag(settings.enable_domain_rejection))
+    logger.info("  LLM 평가     : %s", _flag(settings.enable_llm_evaluation))
+    logger.info("  RAGAS 평가   : %s", _flag(settings.enable_ragas_evaluation))
+    logger.info("  법률 보충     : %s", f"ON (K={settings.legal_supplement_k})" if settings.enable_legal_supplement else "OFF")
+    logger.info("  응답 캐시     : %s", _flag(settings.enable_response_cache))
+    logger.info("  Rate Limit   : %s", f"ON (rate={settings.rate_limit_rate}/s, capacity={settings.rate_limit_capacity})" if settings.enable_rate_limit else "OFF")
+    logger.info("  로그 레벨     : %s", settings.log_level)
+    logger.info("=" * 60)
+
     logger.info("RAG 서비스 초기화 완료")
 
     yield

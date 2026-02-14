@@ -519,12 +519,37 @@ class MainRouter:
                 if not retrieval_results:
                     return None
 
-                # 2. sub_queries 구성
+                # 2. 법률 보충 검색 (원본 파이프라인과 동일)
+                all_documents = [
+                    doc
+                    for r in retrieval_results.values()
+                    for doc in r.documents
+                ]
+                if (
+                    self.settings.enable_legal_supplement
+                    and "law_common" not in domains
+                    and needs_legal_supplement(alt_query, all_documents, domains)
+                    and "law_common" in self.agents
+                ):
+                    try:
+                        law_result = await self.agents["law_common"].aretrieve_only(alt_query)
+                        law_k = self.settings.legal_supplement_k
+                        law_result.documents = law_result.documents[:law_k]
+                        law_result.sources = law_result.sources[:law_k]
+                        retrieval_results["law_common_supplement"] = law_result
+                        logger.info(
+                            "[재시도] 법률 보충 검색: %d건",
+                            len(law_result.documents),
+                        )
+                    except Exception as e:
+                        logger.warning("[재시도] 법률 보충 검색 실패: %s", e)
+
+                # 3. sub_queries 구성
                 alt_sub_queries = [
                     SubQuery(domain=d, query=alt_query) for d in domains
                 ]
 
-                # 3. 답변 생성 (원본 쿼리로 생성하여 사용자 질문에 직접 응답)
+                # 4. 답변 생성 (원본 쿼리로 생성하여 사용자 질문에 직접 응답)
                 gen_result = await self.generator.agenerate(
                     query=query,
                     sub_queries=alt_sub_queries,
@@ -533,7 +558,7 @@ class MainRouter:
                     domains=domains,
                 )
 
-                # 4. 평가 (원본 쿼리 기준으로 평가)
+                # 5. 평가 (원본 쿼리 기준으로 평가)
                 context = "\n".join([s.content for s in gen_result.sources[:5]])
                 evaluation = await self.evaluator.aevaluate(
                     question=query,

@@ -227,7 +227,7 @@ class BaseAgent(ABC):
         """문서 검색만 수행합니다 (생성 없음).
 
         역할 분리 아키텍처에서 검색 전담 메서드로 사용됩니다.
-        규칙 기반 평가를 수행하고, 필요 시 Multi-Query 재검색을 시도합니다.
+        단일 쿼리로 Hybrid Search + Re-ranking 검색 후 규칙 기반 평가를 수행합니다.
 
         Args:
             query: 검색 쿼리
@@ -242,24 +242,17 @@ class BaseAgent(ABC):
         logger.info("[retrieve_only] %s 검색 시작: '%s'", self.domain, query[:50])
         start = time.time()
 
-        # Multi-Query 검색 (항상 기본 경로)
-        rewritten_query: str | None = None
-        used_multi_query = True
+        # 단일 쿼리 검색 (Hybrid Search + Re-ranking)
         try:
-            from utils.query import get_multi_query_retriever
-
-            multi_query_retriever = get_multi_query_retriever(self.rag_chain)
-            documents, rewritten_query = multi_query_retriever.retrieve(
+            documents = self.rag_chain._retrieve_documents(
                 query=query,
                 domain=self.domain,
                 include_common=include_common,
                 search_strategy=search_strategy,
             )
         except Exception as e:
-            logger.warning("[retrieve_only] Multi-Query 검색 실패: %s", e)
+            logger.warning("[retrieve_only] 검색 실패: %s", e)
             documents = []
-            rewritten_query = None
-            used_multi_query = False
 
         # 점수 추출 (메타데이터에서)
         scores = [doc.metadata.get("score", 0.0) for doc in documents]
@@ -270,11 +263,10 @@ class BaseAgent(ABC):
 
         elapsed = time.time() - start
         logger.info(
-            "[retrieve_only] %s 완료: %d건 (%.3fs, multi_query=%s)",
+            "[retrieve_only] %s 완료: %d건 (%.3fs)",
             self.domain,
             len(documents),
             elapsed,
-            used_multi_query,
         )
 
         return RetrievalResult(
@@ -282,11 +274,11 @@ class BaseAgent(ABC):
             scores=scores,
             sources=self.rag_chain.documents_to_sources(documents),
             evaluation=evaluation,
-            used_multi_query=used_multi_query,
+            used_multi_query=False,
             retrieve_time=elapsed,
             domain=self.domain,
             query=query,
-            rewritten_query=rewritten_query,
+            rewritten_query=None,
         )
 
     async def aretrieve_only(

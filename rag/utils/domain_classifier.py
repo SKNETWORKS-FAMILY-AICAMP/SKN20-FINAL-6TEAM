@@ -388,7 +388,7 @@ class VectorDomainClassifier:
         """질문을 분류하여 관련 도메인과 신뢰도를 반환합니다.
 
         ENABLE_LLM_DOMAIN_CLASSIFICATION=true 시 순수 LLM 분류만 사용합니다.
-        LLM 실패 시 기존 키워드+벡터 방식으로 자동 fallback합니다.
+        LLM 호출 자체가 실패하면 도메인 외 질문으로 거부합니다.
 
         Args:
             query: 사용자 질문
@@ -396,7 +396,7 @@ class VectorDomainClassifier:
         Returns:
             도메인 분류 결과
         """
-        # 0. LLM 분류 모드: 순수 LLM만 사용, 실패 시에만 keyword+vector fallback
+        # 0. LLM 분류 모드: 순수 LLM만 사용, 실패 시 거부 (fallback 없음)
         if self.settings.enable_llm_domain_classification:
             llm_result = self._llm_classify(query)
             if llm_result.method != "llm_error":
@@ -406,7 +406,14 @@ class VectorDomainClassifier:
                     llm_result.confidence,
                 )
                 return llm_result
-            logger.warning("[도메인 분류] LLM 분류 실패, keyword+vector fallback")
+            # LLM 호출 자체가 실패한 경우 → 거부 (fallback 없음)
+            logger.warning("[도메인 분류] LLM 분류 실패 → 도메인 외 질문으로 거부")
+            return DomainClassificationResult(
+                domains=[],
+                confidence=0.0,
+                is_relevant=False,
+                method="llm_error_rejected",
+            )
 
         # 1. 키워드 매칭 (0ms, 즉시)
         keyword_result = self._keyword_classify(query)
