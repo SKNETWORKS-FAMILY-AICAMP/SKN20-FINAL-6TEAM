@@ -31,7 +31,7 @@ release/v0.1.0
 
 ### 형식
 ```
-<type>: <subject>
+[type] <subject>
 
 [optional body]
 
@@ -41,14 +41,14 @@ release/v0.1.0
 ### Type 종류
 | Type | 설명 | 예시 |
 |------|------|------|
-| `feat` | 새 기능 | `feat: 구글 로그인 기능 추가` |
-| `fix` | 버그 수정 | `fix: JWT 만료 처리 오류 수정` |
-| `docs` | 문서 수정 | `docs: API 문서 업데이트` |
-| `refactor` | 리팩토링 | `refactor: 인증 로직 모듈화` |
-| `test` | 테스트 | `test: 사용자 서비스 단위 테스트 추가` |
-| `chore` | 빌드/설정 | `chore: Docker 설정 업데이트` |
-| `style` | 포맷팅 | `style: import 정렬` |
-| `perf` | 성능 개선 | `perf: 쿼리 최적화` |
+| `[feat]` | 새 기능 | `[feat] 구글 로그인 기능 추가` |
+| `[fix]` | 버그 수정 | `[fix] JWT 만료 처리 오류 수정` |
+| `[docs]` | 문서 수정 | `[docs] API 문서 업데이트` |
+| `[refactor]` | 리팩토링 | `[refactor] 인증 로직 모듈화` |
+| `[test]` | 테스트 | `[test] 사용자 서비스 단위 테스트 추가` |
+| `[chore]` | 빌드/설정 | `[chore] Docker 설정 업데이트` |
+| `[style]` | 포맷팅 | `[style] import 정렬` |
+| `[perf]` | 성능 개선 | `[perf] 쿼리 최적화` |
 
 ### Subject 규칙
 - 50자 이내
@@ -67,7 +67,7 @@ release/v0.1.0
 
 ### 예시
 ```
-feat: 기업 프로필 CRUD API 구현
+[feat] 기업 프로필 CRUD API 구현
 
 - 기업 생성/조회/수정/삭제 엔드포인트 추가
 - Pydantic 스키마로 입력 검증
@@ -85,8 +85,8 @@ Closes #45
 - 커밋 메시지와 동일한 컨벤션
 
 ```
-feat: 구글 OAuth2 로그인 구현
-fix: 채팅 이력 저장 오류 수정
+[feat] 구글 OAuth2 로그인 구현
+[fix] 채팅 이력 저장 오류 수정
 ```
 
 ### PR 본문 템플릿
@@ -143,7 +143,7 @@ git checkout -b feature/new-feature
 
 # 2. 작업 및 커밋
 git add <files>
-git commit -m "feat: 새 기능 구현"
+git commit -m "[feat] 새 기능 구현"
 
 # 3. PR 생성
 git push -u origin feature/new-feature
@@ -160,7 +160,7 @@ git pull origin main
 git checkout -b hotfix/critical-bug
 
 # 2. 수정 및 커밋
-git commit -m "fix: 긴급 버그 수정"
+git commit -m "[fix] 긴급 버그 수정"
 
 # 3. main과 develop에 머지
 git push -u origin hotfix/critical-bug
@@ -176,9 +176,9 @@ git push -u origin hotfix/critical-bug
 Claude Code로 작성된 코드는 Co-Author 추가:
 
 ```
-feat: RAG 에이전트 구현
+[feat] RAG 에이전트 구현
 
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+with Claude Code
 ```
 
 ---

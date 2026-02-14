@@ -208,13 +208,13 @@ def test_rag_answer_quality():
 ### 커밋 타이밍
 ```bash
 # RED 단계 후
-git commit -m "test: add failing test for user registration"
+git commit -m "[test] add failing test for user registration"
 
 # GREEN 단계 후
-git commit -m "feat: implement user registration"
+git commit -m "[feat] implement user registration"
 
 # REFACTOR 단계 후
-git commit -m "refactor: extract validation logic"
+git commit -m "[refactor] extract validation logic"
 ```
 
 ---

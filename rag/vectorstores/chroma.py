@@ -25,8 +25,6 @@ import chromadb
 from chromadb.config import Settings
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from tqdm import tqdm
-
 from .config import COLLECTION_NAMES, VectorDBConfig
 from .embeddings import get_embeddings
 from .loader import DataLoader
@@ -212,55 +210,68 @@ class ChromaVectorStore:
 
         store = self.get_or_create_store(domain)
 
-        # 문서 로드
-        documents: list[Document] = []
+        # 스트리밍 배치 처리 (메모리 효율)
+        batch_size = self.config.batch_size
+        total_added = 0
         file_counts: dict[str, int] = {}
+        seen_ids: set[str] = set()
+        duplicates = 0
+        batch: list[Document] = []
+
         for doc in self.loader.load_db_documents(domain):
-            documents.append(doc)
             sf = doc.metadata.get("source_file", "unknown")
             file_counts[sf] = file_counts.get(sf, 0) + 1
 
-        if not documents:
-            logger.warning(f"{domain}에 대한 문서를 찾을 수 없습니다")
-            return 0
-
-        # 파일별 통계 출력
-        for sf, cnt in file_counts.items():
-            logger.info("  %-40s → %d건", sf, cnt)
-
-        # 중복 ID 감지
-        seen_ids: set[str] = set()
-        duplicates = 0
-        for doc in documents:
             doc_id = doc.metadata.get("id", "")
             if doc_id in seen_ids:
                 duplicates += 1
             seen_ids.add(doc_id)
+
+            batch.append(doc)
+
+            if len(batch) >= batch_size:
+                self._add_batch(store, batch, total_added)
+                total_added += len(batch)
+                if total_added % 1000 == 0:
+                    logger.info(f"  {total_added}건 완료...")
+                batch = []
+
+        # 남은 배치 처리
+        if batch:
+            self._add_batch(store, batch, total_added)
+            total_added += len(batch)
+
+        if total_added == 0:
+            logger.warning(f"{domain}에 대한 문서를 찾을 수 없습니다")
+            return 0
+
+        # 통계 출력
+        for sf, cnt in file_counts.items():
+            logger.info("  %-40s → %d건", sf, cnt)
         if duplicates:
             logger.warning("중복 ID %d건 감지 (domain: %s)", duplicates, domain)
 
-        logger.info(f"{len(documents)}개 문서를 {collection_name}에 추가 중...")
-
-        # 배치로 문서 추가
-        batch_size = self.config.batch_size
-        total_added = 0
-
-        for i in tqdm(range(0, len(documents), batch_size), desc=f"{domain} 빌드"):
-            batch = documents[i:i + batch_size]
-
-            texts = [doc.page_content for doc in batch]
-            metadatas = [doc.metadata for doc in batch]
-            ids = [doc.metadata.get("id", f"doc_{i + j}") for j, doc in enumerate(batch)]
-
-            store.add_texts(
-                texts=texts,
-                metadatas=metadatas,
-                ids=ids,
-            )
-            total_added += len(batch)
-
         logger.info(f"{total_added}개 문서가 {collection_name}에 성공적으로 추가됨")
         return total_added
+
+    def _add_batch(self, store: Chroma, batch: list[Document], offset: int) -> None:
+        """배치 단위로 문서를 벡터 스토어에 추가합니다.
+
+        Args:
+            store: Chroma 벡터 스토어 인스턴스
+            batch: 추가할 문서 배치
+            offset: 현재까지 추가된 문서 수 (ID 생성용)
+        """
+        texts = [doc.page_content for doc in batch]
+        metadatas = [
+            {k: ("" if v is None else v) for k, v in doc.metadata.items()}
+            for doc in batch
+        ]
+        ids = [
+            doc.metadata.get("id", f"doc_{offset + j}")
+            for j, doc in enumerate(batch)
+        ]
+        store.add_texts(texts=texts, metadatas=metadatas, ids=ids)
 
     def build_all_vectordbs(self, force_rebuild: bool = False) -> dict[str, int]:
         """모든 도메인의 벡터 데이터베이스를 빌드합니다.
