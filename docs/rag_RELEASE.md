@@ -1,5 +1,16 @@
 # Release Notes
 
+## [2026-02-14] - RAG 파이프라인 3단계 개선 (CLASSIFY·RETRIEVE·EVALUATE)
+
+### Refactoring
+- CLASSIFY: LLM 분류 실패 시 keyword+vector fallback 제거, 도메인 외 질문으로 거부 반환 (`method="llm_error_rejected"`)
+- RETRIEVE: 초기 검색에서 Multi-Query 제거, 단일 쿼리 Hybrid Search + Re-ranking
+- EVALUATE: 재시도(`_generate_candidate`) 시 법률 보충 검색 추가 (원본 파이프라인과 동일)
+- `rag_chain.py` 로그 레벨 조정 (문서별 상세 로그 info→debug)
+- CLI 임베딩/리랭킹 모드 표시 개선
+- 기동 시 설정 요약 로그 추가 (main.py lifespan)
+- 미사용 문서 삭제: `RAG_SERVICE_GUIDE.md`
+
 ## [2026-02-13] - RunPod GPU 임베딩/리랭킹 통합 + 관리자 로그 개선
 
 ### Features
