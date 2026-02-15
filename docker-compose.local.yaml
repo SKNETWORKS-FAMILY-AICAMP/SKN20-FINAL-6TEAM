@@ -146,21 +146,47 @@ services:
 
   # ChromaDB (벡터 데이터베이스 서버)
   chromadb:
-    image: chromadb/chroma:0.5.23
+    image: chromadb/chroma:1.5.0
     container_name: bizi-chromadb
     restart: unless-stopped
     ports:
       - "8200:8000"
     volumes:
-      - chromadb_data:/chroma/chroma
+      - chromadb_data:/data
     environment:
       - ANONYMIZED_TELEMETRY=false
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8000'"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  # VectorDB 빌드 서비스 (GPU 임베딩, 필요 시만 실행)
+  # OPENAI_API_KEY 불필요 — 로컬 GPU 임베딩(EMBEDDING_PROVIDER=local) 사용
+  vectordb-builder:
+    build: ./rag
+    container_name: bizi-vectordb-builder
+    profiles: ["build"]
+    volumes:
+      - ./rag:/app
+      - ./scripts/vectordb:/scripts/vectordb:ro
+      - ./data/preprocessed:/data/preprocessed:ro
+    environment:
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - EMBEDDING_PROVIDER=local
+    depends_on:
+      chromadb:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: ["python", "/scripts/vectordb", "--all"]
 
 volumes:
   bizi-mysql-data:

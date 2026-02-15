@@ -14,14 +14,12 @@
 Example:
     >>> from vectorstores import ChromaVectorStore, COLLECTION_NAMES
     >>> store = ChromaVectorStore()
-    >>> store.build_all_vectordbs()
     >>> results = store.similarity_search("창업 지원금", "startup_funding", k=5)
 """
 
 from .config import VectorDBConfig, ChunkingConfig, COLLECTION_NAMES
 from .embeddings import get_embeddings
 from .chroma import ChromaVectorStore
-from .loader import DataLoader
 
 __all__ = [
     "VectorDBConfig",
@@ -29,5 +27,4 @@ __all__ = [
     "COLLECTION_NAMES",
     "get_embeddings",
     "ChromaVectorStore",
-    "DataLoader",
 ]

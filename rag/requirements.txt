@@ -1,27 +1,27 @@
 # FastAPI
-fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
-python-multipart>=0.0.6
-pydantic>=2.5.0
-pydantic-settings>=2.1.0
+fastapi>=0.128.0,<1.0.0
+uvicorn[standard]>=0.37.0
+python-multipart>=0.0.19
+pydantic>=2.10.0,<3.0.0
+pydantic-settings>=2.10.0,<3.0.0
 
 # LangChain
-langchain>=0.1.0
-langchain-core>=0.1.0
-langchain-community>=0.0.10
-langchain-openai>=0.0.5
-langchain-huggingface>=0.0.1
-langchain-chroma>=0.1.0
-langchain-text-splitters>=0.0.1
-langgraph>=0.0.20
+langchain>=1.2.0,<2.0.0
+langchain-core>=1.2.0,<2.0.0
+langchain-community>=0.4.0,<1.0.0
+langchain-openai>=1.1.0,<2.0.0
+langchain-huggingface>=1.2.0,<2.0.0
+langchain-chroma>=1.1.0,<2.0.0
+langchain-text-splitters>=1.1.0,<2.0.0
+langgraph>=1.0.0,<2.0.0
 
 # LLM & Embeddings
-openai>=1.6.0
-sentence-transformers>=2.2.0
+openai>=2.0.0,<3.0.0
+sentence-transformers>=4.0.0,<5.0.0
 torch>=2.0.0
 
 # Vector DB
-chromadb>=0.5.20,<0.6.0
+chromadb==1.5.0
 
 # RAG Components
 rank-bm25>=0.2.2
@@ -34,7 +34,7 @@ pymysql>=1.1.0
 cryptography>=42.0.0
 
 # HTTP Client (RunPod API 호출)
-httpx>=0.27.0
+httpx>=0.28.0
 
 # Utilities
 python-dotenv>=1.0.0

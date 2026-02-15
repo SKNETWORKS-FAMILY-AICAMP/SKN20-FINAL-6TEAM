@@ -118,7 +118,7 @@ class VectorDBConfig:
     def openai_api_key(self) -> str:
         """환경변수에서 OpenAI API 키를 가져옵니다.
 
-        NOTE: build_vectordb 스크립트는 FastAPI 런타임과 독립 실행되므로
+        NOTE: scripts/vectordb 빌드 스크립트는 FastAPI 런타임과 독립 실행되므로
         의도적으로 os.getenv()를 사용합니다.
         런타임 설정은 utils.config.get_settings()를 사용하세요.
 

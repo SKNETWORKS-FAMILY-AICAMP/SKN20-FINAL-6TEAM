@@ -256,8 +256,16 @@ async def lifespan(app: FastAPI):
     load_domain_config()
     logger.info("도메인 설정 DB 초기화 완료")
 
-    # 공유 벡터 스토어 생성 후 MainRouter에 주입
+    # 공유 벡터 스토어 생성 후 ChromaDB 연결 확인
     vector_store = ChromaVectorStore()
+    health = vector_store.health_check()
+    if health["status"] != "ok":
+        logger.error("ChromaDB 연결 실패: %s", health.get("detail", "알 수 없는 오류"))
+        settings = get_settings()
+        logger.error("CHROMA_HOST=%s, CHROMA_PORT=%d", settings.chroma_host, settings.chroma_port)
+    else:
+        logger.info("ChromaDB 연결 성공 (heartbeat: %s)", health["heartbeat"])
+
     router_agent = MainRouter(vector_store=vector_store)
     executor = ActionExecutor()
 

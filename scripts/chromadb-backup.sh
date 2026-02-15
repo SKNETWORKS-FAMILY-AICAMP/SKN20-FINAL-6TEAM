@@ -5,22 +5,31 @@
 # 결과물: ./chromadb_backup.tar.gz (팀원에게 공유)
 # =============================================================================
 set -e
-
-VOLUME_NAME="skn20-final-6team_chromadb_data"
-BACKUP_FILE="chromadb_backup.tar.gz"
-
-# Windows Git Bash MSYS 경로 변환 방지
 export MSYS_NO_PATHCONV=1
 
-# 볼륨 존재 확인
-if ! docker volume inspect "$VOLUME_NAME" > /dev/null 2>&1; then
-    echo "[ERROR] 볼륨 '$VOLUME_NAME'이 존재하지 않습니다."
-    echo "        docker compose up -d 로 먼저 컨테이너를 기동하세요."
+BACKUP_FILE="chromadb_backup.tar.gz"
+
+# 볼륨명 자동 감지
+VOLUME_NAME=$(docker volume ls --format '{{.Name}}' | grep 'chromadb_data$' | head -1)
+if [ -z "$VOLUME_NAME" ]; then
+    echo "[ERROR] chromadb_data 볼륨을 찾을 수 없습니다."
+    echo "        docker compose up -d chromadb 로 먼저 기동하세요."
     exit 1
 fi
+echo "볼륨: $VOLUME_NAME"
+
+# 백업 전 컬렉션 통계 (localhost:8200 접근 가능한 경우)
+echo ""
+echo "[1/3] 현재 컬렉션 확인..."
+curl -s http://localhost:8200/api/v2/collections 2>/dev/null | \
+  sed 's/},{/}\n{/g' | grep -oP '"name":"[^"]+"' | \
+  sed 's/"name":"//;s/"//' | while read name; do
+    echo "  - $name"
+done || echo "  (컬렉션 확인 불가 — 백업은 계속 진행)"
 
 # 백업 실행
-echo "[1/2] ChromaDB 볼륨 백업 중..."
+echo ""
+echo "[2/3] ChromaDB 볼륨 백업 중..."
 docker run --rm \
     -v "${VOLUME_NAME}:/data:ro" \
     -v "$(pwd):/backup" \
@@ -29,7 +38,10 @@ docker run --rm \
 
 # 결과 확인
 FILE_SIZE=$(ls -lh "$BACKUP_FILE" | awk '{print $5}')
-echo "[2/2] 백업 완료: ${BACKUP_FILE} (${FILE_SIZE})"
+echo "[3/3] 백업 완료: ${BACKUP_FILE} (${FILE_SIZE})"
 echo ""
-echo "팀원에게 이 파일을 공유하세요."
-echo "복원 명령: bash scripts/chromadb-restore.sh"
+echo "=== 팀원 배포 가이드 ==="
+echo "1. 이 파일을 팀원에게 공유: ${BACKUP_FILE}"
+echo "2. 팀원은 프로젝트 루트에 파일을 놓고 실행:"
+echo "   docker compose -f docker-compose.local.yaml up -d chromadb"
+echo "   bash scripts/chromadb-restore.sh"

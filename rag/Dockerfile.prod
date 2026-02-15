@@ -42,6 +42,10 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Stage 1에서 다운로드된 모델 캐시 복사
 COPY --from=builder /root/.cache /root/.cache
 
+# GPU 지원 (NVIDIA Container Toolkit 필요)
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
 # 소스 코드 복사
 COPY . .
 

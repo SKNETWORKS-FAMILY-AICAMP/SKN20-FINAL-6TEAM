@@ -10,50 +10,57 @@ ChromaDB 벡터 데이터베이스 인덱스를 빌드하거나 재구축합니�
 ## 실행 내용
 
 ```bash
-cd rag && python -m vectorstores.build_index
+# 프로젝트 루트에서 실행
+python -m scripts.vectordb --all
 ```
 
 ## 옵션
 
 ### 전체 재구축
 ```bash
-/build-vectordb --rebuild
+python -m scripts.vectordb --all --force
 ```
 기존 컬렉션 삭제 후 재구축
 
-### 특정 컬렉션만
+### 특정 도메인만
 ```bash
-/build-vectordb startup_docs
+python -m scripts.vectordb --domain startup_funding
 ```
-`startup_docs` 컬렉션만 빌드
 
-### 증분 업데이트
+### 증분 업데이트 (Resume)
 ```bash
-/build-vectordb --incremental
+python -m scripts.vectordb --all --resume
 ```
-새로운 문서만 추가
+기존 문서는 건너뛰고 누락분만 추가
+
+### 통계 확인
+```bash
+python -m scripts.vectordb --stats
+```
+
+### Dry-Run (임베딩 없이 통계만)
+```bash
+python -m scripts.vectordb --dry-run
+```
+
+## Docker 실행
+
+```bash
+docker compose --profile build up vectordb-builder
+docker compose -f docker-compose.local.yaml --profile build up vectordb-builder
+```
 
 ## 컬렉션 목록
 
-| 컬렉션명 | 설명 | 소스 |
-|---------|------|------|
-| startup_docs | 창업/지원사업 문서 | data/processed/startup/ |
-| finance_docs | 재무/세무 문서 | data/processed/finance/ |
-| hr_docs | 인사/노무 문서 | data/processed/hr/ |
-| law_docs | 공통 법령 | data/processed/law/ |
-
-## 결과 확인
-
-```python
-# 인덱스 상태 확인
-from chromadb import Client
-client = Client()
-for col in client.list_collections():
-    print(f"{col.name}: {col.count()} documents")
-```
+| 도메인 키 | 컬렉션명 | 소스 |
+|---------|---------|------|
+| startup_funding | startup_funding_db | data/preprocessed/startup_support/ |
+| finance_tax | finance_tax_db | data/preprocessed/finance_tax/ |
+| hr_labor | hr_labor_db | data/preprocessed/hr_labor/ |
+| law_common | law_common_db | data/preprocessed/law_common/ |
 
 ## 주의사항
 
-- 대용량 문서는 시간이 오래 걸릴 수 있음
-- OpenAI API 호출 비용 발생 (임베딩)
-- 기존 인덱스 백업 권장 (--rebuild 시)
+- 로컬 GPU(BAAI/bge-m3) 사용 시 OPENAI_API_KEY 불필요
+- 전체 빌드 약 45분 소요 (batch_size=100, 로컬 GPU)
+- 기존 인덱스 백업 권장 (--force 시)

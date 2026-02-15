@@ -27,8 +27,6 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from .config import COLLECTION_NAMES, VectorDBConfig
 from .embeddings import get_embeddings
-from .loader import DataLoader
-
 # 캐시 최대 크기 (도메인 개수보다 크게 설정)
 MAX_STORE_CACHE_SIZE = 10
 
@@ -41,14 +39,12 @@ class ChromaVectorStore:
 
     Attributes:
         config: VectorDB 설정 객체
-        embeddings: OpenAI 임베딩 인스턴스
-        loader: 데이터 로더 인스턴스
+        embeddings: 임베딩 인스턴스
         _client: ChromaDB 클라이언트 (싱글톤)
         _stores: 컬렉션별 Chroma 인스턴스 캐시
 
     Example:
         >>> store = ChromaVectorStore()
-        >>> store.build_vectordb("startup_funding")
         >>> results = store.similarity_search("창업 지원금", "startup_funding", k=5)
     """
 
@@ -60,7 +56,6 @@ class ChromaVectorStore:
         """
         self.config = config or VectorDBConfig()
         self.embeddings = get_embeddings(self.config.embedding_model)
-        self.loader = DataLoader()
         self._client: chromadb.ClientAPI | None = None
         # LRU 캐시 방식의 OrderedDict 사용
         self._stores: OrderedDict[str, Chroma] = OrderedDict()
@@ -73,19 +68,32 @@ class ChromaVectorStore:
     def _is_remote_mode(self) -> bool:
         """원격 ChromaDB 서버 모드 여부를 판단합니다.
 
-        CHROMA_HOST가 설정되어 있고 localhost/127.0.0.1이 아니면 원격 모드입니다.
+        다음 조건 중 하나라도 만족하면 HttpClient(원격 모드)를 사용합니다:
+        - CHROMA_HOST가 localhost/127.0.0.1이 아닌 경우 (예: Docker 네트워크의 'chromadb')
+        - CHROMA_PORT가 기본값(8000)이 아닌 경우 (예: Docker 포트 매핑 8200)
 
         Returns:
             원격 모드이면 True
         """
         from utils.config import get_settings
 
-        chroma_host = get_settings().chroma_host or ""
-        return bool(chroma_host) and chroma_host not in ("localhost", "127.0.0.1")
+        settings = get_settings()
+        chroma_host = settings.chroma_host or ""
+        chroma_port = settings.chroma_port
+
+        # 호스트가 외부 서버인 경우
+        if bool(chroma_host) and chroma_host not in ("localhost", "127.0.0.1"):
+            return True
+
+        # 로컬호스트지만 포트가 기본값(8000)이 아닌 경우 (Docker 포트 매핑)
+        if bool(chroma_host) and chroma_port != 8000:
+            return True
+
+        return False
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True)
     def _get_client(self) -> chromadb.ClientAPI:
-        """ChromaDB 클라이언트를 가져옵니다 (싱글톤).
+        """ChromaDB 클라이언트를 가져옵니다 (싱글톤, 스레드 안전).
 
         CHROMA_HOST 환경변수에 따라 클라이언트 유형을 자동 선택합니다:
         - 미설정 또는 localhost: PersistentClient (로컬 파일 기반)
@@ -94,7 +102,11 @@ class ChromaVectorStore:
         Returns:
             ChromaDB ClientAPI 인스턴스
         """
-        if self._client is None:
+        if self._client is not None:
+            return self._client
+        with self._store_lock:
+            if self._client is not None:
+                return self._client
             if self._is_remote_mode():
                 from utils.config import get_settings as _get_settings
 
@@ -166,131 +178,10 @@ class ChromaVectorStore:
             # 캐시 크기 초과 시 가장 오래된 항목 제거
             while len(self._stores) >= MAX_STORE_CACHE_SIZE:
                 removed_domain, _ = self._stores.popitem(last=False)
-                logger.debug(f"캐시에서 제거됨: {removed_domain}")
+                logger.debug("캐시에서 제거됨: %s", removed_domain)
 
             self._stores[domain] = store
             return store
-
-    def build_vectordb(
-        self,
-        domain: str,
-        force_rebuild: bool = False,
-    ) -> int:
-        """특정 도메인의 벡터 데이터베이스를 빌드합니다.
-
-        전처리된 데이터를 로드하여 임베딩을 생성하고 ChromaDB에 저장합니다.
-
-        Args:
-            domain: 빌드할 도메인 키
-            force_rebuild: True이면 기존 데이터를 삭제하고 재빌드
-
-        Returns:
-            추가된 문서 수
-        """
-        collection_name = self._get_collection_name(domain)
-        client = self._get_client()
-
-        # 기존 컬렉션 확인
-        existing_collections = [c.name for c in client.list_collections()]
-
-        if collection_name in existing_collections and not force_rebuild:
-            store = self.get_or_create_store(domain)
-            existing_count = store._collection.count()
-            if existing_count > 0:
-                logger.info(f"컬렉션 {collection_name}이(가) 이미 존재합니다 ({existing_count}개 문서).")
-                logger.info("재빌드하려면 force_rebuild=True를 사용하세요.")
-                return existing_count
-
-        # 강제 재빌드 시 기존 컬렉션 삭제
-        if force_rebuild and collection_name in existing_collections:
-            client.delete_collection(collection_name)
-            if domain in self._stores:
-                del self._stores[domain]
-            logger.info(f"기존 컬렉션 {collection_name} 삭제됨")
-
-        store = self.get_or_create_store(domain)
-
-        # 스트리밍 배치 처리 (메모리 효율)
-        batch_size = self.config.batch_size
-        total_added = 0
-        file_counts: dict[str, int] = {}
-        seen_ids: set[str] = set()
-        duplicates = 0
-        batch: list[Document] = []
-
-        for doc in self.loader.load_db_documents(domain):
-            sf = doc.metadata.get("source_file", "unknown")
-            file_counts[sf] = file_counts.get(sf, 0) + 1
-
-            doc_id = doc.metadata.get("id", "")
-            if doc_id in seen_ids:
-                duplicates += 1
-            seen_ids.add(doc_id)
-
-            batch.append(doc)
-
-            if len(batch) >= batch_size:
-                self._add_batch(store, batch, total_added)
-                total_added += len(batch)
-                if total_added % 1000 == 0:
-                    logger.info(f"  {total_added}건 완료...")
-                batch = []
-
-        # 남은 배치 처리
-        if batch:
-            self._add_batch(store, batch, total_added)
-            total_added += len(batch)
-
-        if total_added == 0:
-            logger.warning(f"{domain}에 대한 문서를 찾을 수 없습니다")
-            return 0
-
-        # 통계 출력
-        for sf, cnt in file_counts.items():
-            logger.info("  %-40s → %d건", sf, cnt)
-        if duplicates:
-            logger.warning("중복 ID %d건 감지 (domain: %s)", duplicates, domain)
-
-        logger.info(f"{total_added}개 문서가 {collection_name}에 성공적으로 추가됨")
-        return total_added
-
-    def _add_batch(self, store: Chroma, batch: list[Document], offset: int) -> None:
-        """배치 단위로 문서를 벡터 스토어에 추가합니다.
-
-        Args:
-            store: Chroma 벡터 스토어 인스턴스
-            batch: 추가할 문서 배치
-            offset: 현재까지 추가된 문서 수 (ID 생성용)
-        """
-        texts = [doc.page_content for doc in batch]
-        metadatas = [
-            {k: ("" if v is None else v) for k, v in doc.metadata.items()}
-            for doc in batch
-        ]
-        ids = [
-            doc.metadata.get("id", f"doc_{offset + j}")
-            for j, doc in enumerate(batch)
-        ]
-        store.add_texts(texts=texts, metadatas=metadatas, ids=ids)
-
-    def build_all_vectordbs(self, force_rebuild: bool = False) -> dict[str, int]:
-        """모든 도메인의 벡터 데이터베이스를 빌드합니다.
-
-        Args:
-            force_rebuild: True이면 기존 데이터를 삭제하고 재빌드
-
-        Returns:
-            도메인별 추가된 문서 수 딕셔너리
-        """
-        results = {}
-        for domain in COLLECTION_NAMES.keys():
-            logger.info(f"{'='*50}")
-            logger.info(f"{domain} 빌드 중...")
-            logger.info(f"{'='*50}")
-            count = self.build_vectordb(domain, force_rebuild=force_rebuild)
-            results[domain] = count
-
-        return results
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True)
     def similarity_search(
@@ -447,8 +338,9 @@ class ChromaVectorStore:
         Returns:
             컬렉션 통계 딕셔너리 (이름, 문서 수, 메타데이터)
         """
-        store = self.get_or_create_store(domain)
-        collection = store._collection
+        collection_name = self._get_collection_name(domain)
+        client = self._get_client()
+        collection = client.get_collection(collection_name)
 
         return {
             "name": collection.name,
@@ -467,10 +359,12 @@ class ChromaVectorStore:
         Returns:
             Document 리스트
         """
-        store = self.get_or_create_store(domain)
+        collection_name = self._get_collection_name(domain)
+        client = self._get_client()
 
         try:
-            payload = store._collection.get(include=["documents", "metadatas"])
+            collection = client.get_collection(collection_name)
+            payload = collection.get(include=["documents", "metadatas"])
         except Exception as e:
             logger.warning("[벡터스토어] 전체 문서 로드 실패 (%s): %s", domain, e)
             return []
@@ -541,7 +435,10 @@ class ChromaVectorStore:
             컬렉션 이름 리스트
         """
         client = self._get_client()
-        return [c.name for c in client.list_collections()]
+        collections = client.list_collections()
+        if collections and hasattr(collections[0], "name"):
+            return [c.name for c in collections]
+        return [str(c) for c in collections]
 
     def clear_cache(self) -> int:
         """스토어 캐시를 모두 정리합니다.
@@ -552,7 +449,7 @@ class ChromaVectorStore:
         with self._store_lock:
             count = len(self._stores)
             self._stores.clear()
-            logger.info(f"스토어 캐시 정리 완료: {count}개 항목")
+            logger.info("스토어 캐시 정리 완료: %d개 항목", count)
             return count
 
     def get_cache_info(self) -> dict[str, Any]:
@@ -567,6 +464,19 @@ class ChromaVectorStore:
                 "cache_size": len(self._stores),
                 "max_cache_size": MAX_STORE_CACHE_SIZE,
             }
+
+    def health_check(self) -> dict[str, Any]:
+        """ChromaDB 연결 상태를 확인합니다.
+
+        Returns:
+            연결 상태 딕셔너리 (status, heartbeat 또는 detail)
+        """
+        try:
+            client = self._get_client()
+            heartbeat = client.heartbeat()
+            return {"status": "ok", "heartbeat": heartbeat}
+        except Exception as e:
+            return {"status": "error", "detail": str(e)}
 
     def close(self) -> None:
         """리소스를 정리합니다."""

@@ -124,17 +124,22 @@ class Settings(BaseSettings):
         return v
 
     # -- OpenAI --
-    openai_api_key: str = Field(default="", description="OpenAI API 키 (필수)")
+    openai_api_key: str = Field(default="", description="OpenAI API 키 (RAG 서비스 실행 시 필수, 벡터DB 빌드 시 불필요)")
 
     @field_validator("openai_api_key")
     @classmethod
     def validate_openai_api_key(cls, v: str) -> str:
-        """OpenAI API 키 검증."""
+        """OpenAI API 키 검증.
+
+        벡터DB 빌드 시에는 LLM을 사용하지 않으므로 빈 값을 허용합니다.
+        RAG 서비스 실행 시에는 반드시 설정해야 합니다.
+        """
         if not v or not v.strip():
-            raise ValueError(
+            logger.warning(
                 "OPENAI_API_KEY가 설정되지 않았습니다. "
-                "RAG 서비스를 실행하려면 유효한 OpenAI API 키가 필요합니다."
+                "벡터DB 빌드는 가능하지만, RAG 채팅 서비스는 동작하지 않습니다."
             )
+            return v
         if not v.startswith("sk-"):
             logger.warning(
                 "OPENAI_API_KEY 형식이 올바르지 않습니다. "

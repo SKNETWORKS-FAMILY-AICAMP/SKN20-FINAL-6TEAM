@@ -32,7 +32,7 @@
 ### 새 벡터DB 컬렉션 추가
 1. `vectorstores/config.py`에 설정 추가
 2. 데이터 파일을 `data/preprocessed/` 하위에 JSONL 형식으로 준비
-3. `python -m vectorstores.build_vectordb --db {name}` 실행
+3. `python -m scripts.vectordb --domain {name}` 실행 (프로젝트 루트에서)
 
 ---
 

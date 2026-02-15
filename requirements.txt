@@ -42,7 +42,7 @@ sentence-transformers>=2.2.0
 torch>=2.0.0
 
 # Vector DB
-chromadb>=0.4.0
+chromadb==1.5.0
 
 # RAG Components
 rank-bm25>=0.2.2
