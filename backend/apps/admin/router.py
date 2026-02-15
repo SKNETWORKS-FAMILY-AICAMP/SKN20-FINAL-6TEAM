@@ -7,6 +7,7 @@ from datetime import datetime
 from apps.common.deps import get_db, get_current_user
 from apps.common.models import User
 from apps.admin.service import AdminService
+from apps.users.service import ADMIN_TYPE_CODE
 from apps.admin.schemas import (
     HistoryListResponse,
     EvaluationStats,
@@ -25,7 +26,7 @@ def get_admin_service(db: Session = Depends(get_db)) -> AdminService:
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
     """관리자 권한 확인."""
-    if current_user.type_code != "U0000001":
+    if current_user.type_code != ADMIN_TYPE_CODE:
         raise HTTPException(status_code=403, detail="관리자 권한이 필요합니다")
     return current_user
 

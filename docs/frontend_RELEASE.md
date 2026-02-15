@@ -1,5 +1,13 @@
 # Release Notes
 
+## [2026-02-15] - 전체 프로젝트 리팩토링 (코드 품질 개선)
+
+### Refactoring
+- **에러 핸들링 유틸리티 추출**: `lib/errorHandler.ts` 신규 — 4개 파일 8곳의 `err as { response... }` 중복 패턴을 `extractErrorMessage()` 유틸리티로 통합
+- **Mock 응답 함수 분리**: `lib/mockResponses.ts` 신규 — `useChat.ts`에서 89줄의 mock 응답 함수를 별도 모듈로 분리 (327줄 → 238줄)
+- **AdminLogPage 컴포넌트 분리**: 540줄 단일 파일 → `HistoryFilterBar`, `HistoryTable`, `HistoryDetailModal` 3개 컴포넌트로 분리 (103줄 오케스트레이터)
+- **날짜 포맷 유틸리티 추출**: `lib/dateUtils.ts` 신규 — 5개 파일의 인라인 `toLocaleDateString/toLocaleString('ko-KR')` 호출을 `formatDate()`, `formatDateTime()`, `formatDateLong()` 유틸리티로 통합
+
 ## [2026-02-13] - 관리자 로그 페이지 개선
 
 ### Features

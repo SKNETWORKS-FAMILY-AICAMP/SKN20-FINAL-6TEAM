@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class GoogleLoginRequest(BaseModel):
@@ -12,13 +12,12 @@ class TestLoginRequest(BaseModel):
 
 
 class UserInfo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     user_id: int
     google_email: str
     username: str
     type_code: str
-
-    class Config:
-        from_attributes = True
 
 
 class LoginResponse(BaseModel):

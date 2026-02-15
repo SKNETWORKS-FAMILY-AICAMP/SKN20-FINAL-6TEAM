@@ -1,5 +1,11 @@
 # Release Notes
 
+## [2026-02-15] - 전체 프로젝트 리팩토링 (코드 품질 개선)
+
+### Refactoring
+- `auth/schemas.py` Pydantic v1 `class Config` → v2 `model_config = ConfigDict(from_attributes=True)` 통일
+- `admin/router.py` 관리자 코드 인라인 `"U0000001"` → `users/service.py`의 `ADMIN_TYPE_CODE` 상수 import
+
 ## [2026-02-13] - 관리자 로그 페이지 개선
 
 ### Features

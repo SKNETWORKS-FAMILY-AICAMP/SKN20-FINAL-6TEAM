@@ -11,6 +11,7 @@ import { ShieldCheckIcon } from '@heroicons/react/24/outline';
 import { GoogleLogin, CredentialResponse } from '@react-oauth/google';
 import { useAuthStore } from '../stores/authStore';
 import api from '../lib/api';
+import { extractErrorMessage } from '../lib/errorHandler';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -31,8 +32,7 @@ const LoginPage: React.FC = () => {
       navigate('/');
     } catch (err: unknown) {
       console.error('Login error:', err);
-      const error = err as { response?: { data?: { detail?: string } } };
-      setError(error.response?.data?.detail || '로그인에 실패했습니다.');
+      setError(extractErrorMessage(err, '로그인에 실패했습니다.'));
     }
   };
 
@@ -54,8 +54,7 @@ const LoginPage: React.FC = () => {
       navigate('/admin');
     } catch (err: unknown) {
       console.error('Admin login error:', err);
-      const error = err as { response?: { data?: { detail?: string } } };
-      setError(error.response?.data?.detail || '관리자 로그인에 실패했습니다.');
+      setError(extractErrorMessage(err, '관리자 로그인에 실패했습니다.'));
     } finally {
       setAdminLoading(false);
     }

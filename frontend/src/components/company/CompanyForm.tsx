@@ -19,6 +19,8 @@ import { INDUSTRY_MAJOR, INDUSTRY_MINOR, INDUSTRY_ALL, COMPANY_STATUS, REGION_SI
 import type { CompanyStatusKey } from '../../lib/constants';
 import { RegionSelect } from '../common/RegionSelect';
 import api from '../../lib/api';
+import { extractErrorMessage } from '../../lib/errorHandler';
+import { formatDate } from '../../lib/dateUtils';
 import { useAuthStore } from '../../stores/authStore';
 import type { Company } from '../../types';
 
@@ -189,10 +191,9 @@ export const CompanyForm: React.FC = () => {
       setIsDialogOpen(false);
       fetchCompanies();
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } };
       setMessage({
         type: 'error',
-        text: error.response?.data?.detail || '저장에 실패했습니다.',
+        text: extractErrorMessage(err, '저장에 실패했습니다.'),
       });
     } finally {
       setIsSaving(false);
@@ -207,10 +208,9 @@ export const CompanyForm: React.FC = () => {
       setMessage({ type: 'success', text: '기업이 삭제되었습니다.' });
       fetchCompanies();
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } };
       setMessage({
         type: 'error',
-        text: error.response?.data?.detail || '삭제에 실패했습니다.',
+        text: extractErrorMessage(err, '삭제에 실패했습니다.'),
       });
     }
   };
@@ -294,7 +294,7 @@ export const CompanyForm: React.FC = () => {
                       <td className={rowClass}>
                         <Typography variant="small" color="gray">
                           {company.open_date
-                            ? new Date(company.open_date).toLocaleDateString('ko-KR')
+                            ? formatDate(company.open_date)
                             : '-'}
                         </Typography>
                       </td>

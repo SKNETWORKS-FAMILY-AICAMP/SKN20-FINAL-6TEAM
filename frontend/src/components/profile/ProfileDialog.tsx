@@ -15,6 +15,8 @@ import {
 import { useAuthStore } from '../../stores/authStore';
 import { USER_TYPE_NAMES } from '../../types';
 import api from '../../lib/api';
+import { extractErrorMessage } from '../../lib/errorHandler';
+import { formatDate } from '../../lib/dateUtils';
 
 interface ProfileDialogProps {
   open: boolean;
@@ -66,10 +68,9 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
       setMessage({ type: 'success', text: '프로필이 저장되었습니다.' });
       setIsEditing(false);
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } };
       setMessage({
         type: 'error',
-        text: error.response?.data?.detail || '저장에 실패했습니다.',
+        text: extractErrorMessage(err, '저장에 실패했습니다.'),
       });
     } finally {
       setIsSaving(false);
@@ -94,10 +95,9 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
       onClose();
       navigate('/login');
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } };
       setMessage({
         type: 'error',
-        text: error.response?.data?.detail || '회원탈퇴에 실패했습니다.',
+        text: extractErrorMessage(err, '회원탈퇴에 실패했습니다.'),
       });
     }
   };
@@ -187,7 +187,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
           <Input
             value={
               user?.create_date
-                ? new Date(user.create_date).toLocaleDateString('ko-KR')
+                ? formatDate(user.create_date)
                 : '-'
             }
             disabled

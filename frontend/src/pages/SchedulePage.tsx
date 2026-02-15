@@ -17,6 +17,8 @@ import {
   ListBulletIcon,
 } from '@heroicons/react/24/outline';
 import api from '../lib/api';
+import { extractErrorMessage } from '../lib/errorHandler';
+import { formatDateLong } from '../lib/dateUtils';
 import { CalendarView } from '../components/schedule/CalendarView';
 import { ScheduleDetailDialog } from '../components/schedule/ScheduleDetailDialog';
 import type { ScheduleFormData } from '../components/schedule/ScheduleDetailDialog';
@@ -90,10 +92,9 @@ const SchedulePage: React.FC = () => {
       setIsDialogOpen(false);
       fetchData();
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } };
       setMessage({
         type: 'error',
-        text: error.response?.data?.detail || '저장에 실패했습니다.',
+        text: extractErrorMessage(err, '저장에 실패했습니다.'),
       });
     }
   };
@@ -107,10 +108,9 @@ const SchedulePage: React.FC = () => {
       setIsDialogOpen(false);
       fetchData();
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } };
       setMessage({
         type: 'error',
-        text: error.response?.data?.detail || '삭제에 실패했습니다.',
+        text: extractErrorMessage(err, '삭제에 실패했습니다.'),
       });
     }
   };
@@ -131,13 +131,7 @@ const SchedulePage: React.FC = () => {
     return companies.find((c) => c.company_id === companyId)?.com_name || '-';
   };
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('ko-KR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
+  const formatDate = (dateStr: string) => formatDateLong(dateStr);
 
   return (
     <div className="p-6">

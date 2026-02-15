@@ -1,5 +1,13 @@
 # Release Notes
 
+## [2026-02-15] - ChromaDB 백업/복원 스크립트 추가
+
+### Features
+- ChromaDB Docker 컨테이너 백업/복원 셸 스크립트 추가 (`chromadb-backup.sh`, `chromadb-restore.sh`)
+
+### Bug Fixes
+- ChromaDB 백업/복원 스크립트 버그 수정 (Docker 설정 개선)
+
 ## [2026-02-12] - 법령 전처리 대폭 개선 + 4대보험/세정세무 전처리 추가
 
 ### Features

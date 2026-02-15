@@ -1,5 +1,18 @@
 # Release Notes
 
+## [2026-02-15] - main.py 라우트 모듈 분리 + 로깅 유틸리티 추출
+
+### Refactoring
+- **main.py 모듈 분리**: 1,150줄 → 214줄 (앱 생성/미들웨어/lifespan만 유지)
+  - `routes/health.py`: 헬스체크 엔드포인트
+  - `routes/chat.py`: `/api/chat`, `/api/chat/stream` 엔드포인트
+  - `routes/documents.py`: 문서 생성 엔드포인트
+  - `routes/funding.py`: 지원사업 검색 엔드포인트
+  - `routes/vectordb.py`: VectorDB 통계/컬렉션 엔드포인트
+  - `routes/monitoring.py`: 메트릭/캐시/설정/도메인 설정 엔드포인트
+  - `routes/_state.py`: 라우트 모듈 간 공유 전역 인스턴스
+- **로깅 유틸리티 추출**: `utils/chat_logger.py` 신규 — `log_chat_interaction()`, `log_ragas_metrics()` 함수를 main.py에서 분리
+
 ## [2026-02-14] - RAG 파이프라인 3단계 개선 (CLASSIFY·RETRIEVE·EVALUATE)
 
 ### Refactoring
