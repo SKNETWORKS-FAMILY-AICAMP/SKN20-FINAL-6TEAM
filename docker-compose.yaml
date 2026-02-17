@@ -1,7 +1,7 @@
 services:
   # Nginx Reverse Proxy (외부 유일한 진입점)
   nginx:
-    image: nginx:alpine
+    image: nginx:1.28-alpine
     container_name: bizi-nginx
     restart: unless-stopped
     ports:
@@ -11,15 +11,15 @@ services:
     depends_on:
       - frontend
       - backend
-      - rag
 
   # SSH Tunnel to AWS RDS (via Bastion EC2)
   ssh-tunnel:
-    image: alpine:latest
+    image: alpine:3.21
     container_name: bizi-ssh-tunnel
     restart: unless-stopped
     volumes:
       - ./.ssh/bizi-key.pem:/tmp/bizi-key.pem:ro
+      - ./.ssh/known_hosts:/tmp/known_hosts:ro
       - ssh-known-hosts:/root/.ssh
     entrypoint:
       - sh
@@ -29,10 +29,19 @@ services:
         mkdir -p /root/.ssh
         cp /tmp/bizi-key.pem /root/.ssh/bizi-key.pem
         chmod 600 /root/.ssh/bizi-key.pem
+        if [ -f /tmp/known_hosts ] && [ -s /tmp/known_hosts ]; then
+          cp /tmp/known_hosts /root/.ssh/known_hosts
+          chmod 644 /root/.ssh/known_hosts
+          STRICT_MODE="yes"
+          echo "Using pre-deployed known_hosts (StrictHostKeyChecking=yes)"
+        else
+          STRICT_MODE="accept-new"
+          echo "WARNING: No known_hosts file found, using accept-new"
+        fi
         echo "Starting SSH tunnel to RDS..."
         ssh -N \
           -L 0.0.0.0:3306:${MYSQL_HOST}:${MYSQL_PORT:-3306} \
-          -o StrictHostKeyChecking=accept-new \
+          -o StrictHostKeyChecking=$STRICT_MODE \
           -o UserKnownHostsFile=/root/.ssh/known_hosts \
           -o ServerAliveInterval=30 \
           -o ServerAliveCountMax=3 \
@@ -67,6 +76,8 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - ENABLE_TEST_LOGIN=${ENABLE_TEST_LOGIN:-false}
+      - RAG_API_KEY=${RAG_API_KEY:-}
+      - RAG_SERVICE_URL=http://rag:8001
     depends_on:
       ssh-tunnel:
         condition: service_healthy
@@ -90,10 +101,8 @@ services:
       - "5173"
     environment:
       - VITE_API_URL=/api
-      - VITE_RAG_URL=/rag
       - VITE_RAG_ENABLED=${RAG_ENABLED:-true}
       - VITE_RAG_STREAMING=${VITE_RAG_STREAMING:-true}
-      - VITE_RAG_API_KEY=${RAG_API_KEY:-}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
     depends_on:
       - backend
@@ -124,6 +133,7 @@ services:
       # ChromaDB 서버 연결
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
+      - CHROMA_AUTH_TOKEN=${CHROMA_AUTH_TOKEN:-}
       # MySQL (via SSH tunnel)
       - MYSQL_HOST=ssh-tunnel
       - MYSQL_PORT=3306
@@ -135,6 +145,10 @@ services:
       - ENABLE_RERANKING=${ENABLE_RERANKING:-true}
       - ENABLE_VECTOR_DOMAIN_CLASSIFICATION=${ENABLE_VECTOR_DOMAIN_CLASSIFICATION:-true}
       - ENABLE_LLM_DOMAIN_CLASSIFICATION=${ENABLE_LLM_DOMAIN_CLASSIFICATION:-false}
+      # RunPod GPU Inference
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-runpod}
+      - RUNPOD_API_KEY=${RUNPOD_API_KEY}
+      - RUNPOD_ENDPOINT_ID=${RUNPOD_ENDPOINT_ID}
     depends_on:
       ssh-tunnel:
         condition: service_healthy
@@ -145,7 +159,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 120s
+      start_period: 30s
     command: uvicorn main:app --host 0.0.0.0 --port 8001
 
   # ChromaDB (벡터 데이터베이스 서버)
@@ -159,6 +173,8 @@ services:
       - chromadb_data:/data
     environment:
       - ANONYMIZED_TELEMETRY=false
+      - CHROMA_SERVER_AUTHN_PROVIDER=${CHROMA_AUTH_TOKEN:+chromadb.auth.token_authn.TokenAuthenticationServerProvider}
+      - CHROMA_SERVER_AUTHN_CREDENTIALS=${CHROMA_AUTH_TOKEN:-}
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8000'"]
       interval: 10s
@@ -179,6 +195,7 @@ services:
     environment:
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
+      - CHROMA_AUTH_TOKEN=${CHROMA_AUTH_TOKEN:-}
       - EMBEDDING_PROVIDER=local
     depends_on:
       chromadb:

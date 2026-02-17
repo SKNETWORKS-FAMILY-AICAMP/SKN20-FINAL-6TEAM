@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
 
 
@@ -14,9 +14,9 @@ class UserResponse(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    username: str | None = None
+    username: str | None = Field(None, min_length=1, max_length=100)
     birth: datetime | None = None
 
 
 class UserTypeUpdate(BaseModel):
-    type_code: str  # U0000001: 관리자, U0000002: 예비창업자, U0000003: 사업자
+    type_code: str = Field(..., pattern=r"^U\d{7}$")

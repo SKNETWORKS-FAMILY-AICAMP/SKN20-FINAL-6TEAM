@@ -1,5 +1,17 @@
 # Release Notes
 
+## [2026-02-17] - 지원사업 공고 배치 갱신 + VectorDB 빌드 스크립트 + 보안 유틸리티
+
+### Features
+- **지원사업 공고 배치 스크립트** (`scripts/batch/update_announcements.py`): 기업마당/K-Startup API에서 공고 수집 → DB upsert, Slack 알림, systemd 타이머 설정 포함
+- **S3 업로더** (`scripts/batch/s3_uploader.py`): 공고 첨부파일 S3 업로드 유틸리티
+- **VectorDB 빌드 스크립트** (`scripts/vectordb/`): ChromaDB 벡터 인덱스 빌드 — `__main__.py` (CLI 진입점), `builder.py` (빌드 로직), `loader.py` (데이터 로더)
+- **환경변수 검증** (`scripts/validate_env.py`): 필수 환경변수 존재 여부 사전 검증
+- **시크릿 로더** (`scripts/load_secrets.sh`): AWS Secrets Manager에서 .env 파일 생성
+
+### Security
+- **Slack 알림 에러 마스킹** (`update_announcements.py`): `_safe_error_message()` 헬퍼 — DB 연결 에러 시 호스트/비밀번호 노출 방지 (6곳 적용)
+
 ## [2026-02-15] - ChromaDB 백업/복원 스크립트 추가
 
 ### Features

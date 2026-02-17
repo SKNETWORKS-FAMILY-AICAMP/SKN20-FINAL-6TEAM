@@ -1,6 +1,8 @@
+import asyncio
 import logging
 import time
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,10 +12,36 @@ from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from config.settings import settings
+from config.database import SessionLocal
+from apps.auth.token_blacklist import cleanup_expired
 
+logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("audit")
 
 limiter = Limiter(key_func=get_remote_address)
+
+
+async def _cleanup_blacklist_loop():
+    """만료된 토큰 블랙리스트를 주기적으로 정리합니다."""
+    while True:
+        await asyncio.sleep(3600)  # 1시간마다
+        try:
+            db = SessionLocal()
+            try:
+                count = cleanup_expired(db)
+                if count > 0:
+                    logger.info("Cleaned up %d expired blacklist entries", count)
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("Blacklist cleanup failed")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(_cleanup_blacklist_loop())
+    yield
+    task.cancel()
 
 # Import routers
 from apps.auth.router import router as auth_router
@@ -22,6 +50,7 @@ from apps.companies.router import router as companies_router
 from apps.histories.router import router as histories_router
 from apps.schedules.router import router as schedules_router
 from apps.admin.router import router as admin_router
+from apps.rag.router import router as rag_router
 
 _docs_url = "/docs" if settings.ENVIRONMENT != "production" else None
 _redoc_url = "/redoc" if settings.ENVIRONMENT != "production" else None
@@ -32,6 +61,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url=_docs_url,
     redoc_url=_redoc_url,
+    lifespan=lifespan,
 )
 
 # CORS 설정
@@ -59,7 +89,13 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         if request.method in self.MUTATING_METHODS:
             content_type = request.headers.get("content-type", "")
             x_requested = request.headers.get("x-requested-with", "")
-            if "application/json" not in content_type and "multipart/form-data" not in content_type and not x_requested:
+            is_json = "application/json" in content_type
+            is_multipart = "multipart/form-data" in content_type
+
+            # JSON은 브라우저 폼에서 설정 불가 → CSRF-safe
+            # multipart는 X-Requested-With 헤더 필요
+            # 그 외 커스텀 헤더(X-Requested-With)가 있으면 허용
+            if not (is_json or (is_multipart and x_requested) or x_requested):
                 return JSONResponse(
                     status_code=403,
                     content={"detail": "CSRF validation failed"},
@@ -112,6 +148,7 @@ app.include_router(companies_router)
 app.include_router(histories_router)
 app.include_router(schedules_router)
 app.include_router(admin_router)
+app.include_router(rag_router)
 
 
 @app.get("/")
@@ -127,3 +164,15 @@ async def root() -> dict[str, str]:
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+
+# 프로덕션 환경에서 스택 트레이스 노출 방지
+if settings.ENVIRONMENT == "production":
+
+    @app.exception_handler(Exception)
+    async def production_exception_handler(request: Request, exc: Exception):
+        logger.error("Unhandled exception: %s", exc, exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"},
+        )

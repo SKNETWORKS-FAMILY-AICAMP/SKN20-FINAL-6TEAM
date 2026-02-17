@@ -131,8 +131,21 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS 미들웨어
+# 프로덕션 전역 예외 핸들러 (traceback 노출 방지)
 _settings = get_settings()
+if _settings.environment == "production":
+    from fastapi import Request as _Request
+    from fastapi.responses import JSONResponse
+
+    @app.exception_handler(Exception)
+    async def production_exception_handler(_request: _Request, exc: Exception):
+        logger.error("Unhandled exception: %s", exc, exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"},
+        )
+
+# CORS 미들웨어
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_settings.cors_origins,

@@ -1,5 +1,6 @@
 """관리자 서비스."""
 
+import logging
 import os
 import time
 
@@ -7,6 +8,8 @@ import httpx
 from sqlalchemy import select, func, and_, or_, text
 from sqlalchemy.orm import Session
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from apps.common.models import Code, History, User
 from apps.admin.schemas import (
@@ -86,10 +89,11 @@ class AdminService:
                 response_time_ms=round(elapsed_ms, 2),
             )
         except Exception as e:
+            logger.error("Database health check failed: %s", e)
             return ServiceStatus(
                 name="database",
                 status="unhealthy",
-                details={"error": str(e)},
+                details={"error": "Service temporarily unavailable"},
             )
 
     async def _check_rag_service(self) -> ServiceStatus:
@@ -114,10 +118,11 @@ class AdminService:
                 details={"status_code": resp.status_code},
             )
         except Exception as e:
+            logger.error("RAG service health check failed: %s", e)
             return ServiceStatus(
                 name="rag",
                 status="unhealthy",
-                details={"error": str(e)},
+                details={"error": "Service temporarily unavailable"},
             )
 
     def get_histories(

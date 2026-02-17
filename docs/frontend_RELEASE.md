@@ -1,5 +1,14 @@
 # Release Notes
 
+## [2026-02-17] - Dockerfile 보안 강화 + RAG 프록시 전환
+
+### Security
+- **Dockerfile 이미지 핀닝**: `node:20-alpine` → `node:20-alpine3.21` (재현 가능한 빌드)
+- **npm ci 전환**: `npm install` → `npm ci` (lockfile 기반 정확한 의존성 설치)
+
+### Refactoring
+- **RAG API 프록시 경로 전환** (`lib/rag.ts`): 프론트엔드 → RAG 직접 호출에서 Backend 프록시(`/rag/*`) 경유로 변경, 인증된 사용자 컨텍스트 자동 주입
+
 ## [2026-02-15] - 전체 프로젝트 리팩토링 (코드 품질 개선)
 
 ### Refactoring

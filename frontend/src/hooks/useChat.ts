@@ -148,7 +148,7 @@ export const useChat = () => {
             agentCode = domainToAgentCode(finalDomain);
           } else {
             // Non-streaming mode
-            const ragResponse = await ragApi.post<RagChatResponse>('/api/chat', {
+            const ragResponse = await ragApi.post<RagChatResponse>('/rag/chat', {
               message,
             });
             response = ragResponse.data.content;

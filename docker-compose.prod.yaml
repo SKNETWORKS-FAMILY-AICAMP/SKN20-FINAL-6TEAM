@@ -1,8 +1,16 @@
 # =============================================================================
-# Bizi 프로덕션 Docker Compose
+# Bizi 프로덕션 Docker Compose (직접 RDS 연결 + RunPod 추론)
 # 대상: EC2 t3.medium (4GB RAM)
-# 컨테이너: nginx, backend, rag, chromadb, ssh-tunnel (5개)
+# 컨테이너: nginx, backend, rag, chromadb (4개)
 # =============================================================================
+
+# 공통 환경변수 앵커 (backend ↔ rag 공유)
+x-db-env: &db-env
+  MYSQL_HOST: ${MYSQL_HOST}
+  MYSQL_PORT: "3306"
+  MYSQL_DATABASE: ${MYSQL_DATABASE:-bizi_db}
+  MYSQL_USER: ${MYSQL_USER}
+  MYSQL_PASSWORD: ${MYSQL_PASSWORD}
 
 services:
   # --- Nginx (리버스 프록시 + React 정적 파일 서빙) ---
@@ -12,13 +20,18 @@ services:
       dockerfile: Dockerfile.nginx
       args:
         VITE_API_URL: /api
-        VITE_RAG_URL: /rag
         VITE_RAG_ENABLED: ${RAG_ENABLED:-true}
         VITE_RAG_STREAMING: ${VITE_RAG_STREAMING:-true}
-        VITE_RAG_API_KEY: ${RAG_API_KEY:-}
         GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     container_name: bizi-nginx
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
     ports:
       - "80:80"
       - "443:443"
@@ -26,49 +39,14 @@ services:
       - certbot_conf:/etc/letsencrypt:ro
       - certbot_www:/var/www/certbot:ro
     depends_on:
-      - backend
-      - rag
+      backend:
+        condition: service_healthy
     deploy:
       resources:
         limits:
           memory: 128M
-
-  # --- SSH Tunnel (Bastion → AWS RDS) ---
-  ssh-tunnel:
-    image: alpine:latest
-    container_name: bizi-ssh-tunnel
-    restart: unless-stopped
-    volumes:
-      - ./.ssh/bizi-key.pem:/tmp/bizi-key.pem:ro
-    entrypoint:
-      - sh
-      - -c
-      - |
-        apk add --no-cache openssh-client > /dev/null 2>&1
-        mkdir -p /root/.ssh
-        cp /tmp/bizi-key.pem /root/.ssh/bizi-key.pem
-        chmod 600 /root/.ssh/bizi-key.pem
-        echo "Starting SSH tunnel to RDS..."
-        ssh -N \
-          -L 0.0.0.0:3306:${MYSQL_HOST}:${MYSQL_PORT:-3306} \
-          -o StrictHostKeyChecking=no \
-          -o ServerAliveInterval=30 \
-          -o ServerAliveCountMax=3 \
-          -o ExitOnForwardFailure=yes \
-          -i /root/.ssh/bizi-key.pem \
-          ubuntu@${BASTION_HOST}
-    healthcheck:
-      test: ["CMD-SHELL", "netstat -tln | grep -q ':3306 ' || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    expose:
-      - "3306"
-    deploy:
-      resources:
-        limits:
-          memory: 64M
+    networks:
+      - backend
 
   # --- FastAPI Backend (gunicorn + uvicorn workers) ---
   backend:
@@ -77,66 +55,79 @@ services:
       dockerfile: Dockerfile.prod
     container_name: bizi-backend
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     expose:
       - "8000"
     environment:
-      - ENVIRONMENT=production
-      - MYSQL_HOST=ssh-tunnel
-      - MYSQL_PORT=3306
-      - MYSQL_DATABASE=${MYSQL_DATABASE:-bizi_db}
-      - MYSQL_USER=${MYSQL_USER}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
-      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS:-7}
-      - COOKIE_SECURE=true
-      - COOKIE_SAMESITE=lax
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
-      - ENABLE_TEST_LOGIN=false
-    depends_on:
-      ssh-tunnel:
-        condition: service_healthy
+      <<: *db-env
+      ENVIRONMENT: production
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      COOKIE_SECURE: "true"
+      COOKIE_SAMESITE: lax
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      ENABLE_TEST_LOGIN: "false"
+      RAG_API_KEY: ${RAG_API_KEY:-}
+      RAG_SERVICE_URL: http://rag:8001
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     deploy:
       resources:
         limits:
           memory: 512M
+    networks:
+      - backend
 
-  # --- RAG Service (LangChain + BGE-M3) ---
+  # --- RAG Service (LangChain + RunPod GPU 추론) ---
   rag:
     build:
       context: ./rag
       dockerfile: Dockerfile.prod
     container_name: bizi-rag
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /home/appuser/.cache
     expose:
       - "8001"
     environment:
-      - ENVIRONMENT=production
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - RAG_API_KEY=${RAG_API_KEY:-}
-      - BIZINFO_API_KEY=${BIZINFO_API_KEY:-}
-      - KSTARTUP_API_KEY=${KSTARTUP_API_KEY:-}
-      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      <<: *db-env
+      ENVIRONMENT: production
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      RAG_API_KEY: ${RAG_API_KEY:-}
+      BIZINFO_API_KEY: ${BIZINFO_API_KEY:-}
+      KSTARTUP_API_KEY: ${KSTARTUP_API_KEY:-}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      UPSTAGE_API_KEY: ${UPSTAGE_API_KEY:-}
       # ChromaDB 서버 연결
-      - CHROMA_HOST=chromadb
-      - CHROMA_PORT=8000
-      # MySQL (via SSH tunnel)
-      - MYSQL_HOST=ssh-tunnel
-      - MYSQL_PORT=3306
-      - MYSQL_DATABASE=${MYSQL_DATABASE:-bizi_db}
-      - MYSQL_USER=${MYSQL_USER}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: "8000"
+      CHROMA_AUTH_TOKEN: ${CHROMA_AUTH_TOKEN:-}
       # RAG 검색 설정
-      - ENABLE_HYBRID_SEARCH=${ENABLE_HYBRID_SEARCH:-true}
-      - ENABLE_RERANKING=${ENABLE_RERANKING:-true}
-      - ENABLE_DOMAIN_REJECTION=${ENABLE_DOMAIN_REJECTION:-true}
-      - ENABLE_LLM_EVALUATION=${ENABLE_LLM_EVALUATION:-true}
-      - ENABLE_LEGAL_SUPPLEMENT=${ENABLE_LEGAL_SUPPLEMENT:-true}
-      - UPSTAGE_API_KEY=${UPSTAGE_API_KEY:-}
+      ENABLE_HYBRID_SEARCH: ${ENABLE_HYBRID_SEARCH:-true}
+      ENABLE_RERANKING: ${ENABLE_RERANKING:-true}
+      ENABLE_DOMAIN_REJECTION: ${ENABLE_DOMAIN_REJECTION:-true}
+      ENABLE_LLM_EVALUATION: ${ENABLE_LLM_EVALUATION:-true}
+      ENABLE_LEGAL_SUPPLEMENT: ${ENABLE_LEGAL_SUPPLEMENT:-true}
+      ENABLE_VECTOR_DOMAIN_CLASSIFICATION: ${ENABLE_VECTOR_DOMAIN_CLASSIFICATION:-true}
+      ENABLE_LLM_DOMAIN_CLASSIFICATION: ${ENABLE_LLM_DOMAIN_CLASSIFICATION:-false}
+      # RunPod GPU 추론
+      EMBEDDING_PROVIDER: runpod
+      RUNPOD_API_KEY: ${RUNPOD_API_KEY}
+      RUNPOD_ENDPOINT_ID: ${RUNPOD_ENDPOINT_ID}
     depends_on:
-      ssh-tunnel:
-        condition: service_healthy
       chromadb:
         condition: service_healthy
     healthcheck:
@@ -144,23 +135,29 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 120s
+      start_period: 30s
     deploy:
       resources:
         limits:
           memory: 2560M
+    networks:
+      - backend
 
   # --- ChromaDB (벡터 데이터베이스 서버) ---
   chromadb:
     image: chromadb/chroma:1.5.0
     container_name: bizi-chromadb
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     expose:
       - "8000"
     volumes:
       - chromadb_data:/data
     environment:
-      - ANONYMIZED_TELEMETRY=false
+      ANONYMIZED_TELEMETRY: "false"
+      CHROMA_SERVER_AUTHN_PROVIDER: ${CHROMA_AUTH_TOKEN:+chromadb.auth.token_authn.TokenAuthenticationServerProvider}
+      CHROMA_SERVER_AUTHN_CREDENTIALS: ${CHROMA_AUTH_TOKEN:-}
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8000'"]
       interval: 10s
@@ -171,6 +168,8 @@ services:
       resources:
         limits:
           memory: 512M
+    networks:
+      - backend
 
   # --- VectorDB 빌드 서비스 (GPU 임베딩, 필요 시만 실행) ---
   # OPENAI_API_KEY 불필요 — 로컬 GPU 임베딩(EMBEDDING_PROVIDER=local) 사용
@@ -184,9 +183,10 @@ services:
       - ./scripts/vectordb:/scripts/vectordb:ro
       - ./data/preprocessed:/data/preprocessed:ro
     environment:
-      - CHROMA_HOST=chromadb
-      - CHROMA_PORT=8000
-      - EMBEDDING_PROVIDER=local
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: "8000"
+      CHROMA_AUTH_TOKEN: ${CHROMA_AUTH_TOKEN:-}
+      EMBEDDING_PROVIDER: local
     depends_on:
       chromadb:
         condition: service_healthy
@@ -200,6 +200,11 @@ services:
               count: 1
               capabilities: [gpu]
     command: ["python", "/scripts/vectordb", "--all"]
+    networks:
+      - backend
+
+networks:
+  backend:
 
 volumes:
   chromadb_data:

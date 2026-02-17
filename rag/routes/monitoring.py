@@ -29,7 +29,7 @@ async def verify_admin_key(
 # --- 도메인 설정 ---
 
 
-@router.post("/api/domain-config/reload", tags=["DomainConfig"])
+@router.post("/api/domain-config/reload", tags=["DomainConfig"], dependencies=[Depends(verify_admin_key)])
 async def reload_domain_config_endpoint() -> dict[str, Any]:
     """도메인 설정을 MySQL DB에서 다시 로드합니다."""
     try:

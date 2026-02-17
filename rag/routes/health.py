@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from routes._state import vector_store
+from routes import _state
 from schemas.response import HealthResponse
 from utils.config import get_settings
 
@@ -21,9 +21,9 @@ async def health_check() -> HealthResponse:
     openai_status: dict[str, Any] = {"status": "unknown"}
     overall_status = "healthy"
 
-    if vector_store:
+    if _state.vector_store:
         try:
-            stats = vector_store.get_all_stats()
+            stats = _state.vector_store.get_all_stats()
             vectordb_status = {
                 domain: {"count": info.get("count", 0)}
                 for domain, info in stats.items()

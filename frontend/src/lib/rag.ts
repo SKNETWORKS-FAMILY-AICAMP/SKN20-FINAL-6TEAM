@@ -1,21 +1,17 @@
 import axios from 'axios';
 import type { RagStreamResponse } from '../types';
 
-const RAG_URL = import.meta.env.VITE_RAG_URL || 'http://localhost:8001';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const RAG_ENABLED = import.meta.env.VITE_RAG_ENABLED !== 'false';
 const RAG_STREAMING = import.meta.env.VITE_RAG_STREAMING !== 'false';
-const RAG_API_KEY = import.meta.env.VITE_RAG_API_KEY || '';
-
-const ragHeaders: Record<string, string> = {
-  'Content-Type': 'application/json',
-};
-if (RAG_API_KEY) {
-  ragHeaders['X-API-Key'] = RAG_API_KEY;
-}
 
 const ragApi = axios.create({
-  baseURL: RAG_URL,
-  headers: ragHeaders,
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
+  },
+  withCredentials: true,
   timeout: 60000,
 });
 
@@ -25,7 +21,7 @@ export const isStreamingEnabled = (): boolean => RAG_STREAMING;
 export const checkRagHealth = async (): Promise<boolean> => {
   if (!RAG_ENABLED) return false;
   try {
-    const response = await ragApi.get('/health', { timeout: 10000 });
+    const response = await ragApi.get('/rag/health', { timeout: 10000 });
     return response.data?.status === 'healthy' || response.data?.status === 'degraded';
   } catch {
     return false;
@@ -39,23 +35,20 @@ export interface StreamCallbacks {
 }
 
 /**
- * RAG 스트리밍 채팅 API 호출 (SSE)
+ * RAG 스트리밍 채팅 API 호출 (SSE) — Backend 프록시 경유
  */
 export const streamChat = async (
   message: string,
   callbacks: StreamCallbacks,
   signal?: AbortSignal
 ): Promise<void> => {
-  const fetchHeaders: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (RAG_API_KEY) {
-    fetchHeaders['X-API-Key'] = RAG_API_KEY;
-  }
-
-  const response = await fetch(`${RAG_URL}/api/chat/stream`, {
+  const response = await fetch(`${API_URL}/rag/chat/stream`, {
     method: 'POST',
-    headers: fetchHeaders,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+    credentials: 'include',
     body: JSON.stringify({ message }),
     signal,
   });

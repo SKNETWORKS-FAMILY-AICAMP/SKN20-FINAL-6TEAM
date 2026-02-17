@@ -34,7 +34,9 @@ async def get_companies(
 
 
 @router.post("", response_model=CompanyResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def create_company(
+    request: Request,
     company_data: CompanyCreate,
     service: CompanyService = Depends(get_company_service),
     current_user: User = Depends(get_current_user),
@@ -60,7 +62,9 @@ async def get_company(
 
 
 @router.put("/{company_id}", response_model=CompanyResponse)
+@limiter.limit("20/minute")
 async def update_company(
+    request: Request,
     company_id: int,
     company_data: CompanyUpdate,
     service: CompanyService = Depends(get_company_service),
@@ -77,7 +81,9 @@ async def update_company(
 
 
 @router.delete("/{company_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
 async def delete_company(
+    request: Request,
     company_id: int,
     service: CompanyService = Depends(get_company_service),
     current_user: User = Depends(get_current_user),

@@ -1,0 +1,174 @@
+import logging
+from datetime import datetime
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from config.database import get_db
+from config.settings import settings
+from apps.common.deps import get_optional_user
+from apps.common.models import User, Company, Code
+
+from .schemas import RagChatRequest
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/rag", tags=["rag"])
+
+TYPE_CODE_MAP = {
+    "U0000001": "sme_owner",
+    "U0000002": "prospective",
+    "U0000003": "sme_owner",
+}
+
+_RAG_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=10.0, pool=10.0)
+
+
+def _build_user_context(user: User, db: Session) -> dict:
+    """인증된 사용자의 컨텍스트를 구성합니다."""
+    context: dict = {
+        "user_id": str(user.user_id),
+        "user_type": TYPE_CODE_MAP.get(user.type_code, "prospective"),
+        "company": None,
+    }
+
+    # 대표 기업 조회 (main_yn=True)
+    stmt = select(Company).where(
+        Company.user_id == user.user_id,
+        Company.use_yn == True,
+        Company.main_yn == True,
+    )
+    company = db.execute(stmt).scalar_one_or_none()
+    if not company:
+        return context
+
+    # 업종명 조회
+    industry_name = None
+    if company.biz_code:
+        code_stmt = select(Code).where(
+            Code.code == company.biz_code, Code.use_yn == True
+        )
+        code = db.execute(code_stmt).scalar_one_or_none()
+        industry_name = code.name if code else None
+
+    years = None
+    if company.open_date:
+        years = (datetime.now() - company.open_date).days // 365
+
+    context["company"] = {
+        "company_name": company.com_name,
+        "business_number": company.biz_num,
+        "industry_code": company.biz_code,
+        "industry_name": industry_name,
+        "employee_count": None,
+        "years_in_business": years,
+        "region": company.addr,
+        "annual_revenue": None,
+    }
+    return context
+
+
+def _build_rag_headers() -> dict[str, str]:
+    """RAG 서비스 요청 헤더를 구성합니다."""
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    if settings.RAG_API_KEY:
+        headers["X-API-Key"] = settings.RAG_API_KEY
+    return headers
+
+
+@router.post("/chat")
+async def rag_chat(
+    body: RagChatRequest,
+    user: User | None = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
+    """RAG 채팅 프록시 (비스트리밍)."""
+    payload: dict = {"message": body.message}
+    if user:
+        payload["user_context"] = _build_user_context(user, db)
+
+    url = f"{settings.RAG_SERVICE_URL}/api/chat"
+
+    async with httpx.AsyncClient(timeout=_RAG_TIMEOUT) as client:
+        try:
+            resp = await client.post(
+                url, json=payload, headers=_build_rag_headers()
+            )
+        except httpx.ConnectError:
+            raise HTTPException(status_code=502, detail="RAG 서비스에 연결할 수 없습니다.")
+        except httpx.TimeoutException:
+            raise HTTPException(status_code=504, detail="RAG 서비스 응답 시간이 초과되었습니다.")
+
+    if resp.status_code != 200:
+        logger.error("RAG service error: status=%d body=%s", resp.status_code, resp.text[:500])
+        raise HTTPException(status_code=502, detail="RAG 서비스 오류가 발생했습니다.")
+
+    return resp.json()
+
+
+async def _stream_rag(url: str, payload: dict):
+    """RAG SSE 스트림을 바이트 단위로 중계합니다."""
+    async with httpx.AsyncClient(timeout=_RAG_TIMEOUT) as client:
+        try:
+            async with client.stream(
+                "POST", url, json=payload, headers=_build_rag_headers()
+            ) as resp:
+                if resp.status_code != 200:
+                    error_body = await resp.aread()
+                    logger.error(
+                        "RAG stream error: status=%d body=%s",
+                        resp.status_code,
+                        error_body[:500],
+                    )
+                    yield b'data: {"type":"error","content":"RAG \\uc11c\\ube44\\uc2a4 \\uc624\\ub958"}\n\n'
+                    return
+                async for chunk in resp.aiter_bytes():
+                    yield chunk
+        except httpx.ConnectError:
+            yield b'data: {"type":"error","content":"RAG \\uc11c\\ube44\\uc2a4\\uc5d0 \\uc5f0\\uacb0\\ud560 \\uc218 \\uc5c6\\uc2b5\\ub2c8\\ub2e4."}\n\n'
+        except httpx.TimeoutException:
+            yield b'data: {"type":"error","content":"RAG \\uc11c\\ube44\\uc2a4 \\uc751\\ub2f5 \\uc2dc\\uac04\\uc774 \\ucd08\\uacfc\\ub418\\uc5c8\\uc2b5\\ub2c8\\ub2e4."}\n\n'
+
+
+@router.post("/chat/stream")
+async def rag_chat_stream(
+    body: RagChatRequest,
+    user: User | None = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
+    """RAG 채팅 프록시 (SSE 스트리밍)."""
+    payload: dict = {"message": body.message}
+    if user:
+        payload["user_context"] = _build_user_context(user, db)
+
+    url = f"{settings.RAG_SERVICE_URL}/api/chat/stream"
+
+    return StreamingResponse(
+        _stream_rag(url, payload),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/health")
+async def rag_health():
+    """RAG 서비스 헬스체크 프록시."""
+    url = f"{settings.RAG_SERVICE_URL}/health"
+
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+        try:
+            resp = await client.get(url)
+        except (httpx.ConnectError, httpx.TimeoutException):
+            raise HTTPException(status_code=502, detail="RAG 서비스에 연결할 수 없습니다.")
+
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="RAG 서비스 상태 확인 실패")
+
+    return resp.json()

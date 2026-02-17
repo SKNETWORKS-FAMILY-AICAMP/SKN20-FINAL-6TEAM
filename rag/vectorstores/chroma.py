@@ -116,12 +116,21 @@ class ChromaVectorStore:
                 logger.info(
                     "ChromaDB HttpClient 연결: %s:%d", chroma_host, chroma_port
                 )
+                chroma_settings_kwargs: dict[str, Any] = {
+                    "anonymized_telemetry": False,
+                }
+                chroma_auth_token = getattr(_s, "chroma_auth_token", "")
+                if chroma_auth_token:
+                    chroma_settings_kwargs.update({
+                        "chroma_client_auth_provider": "chromadb.auth.token_authn.TokenAuthClientProvider",
+                        "chroma_client_auth_credentials": chroma_auth_token,
+                    })
+                    logger.info("ChromaDB 토큰 인증 활성화")
+
                 self._client = chromadb.HttpClient(
                     host=chroma_host,
                     port=chroma_port,
-                    settings=Settings(
-                        anonymized_telemetry=False,
-                    ),
+                    settings=Settings(**chroma_settings_kwargs),
                 )
             else:
                 logger.info(

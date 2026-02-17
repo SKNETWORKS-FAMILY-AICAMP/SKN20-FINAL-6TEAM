@@ -1,5 +1,21 @@
 # Release Notes
 
+## [2026-02-17] - 보안 감사 Phase 0~6 일괄 적용
+
+### Security
+- **관리 엔드포인트 인증 보호**: `/api/domain-config/reload`에 `verify_admin_key` 의존성 추가 (기존 누락)
+- **SSE 에러 마스킹**: 스트리밍 채팅 오류 시 `str(e)` 대신 제네릭 한국어 메시지 반환, 서버 로그에만 `exc_info=True`로 상세 기록
+- **프로덕션 전역 예외 핸들러**: `environment=production` 시 미처리 예외에 `{"detail": "Internal server error"}` 반환 (traceback 노출 방지)
+- **ChatRequest 입력 제한**: `message` 필드에 `min_length=1, max_length=2000`, `history` 필드에 `max_length=50` 추가
+- **프로덕션 보안 강제** (`settings.py`): `enforce_production_security` 모델 검증기 — `rag_api_key` 필수, CORS localhost 자동 제거, `openai_api_key` 필수 검증
+- **ChromaDB 토큰 인증**: `chroma_auth_token` 설정 필드 추가, `TokenAuthClientProvider` 자동 활성화
+- **`environment` 설정 필드** 추가 (기존 누락)
+
+### Refactoring
+- **Dockerfile.prod non-root**: `appuser:appgroup` (UID/GID 1001) 사용자로 실행, 모델 캐시 `/home/appuser/.cache`로 재지정 (`HF_HOME`, `TRANSFORMERS_CACHE`)
+- **베이스 이미지 고정**: `python:3.10-slim` → `python:3.10-slim-bookworm`
+- **_state 모듈 임포트 방식 변경**: `from routes._state import router_agent` → `from routes import _state` (순환 참조 방지)
+
 ## [2026-02-15] - main.py 라우트 모듈 분리 + 로깅 유틸리티 추출
 
 ### Refactoring

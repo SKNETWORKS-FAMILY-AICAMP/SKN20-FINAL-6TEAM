@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Query
 
-from routes._state import executor
+from routes import _state
 from schemas import ContractRequest, DocumentResponse
 from utils.token_tracker import RequestTokenTracker
 
@@ -16,12 +16,12 @@ router = APIRouter(prefix="/api/documents", tags=["Documents"])
 @router.post("/contract", response_model=DocumentResponse)
 async def generate_contract(request: ContractRequest) -> DocumentResponse:
     """근로계약서 생성 엔드포인트."""
-    if not executor:
+    if not _state.executor:
         raise HTTPException(status_code=503, detail="서비스가 초기화되지 않았습니다")
 
     try:
         async with RequestTokenTracker() as tracker:
-            result = executor.generate_labor_contract(request)
+            result = _state.executor.generate_labor_contract(request)
             token_usage = tracker.get_usage()
         if token_usage and token_usage.get("total_tokens", 0) > 0:
             logger.info(
@@ -43,12 +43,12 @@ async def generate_business_plan(
     format: str = Query(default="docx", description="출력 형식"),
 ) -> DocumentResponse:
     """사업계획서 템플릿 생성 엔드포인트."""
-    if not executor:
+    if not _state.executor:
         raise HTTPException(status_code=503, detail="서비스가 초기화되지 않았습니다")
 
     try:
         async with RequestTokenTracker() as tracker:
-            result = executor.generate_business_plan_template(format=format)
+            result = _state.executor.generate_business_plan_template(format=format)
             token_usage = tracker.get_usage()
         if token_usage and token_usage.get("total_tokens", 0) > 0:
             logger.info(

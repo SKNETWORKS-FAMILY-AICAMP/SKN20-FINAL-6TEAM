@@ -6,7 +6,8 @@ from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
-from jose import jwt, JWTError
+import jwt
+from jwt.exceptions import InvalidTokenError
 
 logger = logging.getLogger("auth")
 limiter = Limiter(key_func=get_remote_address)
@@ -74,8 +75,14 @@ def set_auth_cookies(response: Response, access_token: str, refresh_token: str) 
 
 
 def clear_auth_cookies(response: Response) -> None:
-    response.delete_cookie("access_token", path="/")
-    response.delete_cookie("refresh_token", path="/auth")
+    response.delete_cookie(
+        "access_token", path="/",
+        secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE,
+    )
+    response.delete_cookie(
+        "refresh_token", path="/auth",
+        secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE,
+    )
 
 
 def _build_user_info(user: User) -> UserInfo:
@@ -143,18 +150,20 @@ async def login_google(
 
 
 @router.post("/test-login", response_model=LoginResponse)
+@limiter.limit("5/minute")
 async def test_login(
+    request: Request,
     response: Response,
-    request: TestLoginRequest | None = None,
+    body: TestLoginRequest | None = None,
     db: Session = Depends(get_db),
 ) -> LoginResponse:
     """테스트 로그인 — ENABLE_TEST_LOGIN=true일 때만 동작"""
     if not settings.ENABLE_TEST_LOGIN:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
-    test_email = request.email if request and request.email else "test@bizi.com"
-    test_username = request.username if request and request.username else "테스트 사용자"
-    test_type_code = request.type_code if request and request.type_code else "U0000002"
+    test_email = body.email if body and body.email else "test@bizi.com"
+    test_username = body.username if body and body.username else "테스트 사용자"
+    test_type_code = body.type_code if body and body.type_code else "U0000002"
 
     user = db.execute(select(User).where(User.google_email == test_email)).scalar_one_or_none()
     if not user:
@@ -176,6 +185,7 @@ async def test_login(
 
 
 @router.post("/logout")
+@limiter.limit("10/minute")
 async def logout(
     request: Request,
     response: Response,
@@ -192,7 +202,7 @@ async def logout(
             exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
             if jti:
                 blacklist_token(jti, exp, db)
-        except JWTError:
+        except InvalidTokenError:
             pass
 
     # refresh_token 블랙리스트 등록
@@ -204,7 +214,7 @@ async def logout(
             exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
             if jti:
                 blacklist_token(jti, exp, db)
-        except JWTError:
+        except InvalidTokenError:
             pass
 
     clear_auth_cookies(response)
@@ -226,7 +236,7 @@ async def refresh(
 
     try:
         payload = jwt.decode(refresh_raw, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-    except JWTError:
+    except InvalidTokenError:
         clear_auth_cookies(response)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 리프레시 토큰입니다")
 

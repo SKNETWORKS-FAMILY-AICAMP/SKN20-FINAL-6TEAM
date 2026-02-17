@@ -1,6 +1,8 @@
 """일정 관리 API 라우터."""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
@@ -11,6 +13,7 @@ from apps.common.deps import get_current_user
 from apps.schedules.service import ScheduleService
 from .schemas import ScheduleCreate, ScheduleUpdate, ScheduleResponse
 
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/schedules", tags=["schedules"])
 
 
@@ -43,7 +46,9 @@ async def get_schedules(
 
 
 @router.post("", response_model=ScheduleResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
 async def create_schedule(
+    request: Request,
     schedule_data: ScheduleCreate,
     service: ScheduleService = Depends(get_schedule_service),
     current_user: User = Depends(get_current_user),
@@ -75,7 +80,9 @@ async def get_schedule(
 
 
 @router.put("/{schedule_id}", response_model=ScheduleResponse)
+@limiter.limit("20/minute")
 async def update_schedule(
+    request: Request,
     schedule_id: int,
     schedule_data: ScheduleUpdate,
     service: ScheduleService = Depends(get_schedule_service),
@@ -92,7 +99,9 @@ async def update_schedule(
 
 
 @router.delete("/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
 async def delete_schedule(
+    request: Request,
     schedule_id: int,
     service: ScheduleService = Depends(get_schedule_service),
     current_user: User = Depends(get_current_user),

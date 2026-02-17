@@ -1,6 +1,8 @@
 """상담 이력 API 라우터."""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -10,6 +12,7 @@ from apps.common.deps import get_current_user
 from apps.histories.service import HistoryService
 from .schemas import HistoryCreate, HistoryResponse
 
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/histories", tags=["histories"])
 
 
@@ -36,7 +39,9 @@ async def get_histories(
 
 
 @router.post("", response_model=HistoryResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
 async def create_history(
+    request: Request,
     history_data: HistoryCreate,
     service: HistoryService = Depends(get_history_service),
     current_user: User = Depends(get_current_user),
@@ -62,7 +67,9 @@ async def get_history(
 
 
 @router.delete("/{history_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
 async def delete_history(
+    request: Request,
     history_id: int,
     service: HistoryService = Depends(get_history_service),
     current_user: User = Depends(get_current_user),

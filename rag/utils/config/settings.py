@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -158,6 +158,9 @@ class Settings(BaseSettings):
     # -- ChromaDB --
     chroma_host: str = Field(default="localhost", description="ChromaDB 호스트")
     chroma_port: int = Field(default=8000, description="ChromaDB 포트")
+    chroma_auth_token: str = Field(
+        default="", description="ChromaDB 인증 토큰 (비어있으면 인증 비활성화)"
+    )
 
     # -- 외부 API --
     bizinfo_api_key: str = Field(default="", description="기업마당 API 키")
@@ -332,6 +335,8 @@ class Settings(BaseSettings):
     # [5] Server & Logging
     # ================================================================
 
+    environment: str = Field(default="development", description="실행 환경")
+
     cors_origins: list[str] = Field(
         default=["http://localhost:5173", "http://localhost:3000"],
         description="CORS 허용 오리진",
@@ -350,6 +355,31 @@ class Settings(BaseSettings):
         if upper not in allowed:
             raise ValueError(f"log_level은 {allowed} 중 하나여야 합니다 (입력: {v})")
         return upper
+
+    @model_validator(mode="after")
+    def enforce_production_security(self) -> "Settings":
+        """프로덕션 환경에서 보안 설정을 강제합니다."""
+        if self.environment == "production":
+            if not self.rag_api_key or not self.rag_api_key.strip():
+                raise ValueError(
+                    "프로덕션 환경에서 RAG_API_KEY가 설정되지 않았습니다."
+                )
+            if not self.mysql_password or not self.mysql_password.strip():
+                raise ValueError(
+                    "프로덕션 환경에서 MYSQL_PASSWORD가 설정되지 않았습니다."
+                )
+            # 프로덕션에서 CORS localhost 자동 제거
+            filtered = [
+                o for o in self.cors_origins
+                if "localhost" not in o and "127.0.0.1" not in o
+            ]
+            if len(filtered) != len(self.cors_origins):
+                logger.warning(
+                    "프로덕션에서 CORS_ORIGINS에서 localhost를 제거합니다: %s",
+                    [o for o in self.cors_origins if o not in filtered],
+                )
+                self.cors_origins = filtered if filtered else self.cors_origins
+        return self
 
     # ================================================================
     # CLI 런타임 오버라이드 (보안 관련 필드 제외)

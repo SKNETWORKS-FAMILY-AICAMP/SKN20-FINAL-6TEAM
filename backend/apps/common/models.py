@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean, JSON
+from sqlalchemy import Column, Date, Integer, String, DateTime, ForeignKey, Text, Boolean, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from config.database import Base
@@ -101,9 +101,21 @@ class Announce(Base):
 
     announce_id = Column(Integer, primary_key=True, autoincrement=True)
     ann_name = Column(String(255), nullable=False, default="", comment="공고 제목")
+    source_type = Column(String(20), nullable=False, default="", comment="bizinfo | kstartup")
+    source_id = Column(String(50), nullable=False, default="", comment="원본 API 공고 ID")
+    target_desc = Column(Text, comment="지원대상")
+    exclusion_desc = Column(Text, comment="제외대상")
+    amount_desc = Column(Text, comment="지원금액")
+    apply_start = Column(Date, comment="접수 시작일")
+    apply_end = Column(Date, comment="접수 종료일")
+    region = Column(String(100), default="", comment="지역")
+    organization = Column(String(200), default="", comment="주관기관명")
+    source_url = Column(String(500), default="", comment="원본 URL")
+    doc_s3_key = Column(String(500), default="", comment="공고문 원본 파일 S3 키")
+    form_s3_key = Column(String(500), default="", comment="신청양식 파일 S3 키")
     file_id = Column(Integer, ForeignKey("file.file_id", ondelete="SET NULL"), nullable=True, comment="공고 첨부파일")
     biz_code = Column(String(8), ForeignKey("code.code"), default="BA000000", comment="관련 업종코드")
-    host_gov_code = Column(String(8), ForeignKey("code.code"), default="H0000000", comment="주관기관 코드")
+    host_gov_code = Column(String(8), nullable=True, comment="주관기관 코드 (향후 매핑)")
     create_date = Column(DateTime, default=datetime.now)
     update_date = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     use_yn = Column(Boolean, nullable=False, default=True, comment="0: 미사용, 1: 사용")

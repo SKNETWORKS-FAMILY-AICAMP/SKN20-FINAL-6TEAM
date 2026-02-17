@@ -1,0 +1,18 @@
+[Unit]
+Description=Bizi 지원사업 공고 일일 배치 갱신
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/bizi
+EnvironmentFile=/home/ubuntu/bizi/.env
+ExecStart=/home/ubuntu/bizi/.venv/bin/python scripts/batch/update_announcements.py
+TimeoutStartSec=7200
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

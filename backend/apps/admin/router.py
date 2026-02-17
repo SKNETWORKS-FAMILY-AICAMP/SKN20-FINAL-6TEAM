@@ -1,6 +1,8 @@
 """관리자 API 라우터."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from datetime import datetime
 
@@ -16,6 +18,7 @@ from apps.admin.schemas import (
 )
 from apps.histories.schemas import HistoryDetailResponse
 
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
@@ -32,7 +35,9 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
 
 
 @router.get("/status", response_model=ServerStatusResponse)
+@limiter.limit("10/minute")
 async def get_server_status(
+    request: Request,
     service: AdminService = Depends(get_admin_service),
     _: User = Depends(require_admin),
 ) -> ServerStatusResponse:
@@ -44,7 +49,9 @@ async def get_server_status(
 
 
 @router.get("/histories", response_model=HistoryListResponse)
+@limiter.limit("30/minute")
 async def get_histories(
+    request: Request,
     page: int = Query(default=1, ge=1, description="페이지 번호"),
     page_size: int = Query(default=20, ge=1, le=100, description="페이지 크기"),
     start_date: datetime | None = Query(default=None, description="시작일"),
@@ -77,7 +84,9 @@ async def get_histories(
 
 
 @router.get("/histories/stats", response_model=EvaluationStats)
+@limiter.limit("10/minute")
 async def get_evaluation_stats(
+    request: Request,
     start_date: datetime | None = Query(default=None, description="시작일"),
     end_date: datetime | None = Query(default=None, description="종료일"),
     service: AdminService = Depends(get_admin_service),
@@ -91,7 +100,9 @@ async def get_evaluation_stats(
 
 
 @router.get("/histories/{history_id}", response_model=HistoryDetailResponse)
+@limiter.limit("30/minute")
 async def get_history_detail(
+    request: Request,
     history_id: int,
     service: AdminService = Depends(get_admin_service),
     _: User = Depends(require_admin),

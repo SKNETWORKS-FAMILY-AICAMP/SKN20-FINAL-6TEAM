@@ -1,11 +1,11 @@
 # Frontend Dockerfile - Vite + React
-FROM node:20-alpine
+FROM node:20-alpine3.21
 
 WORKDIR /app
 
 # Install dependencies
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm ci
 
 # Copy source code
 COPY . .

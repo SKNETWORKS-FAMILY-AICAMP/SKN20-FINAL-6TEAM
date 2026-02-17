@@ -1,7 +1,8 @@
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from jose import jwt, JWTError
+import jwt
+from jwt.exceptions import InvalidTokenError
 from config.database import get_db
 from config.settings import settings
 from apps.auth.token_blacklist import is_blacklisted
@@ -44,7 +45,7 @@ def get_current_user(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid authentication credentials",
             )
-    except JWTError:
+    except InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
@@ -58,3 +59,31 @@ def get_current_user(
             detail="User not found",
         )
     return user
+
+
+def get_optional_user(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> User | None:
+    """인증된 사용자를 반환하거나 게스트이면 None을 반환합니다."""
+    token = request.cookies.get("access_token")
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+        )
+        if payload.get("type") != "access":
+            return None
+        jti = payload.get("jti")
+        if jti and is_blacklisted(jti, db):
+            return None
+        user_email = payload.get("sub")
+        if not user_email:
+            return None
+        stmt = select(User).where(User.google_email == user_email, User.use_yn == True)
+        return db.execute(stmt).scalar_one_or_none()
+    except InvalidTokenError:
+        return None

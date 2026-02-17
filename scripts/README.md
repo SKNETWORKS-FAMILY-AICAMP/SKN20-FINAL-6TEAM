@@ -100,6 +100,46 @@ python -m scripts.preprocessing.preprocess_announcements
 | `DATA_ORIGIN_PATH` | 원본 데이터 경로 (기본: `data/origin`) | - |
 | `DATA_PROCESSED_PATH` | 전처리 데이터 경로 (기본: `data/preprocessed`) | - |
 
+## 배치 스크립트
+
+### update_announcements.py - 지원사업 공고 배치 갱신
+
+```bash
+python -m scripts.batch.update_announcements
+```
+
+- 기업마당/K-Startup API에서 공고 수집 → DB upsert
+- Slack 알림 (성공/실패)
+- systemd 타이머로 주기적 실행 가능 (`scripts/batch/systemd/`)
+
+### s3_uploader.py - 공고 첨부파일 S3 업로드
+
+공고 원본 파일/신청양식을 S3에 업로드하는 유틸리티
+
+## VectorDB 빌드 스크립트
+
+```bash
+# 전체 도메인 빌드
+python -m scripts.vectordb --all
+
+# 특정 도메인만 빌드
+python -m scripts.vectordb --domain startup_funding
+
+# 기존 데이터 이어서 빌드
+python -m scripts.vectordb --all --resume
+```
+
+- `scripts/vectordb/__main__.py`: CLI 진입점
+- `scripts/vectordb/builder.py`: ChromaDB 빌드 로직
+- `scripts/vectordb/loader.py`: JSONL 데이터 로더
+
+## 보안 유틸리티
+
+| 스크립트 | 설명 |
+|---------|------|
+| `scripts/validate_env.py` | 필수 환경변수 존재 여부 사전 검증 |
+| `scripts/load_secrets.sh` | AWS Secrets Manager에서 .env 파일 생성 |
+
 ## 관련 문서
 
 - [데이터 스키마 정의](../docs/DATA_SCHEMA.md)

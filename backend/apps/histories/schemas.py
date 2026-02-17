@@ -31,9 +31,9 @@ class EvaluationData(BaseModel):
 
 
 class HistoryCreate(BaseModel):
-    agent_code: str
-    question: str
-    answer: str
+    agent_code: str = Field(..., pattern=r"^A\d{7}$")
+    question: str = Field(..., min_length=1, max_length=5000)
+    answer: str = Field(..., min_length=1, max_length=50000)
     parent_history_id: int | None = None
     evaluation_data: EvaluationData | None = None
 

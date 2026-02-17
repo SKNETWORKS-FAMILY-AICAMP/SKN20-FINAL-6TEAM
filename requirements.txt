@@ -14,7 +14,7 @@ pymysql>=1.1.0
 cryptography>=42.0.0
 
 # Authentication
-python-jose[cryptography]>=3.3.0
+PyJWT[crypto]>=2.8.0
 passlib[bcrypt]>=1.7.4
 
 # Validation
@@ -59,6 +59,11 @@ tavily-python>=0.3.0
 # Document Generation
 reportlab>=4.0.0
 python-docx>=1.0.0
+
+# ===========================
+# AWS
+# ===========================
+boto3>=1.26.0
 
 # ===========================
 # Shared Utilities

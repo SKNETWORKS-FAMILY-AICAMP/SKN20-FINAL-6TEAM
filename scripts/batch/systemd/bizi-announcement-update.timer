@@ -1,0 +1,10 @@
+[Unit]
+Description=Bizi 공고 갱신 일일 타이머
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

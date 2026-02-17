@@ -3,10 +3,19 @@
 # 사용법: docker-compose -f docker-compose.local.yaml up --build
 # 삭제 시: 이 파일만 삭제하면 됨
 # ===========================================
+
+# 공통 환경변수 앵커 (backend ↔ rag 공유)
+x-db-env: &db-env
+  MYSQL_HOST: mysql
+  MYSQL_PORT: "3306"
+  MYSQL_DATABASE: ${MYSQL_DATABASE:-bizi_db}
+  MYSQL_USER: ${MYSQL_USER:-bizi}
+  MYSQL_PASSWORD: ${MYSQL_PASSWORD:-bizi1234}
+
 services:
   # Nginx Reverse Proxy
   nginx:
-    image: nginx:alpine
+    image: nginx:1.28-alpine
     container_name: bizi-nginx
     restart: unless-stopped
     ports:
@@ -14,13 +23,17 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
       - frontend
       - backend
-      - rag
 
   # 로컬 MySQL (AWS RDS 대체)
   mysql:
-    image: mysql:8.0
+    image: mysql:8.0.41
     container_name: bizi-mysql-local
     restart: unless-stopped
     environment:
@@ -45,6 +58,8 @@ services:
       start_period: 30s
     expose:
       - "3306"
+    networks:
+      - backend
 
   # FastAPI Backend
   backend:
@@ -56,15 +71,13 @@ services:
     expose:
       - "8000"
     environment:
-      - MYSQL_HOST=mysql
-      - MYSQL_PORT=3306
-      - MYSQL_DATABASE=${MYSQL_DATABASE:-bizi_db}
-      - MYSQL_USER=${MYSQL_USER:-bizi}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-bizi1234}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-local-dev-secret-key-at-least-32-chars-long}
-      - ENABLE_TEST_LOGIN=true
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      <<: *db-env
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-local-dev-secret-key-at-least-32-chars-long}
+      ENABLE_TEST_LOGIN: "true"
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      RAG_API_KEY: ${RAG_API_KEY:-}
+      RAG_SERVICE_URL: http://rag:8001
     depends_on:
       mysql:
         condition: service_healthy
@@ -75,6 +88,8 @@ services:
       retries: 3
       start_period: 15s
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - backend
 
   # React Frontend (Vite)
   frontend:
@@ -87,12 +102,10 @@ services:
     expose:
       - "5173"
     environment:
-      - VITE_API_URL=/api
-      - VITE_RAG_URL=/rag
-      - VITE_RAG_ENABLED=${RAG_ENABLED:-true}
-      - VITE_RAG_STREAMING=${VITE_RAG_STREAMING:-true}
-      - VITE_RAG_API_KEY=${RAG_API_KEY:-}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      VITE_API_URL: /api
+      VITE_RAG_ENABLED: ${RAG_ENABLED:-true}
+      VITE_RAG_STREAMING: ${VITE_RAG_STREAMING:-true}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     depends_on:
       - backend
     healthcheck:
@@ -102,6 +115,8 @@ services:
       retries: 3
       start_period: 30s
     command: npm run dev -- --host
+    networks:
+      - frontend
 
   # RAG Service (LangChain/FastAPI)
   rag:
@@ -114,23 +129,24 @@ services:
     expose:
       - "8001"
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - RAG_API_KEY=${RAG_API_KEY:-}
-      - BIZINFO_API_KEY=${BIZINFO_API_KEY:-}
-      - KSTARTUP_API_KEY=${KSTARTUP_API_KEY:-}
-      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      <<: *db-env
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      RAG_API_KEY: ${RAG_API_KEY:-}
+      BIZINFO_API_KEY: ${BIZINFO_API_KEY:-}
+      KSTARTUP_API_KEY: ${KSTARTUP_API_KEY:-}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       # ChromaDB 서버 연결
-      - CHROMA_HOST=chromadb
-      - CHROMA_PORT=8000
-      # MySQL (로컬)
-      - MYSQL_HOST=mysql
-      - MYSQL_PORT=3306
-      - MYSQL_DATABASE=${MYSQL_DATABASE:-bizi_db}
-      - MYSQL_USER=${MYSQL_USER:-bizi}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-bizi1234}
-      # RAG 설정
-      - ENABLE_HYBRID_SEARCH=${ENABLE_HYBRID_SEARCH:-true}
-      - ENABLE_RERANKING=${ENABLE_RERANKING:-true}
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: "8000"
+      CHROMA_AUTH_TOKEN: ${CHROMA_AUTH_TOKEN:-}
+      # RAG 검색 설정
+      ENABLE_HYBRID_SEARCH: ${ENABLE_HYBRID_SEARCH:-true}
+      ENABLE_RERANKING: ${ENABLE_RERANKING:-true}
+      ENABLE_DOMAIN_REJECTION: ${ENABLE_DOMAIN_REJECTION:-true}
+      ENABLE_LLM_EVALUATION: ${ENABLE_LLM_EVALUATION:-true}
+      ENABLE_LEGAL_SUPPLEMENT: ${ENABLE_LEGAL_SUPPLEMENT:-true}
+      ENABLE_VECTOR_DOMAIN_CLASSIFICATION: ${ENABLE_VECTOR_DOMAIN_CLASSIFICATION:-true}
+      ENABLE_LLM_DOMAIN_CLASSIFICATION: ${ENABLE_LLM_DOMAIN_CLASSIFICATION:-false}
     depends_on:
       mysql:
         condition: service_healthy
@@ -143,6 +159,8 @@ services:
       retries: 3
       start_period: 120s
     command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+    networks:
+      - backend
 
   # ChromaDB (벡터 데이터베이스 서버)
   chromadb:
@@ -154,13 +172,17 @@ services:
     volumes:
       - chromadb_data:/data
     environment:
-      - ANONYMIZED_TELEMETRY=false
+      ANONYMIZED_TELEMETRY: "false"
+      CHROMA_SERVER_AUTHN_PROVIDER: ${CHROMA_AUTH_TOKEN:+chromadb.auth.token_authn.TokenAuthenticationServerProvider}
+      CHROMA_SERVER_AUTHN_CREDENTIALS: ${CHROMA_AUTH_TOKEN:-}
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8000'"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+    networks:
+      - backend
 
   # VectorDB 빌드 서비스 (GPU 임베딩, 필요 시만 실행)
   # OPENAI_API_KEY 불필요 — 로컬 GPU 임베딩(EMBEDDING_PROVIDER=local) 사용
@@ -173,9 +195,10 @@ services:
       - ./scripts/vectordb:/scripts/vectordb:ro
       - ./data/preprocessed:/data/preprocessed:ro
     environment:
-      - CHROMA_HOST=chromadb
-      - CHROMA_PORT=8000
-      - EMBEDDING_PROVIDER=local
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: "8000"
+      CHROMA_AUTH_TOKEN: ${CHROMA_AUTH_TOKEN:-}
+      EMBEDDING_PROVIDER: local
     depends_on:
       chromadb:
         condition: service_healthy
@@ -187,7 +210,29 @@ services:
               count: 1
               capabilities: [gpu]
     command: ["python", "/scripts/vectordb", "--all"]
+    networks:
+      - backend
+
+  # LocalStack (S3 로컬 테스트, 필요 시만 실행)
+  # 사용법: docker compose -f docker-compose.local.yaml --profile s3 up -d localstack
+  localstack:
+    image: localstack/localstack:4.0
+    container_name: bizi-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3
+      - DEFAULT_REGION=ap-northeast-2
+    volumes:
+      - localstack_data:/var/lib/localstack
+    profiles:
+      - s3
+
+networks:
+  frontend:
+  backend:
 
 volumes:
   bizi-mysql-data:
   chromadb_data:
+  localstack_data:

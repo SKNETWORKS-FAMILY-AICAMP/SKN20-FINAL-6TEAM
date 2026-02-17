@@ -689,20 +689,55 @@ CREATE TABLE IF NOT EXISTS `file` (
 CREATE TABLE IF NOT EXISTS `announce` (
     `announce_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `ann_name` VARCHAR(255) NOT NULL DEFAULT '' COMMENT '공고 제목',
+    `source_type` VARCHAR(20) NOT NULL DEFAULT '' COMMENT 'bizinfo | kstartup',
+    `source_id` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '원본 API 공고 ID',
+    `target_desc` TEXT COMMENT '지원대상',
+    `exclusion_desc` TEXT COMMENT '제외대상',
+    `amount_desc` TEXT COMMENT '지원금액',
+    `apply_start` DATE DEFAULT NULL COMMENT '접수 시작일',
+    `apply_end` DATE DEFAULT NULL COMMENT '접수 종료일',
+    `region` VARCHAR(100) DEFAULT '' COMMENT '지역',
+    `organization` VARCHAR(200) DEFAULT '' COMMENT '주관기관명',
+    `source_url` VARCHAR(500) DEFAULT '' COMMENT '원본 URL',
+    `doc_s3_key` VARCHAR(500) DEFAULT '' COMMENT '공고문 원본 파일 S3 키',
+    `form_s3_key` VARCHAR(500) DEFAULT '' COMMENT '신청양식 파일 S3 키',
     `file_id` INT DEFAULT NULL COMMENT '공고 첨부파일',
     `biz_code` VARCHAR(8) NOT NULL DEFAULT 'BA000000' COMMENT '관련 업종코드',
-    `host_gov_code` VARCHAR(8) NOT NULL DEFAULT 'H0000000' COMMENT '주관기관 코드',
+    `host_gov_code` VARCHAR(8) DEFAULT NULL COMMENT '주관기관 코드 (향후 매핑)',
     `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `use_yn` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0: 미사용, 1: 사용',
 
     FOREIGN KEY (`file_id`) REFERENCES `file`(`file_id`) ON DELETE SET NULL,
     FOREIGN KEY (`biz_code`) REFERENCES `code`(`code`) ON UPDATE CASCADE,
-    FOREIGN KEY (`host_gov_code`) REFERENCES `code`(`code`) ON UPDATE CASCADE,
+    UNIQUE KEY `uk_source` (`source_type`, `source_id`),
     INDEX `idx_announce_biz_code` (`biz_code`),
-    INDEX `idx_announce_host_gov_code` (`host_gov_code`),
+    INDEX `idx_announce_source_type` (`source_type`),
+    INDEX `idx_announce_apply_end` (`apply_end`),
     INDEX `idx_announce_use_yn` (`use_yn`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- 6-1. Announce 테이블 확장 (배치 갱신용 컬럼 추가)
+-- ============================================
+-- ALTER TABLE은 기존 데이터가 있는 운영 DB에 적용할 때 사용합니다.
+-- CREATE TABLE이 이미 새 스키마를 반영하므로, 신규 설치 시에는 불필요합니다.
+--
+-- ALTER TABLE `announce`
+--   ADD COLUMN `source_type` VARCHAR(20) NOT NULL DEFAULT '' COMMENT 'bizinfo | kstartup' AFTER `ann_name`,
+--   ADD COLUMN `source_id` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '원본 API 공고 ID' AFTER `source_type`,
+--   ADD COLUMN `target_desc` TEXT COMMENT '지원대상' AFTER `source_id`,
+--   ADD COLUMN `exclusion_desc` TEXT COMMENT '제외대상' AFTER `target_desc`,
+--   ADD COLUMN `amount_desc` TEXT COMMENT '지원금액' AFTER `exclusion_desc`,
+--   ADD COLUMN `apply_start` DATE DEFAULT NULL COMMENT '접수 시작일' AFTER `amount_desc`,
+--   ADD COLUMN `apply_end` DATE DEFAULT NULL COMMENT '접수 종료일' AFTER `apply_start`,
+--   ADD COLUMN `region` VARCHAR(100) DEFAULT '' COMMENT '지역' AFTER `apply_end`,
+--   ADD COLUMN `organization` VARCHAR(200) DEFAULT '' COMMENT '주관기관명' AFTER `region`,
+--   ADD COLUMN `source_url` VARCHAR(500) DEFAULT '' COMMENT '원본 URL' AFTER `organization`,
+--   ADD COLUMN `doc_s3_key` VARCHAR(500) DEFAULT '' COMMENT '공고문 원본 파일 S3 키' AFTER `source_url`,
+--   ADD COLUMN `form_s3_key` VARCHAR(500) DEFAULT '' COMMENT '신청양식 파일 S3 키' AFTER `doc_s3_key`,
+--   MODIFY COLUMN `host_gov_code` VARCHAR(8) DEFAULT NULL COMMENT '주관기관 코드 (향후 매핑)',
+--   ADD UNIQUE KEY `uk_source` (`source_type`, `source_id`);
 
 -- ============================================
 -- 7. Schedule 테이블

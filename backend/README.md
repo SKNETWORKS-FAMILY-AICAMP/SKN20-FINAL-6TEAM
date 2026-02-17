@@ -50,7 +50,10 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 | `GOOGLE_REDIRECT_URI` | OAuth 콜백 URL | O |
 | `JWT_SECRET_KEY` | JWT 서명 키 | O |
 | `JWT_ALGORITHM` | JWT 알고리즘 (기본: HS256) | - |
-| `JWT_EXPIRE_MINUTES` | 토큰 만료 시간 (기본: 60) | - |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Access 토큰 만료 시간 (기본: 5분) | - |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | Refresh 토큰 만료 기간 (기본: 7일) | - |
+| `RAG_API_KEY` | RAG 서비스 인증 키 | - |
+| `RAG_SERVICE_URL` | RAG 서비스 URL (기본: `http://rag:8001`) | - |
 
 ## 프로젝트 구조
 
@@ -70,6 +73,7 @@ backend/
     ├── histories/        # 상담 이력
     ├── schedules/        # 일정 관리
     ├── admin/            # 관리자 대시보드, 서버 상태
+    ├── rag/              # RAG 채팅 프록시 (Backend 경유)
     └── common/
         ├── models.py     # SQLAlchemy 모델
         └── deps.py       # 의존성 (get_db, get_current_user)
@@ -123,6 +127,14 @@ backend/
 | POST | `/schedules` | 일정 등록 |
 | PUT | `/schedules/{id}` | 일정 수정 |
 | DELETE | `/schedules/{id}` | 일정 삭제 |
+
+### RAG 프록시
+
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| POST | `/rag/chat` | RAG 채팅 프록시 (비스트리밍) |
+| POST | `/rag/chat/stream` | RAG 채팅 프록시 (SSE 스트리밍) |
+| GET | `/rag/health` | RAG 서비스 헬스체크 프록시 |
 
 ### 관리자 (U0000001 권한 필요)
 

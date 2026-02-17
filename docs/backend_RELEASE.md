@@ -1,5 +1,27 @@
 # Release Notes
 
+## [2026-02-17] - 보안 감사 Phase 0~6 일괄 적용 + RAG 프록시 + 공고 배치
+
+### Features
+- **RAG 프록시 라우터** (`apps/rag/`): Backend 경유 RAG 채팅 프록시 (비스트리밍 + SSE 스트리밍), 인증된 사용자의 기업 컨텍스트 자동 주입, `get_optional_user` 의존성으로 게스트/인증 모두 지원
+- **토큰 블랙리스트 자동 정리**: `lifespan` 이벤트로 1시간마다 만료 토큰 정리 (`_cleanup_blacklist_loop`)
+- **Announce 테이블 확장**: `source_type`, `source_id`, `target_desc`, `exclusion_desc`, `amount_desc`, `apply_start`, `apply_end`, `region`, `organization`, `source_url`, `doc_s3_key`, `form_s3_key` 컬럼 추가 (배치 갱신용)
+
+### Security
+- **프로덕션 보안 강제** (`settings.py`): `enforce_production_security` 모델 검증기 — COOKIE_SECURE 강제, MYSQL_PASSWORD 필수, TEST_LOGIN 강제 비활성화, RAG_API_KEY 미설정 경고, CORS localhost 자동 제거
+- **jose → PyJWT 전환**: `python-jose` → `PyJWT` 라이브러리 교체 (`jwt.decode`, `InvalidTokenError`)
+- **CSRF 미들웨어 개선**: JSON Content-Type은 CSRF-safe 판정, multipart는 X-Requested-With 필수
+- **쿠키 삭제 보안**: `clear_auth_cookies`에 `secure`/`samesite` 속성 명시
+- **프로덕션 전역 예외 핸들러**: `ENVIRONMENT=production` 시 스택 트레이스 노출 방지
+- **Admin Rate Limiting**: `/status` 10/min, `/histories` 30/min, `/histories/stats` 10/min, `/histories/{id}` 30/min
+- **테스트 로그인 Rate Limiting**: `/test-login` 5/min, `/logout` 10/min 추가
+- **ACCESS_TOKEN_EXPIRE_MINUTES**: 15분 → 5분 단축
+
+### Refactoring
+- **Dockerfile.prod 멀티스테이지 빌드**: 단일 스테이지 → 2단계 (builder + runtime), gcc/pkg-config 프로덕션 이미지에서 제거
+- **non-root 컨테이너**: `appuser:appgroup` (UID/GID 1001) 사용자로 실행
+- **get_optional_user 의존성** (`deps.py`): 게스트 허용 엔드포인트용 선택적 인증 함수 추가
+
 ## [2026-02-15] - 전체 프로젝트 리팩토링 (코드 품질 개선)
 
 ### Refactoring

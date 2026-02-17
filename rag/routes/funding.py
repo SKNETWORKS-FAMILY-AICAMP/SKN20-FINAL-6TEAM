@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
-from routes._state import vector_store
+from routes import _state
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +18,11 @@ async def search_funding(
     k: int = Query(default=10, description="검색 결과 개수"),
 ) -> dict[str, Any]:
     """VectorDB에서 지원사업 공고를 검색합니다."""
-    if not vector_store:
+    if not _state.vector_store:
         raise HTTPException(status_code=503, detail="서비스가 초기화되지 않았습니다")
 
     try:
-        results = vector_store.similarity_search(
+        results = _state.vector_store.similarity_search(
             query=query,
             domain="startup_funding",
             k=k,

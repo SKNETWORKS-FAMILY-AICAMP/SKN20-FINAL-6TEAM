@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from routes._state import router_agent
+from routes import _state
 from schemas import ChatRequest, ChatResponse
 from schemas.response import StreamResponse
 from utils.cache import get_response_cache
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api", tags=["Chat"])
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
     """사용자 메시지를 처리하고 AI 응답을 반환합니다."""
-    if not router_agent:
+    if not _state.router_agent:
         raise HTTPException(status_code=503, detail="서비스가 초기화되지 않았습니다")
 
     try:
@@ -41,7 +41,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         start_time = time.time()
 
         async with RequestTokenTracker() as tracker:
-            response = await router_agent.aprocess(
+            response = await _state.router_agent.aprocess(
                 query=request.message,
                 user_context=request.user_context,
                 history=[msg.model_dump() for msg in request.history],
@@ -135,7 +135,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
 @router.post("/chat/stream")
 async def chat_stream(request: ChatRequest):
     """SSE 스트리밍 채팅 엔드포인트."""
-    if not router_agent:
+    if not _state.router_agent:
         raise HTTPException(status_code=503, detail="서비스가 초기화되지 않았습니다")
 
     async def generate():
@@ -197,7 +197,7 @@ async def chat_stream(request: ChatRequest):
 
             async with RequestTokenTracker() as tracker:
                 token_index = 0
-                async for chunk in router_agent.astream(
+                async for chunk in _state.router_agent.astream(
                     query=request.message,
                     user_context=request.user_context,
                     history=[msg.model_dump() for msg in request.history],
@@ -350,10 +350,10 @@ async def chat_stream(request: ChatRequest):
             yield f"data: {done_chunk.model_dump_json()}\n\n"
 
         except Exception as e:
-            logger.error(f"스트리밍 채팅 오류: {e}")
+            logger.error("스트리밍 채팅 오류: %s", e, exc_info=True)
             error_chunk = StreamResponse(
                 type="error",
-                content=str(e),
+                content="죄송합니다. 요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
             )
             yield f"data: {error_chunk.model_dump_json()}\n\n"
 

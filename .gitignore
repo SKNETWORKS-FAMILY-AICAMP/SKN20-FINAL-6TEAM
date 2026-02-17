@@ -55,12 +55,14 @@ data/origin/
 data/preprocessed
 
 # =============================================
-# VectorDB
+# VectorDB (데이터 파일만 무시, 소스 코드 제외)
 # =============================================
 rag/vectordb/
-vectordb/
+/vectordb/
+!scripts/vectordb/
 vectordb.zip
 chromadb_backup.tar.gz
+chromadb_backup.manifest
 
 # =============================================
 # macOS 아티팩트
@@ -92,3 +94,11 @@ web-design-guidelines/
 # 전처리 캐시
 # =============================================
 scripts/preprocessing/_cache_*.json
+
+# =============================================
+# 배치 임시 파일
+# =============================================
+data/origin/batch_temp/
+scripts/crawling/output/
+scripts/crawling/temp/
+scripts/crawling/forms/
