@@ -1,6 +1,7 @@
 """MySQL 기반 도메인 설정 관리.
 
 DomainConfig 데이터클래스와 DB CRUD 함수를 제공합니다.
+domain 테이블 대신 code 테이블(code_id INT PK)을 직접 참조합니다.
 """
 
 import json
@@ -17,6 +18,18 @@ from utils.config.domain_data import (
 from utils.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
+
+# code 테이블 code 값 → 내부 domain_key 매핑
+# code 테이블의 A 코드(에이전트)가 domain을 대표합니다.
+AGENT_CODE_TO_DOMAIN: dict[str, str] = {
+    "A0000002": "startup_funding",
+    "A0000003": "finance_tax",
+    "A0000004": "hr_labor",
+    "A0000007": "law_common",
+}
+
+# 역방향 매핑
+DOMAIN_TO_AGENT_CODE: dict[str, str] = {v: k for k, v in AGENT_CODE_TO_DOMAIN.items()}
 
 
 @dataclass
@@ -74,16 +87,16 @@ def _tables_exist(conn: pymysql.Connection) -> bool:
     with conn.cursor() as cursor:
         cursor.execute(
             "SELECT COUNT(*) AS cnt FROM information_schema.tables "
-            "WHERE table_schema = DATABASE() AND table_name = 'domain'"
+            "WHERE table_schema = DATABASE() AND table_name = 'domain_keyword'"
         )
         result = cursor.fetchone()
         return result["cnt"] > 0
 
 
 def _has_data(conn: pymysql.Connection) -> bool:
-    """도메인 테이블에 데이터가 있는지 확인합니다."""
+    """도메인 키워드 테이블에 데이터가 있는지 확인합니다."""
     with conn.cursor() as cursor:
-        cursor.execute("SELECT COUNT(*) AS cnt FROM domain")
+        cursor.execute("SELECT COUNT(*) AS cnt FROM domain_keyword")
         result = cursor.fetchone()
         return result["cnt"] > 0
 
@@ -119,109 +132,105 @@ def _create_tables(conn: pymysql.Connection) -> None:
     """테이블을 생성합니다."""
     with conn.cursor() as cursor:
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS `domain` (
-                `domain_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                `domain_key` VARCHAR(50) NOT NULL UNIQUE,
-                `name` VARCHAR(100) NOT NULL,
-                `sort_order` INT DEFAULT 0,
-                `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
-                `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                `use_yn` TINYINT(1) NOT NULL DEFAULT 1
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        """)
-        cursor.execute("""
             CREATE TABLE IF NOT EXISTS `domain_keyword` (
                 `keyword_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                `domain_id` INT NOT NULL,
+                `code_id` INT NOT NULL COMMENT 'code 테이블 PK',
                 `keyword` VARCHAR(100) NOT NULL,
                 `keyword_type` VARCHAR(20) DEFAULT 'noun',
                 `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
                 `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 `use_yn` TINYINT(1) NOT NULL DEFAULT 1,
-                FOREIGN KEY (`domain_id`) REFERENCES `domain`(`domain_id`) ON DELETE CASCADE,
-                UNIQUE KEY `uq_domain_keyword` (`domain_id`, `keyword`)
+                FOREIGN KEY (`code_id`) REFERENCES `code`(`code_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+                UNIQUE KEY `uq_code_keyword` (`code_id`, `keyword`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS `domain_compound_rule` (
                 `rule_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                `domain_id` INT NOT NULL,
+                `code_id` INT NOT NULL COMMENT 'code 테이블 PK',
                 `required_lemmas` JSON NOT NULL,
                 `description` VARCHAR(255) DEFAULT NULL,
                 `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
                 `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 `use_yn` TINYINT(1) NOT NULL DEFAULT 1,
-                FOREIGN KEY (`domain_id`) REFERENCES `domain`(`domain_id`) ON DELETE CASCADE
+                FOREIGN KEY (`code_id`) REFERENCES `code`(`code_id`) ON DELETE CASCADE ON UPDATE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS `domain_representative_query` (
                 `query_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                `domain_id` INT NOT NULL,
+                `code_id` INT NOT NULL COMMENT 'code 테이블 PK',
                 `query_text` VARCHAR(500) NOT NULL,
                 `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
                 `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 `use_yn` TINYINT(1) NOT NULL DEFAULT 1,
-                FOREIGN KEY (`domain_id`) REFERENCES `domain`(`domain_id`) ON DELETE CASCADE
+                FOREIGN KEY (`code_id`) REFERENCES `code`(`code_id`) ON DELETE CASCADE ON UPDATE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """)
     conn.commit()
     logger.info("[도메인 설정 DB] 테이블 생성 완료")
 
 
+def _get_code_id_map(conn: pymysql.Connection) -> dict[str, int]:
+    """code 테이블에서 agent_code → code_id 매핑을 조회합니다.
+
+    Returns:
+        {agent_code_str: code_id_int} 딕셔너리
+    """
+    placeholders = ", ".join(["%s"] * len(AGENT_CODE_TO_DOMAIN))
+    with conn.cursor() as cursor:
+        cursor.execute(
+            f"SELECT code_id, code FROM `code` WHERE `code` IN ({placeholders})",
+            list(AGENT_CODE_TO_DOMAIN.keys()),
+        )
+        return {row["code"]: row["code_id"] for row in cursor.fetchall()}
+
+
 def _seed_data(conn: pymysql.Connection) -> None:
     """현재 하드코딩 값으로 시드 데이터를 삽입합니다."""
     default = _get_default_config()
-
-    domain_names = {
-        "startup_funding": "창업/지원사업",
-        "finance_tax": "재무/세무",
-        "hr_labor": "인사/노무",
-        "law_common": "법률",
-    }
-
-    domain_ids: dict[str, int] = {}
+    code_id_map = _get_code_id_map(conn)
 
     with conn.cursor() as cursor:
-        # 도메인 삽입
-        for i, domain_key in enumerate(["startup_funding", "finance_tax", "hr_labor", "law_common"]):
-            name = domain_names[domain_key]
-            cursor.execute(
-                "INSERT INTO domain (domain_key, name, sort_order) VALUES (%s, %s, %s)",
-                (domain_key, name, i),
-            )
-            domain_ids[domain_key] = cursor.lastrowid
-
         # 키워드 삽입
         for domain_key, keywords in default.keywords.items():
-            domain_id = domain_ids[domain_key]
+            agent_code = DOMAIN_TO_AGENT_CODE.get(domain_key)
+            code_id = code_id_map.get(agent_code) if agent_code else None
+            if not code_id:
+                continue
             for kw in keywords:
                 kw_type = "verb" if kw.endswith("다") else "noun"
                 cursor.execute(
-                    "INSERT INTO domain_keyword (domain_id, keyword, keyword_type) "
+                    "INSERT IGNORE INTO domain_keyword (code_id, keyword, keyword_type) "
                     "VALUES (%s, %s, %s)",
-                    (domain_id, kw, kw_type),
+                    (code_id, kw, kw_type),
                 )
 
         # 복합 규칙 삽입
         for domain_key, required_lemmas in default.compound_rules:
-            domain_id = domain_ids[domain_key]
+            agent_code = DOMAIN_TO_AGENT_CODE.get(domain_key)
+            code_id = code_id_map.get(agent_code) if agent_code else None
+            if not code_id:
+                continue
             lemmas_json = json.dumps(sorted(required_lemmas), ensure_ascii=False)
             desc = "+".join(sorted(required_lemmas)) + " → " + domain_key
             cursor.execute(
-                "INSERT INTO domain_compound_rule (domain_id, required_lemmas, description) "
+                "INSERT INTO domain_compound_rule (code_id, required_lemmas, description) "
                 "VALUES (%s, %s, %s)",
-                (domain_id, lemmas_json, desc),
+                (code_id, lemmas_json, desc),
             )
 
         # 대표 쿼리 삽입
         for domain_key, queries in default.representative_queries.items():
-            domain_id = domain_ids[domain_key]
+            agent_code = DOMAIN_TO_AGENT_CODE.get(domain_key)
+            code_id = code_id_map.get(agent_code) if agent_code else None
+            if not code_id:
+                continue
             for query_text in queries:
                 cursor.execute(
-                    "INSERT INTO domain_representative_query (domain_id, query_text) "
+                    "INSERT INTO domain_representative_query (code_id, query_text) "
                     "VALUES (%s, %s)",
-                    (domain_id, query_text),
+                    (code_id, query_text),
                 )
 
 
@@ -244,41 +253,38 @@ def load_domain_config() -> DomainConfig:
             logger.warning("[도메인 설정 DB] 테이블/데이터 없음, 하드코딩 기본값 사용")
             return _get_default_config()
 
+        # code 테이블에서 code_id → domain_key 매핑 구성
+        code_id_map = _get_code_id_map(conn)
+        # {code_id_int: domain_key_str}
+        id_to_domain: dict[int, str] = {
+            code_id: AGENT_CODE_TO_DOMAIN[agent_code]
+            for agent_code, code_id in code_id_map.items()
+            if agent_code in AGENT_CODE_TO_DOMAIN
+        }
+
         config = DomainConfig()
 
         with conn.cursor() as cursor:
-            # 활성 도메인 조회
-            cursor.execute(
-                "SELECT domain_id, domain_key FROM domain "
-                "WHERE use_yn = 1 ORDER BY sort_order"
-            )
-            domains = cursor.fetchall()
-
-            domain_map: dict[int, str] = {
-                row["domain_id"]: row["domain_key"] for row in domains
-            }
-
             # 키워드 로드
-            for domain_id, domain_key in domain_map.items():
+            for code_id, domain_key in id_to_domain.items():
                 cursor.execute(
                     "SELECT keyword FROM domain_keyword "
-                    "WHERE domain_id = %s AND use_yn = 1",
-                    (domain_id,),
+                    "WHERE code_id = %s AND use_yn = 1",
+                    (code_id,),
                 )
                 config.keywords[domain_key] = [
                     row["keyword"] for row in cursor.fetchall()
                 ]
 
             # 복합 규칙 로드
-            for domain_id, domain_key in domain_map.items():
+            for code_id, domain_key in id_to_domain.items():
                 cursor.execute(
                     "SELECT required_lemmas FROM domain_compound_rule "
-                    "WHERE domain_id = %s AND use_yn = 1",
-                    (domain_id,),
+                    "WHERE code_id = %s AND use_yn = 1",
+                    (code_id,),
                 )
                 for row in cursor.fetchall():
                     lemmas_raw = row["required_lemmas"]
-                    # MySQL JSON 컬럼은 이미 파싱된 리스트로 반환될 수 있음
                     if isinstance(lemmas_raw, str):
                         lemmas = set(json.loads(lemmas_raw))
                     else:
@@ -286,11 +292,11 @@ def load_domain_config() -> DomainConfig:
                     config.compound_rules.append((domain_key, lemmas))
 
             # 대표 쿼리 로드
-            for domain_id, domain_key in domain_map.items():
+            for code_id, domain_key in id_to_domain.items():
                 cursor.execute(
                     "SELECT query_text FROM domain_representative_query "
-                    "WHERE domain_id = %s AND use_yn = 1",
-                    (domain_id,),
+                    "WHERE code_id = %s AND use_yn = 1",
+                    (code_id,),
                 )
                 config.representative_queries[domain_key] = [
                     row["query_text"] for row in cursor.fetchall()

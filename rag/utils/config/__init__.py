@@ -5,6 +5,8 @@
 """
 
 from utils.config.domain_config import (
+    AGENT_CODE_TO_DOMAIN,
+    DOMAIN_TO_AGENT_CODE,
     DomainConfig,
     _get_connection,
     _get_default_config,
@@ -36,6 +38,8 @@ __all__ = [
     "_DEFAULT_DOMAIN_KEYWORDS",
     "_DEFAULT_DOMAIN_COMPOUND_RULES",
     # domain_config
+    "AGENT_CODE_TO_DOMAIN",
+    "DOMAIN_TO_AGENT_CODE",
     "DomainConfig",
     "init_db",
     "load_domain_config",

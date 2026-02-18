@@ -11,7 +11,7 @@ from routes import _state
 from schemas import ChatRequest, ChatResponse
 from schemas.response import StreamResponse
 from utils.cache import get_response_cache
-from utils.chat_logger import log_chat_interaction, log_ragas_metrics
+from utils.chat_logger import log_chat_interaction
 from utils.config import get_settings
 from utils.token_tracker import RequestTokenTracker
 
@@ -60,36 +60,6 @@ async def chat(request: ChatRequest) -> ChatResponse:
             evaluation=response.evaluation,
             token_usage=token_usage,
         )
-
-        # RAGAS 정량 평가 (설정 활성화 시)
-        if settings.enable_ragas_evaluation:
-            try:
-                from evaluation.ragas_evaluator import RagasEvaluator
-
-                ragas_eval = RagasEvaluator()
-                if ragas_eval.is_available:
-                    contexts = [
-                        s.content
-                        for s in response.sources
-                        if s.content and s.content.strip()
-                    ]
-                    if contexts:
-                        ragas_metrics = ragas_eval.evaluate_single(
-                            question=request.message,
-                            answer=response.content,
-                            contexts=contexts,
-                        )
-                        if ragas_metrics.available:
-                            log_ragas_metrics(
-                                question=request.message,
-                                answer=response.content,
-                                metrics_dict=ragas_metrics.to_dict(),
-                                domains=response.domains,
-                                response_time=response_time,
-                            )
-                            response.ragas_metrics = ragas_metrics.to_dict()
-            except Exception as e:
-                logger.warning(f"RAGAS 평가 실패 (무시됨): {e}")
 
         # evaluation_data 생성
         try:
