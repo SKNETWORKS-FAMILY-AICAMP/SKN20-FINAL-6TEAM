@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 
 # RAGAS 가용 여부 확인 (선택적 의존성)
 _RAGAS_AVAILABLE = False
+_KOREAN_PROMPTS_AVAILABLE = False
+_ragas_llm_factory = None
+
+# 1단계: 핵심 공개 API — RAGAS 동작에 필수
 try:
     from ragas import evaluate as ragas_evaluate
     from ragas.metrics import (
@@ -25,135 +29,7 @@ try:
         context_recall,
         faithfulness,
     )
-    from ragas.metrics._answer_relevance import (
-        ResponseRelevanceInput,
-        ResponseRelevanceOutput,
-        ResponseRelevancePrompt,
-    )
-    from ragas.metrics._faithfulness import (
-        NLIStatementInput,
-        NLIStatementOutput,
-        NLIStatementPrompt,
-        StatementFaithfulnessAnswer,
-        StatementGeneratorInput,
-        StatementGeneratorOutput,
-        StatementGeneratorPrompt,
-    )
     from datasets import Dataset
-
-    # ── 한국어 프롬프트 커스터마이징 ──
-
-    class KoreanResponseRelevancePrompt(ResponseRelevancePrompt):
-        """answer_relevancy용 한국어 질문 생성 프롬프트."""
-
-        instruction = (
-            "주어진 답변에 대한 질문을 반드시 한국어로 생성하세요. "
-            "또한 답변이 비확정적(noncommittal)인지 판단하세요. "
-            "답변이 모호하거나 회피적이면 noncommittal을 1로, "
-            "확정적이고 구체적이면 0으로 설정하세요. "
-            '"잘 모르겠습니다", "확실하지 않습니다" 등이 비확정적 답변의 예입니다.'
-        )
-        examples = [
-            (
-                ResponseRelevanceInput(
-                    response="근로기준법 제34조에 따르면, 사용자는 근로자가 "
-                    "퇴직한 경우에 1년 이상 계속 근로한 근로자에게 퇴직금을 "
-                    "지급해야 합니다. 퇴직금은 1일 평균임금 × 30일 × "
-                    "(재직일수/365)로 계산합니다.",
-                ),
-                ResponseRelevanceOutput(
-                    question="퇴직금 계산 방법은 어떻게 되나요?",
-                    noncommittal=0,
-                ),
-            ),
-            (
-                ResponseRelevanceInput(
-                    response="해당 질문에 대해서는 정확한 정보를 제공하기 "
-                    "어렵습니다. 구체적인 사항은 관할 세무서나 전문 세무사에게 "
-                    "문의하시기 바랍니다.",
-                ),
-                ResponseRelevanceOutput(
-                    question="특정 세무 관련 사항은 어떻게 처리하나요?",
-                    noncommittal=1,
-                ),
-            ),
-        ]
-
-    class KoreanStatementGeneratorPrompt(StatementGeneratorPrompt):
-        """faithfulness용 한국어 statement 추출 프롬프트."""
-
-        instruction = (
-            "질문과 답변이 주어지면, 답변의 각 문장을 분석하여 "
-            "독립적으로 이해 가능한 진술문(statement)으로 분해하세요. "
-            "대명사를 사용하지 말고 명확한 주어를 사용하세요. "
-            "반드시 한국어로 작성하세요. JSON 형식으로 출력하세요."
-        )
-        examples = [
-            (
-                StatementGeneratorInput(
-                    question="퇴직금 지급 기준은 무엇인가요?",
-                    answer="근로기준법에 따르면 1년 이상 계속 근로한 근로자에게 "
-                    "퇴직금을 지급해야 합니다. 퇴직금은 1일 평균임금에 30일을 "
-                    "곱한 금액에 재직일수를 365로 나눈 비율을 적용합니다.",
-                ),
-                StatementGeneratorOutput(
-                    statements=[
-                        "근로기준법에 따르면 1년 이상 계속 근로한 근로자에게 퇴직금을 지급해야 한다.",
-                        "퇴직금은 1일 평균임금에 30일을 곱한 금액으로 계산한다.",
-                        "퇴직금 계산 시 재직일수를 365로 나눈 비율을 적용한다.",
-                    ]
-                ),
-            )
-        ]
-
-    class KoreanNLIStatementPrompt(NLIStatementPrompt):
-        """faithfulness용 한국어 NLI 판정 프롬프트."""
-
-        instruction = (
-            "주어진 컨텍스트를 기반으로 각 진술문의 사실 일관성을 판단하세요. "
-            "진술문이 컨텍스트에서 직접 추론 가능하면 verdict를 1로, "
-            "추론할 수 없으면 0으로 설정하세요."
-        )
-        examples = [
-            (
-                NLIStatementInput(
-                    context="근로기준법 제34조에 따르면 사용자는 계속근로기간 "
-                    "1년에 대하여 30일분 이상의 평균임금을 퇴직금으로 "
-                    "퇴직하는 근로자에게 지급해야 한다.",
-                    statements=[
-                        "퇴직금은 1년 이상 근로한 근로자에게 지급된다.",
-                        "퇴직금은 평균임금을 기준으로 계산된다.",
-                        "퇴직금은 근로자의 요청 없이도 자동 지급된다.",
-                    ],
-                ),
-                NLIStatementOutput(
-                    statements=[
-                        StatementFaithfulnessAnswer(
-                            statement="퇴직금은 1년 이상 근로한 근로자에게 지급된다.",
-                            reason="컨텍스트에서 '계속근로기간 1년에 대하여' 퇴직금을 지급한다고 명시되어 있다.",
-                            verdict=1,
-                        ),
-                        StatementFaithfulnessAnswer(
-                            statement="퇴직금은 평균임금을 기준으로 계산된다.",
-                            reason="컨텍스트에서 '30일분 이상의 평균임금을 퇴직금으로' 지급한다고 명시되어 있다.",
-                            verdict=1,
-                        ),
-                        StatementFaithfulnessAnswer(
-                            statement="퇴직금은 근로자의 요청 없이도 자동 지급된다.",
-                            reason="컨텍스트에는 자동 지급 여부에 대한 언급이 없다.",
-                            verdict=0,
-                        ),
-                    ]
-                ),
-            ),
-        ]
-
-    from ragas.llms import llm_factory as _ragas_llm_factory
-
-    # 메트릭에 한국어 프롬프트 적용
-    answer_relevancy.question_generation = KoreanResponseRelevancePrompt()
-    faithfulness.statement_generator_prompt = KoreanStatementGeneratorPrompt()
-    faithfulness.nli_statements_prompt = KoreanNLIStatementPrompt()
 
     _RAGAS_AVAILABLE = True
 except ImportError:
@@ -162,6 +38,147 @@ except ImportError:
         "RAGAS 평가 기능이 비활성화됩니다. "
         "설치: pip install ragas datasets"
     )
+
+# 2단계: 한국어 프롬프트 커스터마이징 — 내부 API 실패해도 RAGAS는 동작
+if _RAGAS_AVAILABLE:
+    try:
+        from ragas.metrics._answer_relevance import (
+            ResponseRelevanceInput,
+            ResponseRelevanceOutput,
+            ResponseRelevancePrompt,
+        )
+        from ragas.metrics._faithfulness import (
+            NLIStatementInput,
+            NLIStatementOutput,
+            NLIStatementPrompt,
+            StatementFaithfulnessAnswer,
+            StatementGeneratorInput,
+            StatementGeneratorOutput,
+            StatementGeneratorPrompt,
+        )
+
+        # ── 한국어 프롬프트 커스터마이징 ──
+
+        class KoreanResponseRelevancePrompt(ResponseRelevancePrompt):
+            """answer_relevancy용 한국어 질문 생성 프롬프트."""
+
+            instruction = (
+                "주어진 답변에 대한 질문을 반드시 한국어로 생성하세요. "
+                "또한 답변이 비확정적(noncommittal)인지 판단하세요. "
+                "답변이 모호하거나 회피적이면 noncommittal을 1로, "
+                "확정적이고 구체적이면 0으로 설정하세요. "
+                '"잘 모르겠습니다", "확실하지 않습니다" 등이 비확정적 답변의 예입니다.'
+            )
+            examples = [
+                (
+                    ResponseRelevanceInput(
+                        response="근로기준법 제34조에 따르면, 사용자는 근로자가 "
+                        "퇴직한 경우에 1년 이상 계속 근로한 근로자에게 퇴직금을 "
+                        "지급해야 합니다. 퇴직금은 1일 평균임금 × 30일 × "
+                        "(재직일수/365)로 계산합니다.",
+                    ),
+                    ResponseRelevanceOutput(
+                        question="퇴직금 계산 방법은 어떻게 되나요?",
+                        noncommittal=0,
+                    ),
+                ),
+                (
+                    ResponseRelevanceInput(
+                        response="해당 질문에 대해서는 정확한 정보를 제공하기 "
+                        "어렵습니다. 구체적인 사항은 관할 세무서나 전문 세무사에게 "
+                        "문의하시기 바랍니다.",
+                    ),
+                    ResponseRelevanceOutput(
+                        question="특정 세무 관련 사항은 어떻게 처리하나요?",
+                        noncommittal=1,
+                    ),
+                ),
+            ]
+
+        class KoreanStatementGeneratorPrompt(StatementGeneratorPrompt):
+            """faithfulness용 한국어 statement 추출 프롬프트."""
+
+            instruction = (
+                "질문과 답변이 주어지면, 답변의 각 문장을 분석하여 "
+                "독립적으로 이해 가능한 진술문(statement)으로 분해하세요. "
+                "대명사를 사용하지 말고 명확한 주어를 사용하세요. "
+                "반드시 한국어로 작성하세요. JSON 형식으로 출력하세요."
+            )
+            examples = [
+                (
+                    StatementGeneratorInput(
+                        question="퇴직금 지급 기준은 무엇인가요?",
+                        answer="근로기준법에 따르면 1년 이상 계속 근로한 근로자에게 "
+                        "퇴직금을 지급해야 합니다. 퇴직금은 1일 평균임금에 30일을 "
+                        "곱한 금액에 재직일수를 365로 나눈 비율을 적용합니다.",
+                    ),
+                    StatementGeneratorOutput(
+                        statements=[
+                            "근로기준법에 따르면 1년 이상 계속 근로한 근로자에게 퇴직금을 지급해야 한다.",
+                            "퇴직금은 1일 평균임금에 30일을 곱한 금액으로 계산한다.",
+                            "퇴직금 계산 시 재직일수를 365로 나눈 비율을 적용한다.",
+                        ]
+                    ),
+                )
+            ]
+
+        class KoreanNLIStatementPrompt(NLIStatementPrompt):
+            """faithfulness용 한국어 NLI 판정 프롬프트."""
+
+            instruction = (
+                "주어진 컨텍스트를 기반으로 각 진술문의 사실 일관성을 판단하세요. "
+                "진술문이 컨텍스트에서 직접 추론 가능하면 verdict를 1로, "
+                "추론할 수 없으면 0으로 설정하세요."
+            )
+            examples = [
+                (
+                    NLIStatementInput(
+                        context="근로기준법 제34조에 따르면 사용자는 계속근로기간 "
+                        "1년에 대하여 30일분 이상의 평균임금을 퇴직금으로 "
+                        "퇴직하는 근로자에게 지급해야 한다.",
+                        statements=[
+                            "퇴직금은 1년 이상 근로한 근로자에게 지급된다.",
+                            "퇴직금은 평균임금을 기준으로 계산된다.",
+                            "퇴직금은 근로자의 요청 없이도 자동 지급된다.",
+                        ],
+                    ),
+                    NLIStatementOutput(
+                        statements=[
+                            StatementFaithfulnessAnswer(
+                                statement="퇴직금은 1년 이상 근로한 근로자에게 지급된다.",
+                                reason="컨텍스트에서 '계속근로기간 1년에 대하여' 퇴직금을 지급한다고 명시되어 있다.",
+                                verdict=1,
+                            ),
+                            StatementFaithfulnessAnswer(
+                                statement="퇴직금은 평균임금을 기준으로 계산된다.",
+                                reason="컨텍스트에서 '30일분 이상의 평균임금을 퇴직금으로' 지급한다고 명시되어 있다.",
+                                verdict=1,
+                            ),
+                            StatementFaithfulnessAnswer(
+                                statement="퇴직금은 근로자의 요청 없이도 자동 지급된다.",
+                                reason="컨텍스트에는 자동 지급 여부에 대한 언급이 없다.",
+                                verdict=0,
+                            ),
+                        ]
+                    ),
+                ),
+            ]
+
+        # 메트릭에 한국어 프롬프트 적용
+        answer_relevancy.question_generation = KoreanResponseRelevancePrompt()
+        faithfulness.statement_generator_prompt = KoreanStatementGeneratorPrompt()
+        faithfulness.nli_statements_prompt = KoreanNLIStatementPrompt()
+
+        _KOREAN_PROMPTS_AVAILABLE = True
+    except (ImportError, Exception) as e:
+        logger.info("RAGAS 한국어 프롬프트 사용 불가, 기본 프롬프트 사용: %s", e)
+
+# 3단계: llm_factory — 실패해도 RAGAS는 기본 LLM으로 동작
+if _RAGAS_AVAILABLE:
+    try:
+        from ragas.llms import llm_factory as _ragas_llm_factory
+    except ImportError:
+        logger.info("ragas.llms.llm_factory 사용 불가, RAGAS 기본 LLM 사용")
 
 
 def _get_langchain_embeddings():
@@ -185,15 +202,16 @@ def _get_langchain_embeddings():
     return _get_langchain_embeddings._instance
 
 
-def _get_ragas_llm():
+def _get_ragas_llm() -> Any:
     """faithfulness NLI 판정용 max_tokens 확장 LLM을 lazy 생성합니다.
 
     RAGAS InstructorModelArgs의 기본 max_tokens=1024로는 한국어 답변의
     NLI 진술문 판정 JSON이 잘릴 수 있습니다 (GPT-4o-mini finish_reason='length').
     max_tokens=8192로 확장하여 긴 답변도 정상 평가되도록 합니다.
+    llm_factory를 사용할 수 없으면 None을 반환하여 RAGAS 기본 LLM을 사용합니다.
     """
     if not hasattr(_get_ragas_llm, "_instance"):
-        if not _RAGAS_AVAILABLE:
+        if not _RAGAS_AVAILABLE or _ragas_llm_factory is None:
             _get_ragas_llm._instance = None
             return None
         try:
@@ -210,7 +228,7 @@ def _get_ragas_llm():
             logger.info("[RAGAS] 커스텀 LLM 생성 완료 (model=%s, max_tokens=%d)",
                         settings.ragas_llm_model, settings.ragas_max_tokens)
         except Exception as e:
-            logger.warning(f"RAGAS 커스텀 LLM 생성 실패: {e}")
+            logger.warning("RAGAS 커스텀 LLM 생성 실패: %s", e)
             _get_ragas_llm._instance = None
     return _get_ragas_llm._instance
 

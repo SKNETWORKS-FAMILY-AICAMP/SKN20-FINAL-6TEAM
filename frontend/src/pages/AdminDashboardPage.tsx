@@ -109,7 +109,7 @@ const AdminDashboardPage: React.FC = () => {
           <>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <Card className="p-6 text-center">
-                <Typography variant="small" className="text-gray-600">
+                <Typography variant="small" className="text-gray-700">
                   전체 상담
                 </Typography>
                 <Typography variant="h3" color="blue">
@@ -117,7 +117,7 @@ const AdminDashboardPage: React.FC = () => {
                 </Typography>
               </Card>
               <Card className="p-6 text-center">
-                <Typography variant="small" className="text-gray-600">
+                <Typography variant="small" className="text-gray-700">
                   평가된 상담
                 </Typography>
                 <Typography variant="h3" color="blue">
@@ -125,7 +125,7 @@ const AdminDashboardPage: React.FC = () => {
                 </Typography>
               </Card>
               <Card className="p-6 text-center">
-                <Typography variant="small" className="text-gray-600">
+                <Typography variant="small" className="text-gray-700">
                   통과
                 </Typography>
                 <Typography variant="h3" color="green">
@@ -133,7 +133,7 @@ const AdminDashboardPage: React.FC = () => {
                 </Typography>
               </Card>
               <Card className="p-6 text-center">
-                <Typography variant="small" className="text-gray-600">
+                <Typography variant="small" className="text-gray-700">
                   실패
                 </Typography>
                 <Typography variant="h3" color="red">
@@ -152,7 +152,7 @@ const AdminDashboardPage: React.FC = () => {
               <CardBody>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="text-center">
-                    <Typography variant="small" className="text-gray-600">
+                    <Typography variant="small" className="text-gray-700">
                       평균 LLM 점수
                     </Typography>
                     <Typography variant="h4" color="blue">
@@ -160,7 +160,7 @@ const AdminDashboardPage: React.FC = () => {
                     </Typography>
                   </div>
                   <div className="text-center">
-                    <Typography variant="small" className="text-gray-600">
+                    <Typography variant="small" className="text-gray-700">
                       평균 Faithfulness
                     </Typography>
                     <Typography variant="h4" color="blue">
@@ -168,7 +168,7 @@ const AdminDashboardPage: React.FC = () => {
                     </Typography>
                   </div>
                   <div className="text-center">
-                    <Typography variant="small" className="text-gray-600">
+                    <Typography variant="small" className="text-gray-700">
                       평균 Answer Relevancy
                     </Typography>
                     <Typography variant="h4" color="blue">
@@ -264,12 +264,12 @@ const AdminDashboardPage: React.FC = () => {
                       </div>
                       <div className="space-y-1">
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">상태</span>
+                          <span className="text-gray-700">상태</span>
                           <Chip value={service.status} color={config.color} size="sm" />
                         </div>
                         {service.response_time_ms !== null && (
                           <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">응답 시간</span>
+                            <span className="text-gray-700">응답 시간</span>
                             <span>{service.response_time_ms}ms</span>
                           </div>
                         )}
@@ -278,7 +278,7 @@ const AdminDashboardPage: React.FC = () => {
                             {/* VectorDB 컬렉션 */}
                             {!!service.details.vectordb_status && typeof service.details.vectordb_status === 'object' && (
                               <div>
-                                <Typography variant="small" className="text-gray-500 mb-1">VectorDB</Typography>
+                                <Typography variant="small" className="text-gray-700 mb-1">VectorDB</Typography>
                                 <div className="flex flex-wrap gap-1">
                                   {Object.entries(service.details.vectordb_status as Record<string, { count: number }>).map(([col, info]) => (
                                     <Chip key={col} value={`${col}: ${info.count}`} color="blue" size="sm" variant="ghost" />
@@ -289,14 +289,14 @@ const AdminDashboardPage: React.FC = () => {
                             {/* OpenAI 모델 */}
                             {!!service.details.openai_status && typeof service.details.openai_status === 'object' && !!(service.details.openai_status as Record<string, string>).model && (
                               <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">모델</span>
+                                <span className="text-gray-700">모델</span>
                                 <Chip value={(service.details.openai_status as Record<string, string>).model} color="blue" size="sm" />
                               </div>
                             )}
                             {/* Feature Flags */}
                             {!!service.details.rag_config && typeof service.details.rag_config === 'object' && (
                               <div>
-                                <Typography variant="small" className="text-gray-500 mb-1">설정</Typography>
+                                <Typography variant="small" className="text-gray-700 mb-1">설정</Typography>
                                 <div className="flex flex-wrap gap-1">
                                   {Object.entries(service.details.rag_config as Record<string, boolean | string>).map(([key, val]) =>
                                     typeof val === 'boolean' ? (

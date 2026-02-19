@@ -1,5 +1,16 @@
 # Release Notes
 
+## [2026-02-19] - SSE source url 추가 + RAGAS evaluator 안정성 개선
+
+### Features
+- **SSE source 이벤트 url 추가** (`routes/chat.py`): 라이브 스트리밍·캐시 히트·캐시 저장 3곳의 source 메타데이터에 `url` 필드 추가 — 프론트엔드 소스 링크 UI 연동
+
+### Bug Fixes
+- **evaluate.py None 값 필터링** (`routes/evaluate.py`): RAGAS 응답에서 `None` 값과 `error` 키 제거 — evaluator 비활성 또는 평가 실패 시 빈 dict 반환
+
+### Refactoring
+- **RAGAS evaluator 안정성 개선** (`evaluation/ragas_evaluator.py`): 한국어 프롬프트 커스터마이징을 별도 `try/except` 블록으로 분리 — 내부 API 변경에도 핵심 RAGAS 기능 정상 동작 보장 (단계별 graceful degradation)
+
 ## [2026-02-19] - 도메인 설정 DB 기반 전환 + RAGAS 평가 엔드포인트 추가
 
 ### Features

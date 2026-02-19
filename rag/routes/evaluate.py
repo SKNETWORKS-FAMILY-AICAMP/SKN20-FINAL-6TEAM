@@ -43,7 +43,8 @@ async def evaluate_answer(request: EvaluateRequest) -> dict[str, Any]:
             answer=request.answer,
             contexts=request.contexts,
         )
-        return result or {}
+        # None 값과 error 키 제거 — evaluator 비활성 시 모든 값이 None
+        return {k: v for k, v in (result or {}).items() if v is not None and k != "error"}
     except Exception as e:
         logger.warning("[RAGAS 평가 엔드포인트] 실패: %s", e)
         return {}

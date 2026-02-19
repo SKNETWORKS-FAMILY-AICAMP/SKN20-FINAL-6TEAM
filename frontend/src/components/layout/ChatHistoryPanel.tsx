@@ -29,7 +29,7 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({ collapsed = 
     }
     return (
       <div className="px-3 py-4 text-center">
-        <Typography variant="small" color="gray" className="text-xs">
+        <Typography variant="small" color="gray" className="text-xs !text-gray-700">
           채팅 내역이 없습니다.
         </Typography>
       </div>

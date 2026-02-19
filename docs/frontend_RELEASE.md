@@ -1,5 +1,18 @@
 # Release Notes
 
+## [2026-02-19] - 답변 근거 소스 링크 UI + 텍스트 가시성 개선
+
+### Features
+- **답변 근거 소스 링크 UI** (`components/chat/SourceReferences.tsx`): 신규 컴포넌트 — "답변 근거 N건" 접기/펼치기, 제목 클릭 시 새 탭에서 원본 URL 열림, title+url 기준 중복 제거
+- **SSE source 이벤트 처리** (`lib/rag.ts`): `StreamCallbacks.onSource` 콜백 추가, `source` SSE 이벤트 파싱 및 `SourceReference` 객체 생성
+- **소스 수집 및 메시지 연결** (`hooks/useChat.ts`): 스트리밍/비스트리밍 모드 모두에서 `sources` 필드를 `ChatMessage`에 연결
+- **마크다운 근거 섹션 제거** (`lib/utils.ts`): `stripSourcesSection()` — `sources` 데이터 있을 때 마크다운 `[답변 근거]` 섹션 제거 (중복 표시 방지)
+- **MainPage 통합** (`pages/MainPage.tsx`): `SourceReferences` 컴포넌트 렌더링, `sources` 없는 기존 메시지는 마크다운 그대로 유지 (하위 호환)
+- **타입 정의 추가** (`types/index.ts`): `SourceReference` 인터페이스, `ChatMessage.sources` 필드, `RagStreamResponse.metadata.url` 추가
+
+### Bug Fixes
+- **텍스트 가시성 추가 개선** (`components/layout/ChatHistoryPanel.tsx`, `components/layout/Sidebar.tsx`, `pages/AdminDashboardPage.tsx`): `text-gray-600` → `text-gray-700/800` — WCAG AA 대비율 추가 적용
+
 ## [2026-02-19] - 프로덕션 버그 수정 Round 2
 
 ### Bug Fixes

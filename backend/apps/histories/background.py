@@ -37,6 +37,8 @@ async def run_ragas_background(
         logger.warning("[RAGAS 백그라운드] RAG 서비스 호출 실패 (history_id=%d): %s", history_id, e)
         return
 
+    # None 값 제거 — evaluator 비활성 또는 평가 실패 시 None이 포함될 수 있음
+    ragas_data = {k: v for k, v in ragas_data.items() if v is not None}
     if not ragas_data:
         return
 

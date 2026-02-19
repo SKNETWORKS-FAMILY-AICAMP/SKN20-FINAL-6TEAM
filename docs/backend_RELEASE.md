@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-02-19] - RAGAS 백그라운드 평가 안정성 개선
+
+### Bug Fixes
+- **RAGAS None 값 필터링** (`apps/histories/background.py`): `run_ragas_background()`에서 evaluator 비활성 또는 평가 실패 시 포함되는 `None` 값 제거 — 빈 dict 전달 방지 후 early return
+
 ## [2026-02-19] - 도메인 설정 DB 기반 전환 + RAGAS 비동기 평가
 
 ### Features

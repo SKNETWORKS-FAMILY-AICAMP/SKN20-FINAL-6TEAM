@@ -206,7 +206,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                   <ListItemPrefix>
                     <item.icon className="h-5 w-5" />
                   </ListItemPrefix>
-                  <Typography variant="small">{item.label}</Typography>
+                  <Typography variant="small" className="!text-gray-800">{item.label}</Typography>
                 </ListItem>
               </Link>
             ))}
