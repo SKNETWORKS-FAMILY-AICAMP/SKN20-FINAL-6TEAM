@@ -1,5 +1,11 @@
 # Release Notes
 
+## [2026-02-19] - 헬스체크 스크립트 수정 + ChromaDB 메모리 증설
+
+### Bug Fixes
+- **health-check.sh**: HTTP→HTTPS 301 리다이렉트 우회 — `curl http://localhost` 대신 `docker exec python` 내부 직접 체크로 변경, 도메인 지정 시 HTTPS curl 프록시 체크 추가 (nginx.prod.conf의 HTTP→HTTPS 리다이렉트와 충돌 해소)
+- **docker-compose.prod.yaml**: ChromaDB 메모리 512M→768M 증설 (95% 사용률 OOM 방지)
+
 ## [2026-02-19] - 배포 자동화 스크립트 + 복원 스크립트 호환성 개선
 
 ### Features
