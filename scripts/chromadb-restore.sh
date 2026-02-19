@@ -130,7 +130,11 @@ if [ -n "$COLLECTIONS" ] && [ "$COLLECTIONS" != "[]" ]; then
         if grep -q "WARN" "$RESULT_FILE" 2>/dev/null; then
             HAS_WARN=true
         fi
-        TOTAL_DOCS=$(grep -oP '^\d+$' "$RESULT_FILE" | paste -sd+ | bc 2>/dev/null || echo "0")
+        if command -v bc &>/dev/null; then
+            TOTAL_DOCS=$(grep -oP '^\d+$' "$RESULT_FILE" | paste -sd+ | bc 2>/dev/null || echo "0")
+        else
+            TOTAL_DOCS=$(awk '/^[0-9]+$/{s+=$1}END{print s+0}' "$RESULT_FILE" 2>/dev/null || echo "0")
+        fi
         rm -f "$RESULT_FILE"
     fi
 else
