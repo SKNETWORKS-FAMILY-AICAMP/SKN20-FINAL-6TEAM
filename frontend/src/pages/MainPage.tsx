@@ -73,10 +73,10 @@ const MainPage: React.FC = () => {
       <div className="p-4 border-b bg-white">
         <div className="flex items-center justify-between">
           <div>
-            <Typography variant="h5" color="blue-gray">
+            <Typography variant="h5" color="blue-gray" className="!text-gray-900">
               AI 상담
             </Typography>
-            <Typography variant="small" color="gray">
+            <Typography variant="small" color="gray" className="!text-gray-700">
               창업, 세무, 노무, 법률, 지원사업, 마케팅 통합 상담
             </Typography>
           </div>
@@ -88,7 +88,7 @@ const MainPage: React.FC = () => {
 
       {/* Quick questions */}
       <div className="p-4 bg-gray-50 border-b">
-        <Typography variant="small" color="gray" className="mb-2">
+        <Typography variant="small" color="gray" className="mb-2 !text-gray-700">
           빠른 질문
         </Typography>
         <div className="flex flex-wrap gap-2">
@@ -109,12 +109,12 @@ const MainPage: React.FC = () => {
         {!currentSessionId || messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-gray-500">
-              <Typography variant="h6" color="gray" className="mb-2">
+              <Typography variant="h6" color="gray" className="mb-2 !text-gray-800">
                 {user
                   ? `${user.username}님, 환영합니다!`
                   : 'Bizi에 오신 것을 환영합니다!'}
               </Typography>
-              <Typography variant="small" color="gray" className="mb-4">
+              <Typography variant="small" color="gray" className="mb-4 !text-gray-700">
                 궁금한 점을 자유롭게 물어보세요.
               </Typography>
               {!currentSessionId && sessions.length > 0 && (
@@ -231,7 +231,7 @@ const MainPage: React.FC = () => {
               <PaperAirplaneIcon className="h-5 w-5" />
             </IconButton>
           </form>
-          <Typography variant="small" color="gray" className="text-center mt-3 mb-2 text-xs">
+          <Typography variant="small" color="gray" className="text-center mt-3 mb-2 text-xs !text-gray-600">
             Bizi는 AI 기반 상담 서비스로, 법적 조언이 아닙니다. 중요한 결정은 전문가와 상담하세요.
           </Typography>
         </div>

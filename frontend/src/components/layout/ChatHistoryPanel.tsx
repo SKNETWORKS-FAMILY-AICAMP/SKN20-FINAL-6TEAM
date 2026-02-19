@@ -66,7 +66,7 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({ collapsed = 
     <div className="flex-1 overflow-auto px-1">
       {grouped.map((group) => (
         <div key={group.label} className="mb-2">
-          <Typography variant="small" color="gray" className="text-xs px-3 py-1 font-semibold">
+          <Typography variant="small" color="gray" className="text-xs px-3 py-1 font-semibold !text-gray-600">
             {group.label}
           </Typography>
           {group.sessions.map((session) => (

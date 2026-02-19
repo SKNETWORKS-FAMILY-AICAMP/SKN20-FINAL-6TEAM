@@ -6,7 +6,7 @@ import { CompanyDashboard } from '../components/company/CompanyDashboard';
 const CompanyPage: React.FC = () => {
   return (
     <div className="p-6">
-      <Typography variant="h4" color="blue-gray" className="mb-6">
+      <Typography variant="h4" color="blue-gray" className="mb-6 !text-gray-900">
         기업 정보
       </Typography>
 

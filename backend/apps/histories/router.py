@@ -1,6 +1,6 @@
 """상담 이력 API 라우터."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status, Query
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
@@ -10,6 +10,7 @@ from config.database import get_db
 from apps.common.models import User
 from apps.common.deps import get_current_user
 from apps.histories.service import HistoryService
+from apps.histories.background import run_ragas_background
 from .schemas import HistoryCreate, HistoryResponse
 
 limiter = Limiter(key_func=get_remote_address)
@@ -43,11 +44,21 @@ async def get_histories(
 async def create_history(
     request: Request,
     history_data: HistoryCreate,
+    background_tasks: BackgroundTasks,
     service: HistoryService = Depends(get_history_service),
     current_user: User = Depends(get_current_user),
-):
+) -> HistoryResponse:
     """상담 이력 저장"""
-    return service.create_history(history_data, current_user.user_id)
+    history = service.create_history(history_data, current_user.user_id)
+    if history_data.evaluation_data and history_data.evaluation_data.contexts:
+        background_tasks.add_task(
+            run_ragas_background,
+            history_id=history.history_id,
+            question=history_data.question,
+            answer=history_data.answer,
+            contexts=history_data.evaluation_data.contexts,
+        )
+    return history
 
 
 @router.get("/{history_id}", response_model=HistoryResponse)

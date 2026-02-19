@@ -399,21 +399,8 @@ class MainRouter:
         else:
             state["evaluation"] = None
 
-        # RAGAS 평가 (동기 실행, DB 저장용)
-        if self.settings.enable_ragas_evaluation and self.ragas_evaluator:
-            contexts = [s.content for s in state["sources"]]
-            try:
-                ragas_result = await self.ragas_evaluator.aevaluate_answer_quality(
-                    question=state["query"],
-                    answer=state["final_response"],
-                    contexts=contexts,
-                )
-                state["ragas_metrics"] = ragas_result
-            except Exception as e:
-                logger.warning("[RAGAS 평가] 실패: %s", e)
-                state["ragas_metrics"] = None
-        else:
-            state["ragas_metrics"] = None
+        # RAGAS 평가는 Backend BackgroundTask로 비동기 처리 (응답 지연 방지)
+        state["ragas_metrics"] = None
 
         evaluate_time = time.time() - start
         state["timing_metrics"]["evaluate_time"] = evaluate_time
@@ -945,16 +932,8 @@ class MainRouter:
                 except Exception as e:
                     logger.warning("[스트리밍 평가] 단일 도메인 평가 실패: %s", e)
 
+            # RAGAS 평가는 Backend BackgroundTask로 비동기 처리 (응답 지연 방지)
             ragas_metrics_single = None
-            if self.settings.enable_ragas_evaluation and self.ragas_evaluator and content:
-                try:
-                    ragas_metrics_single = await self.ragas_evaluator.aevaluate_answer_quality(
-                        question=query,
-                        answer=content,
-                        contexts=[s.content for s in all_sources],
-                    )
-                except Exception as e:
-                    logger.warning("[RAGAS 스트리밍 평가] 단일 도메인 실패: %s", e)
 
             yield {
                 "type": "done",
@@ -1029,16 +1008,8 @@ class MainRouter:
                 except Exception as e:
                     logger.warning("[스트리밍 평가] 복수 도메인 평가 실패: %s", e)
 
+            # RAGAS 평가는 Backend BackgroundTask로 비동기 처리 (응답 지연 방지)
             ragas_metrics_multi = None
-            if self.settings.enable_ragas_evaluation and self.ragas_evaluator and content:
-                try:
-                    ragas_metrics_multi = await self.ragas_evaluator.aevaluate_answer_quality(
-                        question=query,
-                        answer=content,
-                        contexts=[s.content for s in all_sources_multi],
-                    )
-                except Exception as e:
-                    logger.warning("[RAGAS 스트리밍 평가] 복수 도메인 실패: %s", e)
 
             yield {
                 "type": "done",

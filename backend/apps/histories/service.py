@@ -1,5 +1,7 @@
 """상담 이력 서비스."""
 
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -85,6 +87,31 @@ class HistoryService:
         self.db.commit()
         self.db.refresh(history)
         return history
+
+    def update_evaluation_data(
+        self, history_id: int, ragas_data: dict[str, Any]
+    ) -> bool:
+        """RAGAS 평가 결과를 기존 evaluation_data에 머지합니다.
+
+        Args:
+            history_id: 업데이트할 상담 이력 ID
+            ragas_data: RAGAS 메트릭 (faithfulness, answer_relevancy 등)
+
+        Returns:
+            업데이트 성공 여부
+        """
+        stmt = select(History).where(
+            History.history_id == history_id,
+            History.use_yn == True,
+        )
+        history = self.db.execute(stmt).scalar_one_or_none()
+        if not history:
+            return False
+
+        existing = history.evaluation_data or {}
+        history.evaluation_data = {**existing, **ragas_data}
+        self.db.commit()
+        return True
 
     def delete_history(self, history_id: int, user_id: int) -> bool:
         """상담 이력을 소프트 삭제합니다.

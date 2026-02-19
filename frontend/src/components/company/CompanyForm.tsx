@@ -218,7 +218,7 @@ export const CompanyForm: React.FC = () => {
   return (
     <>
       <div className="flex items-center justify-between mb-4">
-        <Typography variant="h5" color="blue-gray">
+        <Typography variant="h5" color="blue-gray" className="!text-gray-900">
           기업 목록
         </Typography>
         <Button className="flex items-center gap-2" size="sm" onClick={openCreateDialog}>
@@ -258,7 +258,7 @@ export const CompanyForm: React.FC = () => {
                 <tr>
                   {TABLE_HEADERS.map((head) => (
                     <th key={head} className="border-b border-blue-gray-100 bg-blue-gray-50 p-4">
-                      <Typography variant="small" color="blue-gray" className="font-semibold leading-none">
+                      <Typography variant="small" color="blue-gray" className="font-semibold leading-none !text-gray-900">
                         {head}
                       </Typography>
                     </th>
@@ -272,7 +272,7 @@ export const CompanyForm: React.FC = () => {
                   return (
                     <tr key={company.company_id}>
                       <td className={rowClass}>
-                        <Typography variant="small" color="blue-gray" className="font-medium">
+                        <Typography variant="small" color="blue-gray" className="font-medium !text-gray-900">
                           {company.com_name}
                         </Typography>
                       </td>
@@ -328,7 +328,7 @@ export const CompanyForm: React.FC = () => {
         <DialogBody className="space-y-4">
           {/* Company Status */}
           <div>
-            <Typography variant="small" color="gray" className="mb-1">
+            <Typography variant="small" color="gray" className="mb-1 !text-gray-700">
               기업 상태 *
             </Typography>
             <Select
@@ -347,7 +347,7 @@ export const CompanyForm: React.FC = () => {
 
           {/* Company Name */}
           <div>
-            <Typography variant="small" color="gray" className="mb-1">
+            <Typography variant="small" color="gray" className="mb-1 !text-gray-700">
               회사명 *
             </Typography>
             <Input
@@ -360,7 +360,7 @@ export const CompanyForm: React.FC = () => {
 
           {/* Business Registration Number */}
           <div>
-            <Typography variant="small" color="gray" className="mb-1">
+            <Typography variant="small" color="gray" className="mb-1 !text-gray-700">
               사업자등록번호
             </Typography>
             <Input
@@ -375,7 +375,7 @@ export const CompanyForm: React.FC = () => {
 
           {/* Industry - 2-tier (대분류 → 소분류) */}
           <div>
-            <Typography variant="small" color="gray" className="mb-1">
+            <Typography variant="small" color="gray" className="mb-1 !text-gray-700">
               업종 (대분류)
             </Typography>
             <Select
@@ -404,7 +404,7 @@ export const CompanyForm: React.FC = () => {
             </Select>
           </div>
           <div>
-            <Typography variant="small" color="gray" className="mb-1">
+            <Typography variant="small" color="gray" className="mb-1 !text-gray-700">
               업종 (소분류)
             </Typography>
             <Select
@@ -447,7 +447,7 @@ export const CompanyForm: React.FC = () => {
 
           {/* Address */}
           <div>
-            <Typography variant="small" color="gray" className="mb-1">
+            <Typography variant="small" color="gray" className="mb-1 !text-gray-700">
               주소
             </Typography>
             <RegionSelect
@@ -458,7 +458,7 @@ export const CompanyForm: React.FC = () => {
 
           {/* Open Date */}
           <div>
-            <Typography variant="small" color="gray" className="mb-1">
+            <Typography variant="small" color="gray" className="mb-1 !text-gray-700">
               {isPreparing ? '사업 시작 예정일' : '개업일'}
             </Typography>
             <Input

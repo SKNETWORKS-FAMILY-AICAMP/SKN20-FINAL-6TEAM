@@ -33,7 +33,7 @@ const DASHBOARD_CARDS = [
 export const CompanyDashboard: React.FC = () => {
   return (
     <div className="mt-8">
-      <Typography variant="h5" color="blue-gray" className="mb-4">
+      <Typography variant="h5" color="blue-gray" className="mb-4 !text-gray-900">
         기업 대시보드
       </Typography>
       <div className="grid gap-4 md:grid-cols-3">
@@ -43,13 +43,13 @@ export const CompanyDashboard: React.FC = () => {
               <div className={`inline-flex p-3 rounded-full ${card.bgColor} mb-3`}>
                 <card.icon className={`h-8 w-8 ${card.color}`} />
               </div>
-              <Typography variant="h6" color="blue-gray" className="mb-2">
+              <Typography variant="h6" color="blue-gray" className="mb-2 !text-gray-900">
                 {card.title}
               </Typography>
-              <Typography variant="small" color="gray">
+              <Typography variant="small" color="gray" className="!text-gray-700">
                 {card.description}
               </Typography>
-              <Typography variant="small" color="gray" className="mt-3 text-xs italic">
+              <Typography variant="small" color="gray" className="mt-3 text-xs italic !text-gray-600">
                 준비 중...
               </Typography>
             </CardBody>

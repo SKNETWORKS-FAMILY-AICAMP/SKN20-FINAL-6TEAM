@@ -41,6 +41,20 @@ const AdminDashboardPage: React.FC = () => {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
 
+  const fetchStats = useCallback(async () => {
+    setStatsLoading(true);
+    setStatsError(null);
+    try {
+      const response = await api.get<AdminEvaluationStats>('/admin/histories/stats');
+      setStats(response.data);
+    } catch (err) {
+      setStatsError('통계를 불러오는데 실패했습니다.');
+      console.error(err);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
+
   const fetchServerStatus = useCallback(async () => {
     setStatusLoading(true);
     setStatusError(null);
@@ -57,32 +71,31 @@ const AdminDashboardPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const fetchStats = async () => {
-      setStatsLoading(true);
-      setStatsError(null);
-      try {
-        const response = await api.get<AdminEvaluationStats>('/admin/histories/stats');
-        setStats(response.data);
-      } catch (err) {
-        setStatsError('통계를 불러오는데 실패했습니다.');
-        console.error(err);
-      } finally {
-        setStatsLoading(false);
-      }
-    };
-
     fetchStats();
     fetchServerStatus();
 
-    const interval = setInterval(fetchServerStatus, 30000);
+    const interval = setInterval(() => {
+      fetchStats();
+      fetchServerStatus();
+    }, 12000);
     return () => clearInterval(interval);
-  }, [fetchServerStatus]);
+  }, [fetchStats, fetchServerStatus]);
 
   return (
     <div className="p-6">
-      <Typography variant="h4" color="blue-gray" className="mb-6">
-        대시보드
-      </Typography>
+      <div className="flex items-center justify-between mb-6">
+        <Typography variant="h4" color="blue-gray" className="!text-gray-900">
+          대시보드
+        </Typography>
+        <button
+          onClick={() => { fetchStats(); fetchServerStatus(); }}
+          disabled={statsLoading || statusLoading}
+          className="p-1.5 rounded hover:bg-gray-100 transition-colors disabled:opacity-50"
+          title="새로고침"
+        >
+          <ArrowPathIcon className={`h-5 w-5 text-gray-500 ${(statsLoading || statusLoading) ? 'animate-spin' : ''}`} />
+        </button>
+      </div>
 
       <div className="space-y-6">
         {/* 통계 카드 */}
@@ -96,7 +109,7 @@ const AdminDashboardPage: React.FC = () => {
           <>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <Card className="p-6 text-center">
-                <Typography variant="small" className="text-gray-500">
+                <Typography variant="small" className="text-gray-600">
                   전체 상담
                 </Typography>
                 <Typography variant="h3" color="blue">
@@ -104,7 +117,7 @@ const AdminDashboardPage: React.FC = () => {
                 </Typography>
               </Card>
               <Card className="p-6 text-center">
-                <Typography variant="small" className="text-gray-500">
+                <Typography variant="small" className="text-gray-600">
                   평가된 상담
                 </Typography>
                 <Typography variant="h3" color="blue">
@@ -112,7 +125,7 @@ const AdminDashboardPage: React.FC = () => {
                 </Typography>
               </Card>
               <Card className="p-6 text-center">
-                <Typography variant="small" className="text-gray-500">
+                <Typography variant="small" className="text-gray-600">
                   통과
                 </Typography>
                 <Typography variant="h3" color="green">
@@ -120,7 +133,7 @@ const AdminDashboardPage: React.FC = () => {
                 </Typography>
               </Card>
               <Card className="p-6 text-center">
-                <Typography variant="small" className="text-gray-500">
+                <Typography variant="small" className="text-gray-600">
                   실패
                 </Typography>
                 <Typography variant="h3" color="red">
@@ -132,14 +145,14 @@ const AdminDashboardPage: React.FC = () => {
             {/* 평균 점수 */}
             <Card>
               <CardHeader floated={false} shadow={false} className="rounded-none">
-                <Typography variant="h6" color="blue-gray">
+                <Typography variant="h6" color="blue-gray" className="!text-gray-900">
                   평균 점수
                 </Typography>
               </CardHeader>
               <CardBody>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="text-center">
-                    <Typography variant="small" className="text-gray-500">
+                    <Typography variant="small" className="text-gray-600">
                       평균 LLM 점수
                     </Typography>
                     <Typography variant="h4" color="blue">
@@ -147,7 +160,7 @@ const AdminDashboardPage: React.FC = () => {
                     </Typography>
                   </div>
                   <div className="text-center">
-                    <Typography variant="small" className="text-gray-500">
+                    <Typography variant="small" className="text-gray-600">
                       평균 Faithfulness
                     </Typography>
                     <Typography variant="h4" color="blue">
@@ -155,7 +168,7 @@ const AdminDashboardPage: React.FC = () => {
                     </Typography>
                   </div>
                   <div className="text-center">
-                    <Typography variant="small" className="text-gray-500">
+                    <Typography variant="small" className="text-gray-600">
                       평균 Answer Relevancy
                     </Typography>
                     <Typography variant="h4" color="blue">
@@ -169,7 +182,7 @@ const AdminDashboardPage: React.FC = () => {
             {/* 도메인별 통계 */}
             <Card>
               <CardHeader floated={false} shadow={false} className="rounded-none">
-                <Typography variant="h6" color="blue-gray">
+                <Typography variant="h6" color="blue-gray" className="!text-gray-900">
                   도메인별 상담 수
                 </Typography>
               </CardHeader>
@@ -198,7 +211,7 @@ const AdminDashboardPage: React.FC = () => {
           <CardHeader floated={false} shadow={false} className="rounded-none">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Typography variant="h6" color="blue-gray">
+                <Typography variant="h6" color="blue-gray" className="!text-gray-900">
                   서버 상태
                 </Typography>
                 <button
@@ -210,14 +223,14 @@ const AdminDashboardPage: React.FC = () => {
                   <ArrowPathIcon className={`h-4 w-4 text-gray-500 ${statusLoading ? 'animate-spin' : ''}`} />
                 </button>
                 {lastChecked && (
-                  <Typography variant="small" color="gray">
+                  <Typography variant="small" color="gray" className="!text-gray-700">
                     마지막 확인: {lastChecked.toLocaleTimeString('ko-KR')}
                   </Typography>
                 )}
               </div>
               {serverStatus && (
                 <div className="flex items-center gap-2">
-                  <Typography variant="small" color="gray">
+                  <Typography variant="small" color="gray" className="!text-gray-700">
                     가동 시간: {formatUptime(serverStatus.uptime_seconds)}
                   </Typography>
                   <Chip
@@ -251,12 +264,12 @@ const AdminDashboardPage: React.FC = () => {
                       </div>
                       <div className="space-y-1">
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-500">상태</span>
+                          <span className="text-gray-600">상태</span>
                           <Chip value={service.status} color={config.color} size="sm" />
                         </div>
                         {service.response_time_ms !== null && (
                           <div className="flex justify-between text-sm">
-                            <span className="text-gray-500">응답 시간</span>
+                            <span className="text-gray-600">응답 시간</span>
                             <span>{service.response_time_ms}ms</span>
                           </div>
                         )}
@@ -276,7 +289,7 @@ const AdminDashboardPage: React.FC = () => {
                             {/* OpenAI 모델 */}
                             {service.details.openai_status && typeof service.details.openai_status === 'object' && (service.details.openai_status as Record<string, string>).model && (
                               <div className="flex justify-between text-sm">
-                                <span className="text-gray-500">모델</span>
+                                <span className="text-gray-600">모델</span>
                                 <Chip value={(service.details.openai_status as Record<string, string>).model} color="blue" size="sm" />
                               </div>
                             )}

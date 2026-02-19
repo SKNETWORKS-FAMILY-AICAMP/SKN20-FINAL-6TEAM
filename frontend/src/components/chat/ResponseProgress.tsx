@@ -74,7 +74,7 @@ export const ResponseProgress: React.FC<ResponseProgressProps> = ({ isLoading, i
                 />
               ))}
             </div>
-            <Typography variant="small" color="gray">
+            <Typography variant="small" color="gray" className="!text-gray-700">
               {currentStage.text}
               <span className="inline-block w-6">{dots}</span>
             </Typography>

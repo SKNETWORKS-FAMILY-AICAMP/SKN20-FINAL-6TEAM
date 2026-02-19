@@ -45,14 +45,14 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
         <Typography
           variant="small"
           color="blue-gray"
-          className={`truncate ${!notification.is_read ? 'font-semibold' : ''}`}
+          className={`truncate !text-gray-900 ${!notification.is_read ? 'font-semibold' : ''}`}
         >
           {notification.title}
         </Typography>
-        <Typography variant="small" color="gray" className="text-xs truncate">
+        <Typography variant="small" color="gray" className="text-xs truncate !text-gray-700">
           {notification.message}
         </Typography>
-        <Typography variant="small" color="gray" className="text-xs mt-1">
+        <Typography variant="small" color="gray" className="text-xs mt-1 !text-gray-600">
           {timeAgo}
         </Typography>
       </div>

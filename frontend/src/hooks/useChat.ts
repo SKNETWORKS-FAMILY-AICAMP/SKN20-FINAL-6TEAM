@@ -62,6 +62,7 @@ export const useChat = () => {
         let response: string;
         let agentCode: AgentCode;
         let evaluationData: EvaluationData | null = null;
+        let savedAssistantMsgId: string | null = null;
 
         // Check if RAG service is available
         const ragAvailable = isRagEnabled() && await checkRagHealth();
@@ -147,6 +148,7 @@ export const useChat = () => {
 
             response = streamingContentRef.current;
             agentCode = domainToAgentCode(finalDomain);
+            savedAssistantMsgId = assistantMessageId;
           } else {
             // Non-streaming mode
             const ragResponse = await ragApi.post<RagChatResponse>('/rag/chat', {
@@ -175,6 +177,7 @@ export const useChat = () => {
               timestamp: new Date(),
             };
             addMessage(assistantMessage);
+            savedAssistantMsgId = assistantMessage.id;
           }
         } else {
           // Mock response (fallback when RAG is disabled or unavailable)
@@ -190,6 +193,7 @@ export const useChat = () => {
             timestamp: new Date(),
           };
           addMessage(assistantMessage);
+          savedAssistantMsgId = assistantMessage.id;
         }
 
         // Save to backend history if authenticated
@@ -203,6 +207,11 @@ export const useChat = () => {
               evaluation_data: evaluationData,
             });
             setLastHistoryId(historyResponse.data.history_id);
+            // Mark messages as synced to prevent duplicate save on re-login
+            updateMessage(userMessage.id, { synced: true });
+            if (savedAssistantMsgId) {
+              updateMessage(savedAssistantMsgId, { synced: true });
+            }
           } catch {
             // History save failure is non-critical
           }

@@ -106,7 +106,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
     <Dialog open={open} handler={onClose} size="md">
       <DialogHeader>
         <div className="flex items-center justify-between w-full">
-          <Typography variant="h5" color="blue-gray">
+          <Typography variant="h5" color="blue-gray" className="!text-gray-900">
             프로필
           </Typography>
           {!isEditing && (
@@ -128,7 +128,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
 
         {/* Email (read-only) */}
         <div>
-          <Typography variant="small" color="gray" className="mb-1">
+          <Typography variant="small" color="gray" className="mb-1 !text-gray-700">
             이메일
           </Typography>
           <Input
@@ -141,7 +141,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
 
         {/* Name */}
         <div>
-          <Typography variant="small" color="gray" className="mb-1">
+          <Typography variant="small" color="gray" className="mb-1 !text-gray-700">
             이름
           </Typography>
           <Input
@@ -155,7 +155,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
 
         {/* User Type */}
         <div>
-          <Typography variant="small" color="gray" className="mb-1">
+          <Typography variant="small" color="gray" className="mb-1 !text-gray-700">
             사용자 유형
           </Typography>
           {isEditing ? (
@@ -181,7 +181,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
 
         {/* Join Date (read-only) */}
         <div>
-          <Typography variant="small" color="gray" className="mb-1">
+          <Typography variant="small" color="gray" className="mb-1 !text-gray-700">
             가입일
           </Typography>
           <Input

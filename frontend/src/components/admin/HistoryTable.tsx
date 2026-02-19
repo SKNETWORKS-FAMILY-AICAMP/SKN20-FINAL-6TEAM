@@ -43,7 +43,7 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({
   return (
     <Card>
       <CardHeader floated={false} shadow={false} className="rounded-none">
-        <Typography variant="h6" color="blue-gray">
+        <Typography variant="h6" color="blue-gray" className="!text-gray-900">
           상담 이력 ({data?.total || 0}건)
         </Typography>
       </CardHeader>
@@ -79,12 +79,12 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({
                       onClick={() => onRowClick(item.history_id)}
                     >
                       <td className="p-4 border-b border-blue-gray-50">
-                        <Typography variant="small" color="blue-gray" className="font-normal">
+                        <Typography variant="small" color="blue-gray" className="font-normal !text-gray-800">
                           {item.history_id}
                         </Typography>
                       </td>
                       <td className="p-4 border-b border-blue-gray-50">
-                        <Typography variant="small" color="blue-gray" className="font-normal">
+                        <Typography variant="small" color="blue-gray" className="font-normal !text-gray-800">
                           {item.username || item.user_email || '-'}
                         </Typography>
                       </td>
@@ -119,23 +119,23 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({
                               <XCircleIcon className="h-4 w-4 text-red-500" />
                             )
                           )}
-                          <Typography variant="small" color="blue-gray" className="font-normal">
+                          <Typography variant="small" color="blue-gray" className="font-normal !text-gray-800">
                             {item.llm_score !== null ? `${item.llm_score}/100` : '-'}
                           </Typography>
                         </div>
                       </td>
                       <td className="p-4 border-b border-blue-gray-50">
-                        <Typography variant="small" color="blue-gray" className="font-normal">
+                        <Typography variant="small" color="blue-gray" className="font-normal !text-gray-800">
                           {f1 !== null ? f1.toFixed(2) : '-'}
                         </Typography>
                       </td>
                       <td className="p-4 border-b border-blue-gray-50">
-                        <Typography variant="small" color="blue-gray" className="font-normal">
+                        <Typography variant="small" color="blue-gray" className="font-normal !text-gray-800">
                           {item.response_time !== null ? `${item.response_time.toFixed(1)}s` : '-'}
                         </Typography>
                       </td>
                       <td className="p-4 border-b border-blue-gray-50">
-                        <Typography variant="small" color="blue-gray" className="font-normal">
+                        <Typography variant="small" color="blue-gray" className="font-normal !text-gray-800">
                           {item.create_date
                             ? formatDateTime(item.create_date)
                             : '-'}
@@ -158,7 +158,7 @@ export const HistoryTable: React.FC<HistoryTableProps> = ({
                 >
                   이전
                 </Button>
-                <Typography className="flex items-center px-4">
+                <Typography className="flex items-center px-4 !text-gray-700">
                   {data.page} / {data.total_pages}
                 </Typography>
                 <Button

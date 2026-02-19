@@ -136,7 +136,7 @@ const SchedulePage: React.FC = () => {
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
-        <Typography variant="h4" color="blue-gray">
+        <Typography variant="h4" color="blue-gray" className="!text-gray-900">
           일정 관리
         </Typography>
         <div className="flex items-center gap-3">
@@ -216,10 +216,10 @@ const SchedulePage: React.FC = () => {
               <CardHeader floated={false} shadow={false} className="rounded-none">
                 <div className="flex items-center justify-between">
                   <div>
-                    <Typography variant="h6" color="blue-gray">
+                    <Typography variant="h6" color="blue-gray" className="!text-gray-900">
                       {schedule.schedule_name}
                     </Typography>
-                    <Typography variant="small" color="gray">
+                    <Typography variant="small" color="gray" className="!text-gray-700">
                       {getCompanyName(schedule.company_id)}
                     </Typography>
                   </div>
@@ -241,10 +241,10 @@ const SchedulePage: React.FC = () => {
               <CardBody className="pt-0">
                 <div className="flex gap-6 text-sm">
                   <div>
-                    <span className="text-gray-500">시작:</span> {formatDate(schedule.start_date)}
+                    <span className="text-gray-600">시작:</span> {formatDate(schedule.start_date)}
                   </div>
                   <div>
-                    <span className="text-gray-500">종료:</span> {formatDate(schedule.end_date)}
+                    <span className="text-gray-600">종료:</span> {formatDate(schedule.end_date)}
                   </div>
                 </div>
                 {schedule.memo && (

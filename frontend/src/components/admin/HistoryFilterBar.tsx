@@ -24,9 +24,10 @@ export const HistoryFilterBar: React.FC<HistoryFilterBarProps> = ({
   return (
     <Card>
       <CardBody>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           <Select
             label="도메인"
+            labelProps={{ className: '!text-gray-700' }}
             value={filters.domain || ''}
             onChange={(value) => onFiltersChange({ ...filters, domain: value || undefined })}
           >
@@ -38,6 +39,7 @@ export const HistoryFilterBar: React.FC<HistoryFilterBarProps> = ({
           </Select>
           <Input
             label="최소 LLM 점수"
+            labelProps={{ className: '!text-gray-700' }}
             type="number"
             value={filters.min_score?.toString() || ''}
             onChange={(e) =>
@@ -50,6 +52,7 @@ export const HistoryFilterBar: React.FC<HistoryFilterBarProps> = ({
           />
           <Input
             label="최대 LLM 점수"
+            labelProps={{ className: '!text-gray-700' }}
             type="number"
             value={filters.max_score?.toString() || ''}
             onChange={(e) =>
@@ -62,6 +65,7 @@ export const HistoryFilterBar: React.FC<HistoryFilterBarProps> = ({
           />
           <Select
             label="통과 여부"
+            labelProps={{ className: '!text-gray-700' }}
             value={
               filters.passed_only === undefined
                 ? ''

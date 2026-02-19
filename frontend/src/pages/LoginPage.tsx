@@ -66,17 +66,17 @@ const LoginPage: React.FC = () => {
         <CardBody className="flex flex-col gap-6 p-8">
           {/* 로고 및 타이틀 */}
           <div className="text-center">
-            <Typography variant="h3" color="blue-gray" className="mb-2">
+            <Typography variant="h3" color="blue-gray" className="mb-2 !text-gray-900">
               Bizi
             </Typography>
-            <Typography variant="paragraph" color="gray">
+            <Typography variant="paragraph" color="gray" className="!text-gray-700">
               통합 창업/경영 상담 챗봇
             </Typography>
           </div>
 
           {/* 설명 */}
           <div className="bg-blue-50 p-4 rounded-lg">
-            <Typography variant="small" color="blue-gray">
+            <Typography variant="small" color="blue-gray" className="!text-gray-800">
               Bizi는 예비 창업자, 스타트업 CEO, 중소기업 대표를 위한
               AI 기반 통합 경영 상담 서비스입니다.
             </Typography>

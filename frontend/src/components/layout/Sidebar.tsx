@@ -119,7 +119,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
               <Typography variant="h5" color="blue">
                 Bizi
               </Typography>
-              <Typography variant="small" color="gray" className="text-xs">
+              <Typography variant="small" color="gray" className="text-xs !text-gray-600">
                 통합 창업/경영 상담
               </Typography>
             </button>
@@ -243,10 +243,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
             <>
               <div className="flex items-center justify-between mb-2">
                 <div className="min-w-0 flex-1">
-                  <Typography variant="small" color="blue-gray" className="font-medium truncate">
+                  <Typography variant="small" color="blue-gray" className="font-medium truncate !text-gray-900">
                     {user.username}
                   </Typography>
-                  <Typography variant="small" color="gray" className="text-xs truncate">
+                  <Typography variant="small" color="gray" className="text-xs truncate !text-gray-700">
                     {user.google_email}
                   </Typography>
                   <Chip

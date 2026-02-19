@@ -80,10 +80,10 @@ const UsageGuidePage: React.FC = () => {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <Typography variant="h4" color="blue-gray" className="mb-2">
+      <Typography variant="h4" color="blue-gray" className="mb-2 !text-gray-900">
         사용 설명서
       </Typography>
-      <Typography variant="paragraph" color="gray" className="mb-6">
+      <Typography variant="paragraph" color="gray" className="mb-6 !text-gray-700">
         Bizi 챗봇의 주요 기능과 사용 방법을 안내합니다.
       </Typography>
 
@@ -92,23 +92,23 @@ const UsageGuidePage: React.FC = () => {
         <CardHeader floated={false} shadow={false} className="rounded-none">
           <div className="flex items-center gap-2">
             <ChatBubbleLeftRightIcon className="h-6 w-6 text-blue-500" />
-            <Typography variant="h5" color="blue-gray">
+            <Typography variant="h5" color="blue-gray" className="!text-gray-900">
               시작하기
             </Typography>
           </div>
         </CardHeader>
         <CardBody className="pt-0">
           <div className="space-y-3">
-            <Typography variant="small" color="gray">
+            <Typography variant="small" color="gray" className="!text-gray-700">
               1. 채팅 페이지에서 궁금한 내용을 자유롭게 입력하세요.
             </Typography>
-            <Typography variant="small" color="gray">
+            <Typography variant="small" color="gray" className="!text-gray-700">
               2. AI가 질문을 분석하여 적절한 전문 에이전트가 답변합니다.
             </Typography>
-            <Typography variant="small" color="gray">
+            <Typography variant="small" color="gray" className="!text-gray-700">
               3. 빠른 질문 버튼을 이용하면 자주 묻는 질문을 바로 할 수 있습니다.
             </Typography>
-            <Typography variant="small" color="gray">
+            <Typography variant="small" color="gray" className="!text-gray-700">
               4. 기업 프로필을 등록하면 더 정확한 맞춤형 상담이 가능합니다.
             </Typography>
           </div>
@@ -116,7 +116,7 @@ const UsageGuidePage: React.FC = () => {
       </Card>
 
       {/* Domain Sections */}
-      <Typography variant="h5" color="blue-gray" className="mb-4">
+      <Typography variant="h5" color="blue-gray" className="!text-gray-900" className="mb-4">
         상담 도메인
       </Typography>
       <div className="grid gap-4 md:grid-cols-3 mb-6">
@@ -125,11 +125,11 @@ const UsageGuidePage: React.FC = () => {
             <CardBody>
               <div className="flex items-center gap-2 mb-3">
                 <section.icon className={`h-6 w-6 ${section.color}`} />
-                <Typography variant="h6" color="blue-gray">
+                <Typography variant="h6" color="blue-gray" className="!text-gray-900">
                   {section.title}
                 </Typography>
               </div>
-              <Typography variant="small" color="gray" className="mb-3">
+              <Typography variant="small" color="gray" className="mb-3 !text-gray-700">
                 {section.description}
               </Typography>
               <Typography variant="small" className="font-semibold text-gray-700 mb-2">
@@ -138,7 +138,7 @@ const UsageGuidePage: React.FC = () => {
               <ul className="space-y-1">
                 {section.examples.map((example) => (
                   <li key={example}>
-                    <Typography variant="small" color="gray" className="text-xs">
+                    <Typography variant="small" color="gray" className="text-xs !text-gray-700">
                       - {example}
                     </Typography>
                   </li>
@@ -154,7 +154,7 @@ const UsageGuidePage: React.FC = () => {
         <CardHeader floated={false} shadow={false} className="rounded-none">
           <div className="flex items-center gap-2">
             <QuestionMarkCircleIcon className="h-6 w-6 text-blue-500" />
-            <Typography variant="h5" color="blue-gray">
+            <Typography variant="h5" color="blue-gray" className="!text-gray-900">
               자주 묻는 질문
             </Typography>
           </div>

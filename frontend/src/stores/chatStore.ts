@@ -176,6 +176,7 @@ export const useChatStore = create<ChatState>()(
         for (let i = 0; i < messages.length; i++) {
           const msg = messages[i];
           if (msg.type !== 'user') continue;
+          if (msg.synced) continue; // 이미 backend에 저장된 메시지 스킵 (중복 방지)
 
           const assistantMsg = messages[i + 1];
           if (!assistantMsg || assistantMsg.type !== 'assistant') continue;
