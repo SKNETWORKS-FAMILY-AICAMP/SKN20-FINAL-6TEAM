@@ -3,6 +3,7 @@
 API 요청에 사용되는 Pydantic 모델을 정의합니다.
 """
 
+import hashlib
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -71,6 +72,83 @@ class UserContext(BaseModel):
             "sme_owner": "중소기업 대표",
         }
         return labels.get(self.user_type, "일반 사용자")
+
+    # -- 메타데이터 필터링 헬퍼 --
+
+    # 시도 17개 정규화 매핑 (preprocess_announcements.py와 동일)
+    _REGION_NORMALIZATION: dict[str, str] = {
+        "서울": "서울특별시", "부산": "부산광역시", "대구": "대구광역시",
+        "인천": "인천광역시", "광주": "광주광역시", "대전": "대전광역시",
+        "울산": "울산광역시", "세종": "세종특별자치시", "경기": "경기도",
+        "충북": "충청북도", "충남": "충청남도", "전남": "전라남도",
+        "경북": "경상북도", "경남": "경상남도", "제주": "제주특별자치도",
+        "강원": "강원특별자치도", "전북": "전북특별자치도",
+        "서울특별시": "서울특별시", "부산광역시": "부산광역시",
+        "대구광역시": "대구광역시", "인천광역시": "인천광역시",
+        "광주광역시": "광주광역시", "대전광역시": "대전광역시",
+        "울산광역시": "울산광역시", "세종특별자치시": "세종특별자치시",
+        "경기도": "경기도", "충청북도": "충청북도", "충청남도": "충청남도",
+        "전라남도": "전라남도", "경상북도": "경상북도", "경상남도": "경상남도",
+        "제주특별자치도": "제주특별자치도", "강원특별자치도": "강원특별자치도",
+        "전북특별자치도": "전북특별자치도",
+        "전라북도": "전북특별자치도", "강원도": "강원특별자치도",
+    }
+
+    def get_normalized_region(self) -> str | None:
+        """기업 지역을 시도 레벨로 정규화합니다.
+
+        company.region이 "서울특별시 강남구" 형태인 경우 "서울특별시"를 추출합니다.
+
+        Returns:
+            정규화된 시도명 또는 None (지역 정보 없음)
+        """
+        if not self.company or not self.company.region:
+            return None
+
+        region = self.company.region.strip()
+        if not region:
+            return None
+
+        # 정확 매칭
+        if region in self._REGION_NORMALIZATION:
+            return self._REGION_NORMALIZATION[region]
+
+        # 부분 매칭 (긴 키 우선)
+        for key in sorted(self._REGION_NORMALIZATION.keys(), key=len, reverse=True):
+            if key in region:
+                return self._REGION_NORMALIZATION[key]
+
+        return None
+
+    def get_target_types_for_filter(self) -> list[str] | None:
+        """사용자 유형에 맞는 공고 대상 필터 태그를 반환합니다.
+
+        Returns:
+            ChromaDB 필터에 사용할 target 태그 리스트 또는 None
+        """
+        mapping: dict[str, list[str]] = {
+            "prospective": ["target_예비창업자", "target_전체"],
+            "startup_ceo": ["target_창업기업", "target_예비창업자", "target_전체"],
+            "sme_owner": ["target_중소기업", "target_소상공인", "target_전체"],
+        }
+        return mapping.get(self.user_type)
+
+    def get_filter_hash(self) -> str | None:
+        """캐시 키용 필터 해시를 생성합니다.
+
+        region + user_type 조합의 해시를 반환합니다.
+
+        Returns:
+            해시 문자열 또는 None (필터링 대상 아님)
+        """
+        region = self.get_normalized_region()
+        targets = self.get_target_types_for_filter()
+
+        if region is None and targets is None:
+            return None
+
+        parts = [region or "", self.user_type or ""]
+        return hashlib.md5(":".join(parts).encode()).hexdigest()[:8]
 
 
 class ChatMessage(BaseModel):

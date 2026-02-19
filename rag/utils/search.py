@@ -329,6 +329,7 @@ class HybridSearcher:
         domain: str,
         k: int,
         vector_weight: float | None = None,
+        filter: dict[str, Any] | None = None,
     ) -> list[Document]:
         """벡터+BM25 검색 후 가중치 RRF 융합한 문서 리스트를 반환합니다.
 
@@ -337,6 +338,7 @@ class HybridSearcher:
             domain: 도메인
             k: 반환할 후보 문서 수 (reranking 전)
             vector_weight: 벡터 가중치 (None이면 설정값 사용)
+            filter: ChromaDB 메타데이터 필터 (선택)
 
         Returns:
             융합된 문서 리스트
@@ -357,7 +359,7 @@ class HybridSearcher:
         vector_results: list[SearchResult] = []
         try:
             raw_results = self.vector_store.similarity_search_with_score(
-                query=query, domain=domain, k=fetch_k,
+                query=query, domain=domain, k=fetch_k, filter=filter,
             )
             vector_results = [
                 SearchResult(doc, max(0.0, min(1.0, 1.0 - distance)), "vector")
@@ -407,6 +409,7 @@ class HybridSearcher:
         k: int = 5,
         use_rerank: bool = True,
         vector_weight: float | None = None,
+        filter: dict[str, Any] | None = None,
     ) -> list[Document]:
         """Hybrid 검색을 수행합니다.
 
@@ -416,11 +419,12 @@ class HybridSearcher:
             k: 반환할 결과 수
             use_rerank: Re-ranking 사용 여부
             vector_weight: 벡터 검색 가중치 (0.0-1.0, None이면 설정값 사용)
+            filter: ChromaDB 메타데이터 필터 (선택)
 
         Returns:
             검색된 문서 리스트
         """
-        documents = self._build_search_results(query, domain, k, vector_weight)
+        documents = self._build_search_results(query, domain, k, vector_weight, filter=filter)
 
         if use_rerank and self.reranker and len(documents) > k:
             documents = self.reranker.rerank(query, documents, top_k=k)
@@ -436,6 +440,7 @@ class HybridSearcher:
         k: int = 5,
         use_rerank: bool = True,
         vector_weight: float | None = None,
+        filter: dict[str, Any] | None = None,
     ) -> list[Document]:
         """Hybrid 검색을 비동기로 수행합니다.
 
@@ -445,12 +450,13 @@ class HybridSearcher:
             k: 반환할 결과 수
             use_rerank: Re-ranking 사용 여부
             vector_weight: 벡터 검색 가중치 (0.0-1.0, None이면 설정값 사용)
+            filter: ChromaDB 메타데이터 필터 (선택)
 
         Returns:
             검색된 문서 리스트
         """
         documents = await asyncio.to_thread(
-            self._build_search_results, query, domain, k, vector_weight,
+            self._build_search_results, query, domain, k, vector_weight, filter=filter,
         )
 
         if use_rerank and self.reranker and len(documents) > k:

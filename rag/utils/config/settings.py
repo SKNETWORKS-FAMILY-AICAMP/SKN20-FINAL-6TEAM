@@ -90,6 +90,16 @@ class Settings(BaseSettings):
     enable_rate_limit: bool = Field(default=True, description="Rate Limiting 활성화")
     enable_fallback: bool = Field(default=True, description="Fallback 응답 활성화")
 
+    # -- 메타데이터 필터링 --
+    enable_metadata_filtering: bool = Field(
+        default=True,
+        description="공고 메타데이터 필터링 활성화 (region/target_type 기반 ChromaDB where 절)"
+    )
+    metadata_filter_min_results: int = Field(
+        default=2, gt=0,
+        description="메타데이터 필터 적용 시 최소 결과 수 (미달 시 fallback)"
+    )
+
     # -- 생성 --
     enable_action_aware_generation: bool = Field(
         default=True,
@@ -405,6 +415,7 @@ class Settings(BaseSettings):
         "enable_rate_limit",
         "enable_fallback",
         "enable_action_aware_generation",
+        "enable_metadata_filtering",
         "vector_search_weight",
         "reranker_type",
         "multi_query_count",

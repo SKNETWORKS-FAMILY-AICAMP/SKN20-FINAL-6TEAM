@@ -25,6 +25,7 @@ from utils.legal_supplement import LEGAL_SUPPLEMENT_KEYWORDS, needs_legal_supple
 if TYPE_CHECKING:
     from agents.base import BaseAgent
     from chains.rag_chain import RAGChain
+    from schemas.request import UserContext
     from utils.query import MultiQueryRetriever
     from utils.question_decomposer import SubQuery
     from utils.retrieval_evaluator import RuleBasedRetrievalEvaluator
@@ -769,6 +770,7 @@ class RetrievalAgent:
         sub_queries: list = state["sub_queries"]
         query: str = state["query"]
         domains: list[str] = state["domains"]
+        user_context: "UserContext | None" = state.get("user_context")
 
         # 1. 쿼리 분석
         query_chars = self.strategy_selector.analyze(query, domains)
@@ -798,15 +800,30 @@ class RetrievalAgent:
             logger.info("[RetrievalAgent] 에이전트 [%s] 비동기 검색 시작 (K=%d)", sq.domain, k_value)
             agent_start = time.time()
 
-            # 적응형 검색
-            result = await asyncio.to_thread(
-                self._retrieve_with_strategy,
-                agent,
-                sq.query,
-                sq.domain,
-                k_value,
-                query_chars,
-            )
+            # 메타데이터 필터링 (startup_funding 도메인에만 적용)
+            if (
+                sq.domain == "startup_funding"
+                and self.settings.enable_metadata_filtering
+                and user_context
+            ):
+                result = await self._aretrieve_with_metadata_fallback(
+                    agent=agent,
+                    query=sq.query,
+                    domain=sq.domain,
+                    k=k_value,
+                    query_chars=query_chars,
+                    user_context=user_context,
+                )
+            else:
+                # 적응형 검색
+                result = await asyncio.to_thread(
+                    self._retrieve_with_strategy,
+                    agent,
+                    sq.query,
+                    sq.domain,
+                    k_value,
+                    query_chars,
+                )
 
             # 평가 실패 시 재시도
             if (
@@ -901,6 +918,62 @@ class RetrievalAgent:
 
         return state
 
+    # ----- 메타데이터 필터링 -----------------------------------------------
+
+    @staticmethod
+    def _build_metadata_filter(
+        user_context: "UserContext | None",
+        include_region: bool = True,
+        include_target: bool = True,
+    ) -> dict[str, Any] | None:
+        """사용자 컨텍스트를 기반으로 ChromaDB where 절을 생성합니다.
+
+        Args:
+            user_context: 사용자 컨텍스트
+            include_region: 지역 필터 포함 여부
+            include_target: 대상 유형 필터 포함 여부
+
+        Returns:
+            ChromaDB where 딕셔너리 또는 None
+        """
+        if not user_context:
+            return None
+
+        conditions: list[dict[str, Any]] = []
+
+        # 지역 필터
+        if include_region:
+            region = user_context.get_normalized_region()
+            if region:
+                conditions.append({
+                    "$or": [
+                        {"meta_normalized_region": region},
+                        {"meta_normalized_region": ""},  # 전국 공고 포함
+                    ]
+                })
+
+        # 대상 유형 필터
+        if include_target:
+            target_types = user_context.get_target_types_for_filter()
+            if target_types:
+                target_conditions = [
+                    {flag: "true"} for flag in target_types
+                ]
+                # meta_ 접두사 적용
+                target_conditions = [
+                    {f"meta_{k}": v for k, v in cond.items()}
+                    for cond in target_conditions
+                ]
+                conditions.append({"$or": target_conditions})
+
+        if not conditions:
+            return None
+
+        if len(conditions) == 1:
+            return conditions[0]
+
+        return {"$and": conditions}
+
     # ----- 내부 헬퍼 -------------------------------------------------------
 
     async def _amerge_with_optional_rerank(
@@ -964,6 +1037,7 @@ class RetrievalAgent:
         domain: str,
         k: int,
         query_chars: QueryCharacteristics,
+        metadata_filter: dict[str, Any] | None = None,
     ) -> RetrievalResult:
         """적응형 검색 모드를 적용하여 검색.
 
@@ -973,6 +1047,7 @@ class RetrievalAgent:
             domain: 검색 도메인
             k: 검색 결과 개수
             query_chars: 쿼리 분석 결과
+            metadata_filter: ChromaDB 메타데이터 필터 (선택)
 
         Returns:
             RetrievalResult
@@ -999,6 +1074,7 @@ class RetrievalAgent:
                 include_common=False,
                 use_mmr=use_mmr,
                 use_hybrid=use_hybrid if mode != SearchMode.MMR_DIVERSE else False,
+                metadata_filter=metadata_filter,
             )
         except Exception as e:
             logger.error("[RetrievalAgent] 검색 실패 (%s): %s", domain, e)
@@ -1021,6 +1097,85 @@ class RetrievalAgent:
             domain=domain,
             query=query,
             rewritten_query=None,
+        )
+
+    async def _aretrieve_with_metadata_fallback(
+        self,
+        agent: "BaseAgent",
+        query: str,
+        domain: str,
+        k: int,
+        query_chars: QueryCharacteristics,
+        user_context: "UserContext",
+    ) -> RetrievalResult:
+        """메타데이터 필터를 적용하여 검색하되, 결과 부족 시 3단계 fallback.
+
+        Level 1: region + target_type 필터
+        Level 2: target_type만 (region 제거)
+        Level 3: 필터 없이 검색 (기존 방식)
+
+        Args:
+            agent: 도메인 에이전트
+            query: 검색 쿼리
+            domain: 검색 도메인
+            k: 검색 결과 개수
+            query_chars: 쿼리 분석 결과
+            user_context: 사용자 컨텍스트
+
+        Returns:
+            RetrievalResult
+        """
+        min_results = self.settings.metadata_filter_min_results
+
+        # Level 1: region + target_type 필터
+        full_filter = self._build_metadata_filter(
+            user_context, include_region=True, include_target=True,
+        )
+        if full_filter:
+            logger.info("[메타데이터 필터] Level 1: region + target_type 필터 적용")
+            result = await asyncio.to_thread(
+                self._retrieve_with_strategy,
+                agent, query, domain, k, query_chars,
+                metadata_filter=full_filter,
+            )
+            if len(result.documents) >= min_results:
+                logger.info(
+                    "[메타데이터 필터] Level 1 성공: %d건",
+                    len(result.documents),
+                )
+                return result
+            logger.info(
+                "[메타데이터 필터] Level 1 결과 부족 (%d < %d), Level 2로 fallback",
+                len(result.documents), min_results,
+            )
+
+        # Level 2: target_type만
+        target_filter = self._build_metadata_filter(
+            user_context, include_region=False, include_target=True,
+        )
+        if target_filter:
+            logger.info("[메타데이터 필터] Level 2: target_type 필터만 적용")
+            result = await asyncio.to_thread(
+                self._retrieve_with_strategy,
+                agent, query, domain, k, query_chars,
+                metadata_filter=target_filter,
+            )
+            if len(result.documents) >= min_results:
+                logger.info(
+                    "[메타데이터 필터] Level 2 성공: %d건",
+                    len(result.documents),
+                )
+                return result
+            logger.info(
+                "[메타데이터 필터] Level 2 결과 부족 (%d < %d), Level 3으로 fallback",
+                len(result.documents), min_results,
+            )
+
+        # Level 3: 필터 없이 검색
+        logger.info("[메타데이터 필터] Level 3: 필터 없이 검색")
+        return await asyncio.to_thread(
+            self._retrieve_with_strategy,
+            agent, query, domain, k, query_chars,
         )
 
     @staticmethod

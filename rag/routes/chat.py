@@ -27,11 +27,12 @@ async def chat(request: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=503, detail="서비스가 초기화되지 않았습니다")
 
     try:
-        # 캐시 조회
+        # 캐시 조회 (user_context 해시 포함)
         settings = get_settings()
         cache = get_response_cache() if settings.enable_response_cache else None
+        uc_hash = request.user_context.get_filter_hash() if request.user_context else None
         if cache:
-            cached = cache.get(request.message)
+            cached = cache.get(request.message, user_context_hash=uc_hash)
             if cached:
                 logger.info("[chat] 캐시 히트: '%s...'", request.message[:30])
                 cached_response = ChatResponse(**cached)
@@ -91,7 +92,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         # 캐시 저장
         if cache and response.content != settings.fallback_message:
             domain = response.domains[0] if response.domains else None
-            cache.set(request.message, response.model_dump(mode="json"), domain)
+            cache.set(request.message, response.model_dump(mode="json"), domain, user_context_hash=uc_hash)
 
         return response
     except Exception as e:
@@ -110,11 +111,12 @@ async def chat_stream(request: ChatRequest):
 
     async def generate():
         try:
-            # 캐시 조회
+            # 캐시 조회 (user_context 해시 포함)
             settings = get_settings()
             cache = get_response_cache() if settings.enable_response_cache else None
+            stream_uc_hash = request.user_context.get_filter_hash() if request.user_context else None
             if cache:
-                cached = cache.get(request.message)
+                cached = cache.get(request.message, user_context_hash=stream_uc_hash)
                 if cached:
                     logger.info("[stream] 캐시 히트: '%s...'", request.message[:30])
                     cached_content = cached.get("content", "")
@@ -251,7 +253,7 @@ async def chat_stream(request: ChatRequest):
                         for s in final_sources
                     ],
                 }
-                cache.set(request.message, cache_data, cache_domain)
+                cache.set(request.message, cache_data, cache_domain, user_context_hash=stream_uc_hash)
 
             # evaluation_data 생성
             eval_data_dict = None

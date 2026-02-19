@@ -151,6 +151,7 @@ class RAGChain:
         use_rerank: bool | None = None,
         use_hybrid: bool | None = None,
         search_strategy: "SearchStrategy | None" = None,
+        metadata_filter: dict[str, Any] | None = None,
     ) -> list[Document]:
         """단일 쿼리 검색을 수행합니다 (Hybrid Search + Re-ranking)."""
         strategy_k_common: int | None = None
@@ -194,6 +195,7 @@ class RAGChain:
                     domain=domain,
                     k=k,
                     use_rerank=use_rerank,
+                    filter=metadata_filter,
                 )
                 domain_search_time = time.time() - domain_search_start
                 documents.extend(domain_docs)
@@ -235,12 +237,14 @@ class RAGChain:
                     k=fetch_k,
                     fetch_k=fetch_k * fetch_k_mult,
                     lambda_mult=lambda_mult,
+                    filter=metadata_filter,
                 )
             else:
                 domain_docs = self.vector_store.similarity_search(
                     query=query,
                     domain=domain,
                     k=fetch_k,
+                    filter=metadata_filter,
                 )
             domain_search_time = time.time() - domain_search_start
             documents.extend(domain_docs)

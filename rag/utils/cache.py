@@ -228,31 +228,41 @@ class ResponseCache:
         )
 
     @staticmethod
-    def _generate_key(query: str, domain: str | None = None) -> str:
+    def _generate_key(
+        query: str,
+        domain: str | None = None,
+        user_context_hash: str | None = None,
+    ) -> str:
         """캐시 키를 생성합니다.
 
         QueryProcessor.generate_cache_key에 위임합니다.
-        domain은 캐시 키에 포함하지 않습니다 (get 시점에 도메인을 알 수 없으므로).
+        user_context_hash가 있으면 캐시 키에 포함하여
+        다른 사용자가 같은 질문을 해도 다른 캐시 엔트리를 사용합니다.
         """
         from utils.query import QueryProcessor
 
-        return QueryProcessor.generate_cache_key(query)
+        base_key = QueryProcessor.generate_cache_key(query)
+        if user_context_hash:
+            return f"{base_key}:{user_context_hash}"
+        return base_key
 
     def get(
         self,
         query: str,
         domain: str | None = None,
+        user_context_hash: str | None = None,
     ) -> dict[str, Any] | None:
         """캐시된 응답을 가져옵니다.
 
         Args:
             query: 사용자 쿼리
             domain: 도메인 (선택)
+            user_context_hash: 사용자 컨텍스트 해시 (선택)
 
         Returns:
             캐시된 응답 또는 None
         """
-        key = self._generate_key(query, domain)
+        key = self._generate_key(query, domain, user_context_hash)
         result = self._cache.get(key)
 
         stats = self._cache.get_stats()
@@ -275,6 +285,7 @@ class ResponseCache:
         response: dict[str, Any],
         domain: str | None = None,
         ttl: float | None = None,
+        user_context_hash: str | None = None,
     ) -> None:
         """응답을 캐시에 저장합니다.
 
@@ -283,8 +294,9 @@ class ResponseCache:
             response: 응답 딕셔너리
             domain: 도메인 (선택)
             ttl: TTL (초)
+            user_context_hash: 사용자 컨텍스트 해시 (선택)
         """
-        key = self._generate_key(query, domain)
+        key = self._generate_key(query, domain, user_context_hash)
         self._cache.set(key, response, ttl)
         stats = self._cache.get_stats()
         logger.info(
@@ -296,17 +308,19 @@ class ResponseCache:
         self,
         query: str,
         domain: str | None = None,
+        user_context_hash: str | None = None,
     ) -> bool:
         """캐시를 무효화합니다.
 
         Args:
             query: 사용자 쿼리
             domain: 도메인 (선택)
+            user_context_hash: 사용자 컨텍스트 해시 (선택)
 
         Returns:
             삭제 성공 여부
         """
-        key = self._generate_key(query, domain)
+        key = self._generate_key(query, domain, user_context_hash)
         return self._cache.delete(key)
 
     def clear(self) -> int:

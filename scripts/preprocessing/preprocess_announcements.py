@@ -55,6 +55,13 @@ class AnnouncementMetadata:
     amount: str  # 지원금액
     hashtags: List[str] = field(default_factory=list)
     original_id: str = ""  # 원본 ID
+    # 정규화 필드 (ChromaDB 메타데이터 필터링용)
+    normalized_region: str = ""
+    target_예비창업자: str = "false"
+    target_창업기업: str = "false"
+    target_중소기업: str = "false"
+    target_소상공인: str = "false"
+    target_전체: str = "false"
 
 
 @dataclass
@@ -93,6 +100,135 @@ class AnnouncementDocument:
 # ============================================================
 # 유틸리티 함수
 # ============================================================
+
+# ============================================================
+# 정규화 매핑 테이블 (메타데이터 필터링용)
+# ============================================================
+
+# 시도 17개 정규화 매핑
+REGION_NORMALIZATION: Dict[str, str] = {
+    # 약칭 → 정식명칭
+    "서울": "서울특별시",
+    "부산": "부산광역시",
+    "대구": "대구광역시",
+    "인천": "인천광역시",
+    "광주": "광주광역시",
+    "대전": "대전광역시",
+    "울산": "울산광역시",
+    "세종": "세종특별자치시",
+    "경기": "경기도",
+    "충북": "충청북도",
+    "충남": "충청남도",
+    "전남": "전라남도",
+    "경북": "경상북도",
+    "경남": "경상남도",
+    "제주": "제주특별자치도",
+    "강원": "강원특별자치도",
+    "전북": "전북특별자치도",
+    # 정식명칭 → 정식명칭 (idempotent)
+    "서울특별시": "서울특별시",
+    "부산광역시": "부산광역시",
+    "대구광역시": "대구광역시",
+    "인천광역시": "인천광역시",
+    "광주광역시": "광주광역시",
+    "대전광역시": "대전광역시",
+    "울산광역시": "울산광역시",
+    "세종특별자치시": "세종특별자치시",
+    "경기도": "경기도",
+    "충청북도": "충청북도",
+    "충청남도": "충청남도",
+    "전라남도": "전라남도",
+    "경상북도": "경상북도",
+    "경상남도": "경상남도",
+    "제주특별자치도": "제주특별자치도",
+    "강원특별자치도": "강원특별자치도",
+    "전북특별자치도": "전북특별자치도",
+    # 레거시 명칭
+    "전라북도": "전북특별자치도",
+    "강원도": "강원특별자치도",
+}
+
+# 부분 매칭용 키 (긴 키 우선 정렬)
+_REGION_KEYS_BY_LENGTH = sorted(REGION_NORMALIZATION.keys(), key=len, reverse=True)
+
+# 대상 유형 키워드 → 태그 매핑
+TARGET_TYPE_KEYWORDS: Dict[str, List[str]] = {
+    "target_예비창업자": ["예비창업자", "예비 창업자", "예비창업"],
+    "target_창업기업": ["창업기업", "초기창업", "창업초기", "신규창업", "창업 기업"],
+    "target_중소기업": ["중소기업", "중견기업", "중소 기업"],
+    "target_소상공인": ["소상공인", "소기업", "소규모"],
+}
+
+ALL_TARGET_FLAGS = [
+    "target_예비창업자",
+    "target_창업기업",
+    "target_중소기업",
+    "target_소상공인",
+    "target_전체",
+]
+
+
+def normalize_region(raw: str) -> str:
+    """지역 문자열을 시도 17개 정규화 값으로 변환합니다.
+
+    Args:
+        raw: 원본 지역 문자열 (예: "서울", "서울특별시 강남구", "전국")
+
+    Returns:
+        정규화된 시도명 또는 "" (전국/미매칭)
+    """
+    if not raw:
+        return ""
+
+    raw = raw.strip()
+
+    # "전국" 또는 "전 지역" → 빈 문자열 (필터 제외 = 전국 공고)
+    if raw in ("전국", "전 지역", "전지역", "전체", "해당없음"):
+        return ""
+
+    # 1. 정확 매칭
+    if raw in REGION_NORMALIZATION:
+        return REGION_NORMALIZATION[raw]
+
+    # 2. 부분 문자열 매칭 (긴 키 우선)
+    for key in _REGION_KEYS_BY_LENGTH:
+        if key in raw:
+            return REGION_NORMALIZATION[key]
+
+    return ""
+
+
+def get_target_type_flags(target_type: str) -> Dict[str, str]:
+    """대상 유형 문자열을 Boolean 플래그 딕셔너리로 변환합니다.
+
+    ChromaDB가 $contains 미지원이므로, 콤마 구분 대신 개별 Boolean 필드로 저장합니다.
+
+    Args:
+        target_type: 원본 대상 유형 문자열 (예: "중소기업, 예비창업자")
+
+    Returns:
+        {"target_예비창업자": "true"/"false", ...} 딕셔너리
+    """
+    flags = {flag: "false" for flag in ALL_TARGET_FLAGS}
+
+    if not target_type:
+        flags["target_전체"] = "true"
+        return flags
+
+    matched = False
+    for flag_key, keywords in TARGET_TYPE_KEYWORDS.items():
+        for keyword in keywords:
+            if keyword in target_type:
+                flags[flag_key] = "true"
+                matched = True
+                break
+
+    # 매칭 없으면 전체 대상으로 간주
+    if not matched:
+        flags["target_전체"] = "true"
+
+    return flags
+
 
 def remove_html_tags(text: str) -> str:
     """HTML 태그 제거 및 엔티티 디코딩"""
@@ -290,11 +426,16 @@ class BizinfoProcessor:
         exclusion = clean_value(item.get("제외대상", ""))
         amount = clean_value(item.get("지원금액", ""))
 
+        # 정규화 처리
+        target_type_raw = clean_value(item.get("trgetNm", ""))
+        normalized_region = normalize_region(region)
+        target_flags = get_target_type_flags(target_type_raw)
+
         # Metadata 객체 (target, exclusion, amount 포함)
         metadata = AnnouncementMetadata(
             organization=clean_value(item.get("excInsttNm", "")),
             region=region,
-            target_type=clean_value(item.get("trgetNm", "")),
+            target_type=target_type_raw,
             support_type=clean_value(item.get("pldirSportRealmLclasCodeNm", "")),
             apply_method=clean_value(item.get("reqstMthPapersCn", "")),
             contact=clean_value(item.get("refrncNm", "")),
@@ -302,7 +443,9 @@ class BizinfoProcessor:
             exclusion=exclusion,
             amount=amount,
             hashtags=hashtags,
-            original_id=original_id
+            original_id=original_id,
+            normalized_region=normalized_region,
+            **target_flags,
         )
 
         # effective_date 생성: "YYYY-MM-DD ~ YYYY-MM-DD" 형태
@@ -399,11 +542,16 @@ class KstartupProcessor:
         exclusion = clean_value(item.get("제외대상", item.get("aply_excl_trgt_ctnt", "")))
         amount = clean_value(item.get("지원금액", ""))
 
+        # 정규화 처리
+        target_type_raw = clean_value(item.get("aply_trgt", ""))
+        normalized_region = normalize_region(region)
+        target_flags = get_target_type_flags(target_type_raw)
+
         # Metadata 객체 (target, exclusion, amount 포함)
         metadata = AnnouncementMetadata(
             organization=clean_value(item.get("pbanc_ntrp_nm", "")),
             region=region,
-            target_type=clean_value(item.get("aply_trgt", "")),
+            target_type=target_type_raw,
             support_type=clean_value(item.get("supt_biz_clsfc", "")),
             apply_method=" / ".join(apply_methods) if apply_methods else "",
             contact=clean_value(item.get("prch_cnpl_no", "")),
@@ -411,7 +559,9 @@ class KstartupProcessor:
             exclusion=exclusion,
             amount=amount,
             hashtags=[],
-            original_id=str(original_id)
+            original_id=str(original_id),
+            normalized_region=normalized_region,
+            **target_flags,
         )
 
         # effective_date 생성: "YYYY-MM-DD ~ YYYY-MM-DD" 형태
