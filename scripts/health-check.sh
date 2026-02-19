@@ -37,25 +37,39 @@ done
 echo ""
 
 # --- API 헬스체크 ---
+# docker exec python으로 직접 체크 (nginx HTTPS 리다이렉트 우회)
 echo "--- API ---"
 
-# Backend
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
-    "http://${DOMAIN}/api/health" 2>/dev/null || echo "000")
-if [ "$HTTP_CODE" = "200" ]; then
-    echo "[OK]   Backend API: HTTP ${HTTP_CODE}"
+# Backend (컨테이너 내부 직접 체크)
+BACKEND_OK=$(docker exec bizi-backend python -c \
+    "import urllib.request; urllib.request.urlopen('http://localhost:8000/health'); print('OK')" \
+    2>/dev/null || echo "FAIL")
+if [ "$BACKEND_OK" = "OK" ]; then
+    echo "[OK]   Backend API: healthy"
 else
-    echo "[FAIL] Backend API: HTTP ${HTTP_CODE}"
+    echo "[FAIL] Backend API: not responding"
     FAILED=1
 fi
 
-# RAG (응답이 오면 OK, RAG 헬스체크는 벡터DB 포함하여 느릴 수 있음)
-RAG_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
-    "http://${DOMAIN}/api/rag/health" 2>/dev/null || echo "000")
-if [ "$RAG_CODE" = "200" ]; then
-    echo "[OK]   RAG API:     HTTP ${RAG_CODE}"
+# RAG (컨테이너 내부 직접 체크, 벡터DB 포함하여 느릴 수 있음)
+RAG_OK=$(docker exec bizi-rag python -c \
+    "import urllib.request; urllib.request.urlopen('http://localhost:8001/health'); print('OK')" \
+    2>/dev/null || echo "FAIL")
+if [ "$RAG_OK" = "OK" ]; then
+    echo "[OK]   RAG API:     healthy"
 else
-    echo "[WARN] RAG API:     HTTP ${RAG_CODE} (RAG may still be initializing)"
+    echo "[WARN] RAG API:     not responding (may still be initializing)"
+fi
+
+# Nginx HTTPS 프록시 체크 (도메인 지정 시)
+if [ "$DOMAIN" != "localhost" ]; then
+    NGINX_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 \
+        "https://${DOMAIN}/api/health" 2>/dev/null || echo "000")
+    if [ "$NGINX_CODE" = "200" ]; then
+        echo "[OK]   Nginx Proxy: HTTPS ${NGINX_CODE}"
+    else
+        echo "[WARN] Nginx Proxy: HTTPS ${NGINX_CODE}"
+    fi
 fi
 
 echo ""
