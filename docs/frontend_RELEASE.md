@@ -9,6 +9,7 @@
 - **모달 텍스트 overflow 방지** (`components/admin/HistoryDetailModal.tsx`, `index.css`): `break-words overflow-hidden`, `.markdown-body pre` max-width 100% 적용
 - **텍스트 가시성 전면 개선** (16개 파일): Material Tailwind `color="blue-gray/gray"` 컴포넌트에 `!text-gray-700/800/900` Tailwind 오버라이드 적용 (WCAG AA 대비율 준수)
 - **UsageGuidePage 빌드 오류** (`pages/UsageGuidePage.tsx:119`): 중복 `className` 속성 병합 — TS17001 빌드 오류 수정
+- **AdminDashboardPage 빌드 오류** (`pages/AdminDashboardPage.tsx:279,290,297`): `unknown &&` JSX 패턴에 `!!` 연산자 추가 — TS2322 빌드 오류 수정
 
 ## [2026-02-17] - Dockerfile 보안 강화 + RAG 프록시 전환
 
