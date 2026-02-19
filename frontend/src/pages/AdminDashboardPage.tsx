@@ -276,7 +276,7 @@ const AdminDashboardPage: React.FC = () => {
                         {service.name === 'rag' && service.details && (
                           <div className="mt-3 pt-3 border-t space-y-2">
                             {/* VectorDB 컬렉션 */}
-                            {service.details.vectordb_status && typeof service.details.vectordb_status === 'object' && (
+                            {!!service.details.vectordb_status && typeof service.details.vectordb_status === 'object' && (
                               <div>
                                 <Typography variant="small" className="text-gray-500 mb-1">VectorDB</Typography>
                                 <div className="flex flex-wrap gap-1">
@@ -287,14 +287,14 @@ const AdminDashboardPage: React.FC = () => {
                               </div>
                             )}
                             {/* OpenAI 모델 */}
-                            {service.details.openai_status && typeof service.details.openai_status === 'object' && (service.details.openai_status as Record<string, string>).model && (
+                            {!!service.details.openai_status && typeof service.details.openai_status === 'object' && !!(service.details.openai_status as Record<string, string>).model && (
                               <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">모델</span>
                                 <Chip value={(service.details.openai_status as Record<string, string>).model} color="blue" size="sm" />
                               </div>
                             )}
                             {/* Feature Flags */}
-                            {service.details.rag_config && typeof service.details.rag_config === 'object' && (
+                            {!!service.details.rag_config && typeof service.details.rag_config === 'object' && (
                               <div>
                                 <Typography variant="small" className="text-gray-500 mb-1">설정</Typography>
                                 <div className="flex flex-wrap gap-1">
