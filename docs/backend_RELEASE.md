@@ -1,5 +1,14 @@
 # Release Notes
 
+## [2026-02-19] - 도메인 설정 DB 기반 전환 + 마이그레이션 스크립트 추가
+
+### Features
+- **도메인 테이블 추가** (`database.sql`): `domain_keyword`, `domain_compound_rule`, `domain_representative_query` 테이블 스키마 추가 (키워드/복합규칙/대표쿼리 DB 기반 관리)
+
+### Chores
+- **마이그레이션 스크립트 추가** (`scripts/migrate_domain_tables.sql`): 도메인 설정 DB 마이그레이션 SQL 스크립트 추가
+- **PyJWT 라이브러리 전환** (`requirements.txt`): `python-jose` → `PyJWT` 라이브러리 교체
+
 ## [2026-02-17] - 보안 감사 Phase 0~6 일괄 적용 + RAG 프록시 + 공고 배치
 
 ### Features

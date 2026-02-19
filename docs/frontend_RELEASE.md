@@ -1,5 +1,12 @@
 # Release Notes
 
+## [2026-02-19] - useChat/chatStore 개선 + utils 유틸리티 추가
+
+### Chores
+- **유틸리티 모듈 추가** (`lib/utils.ts`): 공통 유틸리티 함수 추가
+- **useChat 훅 개선** (`hooks/useChat.ts`): 채팅 훅 로직 개선
+- **chatStore 개선** (`stores/chatStore.ts`): 채팅 스토어 상태 관리 개선
+
 ## [2026-02-17] - Dockerfile 보안 강화 + RAG 프록시 전환
 
 ### Security

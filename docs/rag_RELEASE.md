@@ -1,5 +1,16 @@
 # Release Notes
 
+## [2026-02-19] - 도메인 설정 DB 기반 전환 + Dockerfile.prod 개선
+
+### Features
+- **도메인 설정 리팩토링** (`utils/config/domain_config.py`): 키워드/복합규칙/대표쿼리를 DB 기반으로 전환
+- **라우터 로직 개선** (`agents/router.py`): 도메인 분류 라우터 로직 개선
+- **채팅 라우트 정리** (`routes/chat.py`): 채팅 라우트 코드 정리
+- **설정 모듈 export 추가** (`utils/config/__init__.py`): 설정 모듈 공개 인터페이스 추가
+
+### Chores
+- **Dockerfile.prod 개선** (`Dockerfile.prod`): 프로덕션 빌드 설정 추가
+
 ## [2026-02-17] - 보안 감사 Phase 0~6 일괄 적용
 
 ### Security
