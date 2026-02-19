@@ -41,13 +41,13 @@ services:
         echo "Starting SSH tunnel to RDS..."
         ssh -N \
           -L 0.0.0.0:3306:${MYSQL_HOST}:${MYSQL_PORT:-3306} \
-          -o StrictHostKeyChecking=$STRICT_MODE \
+          -o StrictHostKeyChecking=$$STRICT_MODE \
           -o UserKnownHostsFile=/root/.ssh/known_hosts \
           -o ServerAliveInterval=30 \
           -o ServerAliveCountMax=3 \
           -o ExitOnForwardFailure=yes \
           -i /root/.ssh/bizi-key.pem \
-          ubuntu@${BASTION_HOST}
+          ec2-user@${BASTION_HOST}
     healthcheck:
       test: ["CMD-SHELL", "netstat -tln | grep -q ':3306 ' || exit 1"]
       interval: 10s
