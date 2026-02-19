@@ -40,9 +40,23 @@ async def health_check() -> HealthResponse:
         openai_status = {"status": "error", "message": "API 키가 설정되지 않았습니다"}
         overall_status = "unhealthy"
 
+    rag_config: dict[str, Any] = {
+        "hybrid_search": settings.enable_hybrid_search,
+        "reranking": settings.enable_reranking,
+        "domain_rejection": settings.enable_domain_rejection,
+        "llm_evaluation": settings.enable_llm_evaluation,
+        "ragas_evaluation": settings.enable_ragas_evaluation,
+        "legal_supplement": settings.enable_legal_supplement,
+        "fixed_doc_limit": settings.enable_fixed_doc_limit,
+        "cross_domain_rerank": settings.enable_cross_domain_rerank,
+        "embedding_provider": settings.embedding_provider,
+        "llm_model": settings.openai_model,
+    }
+
     return HealthResponse(
         status=overall_status,
         version="1.0.0",
         vectordb_status=vectordb_status,
         openai_status=openai_status,
+        rag_config=rag_config,
     )

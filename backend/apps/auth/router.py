@@ -70,7 +70,7 @@ def set_auth_cookies(response: Response, access_token: str, refresh_token: str) 
         secure=settings.COOKIE_SECURE,
         samesite=settings.COOKIE_SAMESITE,
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
-        path="/auth",
+        path="/",
     )
 
 
@@ -80,7 +80,7 @@ def clear_auth_cookies(response: Response) -> None:
         secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE,
     )
     response.delete_cookie(
-        "refresh_token", path="/auth",
+        "refresh_token", path="/",
         secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE,
     )
 

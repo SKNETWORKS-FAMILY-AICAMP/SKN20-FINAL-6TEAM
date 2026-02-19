@@ -24,7 +24,7 @@ export const HistoryFilterBar: React.FC<HistoryFilterBarProps> = ({
   return (
     <Card>
       <CardBody>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Select
             label="도메인"
             value={filters.domain || ''}

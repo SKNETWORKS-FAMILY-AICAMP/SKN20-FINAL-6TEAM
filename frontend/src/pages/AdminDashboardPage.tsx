@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   CardBody,
@@ -11,6 +11,7 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   XCircleIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 import api from '../lib/api';
 import type { AdminEvaluationStats, ServerStatusResponse } from '../types';
@@ -38,6 +39,22 @@ const AdminDashboardPage: React.FC = () => {
   const [statusLoading, setStatusLoading] = useState(false);
   const [statsError, setStatsError] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [lastChecked, setLastChecked] = useState<Date | null>(null);
+
+  const fetchServerStatus = useCallback(async () => {
+    setStatusLoading(true);
+    setStatusError(null);
+    try {
+      const response = await api.get<ServerStatusResponse>('/admin/status');
+      setServerStatus(response.data);
+      setLastChecked(new Date());
+    } catch (err) {
+      setStatusError('서버 상태를 불러오는데 실패했습니다.');
+      console.error(err);
+    } finally {
+      setStatusLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -54,23 +71,12 @@ const AdminDashboardPage: React.FC = () => {
       }
     };
 
-    const fetchServerStatus = async () => {
-      setStatusLoading(true);
-      setStatusError(null);
-      try {
-        const response = await api.get<ServerStatusResponse>('/admin/status');
-        setServerStatus(response.data);
-      } catch (err) {
-        setStatusError('서버 상태를 불러오는데 실패했습니다.');
-        console.error(err);
-      } finally {
-        setStatusLoading(false);
-      }
-    };
-
     fetchStats();
     fetchServerStatus();
-  }, []);
+
+    const interval = setInterval(fetchServerStatus, 30000);
+    return () => clearInterval(interval);
+  }, [fetchServerStatus]);
 
   return (
     <div className="p-6">
@@ -191,9 +197,24 @@ const AdminDashboardPage: React.FC = () => {
         <Card>
           <CardHeader floated={false} shadow={false} className="rounded-none">
             <div className="flex items-center justify-between">
-              <Typography variant="h6" color="blue-gray">
-                서버 상태
-              </Typography>
+              <div className="flex items-center gap-2">
+                <Typography variant="h6" color="blue-gray">
+                  서버 상태
+                </Typography>
+                <button
+                  onClick={fetchServerStatus}
+                  disabled={statusLoading}
+                  className="p-1 rounded hover:bg-gray-100 transition-colors disabled:opacity-50"
+                  title="새로고침"
+                >
+                  <ArrowPathIcon className={`h-4 w-4 text-gray-500 ${statusLoading ? 'animate-spin' : ''}`} />
+                </button>
+                {lastChecked && (
+                  <Typography variant="small" color="gray">
+                    마지막 확인: {lastChecked.toLocaleTimeString('ko-KR')}
+                  </Typography>
+                )}
+              </div>
               {serverStatus && (
                 <div className="flex items-center gap-2">
                   <Typography variant="small" color="gray">
@@ -237,6 +258,43 @@ const AdminDashboardPage: React.FC = () => {
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-500">응답 시간</span>
                             <span>{service.response_time_ms}ms</span>
+                          </div>
+                        )}
+                        {service.name === 'rag' && service.details && (
+                          <div className="mt-3 pt-3 border-t space-y-2">
+                            {/* VectorDB 컬렉션 */}
+                            {service.details.vectordb_status && typeof service.details.vectordb_status === 'object' && (
+                              <div>
+                                <Typography variant="small" className="text-gray-500 mb-1">VectorDB</Typography>
+                                <div className="flex flex-wrap gap-1">
+                                  {Object.entries(service.details.vectordb_status as Record<string, { count: number }>).map(([col, info]) => (
+                                    <Chip key={col} value={`${col}: ${info.count}`} color="blue" size="sm" variant="ghost" />
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {/* OpenAI 모델 */}
+                            {service.details.openai_status && typeof service.details.openai_status === 'object' && (service.details.openai_status as Record<string, string>).model && (
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-500">모델</span>
+                                <Chip value={(service.details.openai_status as Record<string, string>).model} color="blue" size="sm" />
+                              </div>
+                            )}
+                            {/* Feature Flags */}
+                            {service.details.rag_config && typeof service.details.rag_config === 'object' && (
+                              <div>
+                                <Typography variant="small" className="text-gray-500 mb-1">설정</Typography>
+                                <div className="flex flex-wrap gap-1">
+                                  {Object.entries(service.details.rag_config as Record<string, boolean | string>).map(([key, val]) =>
+                                    typeof val === 'boolean' ? (
+                                      <Chip key={key} value={key.replace(/_/g, ' ')} color={val ? 'green' : 'red'} size="sm" variant="ghost" />
+                                    ) : (
+                                      <Chip key={key} value={`${key.replace(/_/g, ' ')}: ${val}`} color="blue" size="sm" variant="ghost" />
+                                    )
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

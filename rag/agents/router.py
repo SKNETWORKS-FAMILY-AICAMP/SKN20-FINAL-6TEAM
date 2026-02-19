@@ -39,7 +39,6 @@ from schemas.response import (
     SourceDocument,
     TimingMetrics,
 )
-from utils.chat_logger import log_ragas_metrics
 from utils.config import DOMAIN_LABELS, get_settings
 from utils.domain_classifier import DomainClassificationResult, get_domain_classifier
 from utils.legal_supplement import needs_legal_supplement
@@ -50,35 +49,6 @@ from vectorstores.chroma import ChromaVectorStore
 
 logger = logging.getLogger(__name__)
 
-
-async def _run_ragas_background(
-    ragas_evaluator: Any,
-    question: str,
-    answer: str,
-    contexts: list[str],
-    domains: list[str],
-) -> None:
-    """RAGAS 평가를 백그라운드로 실행하고 결과를 로깅합니다."""
-    try:
-        metrics = await ragas_evaluator.aevaluate_answer_quality(
-            question=question,
-            answer=answer,
-            contexts=contexts,
-        )
-        logger.info(
-            "[RAGAS 백그라운드] faithfulness=%.2f, answer_relevancy=%.2f",
-            metrics.get("faithfulness") or 0,
-            metrics.get("answer_relevancy") or 0,
-        )
-        log_ragas_metrics(
-            question=question,
-            answer=answer,
-            metrics_dict=metrics,
-            domains=domains,
-            response_time=0.0,
-        )
-    except Exception as e:
-        logger.warning("[RAGAS 백그라운드] 평가 실패 (무시됨): %s", e)
 
 
 class RouterState(TypedDict):
@@ -429,19 +399,21 @@ class MainRouter:
         else:
             state["evaluation"] = None
 
-        # RAGAS 평가 (백그라운드 fire-and-forget, 로깅/모니터링용)
+        # RAGAS 평가 (동기 실행, DB 저장용)
         if self.settings.enable_ragas_evaluation and self.ragas_evaluator:
             contexts = [s.content for s in state["sources"]]
-            asyncio.create_task(
-                _run_ragas_background(
-                    self.ragas_evaluator,
-                    state["query"],
-                    state["final_response"],
-                    contexts,
-                    state.get("domains", []),
+            try:
+                ragas_result = await self.ragas_evaluator.aevaluate_answer_quality(
+                    question=state["query"],
+                    answer=state["final_response"],
+                    contexts=contexts,
                 )
-            )
-        state["ragas_metrics"] = None
+                state["ragas_metrics"] = ragas_result
+            except Exception as e:
+                logger.warning("[RAGAS 평가] 실패: %s", e)
+                state["ragas_metrics"] = None
+        else:
+            state["ragas_metrics"] = None
 
         evaluate_time = time.time() - start
         state["timing_metrics"]["evaluate_time"] = evaluate_time
@@ -973,16 +945,16 @@ class MainRouter:
                 except Exception as e:
                     logger.warning("[스트리밍 평가] 단일 도메인 평가 실패: %s", e)
 
+            ragas_metrics_single = None
             if self.settings.enable_ragas_evaluation and self.ragas_evaluator and content:
-                asyncio.create_task(
-                    _run_ragas_background(
-                        self.ragas_evaluator,
-                        query,
-                        content,
-                        [s.content for s in all_sources],
-                        domains,
+                try:
+                    ragas_metrics_single = await self.ragas_evaluator.aevaluate_answer_quality(
+                        question=query,
+                        answer=content,
+                        contexts=[s.content for s in all_sources],
                     )
-                )
+                except Exception as e:
+                    logger.warning("[RAGAS 스트리밍 평가] 단일 도메인 실패: %s", e)
 
             yield {
                 "type": "done",
@@ -992,7 +964,7 @@ class MainRouter:
                 "sources": all_sources,
                 "actions": all_actions,
                 "evaluation": single_evaluation,
-                "ragas_metrics": None,
+                "ragas_metrics": ragas_metrics_single,
                 "retrieval_results": retrieval_results_map,
             }
         else:
@@ -1057,16 +1029,16 @@ class MainRouter:
                 except Exception as e:
                     logger.warning("[스트리밍 평가] 복수 도메인 평가 실패: %s", e)
 
+            ragas_metrics_multi = None
             if self.settings.enable_ragas_evaluation and self.ragas_evaluator and content:
-                asyncio.create_task(
-                    _run_ragas_background(
-                        self.ragas_evaluator,
-                        query,
-                        content,
-                        [s.content for s in all_sources_multi],
-                        domains,
+                try:
+                    ragas_metrics_multi = await self.ragas_evaluator.aevaluate_answer_quality(
+                        question=query,
+                        answer=content,
+                        contexts=[s.content for s in all_sources_multi],
                     )
-                )
+                except Exception as e:
+                    logger.warning("[RAGAS 스트리밍 평가] 복수 도메인 실패: %s", e)
 
             yield {
                 "type": "done",
@@ -1076,6 +1048,6 @@ class MainRouter:
                 "sources": all_sources_multi,
                 "actions": pre_actions,
                 "evaluation": evaluation,
-                "ragas_metrics": None,
+                "ragas_metrics": ragas_metrics_multi,
                 "retrieval_results": retrieval_results,
             }

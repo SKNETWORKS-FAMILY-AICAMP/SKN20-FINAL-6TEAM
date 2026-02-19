@@ -225,6 +225,7 @@ class HealthResponse(BaseModel):
         version: 버전
         vectordb_status: VectorDB 상태
         openai_status: OpenAI API 연결 상태
+        rag_config: RAG 기능 설정 플래그
     """
 
     status: str = Field(default="healthy", description="서비스 상태")
@@ -234,4 +235,7 @@ class HealthResponse(BaseModel):
     )
     openai_status: dict[str, Any] = Field(
         default_factory=dict, description="OpenAI API 연결 상태"
+    )
+    rag_config: dict[str, Any] = Field(
+        default_factory=dict, description="RAG 기능 설정 플래그"
     )

@@ -55,7 +55,7 @@ export const HistoryDetailModal: React.FC<HistoryDetailModalProps> = ({
         </Typography>
         <XMarkIcon className="h-6 w-6 cursor-pointer" onClick={onClose} />
       </DialogHeader>
-      <DialogBody divider className="max-h-[70vh] overflow-y-auto">
+      <DialogBody divider className="max-h-[70vh] overflow-y-auto text-gray-900">
         {loading ? (
           <div className="flex justify-center py-10">
             <Spinner className="h-8 w-8" />
@@ -67,7 +67,7 @@ export const HistoryDetailModal: React.FC<HistoryDetailModalProps> = ({
               <Typography variant="h6" color="blue-gray" className="mb-2">
                 기본 정보
               </Typography>
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-2 gap-4 text-sm text-gray-900">
                 <div>
                   <span className="text-gray-500">사용자:</span>{' '}
                   {history.username} ({history.user_email})
@@ -94,7 +94,7 @@ export const HistoryDetailModal: React.FC<HistoryDetailModalProps> = ({
               <Typography variant="h6" color="blue-gray" className="mb-2">
                 질문
               </Typography>
-              <div className="bg-gray-100 p-4 rounded-lg whitespace-pre-wrap">
+              <div className="bg-gray-100 p-4 rounded-lg whitespace-pre-wrap text-gray-900">
                 {history.question}
               </div>
             </div>
@@ -104,7 +104,7 @@ export const HistoryDetailModal: React.FC<HistoryDetailModalProps> = ({
               <Typography variant="h6" color="blue-gray" className="mb-2">
                 답변
               </Typography>
-              <div className="bg-blue-50 p-4 rounded-lg max-h-60 overflow-y-auto markdown-body">
+              <div className="bg-blue-50 p-4 rounded-lg markdown-body text-gray-900">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {history.answer || ''}
                 </ReactMarkdown>
@@ -193,9 +193,9 @@ export const HistoryDetailModal: React.FC<HistoryDetailModalProps> = ({
                   <Typography variant="h6" color="blue-gray" className="mb-2">
                     검색된 문서 ({history.evaluation_data.contexts.length}건)
                   </Typography>
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                  <div className="space-y-2">
                     {history.evaluation_data.contexts.map((ctx, idx) => (
-                      <div key={idx} className="bg-gray-50 p-3 rounded text-sm">
+                      <div key={idx} className="bg-gray-50 p-3 rounded text-sm text-gray-900">
                         {ctx}
                       </div>
                     ))}
@@ -209,7 +209,7 @@ export const HistoryDetailModal: React.FC<HistoryDetailModalProps> = ({
                 <Typography variant="h6" color="blue-gray" className="mb-2">
                   검색 평가
                 </Typography>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-900">
                   <div>
                     <span className="text-gray-500">상태:</span>{' '}
                     <Chip

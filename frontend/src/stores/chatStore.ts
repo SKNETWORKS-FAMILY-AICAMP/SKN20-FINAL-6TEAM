@@ -194,6 +194,16 @@ export const useChatStore = create<ChatState>()(
         }
 
         set({ lastHistoryId: lastSyncedHistoryId });
+
+        if (lastSyncedHistoryId !== null) {
+          set((prev) => ({
+            sessions: prev.sessions.map((s) =>
+              s.id === prev.currentSessionId
+                ? { ...s, messages: [], updated_at: new Date().toISOString() }
+                : s
+            ),
+          }));
+        }
       },
 
       getCurrentSession: () => {
