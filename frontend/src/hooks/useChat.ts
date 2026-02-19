@@ -5,6 +5,7 @@ import ragApi, { isRagEnabled, isStreamingEnabled, checkRagHealth, streamChat } 
 import api from '../lib/api';
 import type { ChatMessage, AgentCode, RagChatResponse, EvaluationData } from '../types';
 import { GUEST_MESSAGE_LIMIT, domainToAgentCode } from '../lib/constants';
+import { generateId } from '../lib/utils';
 import { getMockResponse } from '../lib/mockResponses';
 
 const ERROR_MESSAGE = '죄송합니다. 응답을 생성하는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
@@ -34,7 +35,7 @@ export const useChat = () => {
       // Guest message limit check
       if (!isAuthenticated && guestMessageCount >= GUEST_MESSAGE_LIMIT) {
         const limitMessage: ChatMessage = {
-          id: crypto.randomUUID(),
+          id: generateId(),
           type: 'assistant',
           content: GUEST_LIMIT_MESSAGE,
           agent_code: 'A0000001',
@@ -49,7 +50,7 @@ export const useChat = () => {
 
       // Add user message
       const userMessage: ChatMessage = {
-        id: crypto.randomUUID(),
+        id: generateId(),
         type: 'user',
         content: message,
         timestamp: new Date(),
@@ -70,7 +71,7 @@ export const useChat = () => {
 
           if (useStreaming) {
             // Streaming mode (SSE)
-            const assistantMessageId = crypto.randomUUID();
+            const assistantMessageId = generateId();
             streamingContentRef.current = '';
 
             // Create new AbortController for this stream
@@ -166,7 +167,7 @@ export const useChat = () => {
             }
 
             const assistantMessage: ChatMessage = {
-              id: crypto.randomUUID(),
+              id: generateId(),
               type: 'assistant',
               content: response,
               agent_code: agentCode,
@@ -182,7 +183,7 @@ export const useChat = () => {
           agentCode = mockResult.agent_code;
 
           const assistantMessage: ChatMessage = {
-            id: crypto.randomUUID(),
+            id: generateId(),
             type: 'assistant',
             content: response,
             agent_code: agentCode,
@@ -213,7 +214,7 @@ export const useChat = () => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
 
         const errorMessage: ChatMessage = {
-          id: crypto.randomUUID(),
+          id: generateId(),
           type: 'assistant',
           content: ERROR_MESSAGE,
           agent_code: 'A0000001',

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ChatMessage, ChatSession } from '../types';
 import api from '../lib/api';
+import { generateId } from '../lib/utils';
 
 interface ChatState {
   sessions: ChatSession[];
@@ -40,7 +41,7 @@ interface ChatState {
 }
 
 const createNewSession = (title?: string): ChatSession => ({
-  id: crypto.randomUUID(),
+  id: generateId(),
   title: title || '새 채팅',
   messages: [],
   created_at: new Date().toISOString(),

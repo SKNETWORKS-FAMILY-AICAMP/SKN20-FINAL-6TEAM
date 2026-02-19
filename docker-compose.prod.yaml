@@ -100,6 +100,9 @@ services:
     tmpfs:
       - /tmp
       - /home/appuser/.cache
+    volumes:
+      - rag_logs:/app/logs
+      - rag_output:/app/output
     expose:
       - "8001"
     environment:
@@ -171,6 +174,16 @@ services:
     networks:
       - backend
 
+  # --- Certbot (SSL 인증서 발급/갱신, 필요 시만 실행) ---
+  certbot:
+    image: certbot/certbot
+    container_name: bizi-certbot
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    networks:
+      - backend
+
   # --- VectorDB 빌드 서비스 (GPU 임베딩, 필요 시만 실행) ---
   # OPENAI_API_KEY 불필요 — 로컬 GPU 임베딩(EMBEDDING_PROVIDER=local) 사용
   vectordb-builder:
@@ -212,4 +225,8 @@ volumes:
   certbot_conf:
     driver: local
   certbot_www:
+    driver: local
+  rag_logs:
+    driver: local
+  rag_output:
     driver: local

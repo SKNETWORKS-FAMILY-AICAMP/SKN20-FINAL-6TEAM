@@ -57,6 +57,9 @@ ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 # 소스 코드 복사
 COPY --chown=appuser:appgroup . .
 
+# logs 디렉토리 생성 (appuser 소유, named volume 마운트 시 권한 초기화)
+RUN mkdir -p /app/logs /app/output && chown -R appuser:appgroup /app/logs /app/output
+
 USER appuser
 
 EXPOSE 8001
