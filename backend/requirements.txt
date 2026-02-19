@@ -9,7 +9,7 @@ pymysql>=1.1.0
 cryptography>=42.0.0
 
 # Authentication
-PyJWT>=2.8.0
+PyJWT[crypto]>=2.8.0
 
 # Validation
 pydantic>=2.5.0

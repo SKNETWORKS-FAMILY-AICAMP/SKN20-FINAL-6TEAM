@@ -7,6 +7,7 @@ WORKDIR /app
 RUN pip install --no-cache-dir --upgrade pip
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN python -c "import jwt; print(f'PyJWT loaded: {jwt.__version__}')"
 
 # Copy source code
 COPY . .
