@@ -116,7 +116,7 @@ const UsageGuidePage: React.FC = () => {
       </Card>
 
       {/* Domain Sections */}
-      <Typography variant="h5" color="blue-gray" className="!text-gray-900" className="mb-4">
+      <Typography variant="h5" color="blue-gray" className="mb-4 !text-gray-900">
         상담 도메인
       </Typography>
       <div className="grid gap-4 md:grid-cols-3 mb-6">
