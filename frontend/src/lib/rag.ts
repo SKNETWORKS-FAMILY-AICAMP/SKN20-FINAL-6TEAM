@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { RagStreamResponse } from '../types';
+import type { RagStreamResponse, SourceReference } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const RAG_ENABLED = import.meta.env.VITE_RAG_ENABLED !== 'false';
@@ -30,6 +30,7 @@ export const checkRagHealth = async (): Promise<boolean> => {
 
 export interface StreamCallbacks {
   onToken: (token: string) => void;
+  onSource: (source: SourceReference) => void;
   onDone: (metadata: RagStreamResponse['metadata']) => void;
   onError: (error: string) => void;
 }
@@ -88,13 +89,21 @@ export const streamChat = async (
                   callbacks.onToken(event.content);
                 }
                 break;
+              case 'source':
+                if (event.metadata) {
+                  callbacks.onSource({
+                    title: event.metadata.title || '',
+                    source: event.metadata.source || '',
+                    url: event.metadata.url || '',
+                  });
+                }
+                break;
               case 'done':
                 callbacks.onDone(event.metadata);
                 break;
               case 'error':
                 callbacks.onError(event.content || 'Unknown error');
                 break;
-              // source, action은 현재 UI에서 별도 처리 없음
             }
           } catch {
             // JSON 파싱 실패 무시

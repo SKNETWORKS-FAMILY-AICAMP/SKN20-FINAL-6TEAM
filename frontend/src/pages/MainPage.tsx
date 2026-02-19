@@ -18,6 +18,8 @@ import { USER_QUICK_QUESTIONS } from '../lib/constants';
 import { getSeasonalQuestions } from '../lib/seasonalQuestions';
 import { NotificationBell } from '../components/layout/NotificationBell';
 import { ResponseProgress } from '../components/chat/ResponseProgress';
+import { SourceReferences } from '../components/chat/SourceReferences';
+import { stripSourcesSection } from '../lib/utils';
 
 const MainPage: React.FC = () => {
   const { isAuthenticated, user } = useAuthStore();
@@ -164,11 +166,18 @@ const MainPage: React.FC = () => {
                       </div>
                     )}
                     {msg.type === 'assistant' ? (
-                      <div className="markdown-body text-sm text-gray-800">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {msg.content}
-                        </ReactMarkdown>
-                      </div>
+                      <>
+                        <div className="markdown-body text-sm text-gray-800">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {msg.sources && msg.sources.length > 0
+                              ? stripSourcesSection(msg.content)
+                              : msg.content}
+                          </ReactMarkdown>
+                        </div>
+                        {msg.sources && msg.sources.length > 0 && (
+                          <SourceReferences sources={msg.sources} />
+                        )}
+                      </>
                     ) : (
                       <Typography variant="small" className="text-white">
                         {(() => {

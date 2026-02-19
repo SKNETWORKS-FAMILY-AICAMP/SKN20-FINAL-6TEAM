@@ -3,7 +3,7 @@ import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
 import ragApi, { isRagEnabled, isStreamingEnabled, checkRagHealth, streamChat } from '../lib/rag';
 import api from '../lib/api';
-import type { ChatMessage, AgentCode, RagChatResponse, EvaluationData } from '../types';
+import type { ChatMessage, AgentCode, RagChatResponse, EvaluationData, SourceReference } from '../types';
 import { GUEST_MESSAGE_LIMIT, domainToAgentCode } from '../lib/constants';
 import { generateId } from '../lib/utils';
 import { getMockResponse } from '../lib/mockResponses';
@@ -74,6 +74,7 @@ export const useChat = () => {
             // Streaming mode (SSE)
             const assistantMessageId = generateId();
             streamingContentRef.current = '';
+            const collectedSources: SourceReference[] = [];
 
             // Create new AbortController for this stream
             const abortController = new AbortController();
@@ -106,6 +107,9 @@ export const useChat = () => {
                   });
                 }
               },
+              onSource: (source) => {
+                collectedSources.push(source);
+              },
               onDone: (metadata) => {
                 // Cancel pending RAF and flush final content
                 if (rafRef.current !== null) {
@@ -131,6 +135,7 @@ export const useChat = () => {
                   content: streamingContentRef.current,
                   agent_code: finalAgentCode,
                   ...(agentCodes ? { agent_codes: agentCodes } : {}),
+                  ...(collectedSources.length > 0 ? { sources: collectedSources } : {}),
                 });
               },
               onError: (error) => {
@@ -168,12 +173,19 @@ export const useChat = () => {
               }
             }
 
+            const ragSources: SourceReference[] = (ragResponse.data.sources || []).map((s) => ({
+              title: s.title || '',
+              source: s.source || '',
+              url: (s.metadata?.source_url as string) || '',
+            }));
+
             const assistantMessage: ChatMessage = {
               id: generateId(),
               type: 'assistant',
               content: response,
               agent_code: agentCode,
               ...(nonStreamAgentCodes ? { agent_codes: nonStreamAgentCodes } : {}),
+              ...(ragSources.length > 0 ? { sources: ragSources } : {}),
               timestamp: new Date(),
             };
             addMessage(assistantMessage);

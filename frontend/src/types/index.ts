@@ -75,6 +75,12 @@ export const USER_TYPE_NAMES: Record<string, string> = {
   U0000003: '사업자',
 };
 
+export interface SourceReference {
+  title: string;
+  source: string;
+  url: string;
+}
+
 // Chat message
 export interface ChatMessage {
   id: string;
@@ -84,6 +90,7 @@ export interface ChatMessage {
   agent_codes?: AgentCode[];
   timestamp: Date;
   synced?: boolean; // true이면 이미 backend에 저장된 메시지 (재로그인 시 중복 저장 방지)
+  sources?: SourceReference[];
 }
 
 // Chat session
@@ -127,6 +134,7 @@ export interface RagStreamResponse {
     index?: number;
     title?: string;
     source?: string;
+    url?: string;
     type?: string;
     params?: Record<string, unknown>;
     domain?: string;
