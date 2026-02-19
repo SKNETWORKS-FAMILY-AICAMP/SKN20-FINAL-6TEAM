@@ -15,6 +15,7 @@
 - **의존성**: `apps/common/deps.py` (get_db, get_current_user - HttpOnly 쿠키)
 - **설정**: `config/settings.py` (Pydantic BaseSettings), `config/database.py` (SQLAlchemy)
 - **토큰 블랙리스트**: `apps/auth/token_blacklist.py` (blacklist_token, is_blacklisted, cleanup_expired)
+- **백그라운드 태스크**: `apps/*/background.py` → FastAPI BackgroundTasks로 비동기 처리 (예: `apps/histories/background.py`의 `run_ragas_background`)
 
 ### 라우터 등록 (main.py)
 새 라우터 추가 시 `main.py`에 등록:

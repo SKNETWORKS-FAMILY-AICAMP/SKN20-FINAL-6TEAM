@@ -12,6 +12,7 @@ rag/
 ├── cli.py                   # CLI 테스트 모드
 ├── agents/                  # Agentic RAG (router, base, 4 domain, evaluator, executor)
 ├── chains/                  # LangChain 체인 (rag_chain.py)
+├── routes/                  # FastAPI 라우터 (chat, documents, evaluate, funding, health, monitoring, vectordb)
 ├── evaluation/              # RAGAS 정량 평가
 ├── vectorstores/            # VectorDB 관리 (config, chroma, embeddings, loader, build)
 ├── schemas/                 # Pydantic 스키마 (request, response)
@@ -31,6 +32,7 @@ rag/
 | GET | `/api/funding/search` | 지원사업 검색 |
 | POST | `/api/funding/recommend` | 맞춤 지원사업 추천 |
 | POST | `/api/funding/sync` | 공고 데이터 동기화 |
+| POST | `/api/evaluate` | RAGAS 평가 (Backend BackgroundTask 전용, 인증 불필요) |
 
 ## Agents (6+1)
 

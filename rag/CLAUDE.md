@@ -14,6 +14,7 @@
 
 새 기능 추가 시 아래 파일의 패턴을 따르세요:
 - **에이전트**: `agents/*.py` → `BaseAgent` 상속, 패턴: `.claude/rules/patterns.md`
+- **라우터**: `routes/*.py` → FastAPI 엔드포인트, `routes/__init__.py`의 `all_routers`에 등록
 - **체인**: `chains/rag_chain.py` → RAG 체인 정의
 - **스키마**: `schemas/request.py`, `schemas/response.py`
 - **유틸리티**: `utils/*.py` (config, prompts, cache, search 등)
