@@ -1,11 +1,13 @@
 # Release Notes
 
-## [2026-02-19] - useChat/chatStore 개선 + utils 유틸리티 추가
+## [2026-02-19] - 프로덕션 버그 수정 Round 2
 
-### Chores
-- **유틸리티 모듈 추가** (`lib/utils.ts`): 공통 유틸리티 함수 추가
-- **useChat 훅 개선** (`hooks/useChat.ts`): 채팅 훅 로직 개선
-- **chatStore 개선** (`stores/chatStore.ts`): 채팅 스토어 상태 관리 개선
+### Bug Fixes
+- **메시지 중복 저장 방지** (`types/index.ts`, `hooks/useChat.ts`, `stores/chatStore.ts`): `ChatMessage`에 `synced` 플래그 추가 — 로그인 상태에서 저장 성공 시 `synced: true` 마킹, `syncGuestMessages()`에서 스킵하여 재로그인 시 중복 저장 방지
+- **대시보드 자동 갱신 개선** (`pages/AdminDashboardPage.tsx`): `fetchStats` useCallback 추출, 갱신 주기 30초→12초, 통계+서버 상태 동시 갱신, 헤더에 통합 새로고침 버튼 추가
+- **필터바 반응형 레이아웃** (`components/admin/HistoryFilterBar.tsx`): `md:grid-cols-4`→`md:grid-cols-2 xl:grid-cols-4` — 중형(768-1279px) 2x2 구간 추가
+- **모달 텍스트 overflow 방지** (`components/admin/HistoryDetailModal.tsx`, `index.css`): `break-words overflow-hidden`, `.markdown-body pre` max-width 100% 적용
+- **텍스트 가시성 전면 개선** (16개 파일): Material Tailwind `color="blue-gray/gray"` 컴포넌트에 `!text-gray-700/800/900` Tailwind 오버라이드 적용 (WCAG AA 대비율 준수)
 
 ## [2026-02-17] - Dockerfile 보안 강화 + RAG 프록시 전환
 

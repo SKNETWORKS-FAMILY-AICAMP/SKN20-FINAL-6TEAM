@@ -1,9 +1,14 @@
 # Release Notes
 
-## [2026-02-19] - 도메인 설정 DB 기반 전환 + 마이그레이션 스크립트 추가
+## [2026-02-19] - 도메인 설정 DB 기반 전환 + RAGAS 비동기 평가
 
 ### Features
 - **도메인 테이블 추가** (`database.sql`): `domain_keyword`, `domain_compound_rule`, `domain_representative_query` 테이블 스키마 추가 (키워드/복합규칙/대표쿼리 DB 기반 관리)
+- **RAGAS 비동기 백그라운드 평가** (`apps/histories/background.py`): `run_ragas_background()` — 상담 이력 저장 후 FastAPI BackgroundTask로 RAG 서비스의 `POST /api/evaluate` 호출, 결과를 `evaluation_data`에 자동 머지
+
+### Bug Fixes
+- **히스토리 서비스** (`apps/histories/service.py`): `update_evaluation_data()` 메서드 추가 — RAGAS 메트릭을 기존 evaluation_data JSON에 머지
+- **히스토리 라우터** (`apps/histories/router.py`): `create_history`에 `BackgroundTasks` 추가 — contexts 존재 시 RAGAS 평가 백그라운드 트리거 (응답 지연 0ms)
 
 ### Chores
 - **마이그레이션 스크립트 추가** (`scripts/migrate_domain_tables.sql`): 도메인 설정 DB 마이그레이션 SQL 스크립트 추가

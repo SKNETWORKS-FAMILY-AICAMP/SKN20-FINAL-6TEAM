@@ -1,12 +1,16 @@
 # Release Notes
 
-## [2026-02-19] - 도메인 설정 DB 기반 전환 + Dockerfile.prod 개선
+## [2026-02-19] - 도메인 설정 DB 기반 전환 + RAGAS 평가 엔드포인트 추가
 
 ### Features
 - **도메인 설정 리팩토링** (`utils/config/domain_config.py`): 키워드/복합규칙/대표쿼리를 DB 기반으로 전환
+- **RAGAS 평가 전용 엔드포인트** (`routes/evaluate.py`): `POST /api/evaluate` 신규 추가 — Backend BackgroundTask에서 호출, `{question, answer, contexts}` 수신 후 RAGAS 메트릭 반환 (인증 불필요, Docker 내부 전용)
 - **라우터 로직 개선** (`agents/router.py`): 도메인 분류 라우터 로직 개선
 - **채팅 라우트 정리** (`routes/chat.py`): 채팅 라우트 코드 정리
 - **설정 모듈 export 추가** (`utils/config/__init__.py`): 설정 모듈 공개 인터페이스 추가
+
+### Bug Fixes
+- **RAGAS 응답 지연 제거** (`agents/router.py`): 3곳의 `await evaluate_ragas()` 블록 제거 → `ragas_metrics = None` 으로 대체, 평가는 Backend BackgroundTask로 위임 (5~15초 지연 → 0ms)
 
 ### Chores
 - **Dockerfile.prod 개선** (`Dockerfile.prod`): 프로덕션 빌드 설정 추가
