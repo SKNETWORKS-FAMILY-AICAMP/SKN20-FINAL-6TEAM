@@ -152,8 +152,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
           <Button
             fullWidth
             color="blue"
-            className={`flex items-center justify-center gap-2 !shadow-none transition-all duration-150 border-[3.5px] ${
-              isChatBtnHovered ? '!border-blue-500 !bg-blue-900' : '!border-transparent'
+            className={`flex items-center justify-center gap-2 !shadow-none transition-all duration-150 ${
+              isChatBtnHovered ? '!bg-blue-900' : ''
             }`}
             size="sm"
             onClick={handleNewChat}
