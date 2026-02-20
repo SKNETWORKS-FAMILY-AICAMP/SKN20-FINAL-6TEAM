@@ -1,5 +1,18 @@
 # Release Notes
 
+## [2026-02-20] - 지원사업 공고 배치 스케줄러 구현 (Docker + systemd)
+
+### Features
+- **Dockerfile.batch**: torch 제외 경량 배치 이미지 (~1.5GB), RunPod 임베딩 사용
+- **Dockerfile.batch.dockerignore**: Nginx용 `.dockerignore`와 분리하여 `scripts/`, `rag/` 포함
+- **scripts/batch/requirements.txt**: 배치 전용 의존성 (beautifulsoup4, chromadb, langchain 등)
+- **scripts/batch/setup-scheduler.sh**: EC2 systemd 자동 설치 스크립트 (타임존, dry-run, 유닛 설치 포함)
+- **docker-compose.prod.yaml**: `batch-updater` 서비스 추가 (`profile: batch`, 메모리 512M)
+- **scripts/batch/update_announcements.py**: Slack Webhook → Email SMTP 알림 전환 (smtplib, STARTTLS)
+- **.env.example**: SMTP 환경변수 6개 추가 (SMTP_HOST/PORT/USER/PASSWORD/FROM/TO)
+- **systemd 유닛**: `docker compose run --rm batch-updater` 방식 전환, 스케줄 18:30 변경
+- **scripts/__init__.py** 외 2개: 네임스페이스 패키지 안전장치 추가
+
 ## [2026-02-19] - 헬스체크 스크립트 수정 + ChromaDB 메모리 증설
 
 ### Bug Fixes
