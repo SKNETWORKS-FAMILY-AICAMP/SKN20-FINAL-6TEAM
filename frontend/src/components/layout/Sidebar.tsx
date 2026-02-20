@@ -57,6 +57,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
   const displayUserType = useDisplayUserType();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isChatBtnHovered, setIsChatBtnHovered] = useState(false);
+  const [isIconBtnHovered, setIsIconBtnHovered] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -90,7 +91,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
       }`}
     >
       {/* Logo / Toggle */}
-      <div className="px-4 py-[18.5px] border-b flex items-center justify-between min-h-[55px]">
+      <div className={`px-4 border-b flex items-center justify-between ${
+                      collapsed ? 'py-[13.5px] min-h-[40px]' : 'py-[18.5px] min-h-[55px]'
+                      }`}>
         {collapsed ? (
           <div className="w-full flex flex-col items-center gap-1">
             <button
@@ -142,8 +145,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
             <IconButton
               color="blue"
               size="sm"
-              className="w-full"
+              className={`w-full !shadow-none transition-all duration-150 ${
+                isIconBtnHovered ? '!bg-blue-900' : '!border-transparent'
+              }`}
               onClick={handleNewChat}
+              onMouseEnter={() => setIsIconBtnHovered(true)}
+              onMouseLeave={() => setIsIconBtnHovered(false)}
             >
               <PlusIcon className="h-4 w-4" />
             </IconButton>
@@ -153,7 +160,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
             fullWidth
             color="blue"
             className={`flex items-center justify-center gap-2 !shadow-none transition-all duration-150 ${
-              isChatBtnHovered ? '!bg-blue-900' : ''
+              isChatBtnHovered ? '!bg-blue-900' : '!border-transparent'
             }`}
             size="sm"
             onClick={handleNewChat}
