@@ -167,14 +167,14 @@ class BizinfoClient:
 
         today = datetime.now().strftime("%Y%m%d")
 
-        # "YYYYMMDD ~ YYYYMMDD" 형식만 허용 (확실한 날짜)
+        # "YYYYMMDD ~ YYYYMMDD" 또는 "YYYY-MM-DD ~ YYYY-MM-DD" 형식 허용
         if "~" in date_range:
             try:
                 parts = date_range.replace(" ", "").split("~")
                 if len(parts) == 2:
-                    start_date = parts[0].strip()
-                    end_date = parts[1].strip()
-                    # 8자리 숫자인지 확인
+                    # 대시 제거하여 YYYYMMDD 형식으로 정규화
+                    start_date = parts[0].strip().replace("-", "")
+                    end_date = parts[1].strip().replace("-", "")
                     if len(start_date) == 8 and len(end_date) == 8 and start_date.isdigit() and end_date.isdigit():
                         return start_date <= today <= end_date
             except:
@@ -198,13 +198,21 @@ class BizinfoClient:
             resp = requests.get(self.API_URL, params=params, timeout=60)
             data = resp.json()
             items = data.get("jsonArray", [])
+            self.logger.info(f"기업마당 API 원본: {len(items)}개 공고 수신")
+
+            # 날짜 형식 진단 (처음 5개 샘플)
+            if items:
+                sample_dates = [item.get("reqstBeginEndDe", "(없음)") for item in items[:5]]
+                self.logger.info(f"기업마당 reqstBeginEndDe 샘플: {sample_dates}")
 
             announcements = []
+            filtered_out = 0
             for item in items:
                 # 모집중 필터링
                 if recruiting_only:
                     date_range = item.get("reqstBeginEndDe", "")
                     if not self._is_recruiting(date_range):
+                        filtered_out += 1
                         continue
 
                 ann = dict(item)
@@ -215,6 +223,8 @@ class BizinfoClient:
                 if count > 0 and len(announcements) >= count:
                     break
 
+            if filtered_out > 0:
+                self.logger.info(f"기업마당 날짜 필터로 제외: {filtered_out}개")
             self.logger.info(f"기업마당 API: {len(announcements)}개 공고 조회 (모집중)")
             return announcements
 
