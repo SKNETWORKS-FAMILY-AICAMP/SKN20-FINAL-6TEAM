@@ -1,5 +1,14 @@
 # Release Notes
 
+## [2026-02-20] - 스트리밍 깜빡임 수정 + 사이드바 UI 개선
+
+### Features
+- **사이드바 정렬 수정 / 버튼 액션 수정** (`components/layout/Sidebar.tsx`): 사이드바 항목 정렬 및 버튼 액션 개선
+- **테두리 제거** (`components/layout/Sidebar.tsx`): 불필요한 테두리 스타일 제거
+
+### Bug Fixes
+- **스트리밍 깜빡임 수정** (`pages/MainPage.tsx`, `components/chat/SourceReferences.tsx`, `utils/stripSourcesSection`): `stripSourcesSection()` 항상 호출로 스트리밍 중 `[답변 근거]` 텍스트 노출 방지; `SourceReferences` 기본 펼침(`isExpanded: true`)으로 변경
+
 ## [2026-02-19] - 답변 근거 소스 링크 UI + 텍스트 가시성 개선
 
 ### Features

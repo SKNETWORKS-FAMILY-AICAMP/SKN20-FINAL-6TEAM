@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-02-20] - 스트리밍 깜빡임 수정 (프롬프트 footer 제거)
+
+### Bug Fixes
+- **`[답변 근거]` footer 생성 지시 제거** (`utils/prompts.py`): `STARTUP_FUNDING_PROMPT`, `FINANCE_TAX_PROMPT`, `HR_LABOR_PROMPT`, `LEGAL_PROMPT`, `MULTI_DOMAIN_SYNTHESIS_PROMPT` 5개 프롬프트에서 LLM의 footer 생성 지시 제거 — 소스는 SSE `source` 이벤트로 별도 전달되므로 LLM이 생성 불필요, 스트리밍 깜빡임 방지
+
 ## [2026-02-19] - 공고 메타데이터 정규화 + ChromaDB 필터링 구현
 
 ### Features

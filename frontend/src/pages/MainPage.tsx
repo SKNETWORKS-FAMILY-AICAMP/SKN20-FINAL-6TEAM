@@ -169,9 +169,7 @@ const MainPage: React.FC = () => {
                       <>
                         <div className="markdown-body text-sm text-gray-800">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {msg.sources && msg.sources.length > 0
-                              ? stripSourcesSection(msg.content)
-                              : msg.content}
+                            {stripSourcesSection(msg.content)}
                           </ReactMarkdown>
                         </div>
                         {msg.sources && msg.sources.length > 0 && (
