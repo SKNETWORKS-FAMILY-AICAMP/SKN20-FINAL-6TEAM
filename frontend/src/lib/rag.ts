@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { RagStreamResponse, SourceReference } from '../types';
+import type { RagStreamResponse, SourceReference, RagActionSuggestion } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const RAG_ENABLED = import.meta.env.VITE_RAG_ENABLED !== 'false';
@@ -31,6 +31,7 @@ export const checkRagHealth = async (): Promise<boolean> => {
 export interface StreamCallbacks {
   onToken: (token: string) => void;
   onSource: (source: SourceReference) => void;
+  onAction: (action: RagActionSuggestion) => void;
   onDone: (metadata: RagStreamResponse['metadata']) => void;
   onError: (error: string) => void;
 }
@@ -99,6 +100,16 @@ export const streamChat = async (
                     title: event.metadata.title || '',
                     source: event.metadata.source || '',
                     url: event.metadata.url || '',
+                  });
+                }
+                break;
+              case 'action':
+                if (event.metadata) {
+                  callbacks.onAction({
+                    type: event.metadata.type || '',
+                    label: event.content || '',
+                    description: null,
+                    params: event.metadata.params || {},
                   });
                 }
                 break;

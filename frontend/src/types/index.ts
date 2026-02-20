@@ -91,6 +91,7 @@ export interface ChatMessage {
   timestamp: Date;
   synced?: boolean; // true이면 이미 backend에 저장된 메시지 (재로그인 시 중복 저장 방지)
   sources?: SourceReference[];
+  actions?: RagActionSuggestion[];
 }
 
 // Chat session

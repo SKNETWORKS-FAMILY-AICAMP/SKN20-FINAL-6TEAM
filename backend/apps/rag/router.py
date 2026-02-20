@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -12,7 +12,7 @@ from config.settings import settings
 from apps.common.deps import get_optional_user
 from apps.common.models import User, Company, Code
 
-from .schemas import RagChatRequest
+from .schemas import RagChatRequest, ContractGenerateRequest
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +159,72 @@ async def rag_chat_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/documents/contract")
+async def generate_contract(
+    body: ContractGenerateRequest,
+    user: User | None = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
+    """근로계약서 생성 프록시."""
+    payload = body.model_dump()
+
+    # 인증 사용자의 기업 정보 자동 주입
+    if user:
+        context = _build_user_context(user, db)
+        if context.get("company"):
+            payload["company_context"] = {
+                "company_name": context["company"]["company_name"],
+                "business_number": context["company"]["business_number"],
+                "industry_code": context["company"]["industry_code"],
+                "industry_name": context["company"]["industry_name"],
+            }
+
+    url = f"{settings.RAG_SERVICE_URL}/api/documents/contract"
+    async with httpx.AsyncClient(timeout=_RAG_TIMEOUT) as client:
+        try:
+            resp = await client.post(url, json=payload, headers=_build_rag_headers())
+        except httpx.ConnectError:
+            raise HTTPException(502, "RAG 서비스에 연결할 수 없습니다.")
+        except httpx.TimeoutException:
+            raise HTTPException(504, "RAG 서비스 응답 시간이 초과되었습니다.")
+
+    if resp.status_code != 200:
+        logger.error("Document generation error: status=%d body=%s", resp.status_code, resp.text[:500])
+        raise HTTPException(502, "문서 생성 중 오류가 발생했습니다.")
+
+    return resp.json()
+
+
+@router.post("/documents/business-plan")
+async def generate_business_plan(
+    format: str = Query(default="docx", pattern=r"^(pdf|docx)$"),
+    user: User | None = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
+    """사업계획서 템플릿 생성 프록시."""
+    url = f"{settings.RAG_SERVICE_URL}/api/documents/business-plan?format={format}"
+
+    payload: dict = {}
+    if user:
+        context = _build_user_context(user, db)
+        if context.get("company"):
+            payload["company_context"] = context["company"]
+
+    async with httpx.AsyncClient(timeout=_RAG_TIMEOUT) as client:
+        try:
+            resp = await client.post(url, json=payload, headers=_build_rag_headers())
+        except httpx.ConnectError:
+            raise HTTPException(502, "RAG 서비스에 연결할 수 없습니다.")
+        except httpx.TimeoutException:
+            raise HTTPException(504, "RAG 서비스 응답 시간이 초과되었습니다.")
+
+    if resp.status_code != 200:
+        logger.error("Business plan generation error: status=%d body=%s", resp.status_code, resp.text[:500])
+        raise HTTPException(502, "문서 생성 중 오류가 발생했습니다.")
+
+    return resp.json()
 
 
 @router.get("/health")

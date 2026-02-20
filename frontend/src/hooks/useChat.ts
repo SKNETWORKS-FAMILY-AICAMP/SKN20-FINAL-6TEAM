@@ -3,7 +3,7 @@ import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
 import ragApi, { isRagEnabled, isStreamingEnabled, checkRagHealth, streamChat } from '../lib/rag';
 import api from '../lib/api';
-import type { ChatMessage, AgentCode, RagChatResponse, EvaluationData, SourceReference } from '../types';
+import type { ChatMessage, AgentCode, RagChatResponse, EvaluationData, SourceReference, RagActionSuggestion } from '../types';
 import { GUEST_MESSAGE_LIMIT, domainToAgentCode } from '../lib/constants';
 import { generateId } from '../lib/utils';
 import { getMockResponse } from '../lib/mockResponses';
@@ -90,6 +90,7 @@ export const useChat = () => {
             const assistantMessageId = generateId();
             streamingContentRef.current = '';
             const collectedSources: SourceReference[] = [];
+            const collectedActions: RagActionSuggestion[] = [];
 
             // Create new AbortController for this stream
             const abortController = new AbortController();
@@ -125,6 +126,9 @@ export const useChat = () => {
               onSource: (source) => {
                 collectedSources.push(source);
               },
+              onAction: (action) => {
+                collectedActions.push(action);
+              },
               onDone: (metadata) => {
                 // Cancel pending RAF and flush final content
                 if (rafRef.current !== null) {
@@ -151,6 +155,7 @@ export const useChat = () => {
                   agent_code: finalAgentCode,
                   ...(agentCodes ? { agent_codes: agentCodes } : {}),
                   ...(collectedSources.length > 0 ? { sources: collectedSources } : {}),
+                  ...(collectedActions.length > 0 ? { actions: collectedActions } : {}),
                 });
               },
               onError: (error) => {
@@ -195,6 +200,8 @@ export const useChat = () => {
               url: (s.metadata?.source_url as string) || '',
             }));
 
+            const ragActions: RagActionSuggestion[] = ragResponse.data.actions || [];
+
             const assistantMessage: ChatMessage = {
               id: generateId(),
               type: 'assistant',
@@ -202,6 +209,7 @@ export const useChat = () => {
               agent_code: agentCode,
               ...(nonStreamAgentCodes ? { agent_codes: nonStreamAgentCodes } : {}),
               ...(ragSources.length > 0 ? { sources: ragSources } : {}),
+              ...(ragActions.length > 0 ? { actions: ragActions } : {}),
               timestamp: new Date(),
             };
             addMessage(assistantMessage);

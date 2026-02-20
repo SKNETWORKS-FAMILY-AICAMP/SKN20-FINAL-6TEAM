@@ -19,6 +19,7 @@ import { getSeasonalQuestions } from '../lib/seasonalQuestions';
 import { NotificationBell } from '../components/layout/NotificationBell';
 import { ResponseProgress } from '../components/chat/ResponseProgress';
 import { SourceReferences } from '../components/chat/SourceReferences';
+import { ActionButtons } from '../components/chat/ActionButtons';
 import { stripSourcesSection } from '../lib/utils';
 
 const MainPage: React.FC = () => {
@@ -174,6 +175,9 @@ const MainPage: React.FC = () => {
                         </div>
                         {msg.sources && msg.sources.length > 0 && (
                           <SourceReferences sources={msg.sources} />
+                        )}
+                        {msg.actions && msg.actions.length > 0 && (
+                          <ActionButtons actions={msg.actions} />
                         )}
                       </>
                     ) : (
