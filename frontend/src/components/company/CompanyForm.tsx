@@ -139,6 +139,7 @@ export const CompanyForm: React.FC = () => {
   const openCreateDialog = () => {
     setEditingCompany(null);
     setDialogError(null);
+    setMessage(null);
     setFormData({
       ...INITIAL_FORM_DATA,
       open_date: new Date().toISOString().split('T')[0],
@@ -149,6 +150,7 @@ export const CompanyForm: React.FC = () => {
   const openEditDialog = (company: Company) => {
     setEditingCompany(company);
     setDialogError(null);
+    setMessage(null);
     const isOperating = Boolean(company.biz_num);
     const existingAddr = company.addr || '';
     setFormData({
@@ -158,7 +160,7 @@ export const CompanyForm: React.FC = () => {
       biz_code: company.biz_code || 'BA000000',
       addr: existingAddr,
       region_code: displayNameToRegionCode(existingAddr),
-      open_date: company.open_date ? company.open_date.split('T')[0] : '',
+      open_date: company.open_date ? company.open_date.split('T')[0] : new Date().toISOString().split('T')[0],
     });
     setIsDialogOpen(true);
   };
@@ -190,8 +192,8 @@ export const CompanyForm: React.FC = () => {
       } else {
         await api.post('/companies', data);
 
-        // 사업자번호가 있고 관리자가 아닐 때만 사용자 유형을 사업자로 변경
-        if (formData.biz_num && !isAdmin) {
+        // 사업자번호가 있으면 사용자 유형을 사업자로 변경 (관리자 보호는 백엔드에서 처리)
+        if (formData.biz_num) {
           try {
             await api.put('/users/me/type', { type_code: 'U0000003' });
             updateUser({ type_code: 'U0000003' });
@@ -223,7 +225,20 @@ export const CompanyForm: React.FC = () => {
     try {
       await api.delete(`/companies/${companyId}`);
       setMessage({ type: 'success', text: '기업이 삭제되었습니다.' });
-      fetchCompanies();
+
+      const response = await api.get('/companies');
+      const remaining: Company[] = response.data;
+      setCompanies(remaining);
+
+      if (user?.type_code === 'U0000003') {
+        const hasBizNum = remaining.some((c) => c.biz_num);
+        if (!hasBizNum) {
+          try {
+            await api.put('/users/me/type', { type_code: 'U0000002' });
+            updateUser({ type_code: 'U0000002' });
+          } catch { /* non-critical */ }
+        }
+      }
     } catch (err: unknown) {
       setMessage({
         type: 'error',
@@ -246,8 +261,9 @@ export const CompanyForm: React.FC = () => {
 
       {message && (
         <Alert
+          key={`${message.type}-${message.text}`}
           color={message.type === 'success' ? 'green' : 'red'}
-          className="mb-4"
+          className="mb-4 relative z-[9999]"
           onClose={() => setMessage(null)}
         >
           {message.text}
@@ -287,7 +303,7 @@ export const CompanyForm: React.FC = () => {
                   const isLast = index === companies.length - 1;
                   const rowClass = isLast ? 'p-4' : 'p-4 border-b border-blue-gray-50';
                   return (
-                    <tr key={company.company_id}>
+                    <tr key={company.company_id} className="hover:bg-blue-gray-50 cursor-pointer transition-colors">
                       <td className={rowClass}>
                         <Typography variant="small" color="blue-gray" className="font-medium !text-gray-900">
                           {company.com_name}
@@ -381,7 +397,7 @@ export const CompanyForm: React.FC = () => {
             <Input
               value={formData.com_name}
               onChange={(e) => setFormData({ ...formData, com_name: e.target.value })}
-              placeholder="(예비) 창업 준비"
+              placeholder={isPreparing ? '(예비) 창업 준비' : '회사명을 입력하세요'}
               className="!border-gray-300"
               labelProps={{ className: 'hidden' }}
             />
@@ -398,7 +414,7 @@ export const CompanyForm: React.FC = () => {
               placeholder="000-00-00000"
               disabled={isPreparing}
               className="!border-gray-300"
-              label=" "
+              labelProps={{ className: 'hidden' }}
             />
           </div>
 

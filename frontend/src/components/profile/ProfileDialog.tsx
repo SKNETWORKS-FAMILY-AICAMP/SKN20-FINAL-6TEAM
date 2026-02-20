@@ -158,7 +158,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
           <Typography variant="small" color="gray" className="mb-1 !text-gray-700">
             사용자 유형
           </Typography>
-          {isEditing ? (
+          {isEditing && user?.type_code !== 'U0000001' ? (
             <Select
               value={formData.type_code}
               onChange={(val: string | undefined) => setFormData({ ...formData, type_code: (val || 'U0000001') as typeof formData.type_code })}

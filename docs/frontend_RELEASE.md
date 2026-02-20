@@ -1,5 +1,20 @@
 # Release Notes
 
+## [2026-02-20] - 기업 등록 모달 2차 수정 (8가지 추가 이슈 수정)
+
+### Features
+- **테이블 hover 효과** (`components/company/CompanyForm.tsx`): 회사 목록 행에 `hover:bg-blue-gray-50 cursor-pointer transition-colors` 추가
+
+### Bug Fixes
+- **개업일 기본값 보강** (`components/company/CompanyForm.tsx`): 기업 수정 모달 열 때도 `open_date` 없으면 오늘 날짜로 자동 설정 (기존 생성 모달에만 적용)
+- **회사명 placeholder 상태 분기** (`components/company/CompanyForm.tsx`): 운영 중 선택 시 `"(예비) 창업 준비"` 대신 `"회사명을 입력하세요"` 표시
+- **사업자번호 placeholder 노출 수정** (`components/company/CompanyForm.tsx`): `label=" "` → `labelProps={{ className: 'hidden' }}` 교체 — Material Tailwind floating label이 placeholder를 가리던 문제 해결
+- **페이지 Alert z-index 수정** (`components/company/CompanyForm.tsx`): 모달 열 때 `setMessage(null)` 추가, Alert에 `relative z-[9999]` 클래스와 `key` prop 적용 — 잔여 Alert가 Dialog backdrop 뒤에 가려지는 문제 수정
+- **관리자 보호 프론트 가드 제거** (`components/company/CompanyForm.tsx`): `!isAdmin` 조건 제거 — 관리자 유형 보호를 백엔드에 전담 (프론트 이중 체크 제거로 관리자가 type_code 변경되어도 무력화되지 않음)
+- **Alert 자동소멸 보장** (`components/company/CompanyForm.tsx`): `key={message.type-message.text}` prop으로 동일 메시지 재표시 시 컴포넌트 강제 리마운트 → 5초 타이머 확실히 재시작
+- **운영 중 회사 삭제 후 예비창업자 복원** (`components/company/CompanyForm.tsx`): 사업자가 `biz_num` 있는 회사를 모두 삭제하면 `PUT /users/me/type { type_code: 'U0000002' }` 자동 호출하여 예비창업자로 복원
+- **관리자 유형 변경 UI 차단** (`components/profile/ProfileDialog.tsx`): `U0000001` 계정은 수정 모드에서도 사용자 유형 Select를 disabled Input으로 교체 — UI에서 유형 변경 자체를 차단
+
 ## [2026-02-20] - 기업 등록 모달 UX 개선 (8가지 이슈 수정)
 
 ### Features
