@@ -87,6 +87,7 @@ class ResponseGeneratorAgent:
         """
         return create_llm(
             "통합생성",
+            temperature=0.1,
             request_timeout=self.settings.llm_timeout,
         )
 
@@ -275,6 +276,12 @@ class ResponseGeneratorAgent:
             logger.warning("[생성기 스트리밍] 도메인 에이전트 없음: %s", domain)
             return
 
+        if not documents:
+            fallback = "검색된 참고 자료가 부족하여 정확한 답변을 드리기 어렵습니다. 질문을 더 구체적으로 작성해 주시거나, 다른 표현으로 다시 질문해 주세요."
+            yield {"type": "token", "content": fallback}
+            yield {"type": "generation_done", "content": fallback}
+            return
+
         context = self.rag_chain.format_context(documents)
 
         # 액션 힌트 주입
@@ -338,6 +345,12 @@ class ResponseGeneratorAgent:
         legal_supplement = retrieval_results.get("law_common_supplement")
         if legal_supplement:
             all_documents.extend(legal_supplement.documents)
+
+        if not all_documents:
+            fallback = "검색된 참고 자료가 부족하여 정확한 답변을 드리기 어렵습니다. 질문을 더 구체적으로 작성해 주시거나, 다른 표현으로 다시 질문해 주세요."
+            yield {"type": "token", "content": fallback}
+            yield {"type": "generation_done", "content": fallback}
+            return
 
         context = self.rag_chain.format_context(all_documents)
         domains_description = ", ".join(
@@ -405,6 +418,9 @@ class ResponseGeneratorAgent:
         if legal_supplement_docs and domain != "law_common":
             documents = result.documents + legal_supplement_docs
 
+        if not documents:
+            return "검색된 참고 자료가 부족하여 정확한 답변을 드리기 어렵습니다. 질문을 더 구체적으로 작성해 주시거나, 다른 표현으로 다시 질문해 주세요."
+
         context = self.rag_chain.format_context(documents)
 
         if actions_context != "없음" and self.settings.enable_action_aware_generation:
@@ -466,6 +482,9 @@ class ResponseGeneratorAgent:
                 all_documents.extend(retrieval_results[domain].documents)
         if legal_supplement_docs:
             all_documents.extend(legal_supplement_docs)
+
+        if not all_documents:
+            return "검색된 참고 자료가 부족하여 정확한 답변을 드리기 어렵습니다. 질문을 더 구체적으로 작성해 주시거나, 다른 표현으로 다시 질문해 주세요."
 
         context = self.rag_chain.format_context(all_documents)
         domains_description = ", ".join(

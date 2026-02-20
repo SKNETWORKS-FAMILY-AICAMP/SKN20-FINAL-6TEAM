@@ -198,7 +198,7 @@ class RAGChain:
                     query=query,
                     domain=domain,
                     k=k,
-                    use_rerank=use_rerank,
+                    use_rerank=False,
                     filter=metadata_filter,
                 )
                 domain_search_time = time.time() - domain_search_start
@@ -283,17 +283,8 @@ class RAGChain:
 
         documents = self._deduplicate_documents(documents)
 
-        if use_rerank and self.reranker and len(documents) > k:
-            try:
-                pre_rerank_count = len(documents)
-                rerank_start = time.time()
-                documents = self.reranker.rerank(query, documents, top_k=k)
-                rerank_time = time.time() - rerank_start
-                logger.info("[검색] Re-ranking: %d건 → %d건 (%.3fs)", pre_rerank_count, len(documents), rerank_time)
-            except Exception as e:
-                logger.warning("Re-ranking 실패: %s", e)
-                documents = documents[:k]
-        elif len(documents) > k:
+        # 도메인 내 reranking 제거 — 최종 cross-domain rerank 1회로 통합
+        if len(documents) > k:
             documents = documents[:k]
 
         return documents

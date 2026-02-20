@@ -38,26 +38,50 @@ class BM25Index:
         b: BM25 파라미터 (기본 0.75)
     """
 
-    def __init__(self, k1: float = 1.5, b: float = 0.75):
+    def __init__(self, k1: float = 1.5, b: float = 0.75, use_kiwi: bool = True):
         """BM25Index를 초기화합니다.
 
         Args:
             k1: term frequency saturation 파라미터
             b: document length normalization 파라미터
+            use_kiwi: kiwipiepy 형태소 분석기 사용 여부
         """
         self.k1 = k1
         self.b = b
+        self._use_kiwi = use_kiwi
+        self._kiwi = None
         self.documents: list[Document] = []
         self.doc_freqs: list[Counter] = []
         self.idf: dict[str, float] = {}
         self.avg_doc_len: float = 0
         self.doc_count: int = 0
 
+    def _get_kiwi(self):
+        """Kiwi 인스턴스를 지연 로딩합니다."""
+        if self._kiwi is None:
+            try:
+                from kiwipiepy import Kiwi
+                self._kiwi = Kiwi()
+            except ImportError:
+                logger.warning("[BM25] kiwipiepy 미설치, 정규식 토크나이저로 fallback")
+                self._use_kiwi = False
+        return self._kiwi
+
     def _tokenize(self, text: str) -> list[str]:
         """텍스트를 토큰화합니다."""
-        # 한글, 영문, 숫자 추출
+        if self._use_kiwi:
+            kiwi = self._get_kiwi()
+            if kiwi:
+                tokens = kiwi.tokenize(text)
+                result = []
+                for token in tokens:
+                    if token.tag.startswith("NN") or token.tag == "SL":
+                        result.append(token.form)
+                    elif token.tag.startswith("VV") or token.tag.startswith("VA"):
+                        result.append(token.form + "다")
+                return [t for t in result if len(t) >= 2]
+        # fallback: 기존 정규식
         tokens = re.findall(r'[가-힣]+|[a-zA-Z]+|[0-9]+', text.lower())
-        # 2글자 이상만
         return [t for t in tokens if len(t) >= 2]
 
     def fit(self, documents: list[Document]) -> None:

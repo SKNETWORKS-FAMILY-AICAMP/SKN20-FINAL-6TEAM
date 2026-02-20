@@ -886,22 +886,41 @@ class RetrievalAgent:
             sub_queries=sub_queries,
         )
 
-        # 5. 복합 도메인 문서 병합
-        if len(retrieval_results) > 1:
-            main_results = {
-                d: r for d, r in retrieval_results.items()
-                if d != "law_common_supplement"
-            }
-            if len(main_results) > 1:
-                merged = await self._amerge_with_optional_rerank(
-                    query=query,
-                    main_results=main_results,
-                    budgets=budgets,
-                )
-                supplement = retrieval_results.get("law_common_supplement")
-                if supplement:
-                    merged.extend(supplement.documents)
-                all_documents = merged
+        # 5. 문서 병합 + 최종 rerank (단일/복합 도메인 공통)
+        main_results = {
+            d: r for d, r in retrieval_results.items()
+            if d != "law_common_supplement"
+        }
+
+        if len(main_results) > 1:
+            # 복합 도메인: cross-domain rerank
+            merged = await self._amerge_with_optional_rerank(
+                query=query,
+                main_results=main_results,
+                budgets=budgets,
+            )
+            supplement = retrieval_results.get("law_common_supplement")
+            if supplement:
+                merged.extend(supplement.documents)
+            all_documents = merged
+        elif len(main_results) == 1 and self.settings.enable_reranking:
+            # 단일 도메인: 문서 수 > retrieval_k이면 최종 rerank 1회
+            domain_key = next(iter(main_results))
+            budget = budgets.get(domain_key)
+            retrieval_k = budget.allocated_k if budget else self.settings.retrieval_k
+            if len(all_documents) > retrieval_k:
+                reranker = self.rag_chain.reranker
+                if reranker:
+                    logger.info(
+                        "[RetrievalAgent] 단일 도메인 최종 rerank: %d건 → %d건",
+                        len(all_documents),
+                        retrieval_k,
+                    )
+                    all_documents = await reranker.arerank(
+                        query, all_documents, top_k=retrieval_k,
+                    )
+                    # retrieval_results도 갱신
+                    main_results[domain_key].documents = all_documents
 
         state["retrieval_results"] = retrieval_results
         state["documents"] = all_documents
