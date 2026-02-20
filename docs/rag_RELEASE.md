@@ -1,5 +1,14 @@
 # Release Notes
 
+## [2026-02-19] - 공고 메타데이터 정규화 + ChromaDB 필터링 구현
+
+### Features
+- **retrieval_agent.py**: startup_funding 도메인 메타데이터 where절 필터링 (3단계 fallback) 구현
+- **settings.py**: `enable_metadata_filtering`, `metadata_filter_min_results` feature flag 추가
+- **cache.py**: `user_context` 해시 반영으로 사용자별 캐시 분리
+- **request.py**: 메타데이터 필터링 관련 요청 스키마 추가
+- **전처리**: region 시도 17개 정규화, target_type Boolean 플래그 변환
+
 ## [2026-02-19] - SSE source url 추가 + RAGAS evaluator 안정성 개선
 
 ### Features
