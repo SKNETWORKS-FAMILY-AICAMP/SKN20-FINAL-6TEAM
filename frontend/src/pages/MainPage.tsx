@@ -70,7 +70,7 @@ const MainPage: React.FC = () => {
   const quickQuestions = [...baseQuestions.slice(0, 4), ...seasonalQuestions.slice(0, 2)];
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full min-h-0 flex-col">
       {/* Header */}
       <div className="p-4 border-b bg-white">
         <div className="flex items-center justify-between">
@@ -107,7 +107,7 @@ const MainPage: React.FC = () => {
       </div>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-auto p-4 space-y-4">
+      <div className="min-h-0 flex-1 overflow-auto p-4 space-y-4">
         {!currentSessionId || messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-gray-500">
@@ -211,7 +211,7 @@ const MainPage: React.FC = () => {
       </div>
 
       {/* Input area */}
-      <div className="p-6 pt-4 pb-4 bg-transparent">
+      <div className="bg-transparent px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-6 sm:pt-4">
         <div className="max-w-4xl mx-auto">
           <form
             onSubmit={handleSubmit}
