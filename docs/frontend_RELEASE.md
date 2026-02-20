@@ -1,5 +1,11 @@
 # Release Notes
 
+## [2026-02-20] - 스트리밍 깜빡임 수정 + 사이드바 UI 개선 + 반응형 개선
+
+### Bug Fixes
+- **사이드바 수정** (`components/layout/Sidebar.tsx`, `MainLayout.tsx`, `ChatHistoryPanel.tsx`, `MainPage.tsx`): 사이드바 레이아웃 전면 개선
+- **반응형 미디어 쿼리 훅 추가** (`hooks/useMediaQuery.ts`): 화면 크기 감지 커스텀 훅 추가
+
 ## [2026-02-20] - 스트리밍 깜빡임 수정 + 사이드바 UI 개선
 
 ### Features
