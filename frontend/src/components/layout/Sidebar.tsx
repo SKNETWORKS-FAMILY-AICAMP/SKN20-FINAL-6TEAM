@@ -116,7 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const handleMenuClick = (event: React.MouseEvent<HTMLAnchorElement>, path: string) => {
     if (!isAuthenticated && AUTH_REQUIRED_PATHS.has(path)) {
       event.preventDefault();
-      navigate('/login');
+      navigate('/login', { state: { backgroundLocation: location } });
     }
 
     closeSidebar();
@@ -345,7 +345,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  navigate('/login');
+                  navigate('/login', { state: { backgroundLocation: location } });
                   closeSidebar();
                 }}
                 title={effectiveCollapsed ? '로그인' : undefined}
