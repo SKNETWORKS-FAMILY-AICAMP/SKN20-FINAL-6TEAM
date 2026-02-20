@@ -49,7 +49,7 @@ export const useChat = () => {
       abortControllerRef.current?.abort();
 
       // Build history BEFORE adding current message to avoid self-duplication in RAG augmentation
-      const MAX_HISTORY_MESSAGES = 10;
+      const MAX_HISTORY_MESSAGES = 6; // 3턴 (RAG QuestionDecomposer MAX_HISTORY_TURNS=3)
       const previousMessages = useChatStore.getState().getMessages();
       const history = previousMessages
         .filter(m =>
