@@ -1,6 +1,9 @@
 # Release Notes
 
-## [2026-02-20] - 스트리밍 깜빡임 수정 (프롬프트 footer 제거)
+## [2026-02-20] - RunPod·ChromaDB warmup + 스트리밍 깜빡임 수정
+
+### Features
+- **RunPod & ChromaDB cold start 방지 warmup 추가**: `utils/runpod_warmup.py` 신규 (서비스 시작 시 워커 warmup + 주기적 keepalive), `utils/chromadb_warmup.py` 신규 (Phase 1: 컬렉션 사전 생성, Phase 2: BM25 인덱스 병렬 빌드), `chains/rag_chain.py` HybridSearcher 싱글톤 전환 (`get_hybrid_searcher()` 사용 — warmup BM25 인덱스 공유), `utils/config/settings.py` `enable_runpod_warmup` / `runpod_warmup_interval` / `enable_chromadb_warmup` 설정 플래그 추가
 
 ### Bug Fixes
 - **`[답변 근거]` footer 생성 지시 제거** (`utils/prompts.py`): `STARTUP_FUNDING_PROMPT`, `FINANCE_TAX_PROMPT`, `HR_LABOR_PROMPT`, `LEGAL_PROMPT`, `MULTI_DOMAIN_SYNTHESIS_PROMPT` 5개 프롬프트에서 LLM의 footer 생성 지시 제거 — 소스는 SSE `source` 이벤트로 별도 전달되므로 LLM이 생성 불필요, 스트리밍 깜빡임 방지
