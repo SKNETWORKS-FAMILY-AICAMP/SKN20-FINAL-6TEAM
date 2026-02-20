@@ -4,7 +4,6 @@ import {
   Card,
   Typography,
   Tooltip,
-  Chip,
 } from '@material-tailwind/react';
 import {
   ChatBubbleLeftRightIcon,
@@ -278,7 +277,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="border-t" />
 
           {/* User Info + Settings / Login */}
-          <div className="min-h-[84px] p-2">
+          <div className="p-2">
             {isAuthenticated && user ? (
               effectiveCollapsed ? (
                 <div className="flex flex-col items-center gap-1">
@@ -301,7 +300,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
               ) : (
                 <>
-                  <div className="mb-2 flex items-center justify-between">
+                  <div className="mb-1 flex items-center justify-between px-2">
                     <div className="min-w-0 flex-1">
                       <Typography
                         variant="small"
@@ -310,19 +309,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       >
                         {user.username}
                       </Typography>
-                      <Typography variant="small" color="gray" className="truncate text-xs !text-gray-700">
-                        {user.google_email}
+                      <Typography
+                        variant="small"
+                        className="mt-1 inline-flex max-w-full items-center rounded-md bg-blue-50 px-2 py-0.5 text-xs !text-blue-700"
+                      >
+                        {USER_TYPE_NAMES[displayUserType] || displayUserType}
                       </Typography>
-                      <Chip
-                        value={USER_TYPE_NAMES[displayUserType] || displayUserType}
-                        color="blue"
-                        variant="ghost"
-                        size="sm"
-                        className="mt-1"
-                      />
                     </div>
                     <button
-                      className="rounded-full p-1 transition-colors hover:bg-gray-100"
+                      type="button"
+                      className="ml-2 flex h-10 w-10 items-center justify-center rounded-lg transition-colors hover:bg-gray-100"
                       onClick={handleProfileOpen}
                       title="설정"
                     >

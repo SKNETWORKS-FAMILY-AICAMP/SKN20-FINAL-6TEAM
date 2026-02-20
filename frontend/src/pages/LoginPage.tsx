@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, type Location } from 'react-router-dom';
 import { Card, CardBody, Typography } from '@material-tailwind/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
-import { GoogleLogin, CredentialResponse } from '@react-oauth/google';
 import { useAuthStore } from '../stores/authStore';
 import api from '../lib/api';
 import { extractErrorMessage } from '../lib/errorHandler';
@@ -23,6 +22,7 @@ const LoginPage: React.FC = () => {
   const location = useLocation();
   const { login } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
+  const [adminLoading, setAdminLoading] = useState(false);
 
   const hasBackgroundLocation = useMemo(() => {
     const state = location.state as LoginRouteState | null;
@@ -57,12 +57,15 @@ const LoginPage: React.FC = () => {
     };
   }, [hasBackgroundLocation, navigate]);
 
-  const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
+  const handleAdminLogin = async () => {
     setError(null);
+    setAdminLoading(true);
 
     try {
-      const response = await api.post('/auth/google', {
-        id_token: credentialResponse.credential,
+      const response = await api.post('/auth/test-login', {
+        email: 'admin@bizi.com',
+        username: '관리자',
+        type_code: 'U0000001',
       });
       const { user } = response.data;
 
@@ -70,12 +73,15 @@ const LoginPage: React.FC = () => {
       closeModal();
     } catch (err: unknown) {
       console.error('Login error:', err);
-      setError(extractErrorMessage(err, '로그인에 실패했습니다.'));
+      setError(
+        extractErrorMessage(
+          err,
+          '관리자 테스트 로그인에 실패했습니다. ENABLE_TEST_LOGIN 설정을 확인해 주세요.',
+        ),
+      );
+    } finally {
+      setAdminLoading(false);
     }
-  };
-
-  const handleGoogleError = () => {
-    setError('Google 로그인에 실패했습니다. 다시 시도해 주세요.');
   };
 
   return (
@@ -139,14 +145,14 @@ const LoginPage: React.FC = () => {
               )}
 
               <div className="mt-5 flex justify-center">
-                <GoogleLogin
-                  onSuccess={handleGoogleSuccess}
-                  onError={handleGoogleError}
-                  size="large"
-                  width="320"
-                  text="signin_with"
-                  shape="rectangular"
-                />
+                <button
+                  type="button"
+                  className="w-[320px] rounded-md border border-gray-300 bg-white px-4 py-2.5 text-base font-medium text-gray-800 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={handleAdminLogin}
+                  disabled={adminLoading}
+                >
+                  {adminLoading ? '로그인 중...' : '관리자 계정으로 로그인'}
+                </button>
               </div>
             </div>
           </CardBody>
