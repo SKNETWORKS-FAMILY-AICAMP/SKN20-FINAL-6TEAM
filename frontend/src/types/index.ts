@@ -100,6 +100,7 @@ export interface ChatSession {
   messages: ChatMessage[];
   created_at: string;
   updated_at: string;
+  lastHistoryId?: number | null;
 }
 
 // Notification

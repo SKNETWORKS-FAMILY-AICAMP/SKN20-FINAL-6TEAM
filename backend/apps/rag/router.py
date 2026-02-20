@@ -87,6 +87,8 @@ async def rag_chat(
 ):
     """RAG 채팅 프록시 (비스트리밍)."""
     payload: dict = {"message": body.message}
+    if body.history:
+        payload["history"] = [msg.model_dump() for msg in body.history]
     if user:
         payload["user_context"] = _build_user_context(user, db)
 
@@ -141,6 +143,8 @@ async def rag_chat_stream(
 ):
     """RAG 채팅 프록시 (SSE 스트리밍)."""
     payload: dict = {"message": body.message}
+    if body.history:
+        payload["history"] = [msg.model_dump() for msg in body.history]
     if user:
         payload["user_context"] = _build_user_context(user, db)
 

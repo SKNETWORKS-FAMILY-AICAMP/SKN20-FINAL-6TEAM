@@ -12,7 +12,7 @@ const ERROR_MESSAGE = '죄송합니다. 응답을 생성하는 중 오류가 발
 const GUEST_LIMIT_MESSAGE = '무료 체험 메시지를 모두 사용했습니다. 로그인하시면 무제한으로 상담을 이용할 수 있습니다.';
 
 export const useChat = () => {
-  const { addMessage, updateMessage, setLoading, setStreaming, isLoading, lastHistoryId, setLastHistoryId, guestMessageCount, incrementGuestCount } = useChatStore();
+  const { addMessage, updateMessage, setLoading, setStreaming, isLoading, setLastHistoryId, guestMessageCount, incrementGuestCount } = useChatStore();
   const { isAuthenticated } = useAuthStore();
   const streamingContentRef = useRef<string>('');
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -47,6 +47,21 @@ export const useChat = () => {
 
       // Abort any previous in-flight stream
       abortControllerRef.current?.abort();
+
+      // Build history BEFORE adding current message to avoid self-duplication in RAG augmentation
+      const MAX_HISTORY_MESSAGES = 10;
+      const previousMessages = useChatStore.getState().getMessages();
+      const history = previousMessages
+        .filter(m =>
+          (m.type === 'user' || m.type === 'assistant') &&
+          !m.content.startsWith('죄송합니다. 응답을 생성하는 중') &&
+          !m.content.startsWith('무료 체험 메시지를 모두')
+        )
+        .slice(-MAX_HISTORY_MESSAGES)
+        .map(m => ({
+          role: m.type === 'user' ? 'user' : 'assistant' as const,
+          content: m.content,
+        }));
 
       // Add user message
       const userMessage: ChatMessage = {
@@ -149,7 +164,7 @@ export const useChat = () => {
                 });
                 console.error('Streaming error:', error);
               },
-            }, abortController.signal);
+            }, abortController.signal, history);
 
             response = streamingContentRef.current;
             agentCode = domainToAgentCode(finalDomain);
@@ -158,6 +173,7 @@ export const useChat = () => {
             // Non-streaming mode
             const ragResponse = await ragApi.post<RagChatResponse>('/rag/chat', {
               message,
+              ...(history.length ? { history } : {}),
             });
             response = ragResponse.data.content;
             agentCode = domainToAgentCode(ragResponse.data.domain);
@@ -215,7 +231,7 @@ export const useChat = () => {
               agent_code: agentCode,
               question: message,
               answer: response,
-              parent_history_id: lastHistoryId,
+              parent_history_id: useChatStore.getState().getLastHistoryId(),
               evaluation_data: evaluationData,
             });
             setLastHistoryId(historyResponse.data.history_id);
@@ -253,7 +269,7 @@ export const useChat = () => {
         abortControllerRef.current = null;
       }
     },
-    [addMessage, updateMessage, setLoading, setStreaming, isLoading, isAuthenticated, lastHistoryId, setLastHistoryId, guestMessageCount, incrementGuestCount]
+    [addMessage, updateMessage, setLoading, setStreaming, isLoading, isAuthenticated, setLastHistoryId, guestMessageCount, incrementGuestCount]
   );
 
   return { sendMessage, isLoading };

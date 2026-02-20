@@ -41,7 +41,8 @@ export interface StreamCallbacks {
 export const streamChat = async (
   message: string,
   callbacks: StreamCallbacks,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  history?: Array<{ role: string; content: string }>,
 ): Promise<void> => {
   const response = await fetch(`${API_URL}/rag/chat/stream`, {
     method: 'POST',
@@ -50,7 +51,10 @@ export const streamChat = async (
       'X-Requested-With': 'XMLHttpRequest',
     },
     credentials: 'include',
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({
+      message,
+      ...(history?.length ? { history } : {}),
+    }),
     signal,
   });
 

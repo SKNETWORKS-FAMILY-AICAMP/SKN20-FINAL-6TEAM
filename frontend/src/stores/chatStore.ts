@@ -9,7 +9,6 @@ interface ChatState {
   currentSessionId: string | null;
   isLoading: boolean;
   isStreaming: boolean;
-  lastHistoryId: number | null;
   guestMessageCount: number;
 
   // Session management
@@ -25,8 +24,9 @@ interface ChatState {
   setStreaming: (streaming: boolean) => void;
   clearMessages: () => void;
 
-  // History linking
+  // History linking (세션별)
   setLastHistoryId: (id: number | null) => void;
+  getLastHistoryId: () => number | null;
 
   // Guest message limit
   incrementGuestCount: () => void;
@@ -44,6 +44,7 @@ const createNewSession = (title?: string): ChatSession => ({
   id: generateId(),
   title: title || '새 채팅',
   messages: [],
+  lastHistoryId: null,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
 });
@@ -55,7 +56,6 @@ export const useChatStore = create<ChatState>()(
       currentSessionId: null,
       isLoading: false,
       isStreaming: false,
-      lastHistoryId: null,
       guestMessageCount: 0,
 
       createSession: (title?: string) => {
@@ -63,13 +63,12 @@ export const useChatStore = create<ChatState>()(
         set((state) => ({
           sessions: [session, ...state.sessions],
           currentSessionId: session.id,
-          lastHistoryId: null,
         }));
         return session.id;
       },
 
       switchSession: (sessionId: string) => {
-        set({ currentSessionId: sessionId, lastHistoryId: null });
+        set({ currentSessionId: sessionId });
       },
 
       deleteSession: (sessionId: string) => {
@@ -158,7 +157,23 @@ export const useChatStore = create<ChatState>()(
         }));
       },
 
-      setLastHistoryId: (id: number | null) => set({ lastHistoryId: id }),
+      setLastHistoryId: (id: number | null) => {
+        const state = get();
+        if (!state.currentSessionId) return;
+        set((prev) => ({
+          sessions: prev.sessions.map((s) =>
+            s.id === prev.currentSessionId
+              ? { ...s, lastHistoryId: id }
+              : s
+          ),
+        }));
+      },
+
+      getLastHistoryId: () => {
+        const state = get();
+        const session = state.sessions.find((s) => s.id === state.currentSessionId);
+        return session?.lastHistoryId ?? null;
+      },
 
       incrementGuestCount: () =>
         set((state) => ({ guestMessageCount: state.guestMessageCount + 1 })),
@@ -176,7 +191,7 @@ export const useChatStore = create<ChatState>()(
         for (let i = 0; i < messages.length; i++) {
           const msg = messages[i];
           if (msg.type !== 'user') continue;
-          if (msg.synced) continue; // 이미 backend에 저장된 메시지 스킵 (중복 방지)
+          if (msg.synced) continue;
 
           const assistantMsg = messages[i + 1];
           if (!assistantMsg || assistantMsg.type !== 'assistant') continue;
@@ -194,17 +209,28 @@ export const useChatStore = create<ChatState>()(
           }
         }
 
-        set({ lastHistoryId: lastSyncedHistoryId });
-
+        // 게스트 세션의 메시지를 synced로 마킹 + lastHistoryId 업데이트 (메시지 보존)
         if (lastSyncedHistoryId !== null) {
           set((prev) => ({
             sessions: prev.sessions.map((s) =>
               s.id === prev.currentSessionId
-                ? { ...s, messages: [], updated_at: new Date().toISOString() }
+                ? {
+                    ...s,
+                    lastHistoryId: lastSyncedHistoryId,
+                    messages: s.messages.map((m) => ({ ...m, synced: true })),
+                    updated_at: new Date().toISOString(),
+                  }
                 : s
             ),
           }));
         }
+
+        // 새 세션 생성하여 전환 — 로그인 후 깨끗한 시작, 게스트 대화는 사이드바에서 접근 가능
+        const newSession = createNewSession();
+        set((prev) => ({
+          sessions: [newSession, ...prev.sessions],
+          currentSessionId: newSession.id,
+        }));
       },
 
       getCurrentSession: () => {
