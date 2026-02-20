@@ -5,7 +5,7 @@
 # 사전 조건:
 #   - Ubuntu 22.04+
 #   - Docker, Docker Compose v2 설치됨
-#   - /home/ubuntu/bizi 에 프로젝트 클론 + .env 생성 완료
+#   - /home/ec2-user/bizi 에 프로젝트 클론 + .env 생성 완료
 #
 # 실행:
 #   sudo bash scripts/batch/setup-scheduler.sh
@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-BIZI_DIR="${BIZI_DIR:-/home/ubuntu/bizi}"
+BIZI_DIR="${BIZI_DIR:-/home/ec2-user/bizi}"
 SYSTEMD_DIR="/etc/systemd/system"
 SERVICE_NAME="bizi-announcement-update"
 UNIT_SRC="${BIZI_DIR}/scripts/batch/systemd"
