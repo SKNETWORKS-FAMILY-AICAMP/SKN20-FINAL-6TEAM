@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-02-20] - 기업 등록 관리자 보호 강화
+
+### Bug Fixes
+- **관리자 유형 변경 보호** (`apps/users/service.py`): `update_user_type()`에 관리자 체크 추가 — `type_code == 'U0000001'`인 경우 `ValueError` 발생하여 관리자 권한 무결성 보장 (프론트엔드 스킵 + 백엔드 이중 보호)
+
 ## [2026-02-19] - RAGAS 백그라운드 평가 안정성 개선
 
 ### Bug Fixes

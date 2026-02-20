@@ -1,5 +1,17 @@
 # Release Notes
 
+## [2026-02-20] - 기업 등록 모달 UX 개선 (8가지 이슈 수정)
+
+### Features
+- **개업일 기본값** (`components/company/CompanyForm.tsx`): 기업 추가 모달에서 개업일 필드가 오늘 날짜로 자동 설정
+
+### Bug Fixes
+- **회사명 placeholder 전환** (`components/company/CompanyForm.tsx`): `INITIAL_FORM_DATA.com_name` 빈 문자열로 변경, `"(예비) 창업 준비"`를 placeholder 힌트로 전환 — 기본값이 실제 값으로 저장되는 문제 수정
+- **에러 메시지 모달 내 표시** (`components/company/CompanyForm.tsx`): `dialogError` state 추가 — 저장 실패 에러가 모달 안(DialogBody 상단)에 표시되어 모달 뒤에 숨겨지던 문제 수정
+- **알림 자동 사라짐** (`components/company/CompanyForm.tsx`): 성공/에러 페이지 알림이 5초 후 자동으로 사라지도록 `useEffect` 추가 (cleanup 포함)
+- **사업자번호 조건부 유형 변경** (`components/company/CompanyForm.tsx`): 기업 등록 시 `biz_num`이 있을 때만 `PUT /users/me/type` 호출 — 사업자번호 없이 등록해도 예비창업자 유형 유지
+- **관리자 유형 보호** (`components/company/CompanyForm.tsx`): 관리자 계정은 사용자 유형 변경 API 호출 스킵, 에러 발생 시 `response.data` 상세 정보를 `<pre>` 태그로 표시
+
 ## [2026-02-20] - 스트리밍 깜빡임 수정 + 사이드바 UI 개선 + 반응형 개선
 
 ### Bug Fixes

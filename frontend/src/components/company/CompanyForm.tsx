@@ -89,7 +89,7 @@ interface CompanyFormData {
 
 const INITIAL_FORM_DATA: CompanyFormData = {
   status: 'PREPARING',
-  com_name: '(예비) 창업 준비',
+  com_name: '',
   biz_num: '',
   biz_code: 'BA000000',
   addr: '',
@@ -100,17 +100,19 @@ const INITIAL_FORM_DATA: CompanyFormData = {
 const TABLE_HEADERS = ['회사명', '사업자번호', '업종', '주소', '개업일', '액션'];
 
 export const CompanyForm: React.FC = () => {
-  const { updateUser } = useAuthStore();
+  const { updateUser, user } = useAuthStore();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [dialogError, setDialogError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<CompanyFormData>(INITIAL_FORM_DATA);
 
   const isPreparing = formData.status === 'PREPARING';
+  const isAdmin = user?.type_code === 'U0000001';
 
   const fetchCompanies = async () => {
     try {
@@ -127,14 +129,26 @@ export const CompanyForm: React.FC = () => {
     fetchCompanies();
   }, []);
 
+  // 성공/에러 알림 5초 후 자동 사라짐
+  useEffect(() => {
+    if (!message) return;
+    const timer = setTimeout(() => setMessage(null), 5000);
+    return () => clearTimeout(timer);
+  }, [message]);
+
   const openCreateDialog = () => {
     setEditingCompany(null);
-    setFormData(INITIAL_FORM_DATA);
+    setDialogError(null);
+    setFormData({
+      ...INITIAL_FORM_DATA,
+      open_date: new Date().toISOString().split('T')[0],
+    });
     setIsDialogOpen(true);
   };
 
   const openEditDialog = (company: Company) => {
     setEditingCompany(company);
+    setDialogError(null);
     const isOperating = Boolean(company.biz_num);
     const existingAddr = company.addr || '';
     setFormData({
@@ -155,13 +169,12 @@ export const CompanyForm: React.FC = () => {
       ...prev,
       status: newStatus,
       biz_num: newStatus === 'PREPARING' ? '' : prev.biz_num,
-      com_name: newStatus === 'PREPARING' && !prev.com_name ? '(예비) 창업 준비' : prev.com_name,
     }));
   };
 
   const handleSave = async () => {
     setIsSaving(true);
-    setMessage(null);
+    setDialogError(null);
 
     try {
       const data = {
@@ -177,12 +190,14 @@ export const CompanyForm: React.FC = () => {
       } else {
         await api.post('/companies', data);
 
-        // Update user type to 사업자 (U003) after successful company registration
-        try {
-          await api.put('/users/me/type', { type_code: 'U0000003' });
-          updateUser({ type_code: 'U0000003' });
-        } catch {
-          // Non-critical: company was saved, type update failure is acceptable
+        // 사업자번호가 있고 관리자가 아닐 때만 사용자 유형을 사업자로 변경
+        if (formData.biz_num && !isAdmin) {
+          try {
+            await api.put('/users/me/type', { type_code: 'U0000003' });
+            updateUser({ type_code: 'U0000003' });
+          } catch {
+            // Non-critical: company was saved, type update failure is acceptable
+          }
         }
 
         setMessage({ type: 'success', text: '기업이 등록되었습니다.' });
@@ -191,10 +206,12 @@ export const CompanyForm: React.FC = () => {
       setIsDialogOpen(false);
       fetchCompanies();
     } catch (err: unknown) {
-      setMessage({
-        type: 'error',
-        text: extractErrorMessage(err, '저장에 실패했습니다.'),
-      });
+      if (isAdmin) {
+        const detail = (err as { response?: { data?: unknown } })?.response?.data;
+        setDialogError(detail ? JSON.stringify(detail, null, 2) : extractErrorMessage(err, '저장에 실패했습니다.'));
+      } else {
+        setDialogError(extractErrorMessage(err, '저장에 실패했습니다.'));
+      }
     } finally {
       setIsSaving(false);
     }
@@ -326,6 +343,17 @@ export const CompanyForm: React.FC = () => {
       <Dialog open={isDialogOpen} handler={() => setIsDialogOpen(false)} size="md">
         <DialogHeader>{editingCompany ? '기업 정보 수정' : '기업 등록'}</DialogHeader>
         <DialogBody className="space-y-4">
+          {/* Dialog-level error message */}
+          {dialogError && (
+            <Alert color="red" onClose={() => setDialogError(null)}>
+              {isAdmin ? (
+                <pre className="text-xs whitespace-pre-wrap break-all">{dialogError}</pre>
+              ) : (
+                dialogError
+              )}
+            </Alert>
+          )}
+
           {/* Company Status */}
           <div>
             <Typography variant="small" color="gray" className="mb-1 !text-gray-700">
@@ -353,6 +381,7 @@ export const CompanyForm: React.FC = () => {
             <Input
               value={formData.com_name}
               onChange={(e) => setFormData({ ...formData, com_name: e.target.value })}
+              placeholder="(예비) 창업 준비"
               className="!border-gray-300"
               labelProps={{ className: 'hidden' }}
             />

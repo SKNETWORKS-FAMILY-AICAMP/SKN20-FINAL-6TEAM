@@ -56,8 +56,11 @@ class UserService:
             수정된 사용자 객체
 
         Raises:
-            ValueError: 유효하지 않은 유형 코드인 경우
+            ValueError: 유효하지 않은 유형 코드이거나 관리자 계정인 경우
         """
+        if user.type_code == ADMIN_TYPE_CODE:
+            raise ValueError("관리자 계정의 유형은 변경할 수 없습니다.")
+
         valid_codes = self._get_allowed_type_codes()
         if data.type_code not in valid_codes:
             raise ValueError(
