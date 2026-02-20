@@ -56,6 +56,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
   const { createSession } = useChatStore();
   const displayUserType = useDisplayUserType();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isChatBtnHovered, setIsChatBtnHovered] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -89,7 +90,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
       }`}
     >
       {/* Logo / Toggle */}
-      <div className="p-4 border-b flex items-center justify-between min-h-[60px]">
+      <div className="px-4 py-[18.5px] border-b flex items-center justify-between min-h-[55px]">
         {collapsed ? (
           <div className="w-full flex flex-col items-center gap-1">
             <button
@@ -135,7 +136,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
       </div>
 
       {/* New Chat Button */}
-      <div className="px-3 pt-3">
+      <div className="px-3 pt-[10px]">
         {collapsed ? (
           <Tooltip content="새 채팅" placement="right">
             <IconButton
@@ -151,9 +152,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
           <Button
             fullWidth
             color="blue"
-            className="flex items-center justify-center gap-2"
+            className={`flex items-center justify-center gap-2 !shadow-none transition-all duration-150 border-[3.5px] ${
+              isChatBtnHovered ? '!border-blue-500 !bg-blue-900' : '!border-transparent'
+            }`}
             size="sm"
             onClick={handleNewChat}
+            onMouseEnter={() => setIsChatBtnHovered(true)}
+            onMouseLeave={() => setIsChatBtnHovered(false)}
           >
             <PlusIcon className="h-4 w-4" />
             새 채팅
