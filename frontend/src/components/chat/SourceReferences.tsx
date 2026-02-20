@@ -7,7 +7,7 @@ interface SourceReferencesProps {
 }
 
 export const SourceReferences: React.FC<SourceReferencesProps> = ({ sources }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
 
   if (!sources || sources.length === 0) return null;
 
