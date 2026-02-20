@@ -184,6 +184,47 @@ services:
     networks:
       - backend
 
+  # --- Batch Announcement Updater (systemd timer로 매일 18:30 실행) ---
+  batch-updater:
+    build:
+      context: .
+      dockerfile: Dockerfile.batch
+    container_name: bizi-batch-updater
+    profiles: ["batch"]
+    volumes:
+      - ./data:/project/data
+      - batch_logs:/project/logs
+    environment:
+      <<: *db-env
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      BIZINFO_API_KEY: ${BIZINFO_API_KEY:-}
+      KSTARTUP_API_KEY: ${KSTARTUP_API_KEY:-}
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: "8000"
+      CHROMA_AUTH_TOKEN: ${CHROMA_AUTH_TOKEN:-}
+      EMBEDDING_PROVIDER: runpod
+      RUNPOD_API_KEY: ${RUNPOD_API_KEY}
+      RUNPOD_ENDPOINT_ID: ${RUNPOD_ENDPOINT_ID}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-northeast-2}
+      # Email SMTP 알림
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_TO: ${SMTP_TO:-}
+      ENVIRONMENT: batch
+    depends_on:
+      chromadb:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    networks:
+      - backend
+
   # --- VectorDB 빌드 서비스 (GPU 임베딩, 필요 시만 실행) ---
   # OPENAI_API_KEY 불필요 — 로컬 GPU 임베딩(EMBEDDING_PROVIDER=local) 사용
   vectordb-builder:
@@ -229,4 +270,6 @@ volumes:
   rag_logs:
     driver: local
   rag_output:
+    driver: local
+  batch_logs:
     driver: local

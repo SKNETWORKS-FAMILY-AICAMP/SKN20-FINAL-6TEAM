@@ -1,15 +1,15 @@
 [Unit]
 Description=Bizi 지원사업 공고 일일 배치 갱신
-After=network-online.target mysql.service
+After=network-online.target docker.service
 Wants=network-online.target
+Requires=docker.service
 
 [Service]
 Type=oneshot
 User=ubuntu
-Group=ubuntu
+Group=docker
 WorkingDirectory=/home/ubuntu/bizi
-EnvironmentFile=/home/ubuntu/bizi/.env
-ExecStart=/home/ubuntu/bizi/.venv/bin/python scripts/batch/update_announcements.py
+ExecStart=/usr/bin/docker compose -f docker-compose.prod.yaml run --rm batch-updater
 TimeoutStartSec=7200
 StandardOutput=journal
 StandardError=journal

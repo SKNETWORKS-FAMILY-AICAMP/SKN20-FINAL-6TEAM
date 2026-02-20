@@ -28,9 +28,11 @@ import argparse
 import json
 import logging
 import os
+import smtplib
 import sys
 import time
 from datetime import date, datetime
+from email.mime.text import MIMEText
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
@@ -114,12 +116,12 @@ def _create_session(engine):
 
 
 # =============================================================================
-# Slack 알림
+# Email SMTP 알림
 # =============================================================================
 
 
 def _safe_error_message(e: Exception) -> str:
-    """Slack 알림용 안전한 에러 메시지를 생성합니다."""
+    """알림용 안전한 에러 메시지를 생성합니다."""
     error_type = type(e).__name__
     if error_type in (
         "OperationalError", "DatabaseError", "InterfaceError",
@@ -130,22 +132,41 @@ def _safe_error_message(e: Exception) -> str:
     return f"{error_type}: {first_line}"
 
 
-def _send_slack_notification(message: str, logger: logging.Logger) -> None:
-    """Slack Webhook으로 알림을 보냅니다."""
-    webhook_url = os.getenv("SLACK_WEBHOOK_URL")
-    if not webhook_url:
-        return
+def _send_email_notification(
+    subject: str, body: str, logger: logging.Logger
+) -> None:
+    """SMTP로 이메일 알림을 보냅니다.
+
+    SMTP_USER, SMTP_PASSWORD, SMTP_TO 중 하나라도 미설정이면 건너뜁니다.
+
+    Args:
+        subject: 이메일 제목
+        body: 이메일 본문
+        logger: 로거 인스턴스
+    """
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    smtp_from = os.getenv("SMTP_FROM") or smtp_user
+    smtp_to = os.getenv("SMTP_TO")
+
+    if not all([smtp_user, smtp_password, smtp_to]):
+        return  # SMTP 미설정 시 건너뜀
 
     try:
-        import requests
+        msg = MIMEText(body, "plain", "utf-8")
+        msg["Subject"] = subject
+        msg["From"] = smtp_from
+        msg["To"] = smtp_to
 
-        requests.post(
-            webhook_url,
-            json={"text": message},
-            timeout=10,
-        )
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_from, smtp_to.split(","), msg.as_string())
     except Exception as e:
-        logger.warning("Slack 알림 전송 실패: %s", e)
+        logger.warning("이메일 알림 전송 실패: %s", e)
 
 
 # =============================================================================
@@ -239,8 +260,10 @@ class AnnouncementBatchUpdater:
 
         except Exception as e:
             self.logger.exception("예상치 못한 오류: %s", e)
-            _send_slack_notification(
-                f":x: [Bizi 배치] 공고 갱신 실패: {_safe_error_message(e)}", self.logger
+            _send_email_notification(
+                subject="[Bizi 배치] 공고 갱신 실패",
+                body=f"예상치 못한 오류가 발생했습니다.\n\n{_safe_error_message(e)}",
+                logger=self.logger,
             )
             return 6
 
@@ -290,8 +313,10 @@ class AnnouncementBatchUpdater:
 
         except Exception as e:
             self.logger.error("크롤링 실패: %s", e)
-            _send_slack_notification(
-                f":warning: [Bizi 배치] 크롤링 실패: {_safe_error_message(e)}", self.logger
+            _send_email_notification(
+                subject="[Bizi 배치] 크롤링 실패",
+                body=f"크롤링 단계에서 오류가 발생했습니다.\n\n{_safe_error_message(e)}",
+                logger=self.logger,
             )
             return None
 
@@ -424,8 +449,10 @@ class AnnouncementBatchUpdater:
 
         except Exception as e:
             self.logger.error("파일 업로드 실패: %s", e)
-            _send_slack_notification(
-                f":warning: [Bizi 배치] 파일 업로드 실패: {_safe_error_message(e)}", self.logger
+            _send_email_notification(
+                subject="[Bizi 배치] 파일 업로드 실패",
+                body=f"S3 파일 업로드 단계에서 오류가 발생했습니다.\n\n{_safe_error_message(e)}",
+                logger=self.logger,
             )
             return False
 
@@ -587,8 +614,10 @@ class AnnouncementBatchUpdater:
 
         except Exception as e:
             self.logger.error("DB 동기화 실패: %s", e)
-            _send_slack_notification(
-                f":warning: [Bizi 배치] DB 동기화 실패: {_safe_error_message(e)}", self.logger
+            _send_email_notification(
+                subject="[Bizi 배치] DB 동기화 실패",
+                body=f"DB 동기화 단계에서 오류가 발생했습니다.\n\n{_safe_error_message(e)}",
+                logger=self.logger,
             )
             return False
         finally:
@@ -747,8 +776,10 @@ class AnnouncementBatchUpdater:
 
         except Exception as e:
             self.logger.error("전처리 실패: %s", e)
-            _send_slack_notification(
-                f":warning: [Bizi 배치] 전처리 실패: {_safe_error_message(e)}", self.logger
+            _send_email_notification(
+                subject="[Bizi 배치] 전처리 실패",
+                body=f"JSONL 전처리 단계에서 오류가 발생했습니다.\n\n{_safe_error_message(e)}",
+                logger=self.logger,
             )
             return False
 
@@ -782,8 +813,10 @@ class AnnouncementBatchUpdater:
 
         except Exception as e:
             self.logger.error("VectorDB 갱신 실패: %s", e)
-            _send_slack_notification(
-                f":warning: [Bizi 배치] VectorDB 갱신 실패: {_safe_error_message(e)}", self.logger
+            _send_email_notification(
+                subject="[Bizi 배치] VectorDB 갱신 실패",
+                body=f"VectorDB 갱신 단계에서 오류가 발생했습니다.\n\n{_safe_error_message(e)}",
+                logger=self.logger,
             )
             return False
 
@@ -824,21 +857,26 @@ class AnnouncementBatchUpdater:
         )
         self.logger.info("=" * 60)
 
-        # Slack 알림
+        # Email 알림
         total_crawled = (
             self.stats["crawled"]["bizinfo"] + self.stats["crawled"]["kstartup"]
         )
-        _send_slack_notification(
-            f":white_check_mark: [Bizi 배치] 공고 갱신 완료\n"
-            f"  크롤링: {total_crawled}건\n"
-            f"  S3: 공고문 {self.stats['s3_upload']['docs']}건, "
-            f"신청양식 {self.stats['s3_upload']['forms']}건\n"
-            f"  DB: +{self.stats['db_sync']['inserted']}, "
-            f"갱신 {self.stats['db_sync']['updated']}, "
-            f"마감 {self.stats['db_sync']['deactivated']}\n"
-            f"  VectorDB: {self.stats['vectordb']['added']}건 갱신\n"
-            f"  소요시간: {elapsed:.0f}초",
-            self.logger,
+        _send_email_notification(
+            subject="[Bizi 배치] 공고 갱신 완료",
+            body=(
+                f"공고 갱신 배치가 완료되었습니다.\n\n"
+                f"크롤링: {total_crawled}건 "
+                f"(기업마당 {self.stats['crawled']['bizinfo']}건, "
+                f"K-Startup {self.stats['crawled']['kstartup']}건)\n"
+                f"S3 업로드: 공고문 {self.stats['s3_upload']['docs']}건, "
+                f"신청양식 {self.stats['s3_upload']['forms']}건\n"
+                f"DB 동기화: 추가 +{self.stats['db_sync']['inserted']}, "
+                f"갱신 {self.stats['db_sync']['updated']}, "
+                f"마감 {self.stats['db_sync']['deactivated']}\n"
+                f"VectorDB: {self.stats['vectordb']['added']}건 갱신\n"
+                f"소요시간: {elapsed:.0f}초"
+            ),
+            logger=self.logger,
         )
 
 

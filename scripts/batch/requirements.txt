@@ -1,0 +1,34 @@
+# Database
+sqlalchemy>=2.0.0,<3.0.0
+pymysql>=1.1.0
+cryptography>=42.0.0
+
+# LangChain (VectorDB builder 최소 의존성)
+langchain-core>=1.2.0,<2.0.0
+langchain-chroma>=1.1.0,<2.0.0
+langchain-text-splitters>=1.1.0,<2.0.0
+
+# Vector DB
+chromadb==1.5.0
+
+# LLM (공고문 텍스트 분석)
+openai>=2.0.0,<3.0.0
+
+# HTTP (RunPod API + 크롤링)
+httpx>=0.28.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+
+# AWS S3
+boto3>=1.34.0
+
+# 파일 처리 (HWP/PDF - collect_announcements.py에서 lazy import)
+olefile>=0.47
+PyMuPDF>=1.24.0
+
+# Config
+pydantic>=2.10.0,<3.0.0
+pydantic-settings>=2.10.0,<3.0.0
+python-dotenv>=1.0.0
+tqdm>=4.66.0
+tenacity>=8.0.0

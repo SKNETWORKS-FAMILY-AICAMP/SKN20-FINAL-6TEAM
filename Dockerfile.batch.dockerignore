@@ -1,0 +1,57 @@
+# Dockerfile.batch 전용 .dockerignore
+# (루트 .dockerignore는 Nginx 빌드용이므로 별도 관리)
+
+# --- 환경/시크릿 ---
+.env
+.env.*
+!.env.example
+.ssh/
+*.pem
+
+# --- 불필요한 서비스 (batch에서 불필요) ---
+frontend/
+backend/
+deploy/
+runpod-inference/
+
+# --- 데이터 (런타임에 bind mount) ---
+data/
+
+# --- 가상환경 ---
+.backend
+.rag
+.react
+.venv
+venv
+
+# --- Git/IDE/Claude ---
+.git
+.gitignore
+.gitattributes
+.vscode/
+.idea/
+.cursor/
+.claude/
+.agents/
+
+# --- OS 아티팩트 ---
+.DS_Store
+__MACOSX/
+Thumbs.db
+
+# --- Python 아티팩트 ---
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+
+# --- Node ---
+node_modules/
+
+# --- 문서/기타 ---
+docs/
+proposal/
+vercel-react-best-practices/
+web-design-guidelines/
+*.log
