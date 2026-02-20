@@ -403,14 +403,19 @@ class DataLoader:
                         data, file_name, collection_domain=collection_domain,
                     )
 
-    def load_db_documents(self, domain: str) -> Iterator[Document]:
-        """특정 도메인의 모든 문서를 로드합니다.
+    def load_db_documents(
+        self,
+        domain: str,
+        source_files: list[str] | None = None,
+    ) -> Iterator[Document]:
+        """특정 도메인의 문서를 로드합니다.
 
-        도메인에 매핑된 모든 데이터 파일을 읽어 Document로 변환합니다.
+        도메인에 매핑된 데이터 파일을 읽어 Document로 변환합니다.
         FILE_SOURCE_DIR로 소스 디렉토리를 명시적으로 결정합니다.
 
         Args:
             domain: 도메인 키 (startup_funding, finance_tax, hr_labor, law_common)
+            source_files: 로드할 파일명 목록. None이면 도메인 전체 파일 로드.
 
         Yields:
             LangChain Document 인스턴스
@@ -423,6 +428,8 @@ class DataLoader:
 
         for file_name, target_domain in FILE_TO_COLLECTION_MAPPING.items():
             if target_domain != domain:
+                continue
+            if source_files is not None and file_name not in source_files:
                 continue
 
             source_key = FILE_SOURCE_DIR.get(file_name, domain)

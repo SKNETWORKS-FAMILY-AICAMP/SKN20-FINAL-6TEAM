@@ -6,7 +6,7 @@
     2. S3 UPLOAD  → 공고문/신청양식 파일 다운로드 → S3 업로드
     3. DB SYNC    → MySQL announce 테이블 동기화 (추가/갱신/마감 분류)
     4. PREPROCESS → JSONL 변환 (RAG용 통합 스키마)
-    5. VECTORDB   → 선택적 교체 (ANNOUNCE_* 삭제 → 새 문서 추가)
+    5. VECTORDB   → upsert 후 마감 표시, 보존 기간 경과 문서 삭제
 
 Usage:
     python scripts/batch/update_announcements.py
@@ -203,7 +203,7 @@ class AnnouncementBatchUpdater:
             "s3_upload": {"docs": 0, "forms": 0, "errors": 0},
             "db_sync": {"inserted": 0, "updated": 0, "deactivated": 0},
             "preprocessed": 0,
-            "vectordb": {"deleted": 0, "added": 0},
+            "vectordb": {"upserted": 0, "newly_closed": 0, "removed": 0},
         }
 
     def run(self) -> int:
@@ -788,7 +788,7 @@ class AnnouncementBatchUpdater:
     # -------------------------------------------------------------------------
 
     def _update_vectordb(self) -> bool:
-        """VectorDB에서 공고 문서만 선택적으로 교체합니다."""
+        """VectorDB에 공고 문서를 upsert하고 마감 공고를 관리합니다."""
         self.logger.info("[5/5] VectorDB 갱신 시작...")
 
         if self.dry_run:
@@ -801,13 +801,15 @@ class AnnouncementBatchUpdater:
             builder = VectorDBBuilder()
             result = builder.update_announcements(domain="startup_funding")
 
-            self.stats["vectordb"]["deleted"] = result["deleted"]
-            self.stats["vectordb"]["added"] = result["added"]
+            self.stats["vectordb"]["upserted"] = result["upserted"]
+            self.stats["vectordb"]["newly_closed"] = result["newly_closed"]
+            self.stats["vectordb"]["removed"] = result["removed"]
 
             self.logger.info(
-                "  VectorDB 갱신 완료: 삭제 %d건, 추가 %d건",
-                result["deleted"],
-                result["added"],
+                "  VectorDB 갱신 완료: upsert %d건, 마감표시 %d건, 삭제 %d건",
+                result["upserted"],
+                result["newly_closed"],
+                result["removed"],
             )
             return True
 
@@ -851,9 +853,10 @@ class AnnouncementBatchUpdater:
         )
         self.logger.info("  전처리: %d건 JSONL", self.stats["preprocessed"])
         self.logger.info(
-            "  VectorDB: 삭제 %d건, 추가 %d건",
-            self.stats["vectordb"]["deleted"],
-            self.stats["vectordb"]["added"],
+            "  VectorDB: upsert %d건, 마감표시 %d건, 삭제 %d건",
+            self.stats["vectordb"]["upserted"],
+            self.stats["vectordb"]["newly_closed"],
+            self.stats["vectordb"]["removed"],
         )
         self.logger.info("=" * 60)
 
@@ -873,7 +876,9 @@ class AnnouncementBatchUpdater:
                 f"DB 동기화: 추가 +{self.stats['db_sync']['inserted']}, "
                 f"갱신 {self.stats['db_sync']['updated']}, "
                 f"마감 {self.stats['db_sync']['deactivated']}\n"
-                f"VectorDB: {self.stats['vectordb']['added']}건 갱신\n"
+                f"VectorDB: upsert {self.stats['vectordb']['upserted']}건, "
+                f"마감표시 {self.stats['vectordb']['newly_closed']}건, "
+                f"삭제 {self.stats['vectordb']['removed']}건\n"
                 f"소요시간: {elapsed:.0f}초"
             ),
             logger=self.logger,

@@ -6,6 +6,8 @@ RAG 런타임(ChromaVectorStore)과 독립적으로 동작합니다.
 
 import gc
 import logging
+import os
+from datetime import date, timedelta
 from typing import Any
 
 import chromadb
@@ -288,73 +290,135 @@ class VectorDBBuilder:
 
         return results
 
-    def update_announcements(self, domain: str = "startup_funding") -> dict[str, int]:
-        """공고 문서만 선택적으로 갱신합니다.
+    def update_announcements(
+        self,
+        domain: str = "startup_funding",
+        retention_days: int | None = None,
+    ) -> dict[str, int]:
+        """공고 문서를 안전하게 upsert 방식으로 갱신합니다.
 
-        기존 ANNOUNCE_* 접두사 ID를 가진 문서를 삭제하고,
-        새로운 announcements.jsonl 데이터를 추가합니다.
-        가이드/절차 등 다른 문서는 보존됩니다.
+        Upsert 먼저 수행 후, 마감된 공고에 closed 표시를 하고
+        retention_days가 지난 공고만 삭제합니다.
+        실패 시 기존 데이터가 보존됩니다.
 
         Args:
             domain: 대상 도메인 키 (기본: startup_funding)
+            retention_days: 마감 후 VectorDB 보존 일수 (기본: 환경변수 또는 30일)
 
         Returns:
-            {"deleted": 삭제 수, "added": 추가 수} 딕셔너리
+            {"upserted": upsert 수, "newly_closed": 마감 표시 수, "removed": 삭제 수}
         """
+        if retention_days is None:
+            try:
+                retention_days = int(os.environ.get("ANNOUNCEMENT_RETENTION_DAYS", "30"))
+            except ValueError:
+                retention_days = 30
+                logger.warning(
+                    "ANNOUNCEMENT_RETENTION_DAYS 값이 유효하지 않아 기본값 30일 사용"
+                )
+
         collection_name = COLLECTION_NAMES.get(domain, domain)
         client = self._get_client()
 
-        # 1. 기존 ANNOUNCE_* ID 조회 + 삭제
         try:
             collection = client.get_collection(collection_name)
         except Exception:
-            logger.warning("컬렉션 %s이(가) 존재하지 않습니다. 전체 빌드를 먼저 실행하세요.", collection_name)
-            return {"deleted": 0, "added": 0}
+            logger.warning(
+                "컬렉션 %s이(가) 존재하지 않습니다. 전체 빌드를 먼저 실행하세요.",
+                collection_name,
+            )
+            return {"upserted": 0, "newly_closed": 0, "removed": 0}
 
-        all_ids = collection.get(include=[])["ids"]
-        announce_ids = [doc_id for doc_id in all_ids if doc_id.startswith("ANNOUNCE_")]
-        deleted_count = len(announce_ids)
+        # 1. 기존 ANNOUNCE_* ID + metadata 조회
+        existing = collection.get(
+            where={"source_file": "announcements.jsonl"},
+            include=["metadatas"],
+        )
+        old_announce: dict[str, dict] = {
+            doc_id: (meta or {})
+            for doc_id, meta in zip(existing["ids"], existing["metadatas"])
+        }
+        logger.info("기존 공고 문서 %d건 조회 완료", len(old_announce))
 
-        if announce_ids:
-            # ChromaDB delete는 최대 ~5000건씩 처리
-            for i in range(0, len(announce_ids), 5000):
-                batch_ids = announce_ids[i:i + 5000]
-                collection.delete(ids=batch_ids)
-            logger.info("기존 공고 문서 %d건 삭제 완료", deleted_count)
-        else:
-            logger.info("삭제할 기존 공고 문서 없음")
-
-        # 2. 새 announcements.jsonl 로드 (source_file 필터)
+        # 2. 새 announcements.jsonl upsert (add_texts → 내부적으로 collection.upsert)
         store = self._get_store(domain)
         batch: list[Document] = []
-        total_added = 0
+        new_ids: set[str] = set()
+        total_upserted = 0
         batch_size = self.config.batch_size
 
-        for doc in self.loader.load_db_documents(domain):
-            if doc.metadata.get("source_file") != "announcements.jsonl":
-                continue
+        for doc in self.loader.load_db_documents(domain, source_files=["announcements.jsonl"]):
+            doc_id = doc.metadata.get("id") or f"doc_{total_upserted + len(batch)}"
+            doc.metadata["id"] = doc_id
+            new_ids.add(doc_id)
             batch.append(doc)
 
             if len(batch) >= batch_size:
-                self._add_batch(store, batch, total_added)
-                total_added += len(batch)
+                self._add_batch(store, batch, total_upserted)
+                total_upserted += len(batch)
                 batch = []
-                if total_added % 1000 == 0:
-                    logger.info("  공고 문서 %d건 추가 완료", total_added)
+                if total_upserted % 1000 == 0:
+                    logger.info("  공고 문서 %d건 upsert 완료", total_upserted)
                     self._cleanup_memory()
 
-        # 남은 배치 처리
         if batch:
-            self._add_batch(store, batch, total_added)
-            total_added += len(batch)
+            self._add_batch(store, batch, total_upserted)
+            total_upserted += len(batch)
 
         self._cleanup_memory()
+        logger.info("공고 문서 %d건 upsert 완료", total_upserted)
+
+        # 3. 마감 공고 처리 (orphan = 기존에 있었으나 새 데이터에 없는 것)
+        today_str = date.today().isoformat()
+        cutoff_date = (date.today() - timedelta(days=retention_days)).isoformat()
+        orphan_ids = set(old_announce.keys()) - new_ids
+
+        newly_closed_ids: list[str] = []
+        expired_ids: list[str] = []
+
+        for doc_id in orphan_ids:
+            meta = old_announce[doc_id]
+            if meta.get("status") == "closed":
+                # 이미 마감 표시됨 → 보존 기간 초과 여부 확인
+                closed_date = meta.get("closed_date", "")
+                if closed_date and closed_date <= cutoff_date:
+                    expired_ids.append(doc_id)
+            else:
+                # 처음 마감 감지 → closed 표시
+                newly_closed_ids.append(doc_id)
+
+        # 4. 처음 마감된 공고에 status=closed, closed_date 추가
+        if newly_closed_ids:
+            for i in range(0, len(newly_closed_ids), 5000):
+                batch_ids = newly_closed_ids[i:i + 5000]
+                batch_metas = []
+                for doc_id in batch_ids:
+                    updated_meta = dict(old_announce[doc_id])
+                    updated_meta["status"] = "closed"
+                    updated_meta["closed_date"] = today_str
+                    batch_metas.append(updated_meta)
+                collection.update(ids=batch_ids, metadatas=batch_metas)
+            logger.info("마감 공고 %d건 closed 표시 완료", len(newly_closed_ids))
+
+        # 5. 보존 기간 초과 마감 공고 삭제
+        removed_count = len(expired_ids)
+        if expired_ids:
+            for i in range(0, len(expired_ids), 5000):
+                batch_ids = expired_ids[i:i + 5000]
+                collection.delete(ids=batch_ids)
+            logger.info("만료 공고 %d건 삭제 완료 (보존 기간 %d일 초과)", removed_count, retention_days)
+        else:
+            logger.info("삭제할 만료 공고 없음")
 
         logger.info(
-            "공고 갱신 완료: 삭제 %d건, 추가 %d건 (컬렉션: %s)",
-            deleted_count, total_added, collection_name,
+            "공고 갱신 완료: upsert %d건, 마감표시 %d건, 삭제 %d건 (컬렉션: %s)",
+            total_upserted, len(newly_closed_ids), removed_count, collection_name,
         )
-        return {"deleted": deleted_count, "added": total_added}
+        return {
+            "upserted": total_upserted,
+            "newly_closed": len(newly_closed_ids),
+            "removed": removed_count,
+        }
 
     def get_all_stats(self) -> dict[str, dict[str, Any]]:
         """모든 컬렉션의 통계를 반환합니다.
