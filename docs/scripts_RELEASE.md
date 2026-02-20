@@ -3,6 +3,7 @@
 ## [2026-02-20] - 지원사업 공고 배치 스케줄러 구현 (Docker + systemd)
 
 ### Bug Fixes
+- **코드 리뷰 이슈 수정** (`scripts/vectordb/builder.py`, `scripts/vectordb/loader.py`, `scripts/batch/update_announcements.py`): upsert doc_id fallback 처리, `ANNOUNCEMENT_RETENTION_DAYS` 비정수값 안전 파싱, `load_db_documents()` `source_files` 필터 파라미터 추가
 - **배치 스케줄러 EC2 유저 수정** (`scripts/batch/setup-scheduler.sh`, `scripts/batch/systemd/bizi-announcement-update.service`): `ubuntu` → `ec2-user` (Amazon Linux 계정명 수정)
 
 ### Features
