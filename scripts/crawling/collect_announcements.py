@@ -24,7 +24,7 @@ import logging
 import zlib
 import zipfile
 from pathlib import Path
-from datetime import datetime
+from datetime import date, datetime
 from urllib.parse import unquote
 from xml.etree import ElementTree as ET
 from dataclasses import dataclass, field
@@ -160,19 +160,24 @@ class BizinfoClient:
         self.api_key = api_key
         self.logger = logger
 
-    def _is_recruiting(self, date_range: str) -> bool:
-        """모집중인지 확인 (접수기간 기준) - 확실한 것만"""
+    def _is_recruiting(self, date_range: str) -> bool | None:
+        """모집중인지 확인.
+
+        Returns:
+            True:  날짜 기준 모집 중 (확정)
+            False: 날짜 기준 모집 종료 또는 날짜 정보 없음 (확정)
+            None:  날짜 파싱 불가 — 상시/세부사업별 상이 등 (LLM 판단 필요)
+        """
         if not date_range:
             return False
 
         today = datetime.now().strftime("%Y%m%d")
 
-        # "YYYYMMDD ~ YYYYMMDD" 또는 "YYYY-MM-DD ~ YYYY-MM-DD" 형식 허용
+        # YYYYMMDD~YYYYMMDD 또는 YYYY-MM-DD ~ YYYY-MM-DD 형식
         if "~" in date_range:
             try:
                 parts = date_range.replace(" ", "").split("~")
                 if len(parts) == 2:
-                    # 대시 제거하여 YYYYMMDD 형식으로 정규화
                     start_date = parts[0].strip().replace("-", "")
                     end_date = parts[1].strip().replace("-", "")
                     if len(start_date) == 8 and len(end_date) == 8 and start_date.isdigit() and end_date.isdigit():
@@ -180,7 +185,8 @@ class BizinfoClient:
             except:
                 pass
 
-        return False
+        # 날짜 파싱 불가 (상시, 세부사업별 상이 등) → LLM 판단 위임
+        return None
 
     def fetch(self, count: int = 0, recruiting_only: bool = True) -> list[dict]:
         """공고 목록 조회 (count=0이면 전체, recruiting_only=True면 모집중만)"""
@@ -211,21 +217,29 @@ class BizinfoClient:
                 # 모집중 필터링
                 if recruiting_only:
                     date_range = item.get("reqstBeginEndDe", "")
-                    if not self._is_recruiting(date_range):
+                    recruiting = self._is_recruiting(date_range)
+                    if recruiting is False:
                         filtered_out += 1
                         continue
 
                 ann = dict(item)
                 ann["id"] = item.get("pblancId", "")
+                # None: 날짜 파싱 불가 → LLM이 나중에 모집 여부 판단
+                ann["date_ambiguous"] = recruiting is None
                 announcements.append(ann)
 
                 # count 제한
                 if count > 0 and len(announcements) >= count:
                     break
 
+            ambiguous_count = sum(1 for a in announcements if a.get("date_ambiguous"))
             if filtered_out > 0:
                 self.logger.info(f"기업마당 날짜 필터로 제외: {filtered_out}개")
-            self.logger.info(f"기업마당 API: {len(announcements)}개 공고 조회 (모집중)")
+            self.logger.info(
+                f"기업마당 API: {len(announcements)}개 공고 조회 "
+                f"(날짜확인: {len(announcements) - ambiguous_count}개, "
+                f"LLM판단필요: {ambiguous_count}개)"
+            )
             return announcements
 
         except Exception as e:
@@ -1024,6 +1038,27 @@ class OpenAIAnalyzer:
   "지원금액": "..."
 }"""
 
+    # 날짜 파싱 불가 공고용: 모집중 여부 + 정보 추출을 한 번에 수행
+    # {today} 자리표시자는 analyze() 호출 시 오늘 날짜로 대체됨
+    SYSTEM_PROMPT_WITH_RECRUITING = """너는 정부 공고문 분석 전문가야.
+아래 텍스트에서 '지원대상', '제외대상', '지원금액'을 찾아 요약하고,
+오늘({today}) 기준으로 이 공고가 현재 모집 중인지 판단해줘.
+만약 해당 내용이 없다면 '정보 없음'이라고 답해줘.
+
+모집중 판단 기준:
+- 문서 내 접수기간/모집기간을 찾아 오늘({today}) 기준으로 판단
+- 접수 종료일이 오늘 이전이면 false
+- 상시모집, 예산 소진 시까지, 기간 불명확이면 true
+- 판단 근거가 없으면 true (포함 방향으로)
+
+반드시 아래 JSON 형식으로만 응답해:
+{
+  "모집중": true,
+  "지원대상": "...",
+  "제외대상": "...",
+  "지원금액": "..."
+}"""
+
     DEFAULT_RESULT = {"지원대상": "정보 없음", "제외대상": "정보 없음", "지원금액": "정보 없음"}
 
     def __init__(self, api_key: str, logger: logging.Logger):
@@ -1045,13 +1080,21 @@ class OpenAIAnalyzer:
             except ImportError:
                 self.logger.error("openai 패키지가 설치되지 않았습니다.")
 
-    def analyze(self, text: str, extract_target: bool = True) -> dict:
-        """
-        텍스트에서 정보 추출
+    def analyze(
+        self,
+        text: str,
+        extract_target: bool = True,
+        check_recruiting: bool = False,
+    ) -> dict:
+        """텍스트에서 정보 추출.
 
         Args:
             text: 분석할 텍스트
             extract_target: True면 지원대상 포함, False면 제외대상/지원금액만
+            check_recruiting: True면 모집중 여부도 함께 판단 (날짜 파싱 불가 공고용)
+
+        Returns:
+            추출된 정보 dict. check_recruiting=True면 '모집중' 키 포함.
         """
         if not self.client:
             self.logger.error("OpenAI 클라이언트가 초기화되지 않았습니다.")
@@ -1066,7 +1109,11 @@ class OpenAIAnalyzer:
             text = text[:max_chars]
 
         # 프롬프트 선택
-        system_prompt = self.SYSTEM_PROMPT_FULL if extract_target else self.SYSTEM_PROMPT_PARTIAL
+        if check_recruiting:
+            today = date.today().isoformat()
+            system_prompt = self.SYSTEM_PROMPT_WITH_RECRUITING.format(today=today)
+        else:
+            system_prompt = self.SYSTEM_PROMPT_FULL if extract_target else self.SYSTEM_PROMPT_PARTIAL
 
         try:
             response = self.client.chat.completions.create(
@@ -1101,7 +1148,14 @@ class OpenAIAnalyzer:
             result = json.loads(response.choices[0].message.content)
             self.logger.info("  OpenAI 분석 완료")
 
-            if extract_target:
+            if check_recruiting:
+                return {
+                    "모집중": result.get("모집중", True),
+                    "지원대상": result.get("지원대상", "정보 없음"),
+                    "제외대상": result.get("제외대상", "정보 없음"),
+                    "지원금액": result.get("지원금액", "정보 없음"),
+                }
+            elif extract_target:
                 return {
                     "지원대상": result.get("지원대상", "정보 없음"),
                     "제외대상": result.get("제외대상", "정보 없음"),
@@ -1243,12 +1297,14 @@ class AnnouncementProcessor:
                 지원대상 = api_target if api_target else "정보 없음"
             else:
                 지원대상 = "정보 없음"
-
             제외대상 = "정보 없음"
             지원금액 = "정보 없음"
 
             # 신청서/양식 파일 경로 저장 리스트
             form_files = []
+            # date_ambiguous 공고: 첫 LLM 분석 시 모집중 여부도 판단
+            is_ambiguous = ann.get("date_ambiguous", False) and not is_kstartup
+            skip_announcement = False
 
             # 파일들을 순회하면서 정보 추출
             file_count = 0
@@ -1270,8 +1326,20 @@ class AnnouncementProcessor:
                 text = self.extractor.extract(file_path)
 
                 if text:
-                    # OpenAI 분석 (K-Startup은 지원대상 제외)
-                    extracted_info = self.analyzer.analyze(text, extract_target=not is_kstartup)
+                    # date_ambiguous 공고는 첫 번째 파일에서 모집중 여부도 함께 판단
+                    check_recruiting = is_ambiguous and file_count == 1
+                    extracted_info = self.analyzer.analyze(
+                        text,
+                        extract_target=not is_kstartup,
+                        check_recruiting=check_recruiting,
+                    )
+
+                    # 모집 종료로 판단되면 이 공고 스킵
+                    if check_recruiting and not extracted_info.get("모집중", True):
+                        self.logger.info("  ✗ 모집 종료 (LLM 판단) — 스킵")
+                        skip_announcement = True
+                        self._cleanup_temp_files(file_path)
+                        break
 
                     # 기업마당인 경우 지원대상도 LLM에서 추출
                     if not is_kstartup:
@@ -1288,6 +1356,9 @@ class AnnouncementProcessor:
                     self.logger.info(f"  ✓ 정보 추출 완료 (파일 {file_count}개 처리)")
                     break
 
+            if skip_announcement:
+                continue
+
             if file_count == 0:
                 self.logger.warning("  문서 파일 없음")
 
@@ -1301,7 +1372,7 @@ class AnnouncementProcessor:
                 "지원대상": 지원대상,
                 "제외대상": 제외대상,
                 "지원금액": 지원금액,
-                "신청양식_파일": form_files,  # 신청서/양식 파일 경로 리스트
+                "신청양식_파일": form_files,
             }
             results.append(result)
 
