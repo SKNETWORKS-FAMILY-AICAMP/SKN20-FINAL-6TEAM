@@ -6,6 +6,7 @@ Bizi의 RAG 서비스 API 서버를 구동합니다.
 
 import asyncio
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -36,7 +37,7 @@ from vectorstores.chroma import ChromaVectorStore
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """애플리케이션 라이프사이클 관리."""
     logger.info("RAG 서비스 초기화 중...")
 
@@ -58,15 +59,38 @@ async def lifespan(app: FastAPI):
     state.router_agent = MainRouter(vector_store=state.vector_store)
     state.executor = ActionExecutor()
 
-    # CrossEncoder 모델 사전 로딩
+    # CrossEncoder 모델 사전 로딩 / RunPod warmup / ChromaDB warmup
     settings = get_settings()
+    warmup_task: asyncio.Task | None = None
+
     if settings.enable_reranking and settings.embedding_provider == "local":
         logger.info("CrossEncoder 모델 사전 로딩 시작...")
         reranker = get_reranker()
         await asyncio.to_thread(lambda: reranker.model)
         logger.info("CrossEncoder 모델 사전 로딩 완료")
-    elif settings.enable_reranking and settings.embedding_provider == "runpod":
-        logger.info("RunPod 모드: CrossEncoder 프리로드 스킵 (RunPod 워커가 모델 관리)")
+    elif settings.embedding_provider == "runpod":
+        # 시작 시 1회 warmup (워커 깨우기)
+        from utils.runpod_warmup import run_periodic_warmup, warmup_runpod
+        success = await warmup_runpod()
+        if success:
+            logger.info("RunPod 초기 warmup 성공")
+        else:
+            logger.warning("RunPod 초기 warmup 실패 (서비스는 정상 시작)")
+
+        # 주기적 warmup 백그라운드 태스크 시작
+        if settings.enable_runpod_warmup:
+            warmup_task = asyncio.create_task(
+                run_periodic_warmup(settings.runpod_warmup_interval)
+            )
+
+    # ChromaDB 컬렉션 및 BM25 인덱스 사전 로딩
+    if health["status"] == "ok" and settings.enable_chromadb_warmup:
+        from utils.chromadb_warmup import warmup_chromadb
+        chroma_ok = await warmup_chromadb(state.vector_store)
+        if chroma_ok:
+            logger.info("ChromaDB 초기 warmup 성공")
+        else:
+            logger.warning("ChromaDB 초기 warmup 실패 (서비스는 정상 시작)")
 
     _log_settings_summary(settings)
     logger.info("RAG 서비스 초기화 완료")
@@ -75,6 +99,12 @@ async def lifespan(app: FastAPI):
 
     # 종료 시 정리
     logger.info("RAG 서비스 종료 중...")
+    if warmup_task:
+        warmup_task.cancel()
+        try:
+            await warmup_task
+        except asyncio.CancelledError:
+            pass
     if state.vector_store:
         state.vector_store.close()
     logger.info("RAG 서비스 종료 완료")
@@ -116,6 +146,7 @@ def _log_settings_summary(settings) -> None:
     logger.info("  법률 보충     : %s", f"ON (K={settings.legal_supplement_k})" if settings.enable_legal_supplement else "OFF")
     logger.info("  응답 캐시     : %s", _flag(settings.enable_response_cache))
     logger.info("  Rate Limit   : %s", f"ON (rate={settings.rate_limit_rate}/s, capacity={settings.rate_limit_capacity})" if settings.enable_rate_limit else "OFF")
+    logger.info("  ChromaDB Warmup: %s", _flag(settings.enable_chromadb_warmup))
     logger.info("  로그 레벨     : %s", settings.log_level)
     logger.info("=" * 60)
 

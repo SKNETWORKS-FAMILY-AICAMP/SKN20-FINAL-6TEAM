@@ -82,10 +82,14 @@ class RAGChain:
 
     @property
     def hybrid_searcher(self):
-        """HybridSearcher 인스턴스 (지연 로딩)."""
+        """HybridSearcher 인스턴스 (지연 로딩, 모듈 싱글톤 재사용).
+
+        get_hybrid_searcher() 싱글톤을 사용하여 warmup에서 빌드한
+        BM25 인덱스를 공유합니다.
+        """
         if self._hybrid_searcher is None and self.settings.enable_hybrid_search:
-            from utils.search import HybridSearcher
-            self._hybrid_searcher = HybridSearcher(self.vector_store)
+            from utils.search import get_hybrid_searcher
+            self._hybrid_searcher = get_hybrid_searcher(self.vector_store)
         return self._hybrid_searcher
 
     @property

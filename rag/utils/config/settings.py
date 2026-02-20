@@ -90,6 +90,16 @@ class Settings(BaseSettings):
     enable_rate_limit: bool = Field(default=True, description="Rate Limiting 활성화")
     enable_fallback: bool = Field(default=True, description="Fallback 응답 활성화")
 
+    # -- RunPod Warmup --
+    enable_runpod_warmup: bool = Field(default=True, description="RunPod 주기적 warmup 활성화")
+    runpod_warmup_interval: int = Field(default=180, description="RunPod warmup 간격 (초)")
+
+    # -- ChromaDB Warmup --
+    enable_chromadb_warmup: bool = Field(
+        default=True,
+        description="서비스 시작 시 ChromaDB 컬렉션 및 BM25 인덱스 사전 로딩"
+    )
+
     # -- 메타데이터 필터링 --
     enable_metadata_filtering: bool = Field(
         default=True,
