@@ -1,23 +1,61 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {
-  Card,
-  CardBody,
-  Typography,
-  Button,
-  Spinner,
-} from '@material-tailwind/react';
-import { ShieldCheckIcon } from '@heroicons/react/24/outline';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate, type Location } from 'react-router-dom';
+import { Card, CardBody, Typography } from '@material-tailwind/react';
+import { XMarkIcon } from '@heroicons/react/24/outline';
 import { GoogleLogin, CredentialResponse } from '@react-oauth/google';
 import { useAuthStore } from '../stores/authStore';
 import api from '../lib/api';
 import { extractErrorMessage } from '../lib/errorHandler';
 
+interface LoginRouteState {
+  backgroundLocation?: Location;
+}
+
+const FEATURE_ITEMS = [
+  '창업 절차, 지원사업, 세무/회계 상담',
+  '인사/노무, 법률 리스크 기본 가이드',
+  '기업 프로필 기반 맞춤형 상담 지원',
+  '대화 히스토리 기반 연속 상담',
+];
+
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
-  const [adminLoading, setAdminLoading] = useState(false);
+
+  const hasBackgroundLocation = useMemo(() => {
+    const state = location.state as LoginRouteState | null;
+    return Boolean(state?.backgroundLocation);
+  }, [location.state]);
+
+  const closeModal = () => {
+    if (hasBackgroundLocation) {
+      navigate(-1);
+      return;
+    }
+    navigate('/', { replace: true });
+  };
+
+  useEffect(() => {
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+
+      if (hasBackgroundLocation) {
+        navigate(-1);
+        return;
+      }
+
+      navigate('/', { replace: true });
+    };
+
+    window.addEventListener('keydown', handleKeydown);
+    return () => {
+      window.removeEventListener('keydown', handleKeydown);
+    };
+  }, [hasBackgroundLocation, navigate]);
 
   const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
     setError(null);
@@ -29,7 +67,7 @@ const LoginPage: React.FC = () => {
       const { user } = response.data;
 
       login(user);
-      navigate('/');
+      closeModal();
     } catch (err: unknown) {
       console.error('Login error:', err);
       setError(extractErrorMessage(err, '로그인에 실패했습니다.'));
@@ -37,105 +75,83 @@ const LoginPage: React.FC = () => {
   };
 
   const handleGoogleError = () => {
-    setError('Google 로그인에 실패했습니다. 다시 시도해주세요.');
-  };
-
-  const handleAdminLogin = async () => {
-    setError(null);
-    setAdminLoading(true);
-    try {
-      const response = await api.post('/auth/test-login', {
-        email: 'admin@bizi.com',
-        username: '관리자',
-        type_code: 'U0000001',
-      });
-      const { user } = response.data;
-      login(user);
-      navigate('/admin');
-    } catch (err: unknown) {
-      console.error('Admin login error:', err);
-      setError(extractErrorMessage(err, '관리자 로그인에 실패했습니다.'));
-    } finally {
-      setAdminLoading(false);
-    }
+    setError('Google 로그인에 실패했습니다. 다시 시도해 주세요.');
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
-      <Card className="w-full max-w-md">
-        <CardBody className="flex flex-col gap-6 p-8">
-          {/* 로고 및 타이틀 */}
-          <div className="text-center">
-            <Typography variant="h3" color="blue-gray" className="mb-2 !text-gray-900">
-              Bizi
-            </Typography>
-            <Typography variant="paragraph" color="gray" className="!text-gray-700">
-              통합 창업/경영 상담 챗봇
-            </Typography>
-          </div>
+    <div className="fixed inset-0 z-[80]">
+      <div
+        aria-hidden
+        className="absolute inset-0"
+        style={{ backgroundColor: 'rgba(15, 23, 42, 0.78)' }}
+        onClick={closeModal}
+      />
 
-          {/* 설명 */}
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <Typography variant="small" color="blue-gray" className="!text-gray-800">
-              Bizi는 예비 창업자, 스타트업 CEO, 중소기업 대표를 위한
-              AI 기반 통합 경영 상담 서비스입니다.
-            </Typography>
-            <ul className="mt-3 space-y-1 text-sm text-gray-600">
-              <li>창업 절차 및 사업자 등록 안내</li>
-              <li>세무/회계 상담</li>
-              <li>인사/노무 관련 상담</li>
-              <li>법률 자문</li>
-              <li>정부 지원사업 매칭</li>
-              <li>마케팅 전략 상담</li>
-            </ul>
-          </div>
-
-          {/* 에러 메시지 */}
-          {error && (
-            <div className="bg-red-50 text-red-500 p-3 rounded-lg text-sm">
-              {error}
-            </div>
-          )}
-
-          {/* Google 로그인 버튼 */}
-          <div className="flex justify-center">
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={handleGoogleError}
-              size="large"
-              width="350"
-              text="signin_with"
-              shape="rectangular"
-            />
-          </div>
-
-          {/* 구분선 */}
-          <div className="flex items-center gap-3">
-            <div className="flex-1 border-t border-gray-300" />
-            <Typography variant="small" color="gray">
-              또는
-            </Typography>
-            <div className="flex-1 border-t border-gray-300" />
-          </div>
-
-          {/* 관리자 로그인 버튼 */}
-          <Button
-            variant="outlined"
-            color="blue-gray"
-            fullWidth
-            className="flex items-center justify-center gap-2"
-            onClick={handleAdminLogin}
-            disabled={adminLoading}
+      <div className="relative z-10 flex min-h-full items-center justify-center p-4 sm:p-6">
+        <Card
+          className="relative w-full max-w-[25.5rem] overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            aria-label="로그인 모달 닫기"
+            className="absolute right-5 top-5 z-20 rounded-full border border-gray-200 bg-white p-1.5 text-gray-400 transition-colors hover:text-gray-700"
+            onClick={closeModal}
           >
-            {adminLoading ? (
-              <Spinner className="h-4 w-4" />
-            ) : (
-              <ShieldCheckIcon className="h-5 w-5" />
-            )}
-            관리자 로그인
-          </Button>
-        </CardBody>
-      </Card>
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+
+          <CardBody className="p-0">
+            <div className="flex flex-col px-8 pt-10 pb-8">
+              <div className="relative mb-1 pb-1">
+                <h1 className="relative z-10 font-serif text-[6.2rem] leading-[0.9] tracking-tight text-indigo-500">
+                  Biz
+                  <span className="relative inline-block">
+                    i
+                    <span
+                      aria-hidden
+                      className="absolute left-[33%] bottom-[0.12em] h-[2px] w-[30rem] bg-indigo-500"
+                    />
+                  </span>
+                </h1>
+              </div>
+
+              <Typography variant="paragraph" className="mt-1 !text-gray-600">
+                통합 창업/경영 상담 챗봇에
+                <br />
+                오신 것을 환영합니다.
+              </Typography>
+
+              <ul className="ml-auto mt-10 w-full max-w-[19rem] space-y-2 text-right text-[10pt] font-normal leading-[1.4] text-[#6BB3F2]">
+                {FEATURE_ITEMS.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+
+              <Typography variant="paragraph" className="mt-10 text-center !text-gray-600">
+                무제한으로 최적화된 상담 기능을 이용해보세요
+              </Typography>
+
+              {error && (
+                <div className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-center text-sm text-red-600">
+                  {error}
+                </div>
+              )}
+
+              <div className="mt-5 flex justify-center">
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={handleGoogleError}
+                  size="large"
+                  width="320"
+                  text="signin_with"
+                  shape="rectangular"
+                />
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+      </div>
     </div>
   );
 };
