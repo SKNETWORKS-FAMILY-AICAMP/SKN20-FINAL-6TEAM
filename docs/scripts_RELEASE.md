@@ -2,6 +2,9 @@
 
 ## [2026-02-20] - 지원사업 공고 배치 스케줄러 구현 (Docker + systemd)
 
+### Bug Fixes
+- **배치 스케줄러 EC2 유저 수정** (`scripts/batch/setup-scheduler.sh`, `scripts/batch/systemd/bizi-announcement-update.service`): `ubuntu` → `ec2-user` (Amazon Linux 계정명 수정)
+
 ### Features
 - **Dockerfile.batch**: torch 제외 경량 배치 이미지 (~1.5GB), RunPod 임베딩 사용
 - **Dockerfile.batch.dockerignore**: Nginx용 `.dockerignore`와 분리하여 `scripts/`, `rag/` 포함
