@@ -12,7 +12,7 @@ const ERROR_MESSAGE = '죄송합니다. 응답을 생성하는 중 오류가 발
 const GUEST_LIMIT_MESSAGE = '무료 체험 메시지를 모두 사용했습니다. 로그인하시면 무제한으로 상담을 이용할 수 있습니다.';
 
 export const useChat = () => {
-  const { addMessage, updateMessage, setLoading, setStreaming, isLoading, setLastHistoryId, guestMessageCount, incrementGuestCount } = useChatStore();
+  const { addMessage, updateMessage, setLoading, setStreaming, isLoading, setLastHistoryId, updateMessageInSession, setLastHistoryIdForSession, guestMessageCount, incrementGuestCount } = useChatStore();
   const { isAuthenticated } = useAuthStore();
   const streamingContentRef = useRef<string>('');
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -72,6 +72,9 @@ export const useChat = () => {
       };
       addMessage(userMessage);
       setLoading(true);
+
+      // 세션 ID 고정 — 비동기 중 세션 전환 시에도 올바른 세션에 업데이트
+      const targetSessionId = useChatStore.getState().currentSessionId!;
 
       try {
         let response: string;
@@ -235,18 +238,23 @@ export const useChat = () => {
         // Save to backend history if authenticated
         if (isAuthenticated) {
           try {
+            // 고정된 세션의 lastHistoryId를 parent로 사용
+            const targetSession = useChatStore.getState().sessions.find(s => s.id === targetSessionId);
+            const parentHistoryId = targetSession?.lastHistoryId ?? null;
+
             const historyResponse = await api.post('/histories', {
               agent_code: agentCode,
               question: message,
               answer: response,
-              parent_history_id: useChatStore.getState().getLastHistoryId(),
+              parent_history_id: parentHistoryId,
               evaluation_data: evaluationData,
             });
-            setLastHistoryId(historyResponse.data.history_id);
-            // Mark messages as synced to prevent duplicate save on re-login
-            updateMessage(userMessage.id, { synced: true });
+            // 고정된 세션에 lastHistoryId 설정 (세션 전환 중에도 안전)
+            setLastHistoryIdForSession(targetSessionId, historyResponse.data.history_id);
+            // 고정된 세션의 메시지에 synced 마킹 (중복 저장 방지)
+            updateMessageInSession(targetSessionId, userMessage.id, { synced: true });
             if (savedAssistantMsgId) {
-              updateMessage(savedAssistantMsgId, { synced: true });
+              updateMessageInSession(targetSessionId, savedAssistantMsgId, { synced: true });
             }
           } catch {
             // History save failure is non-critical
@@ -277,7 +285,7 @@ export const useChat = () => {
         abortControllerRef.current = null;
       }
     },
-    [addMessage, updateMessage, setLoading, setStreaming, isLoading, isAuthenticated, setLastHistoryId, guestMessageCount, incrementGuestCount]
+    [addMessage, updateMessage, setLoading, setStreaming, isLoading, isAuthenticated, setLastHistoryId, updateMessageInSession, setLastHistoryIdForSession, guestMessageCount, incrementGuestCount]
   );
 
   return { sendMessage, isLoading };

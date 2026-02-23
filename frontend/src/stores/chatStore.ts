@@ -6,6 +6,9 @@ import { generateId } from '../lib/utils';
 
 const MAX_SESSIONS = 50;
 
+// syncGuestMessages 동시 호출 방지 가드
+let isSyncing = false;
+
 interface ChatState {
   sessions: ChatSession[];
   currentSessionId: string | null;
@@ -28,7 +31,11 @@ interface ChatState {
 
   // History linking (세션별)
   setLastHistoryId: (id: number | null) => void;
+  setLastHistoryIdForSession: (sessionId: string, id: number | null) => void;
   getLastHistoryId: () => number | null;
+
+  // Session-aware message update (비동기 중 세션 전환 대응)
+  updateMessageInSession: (sessionId: string, messageId: string, updates: Partial<ChatMessage>) => void;
 
   // Guest message limit
   incrementGuestCount: () => void;
@@ -36,6 +43,9 @@ interface ChatState {
 
   // Guest → Login sync
   syncGuestMessages: () => Promise<void>;
+
+  // Logout cleanup
+  resetOnLogout: () => void;
 
   // Getters
   getCurrentSession: () => ChatSession | undefined;
@@ -152,6 +162,21 @@ export const useChatStore = create<ChatState>()(
         }));
       },
 
+      updateMessageInSession: (sessionId: string, messageId: string, updates: Partial<ChatMessage>) => {
+        set((prev) => ({
+          sessions: prev.sessions.map((s) => {
+            if (s.id !== sessionId) return s;
+            return {
+              ...s,
+              messages: s.messages.map((m) =>
+                m.id === messageId ? { ...m, ...updates } : m
+              ),
+              updated_at: new Date().toISOString(),
+            };
+          }),
+        }));
+      },
+
       setLoading: (loading: boolean) => set({ isLoading: loading }),
 
       setStreaming: (streaming: boolean) => set({ isStreaming: streaming }),
@@ -178,6 +203,14 @@ export const useChatStore = create<ChatState>()(
         }));
       },
 
+      setLastHistoryIdForSession: (sessionId: string, id: number | null) => {
+        set((prev) => ({
+          sessions: prev.sessions.map((s) =>
+            s.id === sessionId ? { ...s, lastHistoryId: id } : s
+          ),
+        }));
+      },
+
       getLastHistoryId: () => {
         const state = get();
         const session = state.sessions.find((s) => s.id === state.currentSessionId);
@@ -190,56 +223,81 @@ export const useChatStore = create<ChatState>()(
       resetGuestCount: () => set({ guestMessageCount: 0 }),
 
       syncGuestMessages: async () => {
-        const state = get();
-        const session = state.sessions.find((s) => s.id === state.currentSessionId);
-        if (!session || session.messages.length === 0) return;
+        // 동시 호출 방지 (login이 빠르게 2번 호출되는 경우 대응)
+        if (isSyncing) return;
+        isSyncing = true;
 
-        const messages = session.messages;
-        let lastSyncedHistoryId: number | null = null;
+        try {
+          const state = get();
+          const session = state.sessions.find((s) => s.id === state.currentSessionId);
+          if (!session || session.messages.length === 0) return;
 
-        for (let i = 0; i < messages.length; i++) {
-          const msg = messages[i];
-          if (msg.type !== 'user') continue;
-          if (msg.synced) continue;
+          const messages = session.messages;
+          const sessionId = session.id; // 세션 ID 고정
+          // 기존 lastHistoryId를 시작점으로 사용 (parent chain 유지)
+          let lastSyncedHistoryId: number | null = session.lastHistoryId ?? null;
+          let anySynced = false;
 
-          const assistantMsg = messages[i + 1];
-          if (!assistantMsg || assistantMsg.type !== 'assistant') continue;
+          for (let i = 0; i < messages.length; i++) {
+            const msg = messages[i];
+            if (msg.type !== 'user') continue;
+            if (msg.synced) continue;
 
-          try {
-            const res: { data: { history_id: number } } = await api.post('/histories', {
-              agent_code: assistantMsg.agent_code || 'A0000001',
-              question: msg.content,
-              answer: assistantMsg.content,
-              parent_history_id: lastSyncedHistoryId,
-            });
-            lastSyncedHistoryId = res.data.history_id;
-          } catch {
-            // History sync failure is non-critical
+            const assistantMsg = messages[i + 1];
+            if (!assistantMsg || assistantMsg.type !== 'assistant') continue;
+
+            try {
+              const res: { data: { history_id: number } } = await api.post('/histories', {
+                agent_code: assistantMsg.agent_code || 'A0000001',
+                question: msg.content,
+                answer: assistantMsg.content,
+                parent_history_id: lastSyncedHistoryId,
+              });
+              lastSyncedHistoryId = res.data.history_id;
+              anySynced = true;
+
+              // 메시지별 즉시 synced 마킹 (부분 실패 시에도 성공분은 보존)
+              set((prev) => ({
+                sessions: prev.sessions.map((s) =>
+                  s.id === sessionId
+                    ? {
+                        ...s,
+                        lastHistoryId: lastSyncedHistoryId,
+                        messages: s.messages.map((m) =>
+                          m.id === msg.id || m.id === assistantMsg.id
+                            ? { ...m, synced: true }
+                            : m
+                        ),
+                        updated_at: new Date().toISOString(),
+                      }
+                    : s
+                ),
+              }));
+            } catch {
+              // 개별 실패는 건너뜀 — 이미 성공한 것은 마킹됨
+            }
           }
-        }
 
-        // 게스트 세션의 메시지를 synced로 마킹 + lastHistoryId 업데이트 (메시지 보존)
-        if (lastSyncedHistoryId !== null) {
-          set((prev) => ({
-            sessions: prev.sessions.map((s) =>
-              s.id === prev.currentSessionId
-                ? {
-                    ...s,
-                    lastHistoryId: lastSyncedHistoryId,
-                    messages: s.messages.map((m) => ({ ...m, synced: true })),
-                    updated_at: new Date().toISOString(),
-                  }
-                : s
-            ),
-          }));
+          // 새 세션 생성하여 전환 — 로그인 후 깨끗한 시작
+          if (anySynced || messages.some(m => m.type === 'user')) {
+            const newSession = createNewSession();
+            set((prev) => ({
+              sessions: [newSession, ...prev.sessions],
+              currentSessionId: newSession.id,
+            }));
+          }
+        } finally {
+          isSyncing = false;
         }
+      },
 
-        // 새 세션 생성하여 전환 — 로그인 후 깨끗한 시작, 게스트 대화는 사이드바에서 접근 가능
+      resetOnLogout: () => {
         const newSession = createNewSession();
-        set((prev) => ({
-          sessions: [newSession, ...prev.sessions],
+        set({
+          sessions: [newSession],
           currentSessionId: newSession.id,
-        }));
+          guestMessageCount: 0,
+        });
       },
 
       getCurrentSession: () => {

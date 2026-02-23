@@ -40,6 +40,8 @@ export const useAuthStore = create<AuthState>()(
       },
       clearAuth: () => {
         set({ isAuthenticated: false, user: null });
+        // 로그아웃 시 chatStore 세션 초기화 (재로그인 시 중복 저장 방지)
+        useChatStore.getState().resetOnLogout();
       },
       updateUser: (userData) =>
         set((state) => ({
