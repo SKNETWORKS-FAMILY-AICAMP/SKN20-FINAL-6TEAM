@@ -1,5 +1,17 @@
 # Release Notes
 
+## [2026-02-23] - 문서 자동 생성 + 멀티턴 대화 + history 최적화
+
+### Features
+- **문서 자동 생성 기능** (`components/chat/`, `lib/rag.ts`): 근로계약서/사업계획서 다운로드 UI 및 RAG API 연동
+- **멀티턴 대화 구현** (`hooks/`, `stores/`): 세션별 독립 history 관리, RAG에 대화 문맥 전달
+
+### Bug Fixes
+- **history 전송량 최적화** (`lib/rag.ts`): RAG 실제 사용량에 맞춰 history를 3턴(6개)으로 축소
+
+### Documentation
+- **AGENTS.md 갱신**: 컴포넌트/훅/스토어/lib 구조 현행화
+
 ## [2026-02-20] - 기업 등록 모달 2차 수정 (8가지 추가 이슈 수정)
 
 ### Features

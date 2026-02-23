@@ -1,5 +1,15 @@
 # Release Notes
 
+## [2026-02-23] - 문서 현행화 + RAG 답변 품질 개선
+
+### Performance
+- **RAG 답변 품질 개선** (`agents/`, `utils/prompts.py`, `chains/`): Faithfulness/Relevancy 향상 6건 — 프롬프트 최적화, 검색 파라미터 튜닝
+
+### Documentation
+- **CLAUDE.md 현행화**: 통신 아키텍처(Backend 프록시), 스키마, 분류/재시도 흐름, 환경변수 등 16건 수정
+- **ARCHITECTURE.md 현행화**: 통신 다이어그램, VectorDB 구조, 파일명 참조, 평가체계 등 10건 수정
+- **AGENTS.md 갱신**: 미존재 엔드포인트 제거
+
 ## [2026-02-20] - RunPod·ChromaDB warmup + 스트리밍 깜빡임 수정
 
 ### Features

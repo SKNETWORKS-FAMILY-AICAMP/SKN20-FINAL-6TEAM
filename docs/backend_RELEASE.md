@@ -1,5 +1,14 @@
 # Release Notes
 
+## [2026-02-23] - 문서 현행화 + 문서 자동 생성 + 멀티턴 대화
+
+### Features
+- **문서 자동 생성 기능** (`apps/rag/router.py`): 근로계약서/사업계획서 다운로드 엔드포인트 추가 — RAG Service 프록시를 통한 문서 생성 API 연동
+- **멀티턴 대화 구현** (`apps/histories/`): 세션별 독립 history를 RAG에 전달하여 대화 문맥 유지
+
+### Documentation
+- **AGENTS.md 갱신**: RAG 프록시 모듈 및 엔드포인트 구조 반영
+
 ## [2026-02-20] - 기업 등록 관리자 보호 강화
 
 ### Bug Fixes
