@@ -4,6 +4,10 @@ import type { User } from '../types';
 import { useChatStore } from './chatStore';
 import api from '../lib/api';
 
+const AUTH_CHECK_DEDUP_MS = 3000;
+let authCheckInFlight: Promise<void> | null = null;
+let lastAuthCheckAt = 0;
+
 interface AuthState {
   isAuthenticated: boolean;
   isAuthChecking: boolean;
@@ -42,14 +46,33 @@ export const useAuthStore = create<AuthState>()(
           user: state.user ? { ...state.user, ...userData } : null,
         })),
       checkAuth: async () => {
-        set({ isAuthChecking: true });
-        try {
-          const response = await api.get('/auth/me');
-          const { user } = response.data;
-          set({ isAuthenticated: true, user, isAuthChecking: false });
-        } catch {
-          set({ isAuthenticated: false, user: null, isAuthChecking: false });
+        if (authCheckInFlight) {
+          await authCheckInFlight;
+          return;
         }
+
+        const now = Date.now();
+        if (now - lastAuthCheckAt < AUTH_CHECK_DEDUP_MS) {
+          return;
+        }
+
+        set({ isAuthChecking: true });
+
+        authCheckInFlight = (async () => {
+          try {
+            const response = await api.get('/auth/me');
+            const { user } = response.data;
+            set({ isAuthenticated: true, user });
+          } catch {
+            set({ isAuthenticated: false, user: null });
+          } finally {
+            set({ isAuthChecking: false });
+            lastAuthCheckAt = Date.now();
+            authCheckInFlight = null;
+          }
+        })();
+
+        await authCheckInFlight;
       },
     }),
     {

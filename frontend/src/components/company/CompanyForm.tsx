@@ -397,6 +397,7 @@ export const CompanyForm: React.FC = () => {
             <Input
               value={formData.com_name}
               onChange={(e) => setFormData({ ...formData, com_name: e.target.value })}
+              id="company-name-input"
               placeholder={isPreparing ? '(예비) 창업 준비' : '회사명을 입력하세요'}
               className="!border-gray-300"
               labelProps={{ className: 'hidden' }}

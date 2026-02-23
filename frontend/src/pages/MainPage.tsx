@@ -9,30 +9,60 @@ import {
   Chip,
 } from '@material-tailwind/react';
 import { PaperAirplaneIcon, PlusIcon } from '@heroicons/react/24/solid';
+import api from '../lib/api';
 import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
+import { useNotificationStore } from '../stores/notificationStore';
 import { useChat } from '../hooks/useChat';
 import { useDisplayUserType } from '../hooks/useDisplayUserType';
-import { AGENT_NAMES, AGENT_COLORS } from '../types';
+import { useNotifications } from '../hooks/useNotifications';
+import { AGENT_NAMES, AGENT_COLORS, type Schedule } from '../types';
 import { USER_QUICK_QUESTIONS } from '../lib/constants';
 import { getSeasonalQuestions } from '../lib/seasonalQuestions';
 import { NotificationBell } from '../components/layout/NotificationBell';
 import { ResponseProgress } from '../components/chat/ResponseProgress';
 import { SourceReferences } from '../components/chat/SourceReferences';
 import { ActionButtons } from '../components/chat/ActionButtons';
+import { NotificationToast } from '../components/layout/NotificationToast';
 import { stripSourcesSection } from '../lib/utils';
+
+const MAX_VISIBLE_TOASTS = 5;
+
+const normalizeNotificationSchedules = (value: unknown): Schedule[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter(
+    (item): item is Schedule =>
+      typeof item === 'object' &&
+      item !== null &&
+      typeof (item as Schedule).schedule_id === 'number' &&
+      typeof (item as Schedule).schedule_name === 'string' &&
+      typeof (item as Schedule).start_date === 'string' &&
+      typeof (item as Schedule).end_date === 'string'
+  );
+};
 
 const MainPage: React.FC = () => {
   const { isAuthenticated, user } = useAuthStore();
+  const { notifications, toastQueue, dismissToast } = useNotificationStore();
   const displayUserType = useDisplayUserType();
   const { sessions, currentSessionId, createSession, isStreaming } = useChatStore();
   const { sendMessage, isLoading } = useChat();
   const [inputValue, setInputValue] = useState('');
+  const [notificationSchedules, setNotificationSchedules] = useState<Schedule[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const currentSession = sessions.find((s) => s.id === currentSessionId);
   const messages = currentSession?.messages || [];
+  const visibleToastNotifications = toastQueue
+    .slice(0, MAX_VISIBLE_TOASTS)
+    .map((toastId) => notifications.find((notification) => notification.id === toastId) ?? null)
+    .filter((notification): notification is NonNullable<typeof notification> => notification !== null);
+
+  useNotifications(notificationSchedules);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -41,6 +71,34 @@ const MainPage: React.FC = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setNotificationSchedules([]);
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchSchedulesForNotifications = async () => {
+      try {
+        const response = await api.get('/schedules');
+        if (!isMounted) {
+          return;
+        }
+
+        setNotificationSchedules(normalizeNotificationSchedules(response.data));
+      } catch (error) {
+        console.error('Failed to fetch schedules for notifications:', error);
+      }
+    };
+
+    fetchSchedulesForNotifications();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated]);
 
   const handleSendMessage = async (message: string) => {
     if (!message.trim() || isLoading) return;
@@ -72,6 +130,16 @@ const MainPage: React.FC = () => {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      {isAuthenticated &&
+        visibleToastNotifications.map((notification, index) => (
+          <NotificationToast
+            key={notification.id}
+            notification={notification}
+            onClose={() => dismissToast(notification.id)}
+            placement="bell-side"
+            stackIndex={index}
+          />
+        ))}
       {/* Header */}
       <div className="p-4 border-b bg-white">
         <div className="flex items-center justify-between">

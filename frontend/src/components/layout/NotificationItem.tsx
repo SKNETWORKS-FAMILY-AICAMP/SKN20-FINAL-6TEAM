@@ -2,14 +2,16 @@ import React from 'react';
 import { Typography } from '@material-tailwind/react';
 import {
   CalendarDaysIcon,
-  InformationCircleIcon,
   ExclamationTriangleIcon,
+  InformationCircleIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
 import type { Notification } from '../../types';
 
 interface NotificationItemProps {
   notification: Notification;
   onClick: (notification: Notification) => void;
+  onDelete: (id: string) => void;
 }
 
 const NOTIFICATION_ICONS: Record<Notification['type'], React.ElementType> = {
@@ -27,21 +29,28 @@ const NOTIFICATION_ICON_COLORS: Record<Notification['type'], string> = {
 export const NotificationItem: React.FC<NotificationItemProps> = ({
   notification,
   onClick,
+  onDelete,
 }) => {
-  const Icon = NOTIFICATION_ICONS[notification.type];
-  const iconColor = NOTIFICATION_ICON_COLORS[notification.type];
-
-  const timeAgo = getTimeAgo(notification.created_at);
+  const Icon = NOTIFICATION_ICONS[notification.type] ?? InformationCircleIcon;
+  const iconColor = NOTIFICATION_ICON_COLORS[notification.type] ?? 'text-gray-500';
 
   return (
     <div
-      className={`flex items-start gap-3 p-3 cursor-pointer transition-colors rounded-lg ${
+      className={`flex cursor-pointer items-start gap-3 rounded-lg p-3 transition-colors ${
         notification.is_read ? 'bg-white hover:bg-gray-50' : 'bg-blue-50 hover:bg-blue-100'
       }`}
       onClick={() => onClick(notification)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onClick(notification);
+        }
+      }}
     >
-      <Icon className={`h-5 w-5 mt-0.5 flex-shrink-0 ${iconColor}`} />
-      <div className="flex-1 min-w-0">
+      <Icon className={`mt-0.5 h-5 w-5 flex-shrink-0 ${iconColor}`} />
+      <div className="min-w-0 flex-1">
         <Typography
           variant="small"
           color="blue-gray"
@@ -49,16 +58,29 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
         >
           {notification.title}
         </Typography>
-        <Typography variant="small" color="gray" className="text-xs truncate !text-gray-700">
+        <Typography variant="small" color="gray" className="truncate text-xs !text-gray-700">
           {notification.message}
         </Typography>
-        <Typography variant="small" color="gray" className="text-xs mt-1 !text-gray-600">
-          {timeAgo}
+        <Typography variant="small" color="gray" className="mt-1 text-xs !text-gray-600">
+          {getTimeAgo(notification.created_at)}
         </Typography>
       </div>
-      {!notification.is_read && (
-        <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-2" />
-      )}
+      <div className="mt-0.5 flex items-center gap-1">
+        {!notification.is_read && (
+          <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-blue-500" />
+        )}
+        <button
+          type="button"
+          className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-200/70 hover:text-gray-600"
+          onClick={(event) => {
+            event.stopPropagation();
+            onDelete(notification.id);
+          }}
+          aria-label="Delete notification"
+        >
+          <TrashIcon className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 };
@@ -71,9 +93,9 @@ function getTimeAgo(dateStr: string): string {
   const diffHour = Math.floor(diffMin / 60);
   const diffDay = Math.floor(diffHour / 24);
 
-  if (diffMin < 1) return '방금 전';
-  if (diffMin < 60) return `${diffMin}분 전`;
-  if (diffHour < 24) return `${diffHour}시간 전`;
-  if (diffDay < 7) return `${diffDay}일 전`;
+  if (diffMin < 1) return '\uBC29\uAE08 \uC804';
+  if (diffMin < 60) return `${diffMin}\uBD84 \uC804`;
+  if (diffHour < 24) return `${diffHour}\uC2DC\uAC04 \uC804`;
+  if (diffDay < 7) return `${diffDay}\uC77C \uC804`;
   return date.toLocaleDateString('ko-KR');
 }

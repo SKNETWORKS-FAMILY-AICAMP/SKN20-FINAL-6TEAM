@@ -20,12 +20,68 @@ import api from '../lib/api';
 import { extractErrorMessage } from '../lib/errorHandler';
 import { formatDateLong } from '../lib/dateUtils';
 import { CalendarView } from '../components/schedule/CalendarView';
+import { CalendarErrorBoundary } from '../components/schedule/CalendarErrorBoundary';
 import { ScheduleDetailDialog } from '../components/schedule/ScheduleDetailDialog';
 import type { ScheduleFormData } from '../components/schedule/ScheduleDetailDialog';
 import { useNotifications } from '../hooks/useNotifications';
 import type { Schedule, Company } from '../types';
 
 type ViewMode = 'calendar' | 'list';
+
+const isValidDateString = (value: unknown): value is string =>
+  typeof value === 'string' && !Number.isNaN(new Date(value).getTime());
+
+const normalizeSchedules = (value: unknown): Schedule[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is Partial<Schedule> => typeof item === 'object' && item !== null)
+    .filter(
+      (item): item is Schedule =>
+        typeof item.schedule_id === 'number' &&
+        typeof item.company_id === 'number' &&
+        typeof item.schedule_name === 'string' &&
+        isValidDateString(item.start_date) &&
+        isValidDateString(item.end_date)
+    )
+    .map((item) => ({
+      schedule_id: item.schedule_id,
+      company_id: item.company_id,
+      announce_id: item.announce_id,
+      schedule_name: item.schedule_name,
+      start_date: item.start_date,
+      end_date: item.end_date,
+      memo: item.memo ?? '',
+      create_date: item.create_date,
+    }));
+};
+
+const normalizeCompanies = (value: unknown): Company[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is Partial<Company> => typeof item === 'object' && item !== null)
+    .filter(
+      (item): item is Company =>
+        typeof item.company_id === 'number' && typeof item.com_name === 'string'
+    )
+    .map((item) => ({
+      company_id: item.company_id,
+      user_id: typeof item.user_id === 'number' ? item.user_id : 0,
+      com_name: item.com_name,
+      biz_num: typeof item.biz_num === 'string' ? item.biz_num : '',
+      addr: typeof item.addr === 'string' ? item.addr : '',
+      open_date: item.open_date,
+      biz_code: item.biz_code,
+      file_path: typeof item.file_path === 'string' ? item.file_path : '',
+      main_yn: typeof item.main_yn === 'boolean' ? item.main_yn : false,
+      create_date: item.create_date,
+    }));
+};
 
 const SchedulePage: React.FC = () => {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
@@ -46,8 +102,8 @@ const SchedulePage: React.FC = () => {
         api.get('/schedules'),
         api.get('/companies'),
       ]);
-      setSchedules(schedulesRes.data);
-      setCompanies(companiesRes.data);
+      setSchedules(normalizeSchedules(schedulesRes.data));
+      setCompanies(normalizeCompanies(companiesRes.data));
     } catch (err) {
       console.error('Failed to fetch data:', err);
     } finally {
@@ -133,6 +189,14 @@ const SchedulePage: React.FC = () => {
 
   const formatDate = (dateStr: string) => formatDateLong(dateStr);
 
+  const handleCalendarError = () => {
+    setViewMode('list');
+    setMessage({
+      type: 'error',
+      text: '캘린더 렌더링 중 오류가 발생해 리스트 보기로 전환했습니다.',
+    });
+  };
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
@@ -191,11 +255,20 @@ const SchedulePage: React.FC = () => {
         </div>
       ) : viewMode === 'calendar' ? (
         /* Calendar View */
-        <CalendarView
-          schedules={schedules}
-          onDateClick={handleDateClick}
-          onEventClick={handleEventClick}
-        />
+        <CalendarErrorBoundary
+          onError={handleCalendarError}
+          fallback={(
+            <Alert color="red">
+              캘린더를 불러오는 중 오류가 발생했습니다. 리스트 보기로 전환해 확인해주세요.
+            </Alert>
+          )}
+        >
+          <CalendarView
+            schedules={schedules}
+            onDateClick={handleDateClick}
+            onEventClick={handleEventClick}
+          />
+        </CalendarErrorBoundary>
       ) : schedules.length === 0 ? (
         /* Empty list */
         <Card>

@@ -79,6 +79,16 @@
   box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
 }
 
+/* Company form: show guide text before focus, hide it on focus */
+#company-name-input::placeholder {
+  color: #9ca3af;
+  opacity: 1;
+}
+
+#company-name-input:focus::placeholder {
+  opacity: 0;
+}
+
 /* Markdown rendering styles for chat messages */
 .markdown-body h1 {
   font-size: 1.25rem;
