@@ -6,7 +6,7 @@
 > 파이프라인 상세(RouterState, 5단계 흐름, 벡터DB별 에이전트, 청킹 전략, 프롬프트 설계)는 아래를 참조하세요:
 > @.claude/docs/rag-pipeline.md
 
-**중요**: RAG 서비스는 프론트엔드와 직접 통신합니다. Backend를 거치지 않습니다.
+**중요**: RAG 서비스는 Backend 프록시(`/rag/*`)를 경유하여 통신합니다. Backend가 사용자 컨텍스트를 주입하고 RAG Service로 중계합니다. X-API-Key 인증으로 직접 호출도 가능합니다.
 
 ---
 
@@ -40,25 +40,12 @@
 ## 도메인 분류 기준
 
 ```python
+# 약식 목록 — 전체 키워드(도메인당 25~35개)는 utils/config/domain_data.py 참조
 DOMAIN_KEYWORDS = {
-    'startup_funding': [
-        '창업', '사업자등록', '법인설립', '업종',
-        '지원사업', '보조금', '정책자금', '공고',
-        '마케팅', '광고', '홍보', '브랜딩'
-    ],
-    'finance_tax': [
-        '세금', '부가세', '법인세', '회계',
-        '세무', '재무', '결산', '세무조정'
-    ],
-    'hr_labor': [
-        '근로', '채용', '해고', '급여', '퇴직금', '연차',
-        '인사', '노무', '4대보험'
-    ],
-    'law_common': [
-        '법률', '법령', '조문', '판례', '규정',
-        '상법', '민법', '소송', '분쟁', '손해배상',
-        '특허', '상표', '저작권', '변호사', '계약'
-    ],
+    'startup_funding': ['창업', '사업자등록', '법인설립', '지원사업', '보조금', '정책자금', '마케팅', ...],
+    'finance_tax': ['세금', '부가세', '법인세', '회계', '세무', '재무', '결산', ...],
+    'hr_labor': ['근로', '채용', '해고', '급여', '퇴직금', '연차', '인사', '노무', '4대보험', ...],
+    'law_common': ['법률', '법령', '판례', '상법', '민법', '소송', '특허', '상표', '저작권', ...],
 }
 ```
 
@@ -67,8 +54,8 @@ DOMAIN_KEYWORDS = {
 ## 도메인 외 질문 거부
 
 ### 동작 방식
-1. 1차: 키워드 매칭 (DOMAIN_KEYWORDS 기반)
-2. 2차: 벡터 유사도 기반 분류 (LLM 미사용, `domain_classifier.py`)
+1. LLM API 기반 도메인 분류 (`ENABLE_LLM_DOMAIN_CLASSIFICATION=true`)
+2. Fallback: 키워드 매칭 (kiwipiepy 형태소 분석) + 벡터 유사도 분류 (`utils/domain_classifier.py`)
 3. 신뢰도가 `DOMAIN_CLASSIFICATION_THRESHOLD` 미만이면 거부 응답 반환
 
 ### 거부 응답 형식
@@ -91,17 +78,28 @@ Bizi는 다음 분야의 전문 상담을 제공합니다:
 ```python
 class ChatRequest(BaseModel):
     message: str
-    history: list[dict] = []
-    user_context: dict = {}
+    history: list[ChatMessage] = []         # max_length=50
+    user_context: UserContext | None = None
+    session_id: str | None = None
+
+class ChatMessage(BaseModel):
+    role: str       # "user" | "assistant"
+    content: str
 
 class UserContext(BaseModel):
-    user_type: str  # prospective, startup_ceo, sme_owner
+    user_id: str | None = None
+    user_type: str = "prospective"  # prospective, startup_ceo, sme_owner
     company: CompanyContext | None = None
 
-class CompanyContext(BaseModel):
-    industry_code: str
-    employee_count: int
-    years_in_business: int | None
+class CompanyContext(BaseModel):   # 모두 Optional
+    company_name: str | None = None
+    business_number: str | None = None
+    industry_code: str | None = None
+    industry_name: str | None = None
+    employee_count: int | None = None
+    years_in_business: int | None = None
+    region: str | None = None
+    annual_revenue: int | None = None
 ```
 
 ### 채팅 응답
@@ -110,17 +108,32 @@ class CompanyContext(BaseModel):
 class ChatResponse(BaseModel):
     content: str
     domain: str
-    sources: list[str] = []
+    domains: list[str] = []                     # 복합 질문 시 관련 도메인
+    sources: list[SourceDocument] = []          # 출처 객체 리스트
     actions: list[ActionSuggestion] = []
     evaluation: EvaluationResult | None = None
+    session_id: str | None = None
+    retry_count: int = 0
+    ragas_metrics: dict | None = None
+    timing_metrics: TimingMetrics | None = None
+    evaluation_data: EvaluationDataForDB | None = None  # Backend DB 저장용
+
+class SourceDocument(BaseModel):
+    title: str | None = None
+    content: str
+    source: str | None = None
+    url: str = "https://law.go.kr/"
+    metadata: dict = {}
 
 class ActionSuggestion(BaseModel):
-    type: str  # document_generation, funding_search, etc.
+    type: str       # document_generation, funding_search, etc.
     label: str
-    params: dict
+    description: str | None = None
+    params: dict = {}
 
 class EvaluationResult(BaseModel):
-    score: float
+    scores: dict[str, int] = {}   # accuracy, completeness, relevance, citation
+    total_score: int              # 100점 만점
     passed: bool
     feedback: str | None = None
 ```
@@ -139,11 +152,11 @@ ENABLE_DOMAIN_REJECTION=true     # 도메인 외 질문 거부
 ENABLE_RAGAS_EVALUATION=false    # RAGAS 정량 평가
 ```
 
-### 도메인 분류 (벡터 기반)
+### 도메인 분류
 ```
+ENABLE_LLM_DOMAIN_CLASSIFICATION=true  # LLM API 기반 도메인 분류 (1차)
+ENABLE_VECTOR_DOMAIN_CLASSIFICATION=true  # 벡터 유사도 분류 (fallback)
 DOMAIN_CLASSIFICATION_THRESHOLD=0.6    # 벡터 유사도 임계값
-ENABLE_VECTOR_DOMAIN_CLASSIFICATION=true
-ENABLE_LLM_DOMAIN_CLASSIFICATION=false # LLM 분류 비교 (추가 비용 발생)
 ```
 
 ### 검색 평가 (규칙 기반)
@@ -162,9 +175,21 @@ ENABLE_CROSS_DOMAIN_RERANK=true        # 복합 도메인 병합 후 Cross-Domai
 
 ### Multi-Query / 재시도
 ```
-MULTI_QUERY_COUNT=3                    # 생성할 쿼리 수
-ENABLE_POST_EVAL_RETRY=true            # 평가 후 재시도
-POST_EVAL_ALT_QUERY_COUNT=2            # 평가 후 대체 쿼리 수 (1~5)
+MULTI_QUERY_COUNT=3                    # 검색 단계 Multi-Query 생성 개수 (항상 사용)
+ENABLE_POST_EVAL_RETRY=true            # 평가 FAIL 시 재시도
+POST_EVAL_ALT_QUERY_COUNT=2            # 재시도 시 대체 쿼리 수 (1~5)
+```
+재시도 동작: 평가 FAIL → 대체 쿼리 2개 생성 → 원본 + 2개 = **3개 후보** 중 LLM 최고점 반환.
+재시도는 **1회만** 수행 (`max_retry_count=1`, evaluate → retry → END, 루프 없음).
+
+### 추가 기능 토글
+```
+ENABLE_ADAPTIVE_SEARCH=true            # 적응형 검색 모드 선택
+ENABLE_RESPONSE_CACHE=true             # 응답 캐싱
+ENABLE_RATE_LIMIT=true                 # Rate Limiting
+ENABLE_METADATA_FILTERING=true         # 메타데이터 필터링 (지역/대상)
+ENABLE_GRADUATED_RETRY=true            # 단계적 재시도 (L1~L4)
+ENABLE_ACTION_AWARE_GENERATION=true    # 액션 선제안
 ```
 
 ### 법률 보충 검색
@@ -201,7 +226,7 @@ RUNPOD_ENDPOINT_ID=                   # RunPod Serverless Endpoint ID
 - 공고 요약 정확도: 90%
 - 법령 답변 정확도: 90%
 - 응답 시간: 3초 이내
-- Multi-Query 재검색 시 최대 추가 3회 쿼리
+- 평가 FAIL 시 재시도 1회 (대체 쿼리 2개 생성, 3개 후보 중 최고점 반환)
 
 ---
 

@@ -10,7 +10,7 @@ Python 3.10+ / FastAPI / LangChain / LangGraph / OpenAI GPT-4o-mini / ChromaDB /
 rag/
 ├── main.py                  # FastAPI 진입점
 ├── cli.py                   # CLI 테스트 모드
-├── agents/                  # Agentic RAG (router, base, 4 domain, evaluator, executor)
+├── agents/                  # Agentic RAG (router, base, 4 domain, evaluator, executor, retrieval_agent, generator)
 ├── chains/                  # LangChain 체인 (rag_chain.py)
 ├── routes/                  # FastAPI 라우터 (chat, documents, evaluate, funding, health, monitoring, vectordb)
 ├── evaluation/              # RAGAS 정량 평가
@@ -27,7 +27,6 @@ rag/
 | POST | `/api/chat` | 채팅 메시지 처리 |
 | POST | `/api/chat/stream` | 스트리밍 응답 |
 | POST | `/api/documents/contract` | 근로계약서 생성 |
-| POST | `/api/documents/rules` | 취업규칙 생성 |
 | POST | `/api/documents/business-plan` | 사업계획서 생성 |
 | GET | `/api/funding/search` | 지원사업 검색 |
 | POST | `/api/funding/recommend` | 맞춤 지원사업 추천 |

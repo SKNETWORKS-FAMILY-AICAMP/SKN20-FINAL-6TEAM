@@ -10,15 +10,17 @@ React 18 / Vite 5 / TypeScript 5 / React Router v6 / TailwindCSS / Zustand / axi
 frontend/src/
 ├── pages/              # MainPage, LoginPage, CompanyPage, SchedulePage, UsageGuidePage, AdminDashboardPage, AdminLogPage
 ├── components/
-│   ├── chat/           # ChatWindow, MessageList, MessageInput, DomainTag
+│   ├── chat/           # ChatWindow, MessageList, MessageInput, DomainTag, ActionButtons, ContractFormModal, LoginPromptModal, ResponseProgress, SourceReferences
 │   ├── common/         # RegionSelect, ProtectedRoute, ErrorBoundary, Button, Input, Modal
 │   ├── company/        # CompanyForm (준비중/운영중 토글)
 │   ├── profile/        # ProfileDialog (모달 기반)
-│   └── layout/         # MainLayout, Sidebar, ChatHistoryPanel, Footer
-├── hooks/              # useAuth, useChat, useCompany
-├── stores/             # authStore (persist), chatStore (멀티세션, persist), uiStore
+│   ├── admin/          # HistoryDetailModal, HistoryFilterBar, HistoryTable
+│   ├── schedule/       # CalendarView, ScheduleDetailDialog
+│   └── layout/         # MainLayout, Sidebar, ChatHistoryPanel, NotificationBell, NotificationItem
+├── hooks/              # useChat, useDisplayUserType, useMediaQuery, useNotifications
+├── stores/             # authStore (persist), chatStore (멀티세션, persist), notificationStore
 ├── types/              # index.ts (User, Company, ChatMessage, ChatSession, AgentCode)
-├── lib/                # api.ts (Backend), rag.ts (RAG), constants.ts
+├── lib/                # api.ts (Backend), rag.ts (RAG), constants.ts, documentApi.ts, utils.ts, dateUtils.ts, errorHandler.ts, seasonalQuestions.ts
 ├── App.tsx             # React Router (MainLayout 래퍼 패턴)
 └── main.tsx
 ```

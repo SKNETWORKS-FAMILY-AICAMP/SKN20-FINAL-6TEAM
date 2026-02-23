@@ -11,8 +11,8 @@
     ↓
 ┌─────────────────────────────────────────────────────────────┐
 │                  1. 분류 (classify)                          │
-│  - 1차: 키워드 매칭 (DB 기반 + 하드코딩 fallback)            │
-│  - 2차: 벡터 유사도 기반 도메인 분류 (VectorDomainClassifier) │
+│  - LLM API 기반 도메인 분류 (1차)                            │
+│  - Fallback: 키워드 매칭 + 벡터 유사도 분류                   │
 │  - 키워드 보정(+0.1)을 threshold 판정 전에 적용              │
 │  - 도메인 외 질문 시 거부 응답 반환                           │
 └────────────────────────┬────────────────────────────────────┘
@@ -74,25 +74,35 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │                      Frontend (React + Vite)                    │
 │                    localhost:5173                               │
-└───────────────┬─────────────────────────────┬───────────────────┘
-                │ axios (REST API)            │ axios (직접 통신)
-                │ (인증, 사용자, 기업)         │ (채팅, AI 응답)
-                ↓                             ↓
-┌───────────────────────────┐    ┌─────────────────────────────────┐
-│   Backend (FastAPI)       │    │      RAG Service (FastAPI)      │
-│   localhost:8000          │    │      localhost:8001             │
-│                           │    │                                 │
-│ - Google OAuth2 인증      │    │ - LangGraph 5단계 파이프라인    │
-│ - 사용자/기업 관리         │    │ - 4개 도메인별 벡터DB           │
-│ - 상담 이력 저장           │    │ - 평가 모듈 (LLM + RAGAS)       │
-│ - 일정 관리               │    │ - Action Executor               │
-└───────────────┬───────────┘    └───────────┬─────────────────────┘
-                │                             │
-                ↓                             ↓
-        ┌───────────────┐           ┌─────────────────────┐
-        │    MySQL      │           │     ChromaDB        │
-        │  bizi_db   │           │   (Vector DB)       │
-        └───────────────┘           └─────────────────────┘
+└───────────────────────────┬─────────────────────────────────────┘
+                            │ axios (모든 요청)
+                            │ /api/* (인증,사용자,기업)
+                            │ /rag/* (채팅,AI응답,문서생성)
+                            ↓
+┌───────────────────────────────────────────────────┐
+│              Backend (FastAPI) :8000               │
+│                                                    │
+│ - Google OAuth2 인증, 사용자/기업 관리              │
+│ - 상담 이력 저장, 일정 관리                         │
+│ - RAG 프록시 (/rag/*): 사용자 컨텍스트 주입 후 중계 │
+└───────────────┬───────────────────┬────────────────┘
+                │                   │ httpx 프록시
+                ↓                   ↓
+        ┌───────────────┐  ┌─────────────────────────────────┐
+        │    MySQL      │  │      RAG Service (FastAPI)      │
+        │   bizi_db     │  │      localhost:8001             │
+        └───────────────┘  │                                 │
+                           │ - LangGraph 5단계 파이프라인    │
+                           │ - 4개 도메인별 벡터DB           │
+                           │ - 평가 모듈 (LLM + RAGAS)       │
+                           │ - Action Executor               │
+                           └───────────┬─────────────────────┘
+                                       │
+                                       ↓
+                             ┌─────────────────────┐
+                             │     ChromaDB        │
+                             │   (Vector DB)       │
+                             └─────────────────────┘
 ```
 
 ## 벡터DB 구조
@@ -111,13 +121,10 @@ ChromaDB
 │   ├── 세법 정보
 │   └── 회계 기준
 │
-├── hr_labor_db/                 # 인사/노무/법률 전용
-│   ├── 근로기준법
-│   ├── 근로기준법 시행령
-│   ├── 근로기준법 시행규칙
-│   ├── 상법
-│   ├── 민법
-│   └── 지식재산권법
+├── hr_labor_db/                 # 인사/노무 전용
+│   ├── 근로기준법 관련 (법령/시행령/시행규칙)
+│   ├── 노동 해석례/판례
+│   └── 4대보험 교육자료
 │
 └── law_common_db/               # 법령/법령해석 (공통)
     ├── 법령 원문
@@ -143,12 +150,13 @@ class MainRouter:
     - generator: ResponseGeneratorAgent (응답 생성 전담)
     - async_graph: 비동기 StateGraph (async 전용, 동기 graph 제거됨)
 
-    노드 메서드:
-    - _classify_node(): 도메인 분류
-    - _decompose_node(): 질문 분해
-    - _retrieve_node(): 문서 검색 (→ RetrievalAgent 위임)
-    - _generate_node(): 답변 생성 (→ ResponseGeneratorAgent 위임)
-    - _evaluate_node(): 품질 평가 (FAIL 시 generate 재실행)
+    노드 메서드 (async):
+    - _aclassify_node(): 도메인 분류
+    - _adecompose_node(): 질문 분해
+    - _aretrieve_node(): 문서 검색 (→ RetrievalAgent 위임)
+    - _agenerate_node(): 답변 생성 (→ ResponseGeneratorAgent 위임)
+    - _aevaluate_node(): 품질 평가 (FAIL 시 재시도)
+    - _aretry_with_alternatives_node(): 재시도 (대체 쿼리 2개 + 원본, 최고점 반환)
     """
 ```
 
@@ -164,8 +172,8 @@ class MainRouter:
 |--------|------|
 | `SearchStrategySelector` | 쿼리 특성 분석 → 검색 모드 추천 (Hybrid/Vector/BM25/MMR/Exact) |
 | `DocumentBudgetCalculator` | 도메인별 문서 할당량(K값) 계산 |
-| `GraduatedRetryHandler` | 평가 실패 시 단계적 재시도 |
-| `DocumentMerger` | 복합 도메인 문서 병합, 중복 제거, 우선순위 정렬 |
+| 단계적 재시도 로직 | 평가 실패 시 L1~L4 단계적 재시도 (RetrievalAgent 내부) |
+| 문서 병합 로직 | 복합 도메인 문서 병합, 중복 제거, 우선순위 정렬 (RetrievalAgent 내부) |
 
 **적응형 검색 모드**:
 
@@ -203,7 +211,7 @@ Level 4: PARTIAL_ANSWER  → 현재 문서로 진행 (포기)
 - 토큰 스트리밍: `astream_generate()` / `astream_generate_multi()`로 SSE 스트리밍 지원
 
 **설정**:
-- `ENABLE_INTEGRATED_GENERATION=true`: 통합 생성 에이전트 사용 (false면 기존 방식)
+- 통합 생성은 항상 활성화 (토글 제거됨)
 - `ENABLE_ACTION_AWARE_GENERATION=true`: 액션 선제안 활성화
 
 ### 4. 도메인 에이전트 (4개)
@@ -261,23 +269,24 @@ Level 4: PARTIAL_ANSWER  → 현재 문서로 진행 (포기)
 
 **역할**: 답변 품질 평가 + FAIL 시 generate 재실행
 
-**평가 기준**:
+**평가 기준** (5개):
 - 정확성: 제공된 정보가 사실에 부합하는지
 - 완성도: 질문에 대해 충분히 답변했는지
 - 관련성: 질문 의도에 맞는 답변인지
 - 출처 명시: 법령/규정 인용 시 출처가 있는지
+- 검색 품질: 검색된 문서가 질문에 적합한지
 
-**재시도 흐름**: evaluate → FAIL → generate 재실행 (최대 N회, `ENABLE_POST_EVAL_RETRY`로 제어)
+**재시도 흐름**: evaluate → FAIL → 대체 쿼리 2개 생성 → 원본+2개=3개 후보 중 최고점 반환 (1회만, `ENABLE_POST_EVAL_RETRY`로 제어)
 
 ### 핵심 유틸리티 모듈
 
 | 모듈 | 클래스 | 역할 |
 |------|--------|------|
 | `domain_classifier.py` | `VectorDomainClassifier` | 벡터 유사도 기반 도메인 분류 |
-| `domain_config_db.py` | `DomainConfig` | MySQL 기반 도메인 키워드/규칙/대표쿼리 관리 |
+| `utils/config/domain_config.py` | `DomainConfig` | MySQL 기반 도메인 키워드/규칙/대표쿼리 관리 |
 | `question_decomposer.py` | `QuestionDecomposer` | LLM 기반 복합 질문 분해 |
 | `retrieval_evaluator.py` | `RuleBasedRetrievalEvaluator` | 규칙 기반 검색 품질 평가 |
-| `multi_query.py` | `MultiQueryRetriever` | Multi-Query 재검색 |
+| `utils/query.py` | `MultiQueryRetriever` | Multi-Query 재검색 |
 | `legal_supplement.py` | `needs_legal_supplement()` | 법률 보충 검색 판단 (키워드 매칭) |
 | `token_tracker.py` | `TokenUsageCallbackHandler` | 토큰 사용량 추적 |
 
@@ -288,8 +297,6 @@ Level 4: PARTIAL_ANSWER  → 현재 문서로 진행 (포기)
 **생성 가능 문서**:
 - 근로계약서
 - 취업규칙
-- 연차관리대장
-- 급여명세서
 - 사업계획서 템플릿
 
 ## 3중 평가 체계
@@ -301,7 +308,7 @@ RAG 시스템은 세 가지 평가 방식을 지원합니다:
 | 방식 | 규칙 기반 (문서 수, 키워드, 유사도) | LLM이 5개 기준으로 채점 | RAGAS 라이브러리 메트릭 |
 | 용도 | 검색 품질 판단 → 단계적 재시도 트리거 | 답변 품질 채점 → FAIL 시 generate 재실행 | 정량적 품질 추적 및 분석 |
 | 실행 | RetrievalAgent 검색 단계에서 자동 실행 | `ENABLE_LLM_EVALUATION=true` | `ENABLE_RAGAS_EVALUATION=true` |
-| 재시도 | GraduatedRetryHandler (L1~L4 단계적) | 선택적 (`ENABLE_POST_EVAL_RETRY=false` 기본) | 없음 (로깅만) |
+| 재시도 | GraduatedRetryHandler (L1~L4 단계적) | 1회 재시도 (`ENABLE_POST_EVAL_RETRY=true` 기본) | 없음 (로깅만) |
 | 로그 | 콘솔 | logs/chat.log | logs/ragas.log (JSON Lines) |
 
 ## 도메인 분류 상세
@@ -313,15 +320,22 @@ RAG 시스템은 세 가지 평가 방식을 지원합니다:
     │
     ↓
 ┌───────────────────────────────────────────┐
-│ 1차: 키워드 매칭 (kiwipiepy 형태소 분석)    │
-│   - DB 기반 키워드 (domain_config_db.py)   │
-│   - 하드코딩 fallback (prompts.py)         │
+│ LLM API 기반 도메인 분류 (1차)              │
+│   - ENABLE_LLM_DOMAIN_CLASSIFICATION=true │
+│   → 성공 시 바로 반환                      │
+│   → 실패 시 아래 fallback                  │
+└────────────────────┬──────────────────────┘
+                     ↓ (fallback)
+┌───────────────────────────────────────────┐
+│ 키워드 매칭 (kiwipiepy 형태소 분석)         │
+│   - DB 기반 키워드 (domain_config.py)      │
+│   - 하드코딩 fallback (domain_data.py)     │
 │   - 복합 규칙 (2개 이상 lemma 조합)         │
 │   → 매칭 시 +0.1 보정 (boosted_confidence) │
 └────────────────────┬──────────────────────┘
                      ↓
 ┌───────────────────────────────────────────┐
-│ 2차: 벡터 유사도 (HuggingFace embeddings)  │
+│ 벡터 유사도 (HuggingFace embeddings)       │
 │   - 대표 쿼리 벡터 centroid 비교            │
 │   → boosted_confidence ≥ 0.6 → 통과       │
 │   → boosted_confidence < 0.6 → 거부       │
@@ -332,13 +346,13 @@ RAG 시스템은 세 가지 평가 방식을 지원합니다:
 
 | 테이블 | 역할 |
 |--------|------|
-| `domain` | 도메인 마스터 (domain_key, name, sort_order) |
+| `code` (에이전트 코드) | 도메인-에이전트 매핑 (A0000001~A0000005) |
 | `domain_keyword` | 도메인별 키워드 (noun/verb) |
 | `domain_compound_rule` | 복합 규칙 (필수 lemma 조합, JSON) |
 | `domain_representative_query` | 대표 쿼리 (벡터 centroid 계산용) |
 
-`domain_config_db.py`의 `get_domain_config()` 싱글톤으로 캐시됨.
-DB 연결 실패 시 `prompts.py`의 하드코딩 값으로 fallback.
+`utils/config/domain_config.py`의 `get_domain_config()` 싱글톤으로 캐시됨.
+DB 연결 실패 시 `utils/config/domain_data.py`의 하드코딩 값으로 fallback.
 
 ## 데이터 흐름 예시
 

@@ -11,22 +11,28 @@ data/
 │   ├── finance/           # 세무/회계 원본
 │   └── labor/             # 노동/인사 원본
 └── preprocessed/          # 전처리된 JSONL (RAG 입력용)
-    ├── law/               # laws_full, law_lookup, interpretations, court_cases
-    ├── labor/             # labor_qa
-    ├── finance/           # tax_schedule
-    └── startup_support/   # industries, startup_procedures
+    ├── law_common/        # laws_full, laws_etc, interpretations, interpretations_etc
+    ├── hr_labor/          # court_cases_labor, hr_insurance_edu, labor_interpretation
+    ├── finance_tax/       # court_cases_tax, tax_support
+    └── startup_support/   # announcements, industry_startup_guide_filtered, startup_procedures_filtered
 ```
 
 ## Output Files
 
-| File | Type | Domain | Count |
-|------|------|--------|-------|
-| `law/laws_full.jsonl` | law | all | ~5,500 |
-| `law/interpretations.jsonl` | interpretation | all | ~8,600 |
-| `law/court_cases_*.jsonl` | court_case | labor/tax | ~3,000 |
-| `labor/labor_qa.jsonl` | labor_qa | labor | ~500 |
-| `finance/tax_schedule.jsonl` | schedule | tax | ~240 |
-| `startup_support/industries.jsonl` | guide | startup | ~1,600 |
+| File | Type | Domain |
+|------|------|--------|
+| `law_common/laws_full.jsonl` | law | law_common |
+| `law_common/laws_etc.jsonl` | law | law_common |
+| `law_common/interpretations.jsonl` | interpretation | law_common |
+| `law_common/interpretations_etc.jsonl` | interpretation | law_common |
+| `hr_labor/court_cases_labor.jsonl` | court_case | hr_labor |
+| `hr_labor/hr_insurance_edu.jsonl` | insurance | hr_labor |
+| `hr_labor/labor_interpretation.jsonl` | interpretation | hr_labor |
+| `finance_tax/court_cases_tax.jsonl` | court_case | finance_tax |
+| `finance_tax/tax_support.jsonl` | support | finance_tax |
+| `startup_support/announcements.jsonl` | announcement | startup |
+| `startup_support/industry_startup_guide_filtered.jsonl` | guide | startup |
+| `startup_support/startup_procedures_filtered.jsonl` | procedure | startup |
 
 ## Schema (Required Fields)
 `id`, `type`, `domain`, `title`, `content`, `source`

@@ -152,6 +152,7 @@ Agentic RAG 구조로 6개 에이전트 운영:
 | 평가 에이전트 | 답변 품질 평가, 재요청 판단 |
 | Action Executor | 문서 생성 (근로계약서, 사업계획서 등) |
 
+내부적으로 RetrievalAgent(검색 실행)와 ResponseGenerator(답변 생성)가 파이프라인 내에서 동작합니다.
 상세 아키텍처는 [rag/ARCHITECTURE.md](./rag/ARCHITECTURE.md) 참조
 
 ### RAG 품질 기능
@@ -166,6 +167,7 @@ Agentic RAG 구조로 6개 에이전트 운영:
 | Domain Rejection | `ENABLE_DOMAIN_REJECTION` | true | 도메인 외 질문 거부 |
 | LLM Domain Classification | `ENABLE_LLM_DOMAIN_CLASSIFICATION` | false | LLM 기반 도메인 분류 비교 (추가 비용) |
 | Response Caching | 항상 활성화 | - | LRU 캐시 (500건, 1시간 TTL) |
+| Multi-Query | `MULTI_QUERY_COUNT` | 3 | Multi-Query 생성 개수 (항상 활성화) |
 | LLM Evaluation | `ENABLE_LLM_EVALUATION` | true | 답변 품질 평가 |
 | Legal Supplement | `ENABLE_LEGAL_SUPPLEMENT` | true | 주 도메인 검색 후 법률 키워드 감지 시 법률DB 보충 검색 |
 

@@ -18,6 +18,7 @@ backend/
     ├── histories/       # 상담 이력
     ├── schedules/       # 일정 관리
     ├── admin/           # 관리자 대시보드, 서버 상태
+    ├── rag/             # RAG 프록시 (채팅/스트리밍/문서생성을 RAG 서비스로 중계)
     └── common/          # models.py, deps.py
 ```
 
@@ -44,6 +45,11 @@ backend/
 | admin | GET | `/admin/histories` | 상담 로그 (페이지네이션/필터링) |
 | admin | GET | `/admin/histories/stats` | 평가 통계 |
 | admin | GET | `/admin/histories/{id}` | 상담 로그 상세 |
+| rag | POST | `/rag/chat` | RAG 채팅 프록시 |
+| rag | POST | `/rag/chat/stream` | RAG 스트리밍 프록시 (SSE) |
+| rag | POST | `/rag/documents/contract` | 근로계약서 생성 프록시 |
+| rag | POST | `/rag/documents/business-plan` | 사업계획서 생성 프록시 |
+| rag | GET | `/rag/health` | RAG 헬스체크 프록시 |
 
 ## Code Table (main_code)
 - `U`: 사용자 유형 (U0000001: 관리자, U0000002: 예비창업자, U0000003: 사업자)
