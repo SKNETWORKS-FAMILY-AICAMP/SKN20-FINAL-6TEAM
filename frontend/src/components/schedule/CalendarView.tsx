@@ -74,8 +74,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           center: 'title',
           right: '',
         }}
+        buttonIcons={false}
         buttonText={{
-          today: '오늘',
+          prev: '<',
+          next: '>',
+          today: '\uC624\uB298',
         }}
         height="auto"
         dayMaxEvents={3}
