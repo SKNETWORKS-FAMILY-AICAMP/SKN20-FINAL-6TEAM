@@ -1021,11 +1021,15 @@ class RetrievalAgent:
                 budgets=budgets,
                 max_total=candidate_total,
             )
-            # 모든 도메인 예산 합계를 final_k로 사용 (max_retrieval_docs로 상한)
-            final_k = min(
-                sum(b.allocated_k for b in budgets.values() if b.domain in main_results),
-                self.settings.max_retrieval_docs,
-            )
+            # 복합 도메인: ratio 적용하여 실질적 필터링 (저품질 문서 제거)
+            if len(main_results) > 1:
+                final_k = min(
+                    max(5, int(candidate_total * self.settings.cross_domain_rerank_ratio)),
+                    self.settings.max_retrieval_docs,
+                )
+            else:
+                # 단일 도메인: rerank 후 top_k개만 유지 (비관련 하위 문서 제거)
+                final_k = min(candidate_total, self.settings.rerank_top_k)
             reranker = self.rag_chain.reranker
             if reranker and len(merged) > final_k:
                 logger.info(

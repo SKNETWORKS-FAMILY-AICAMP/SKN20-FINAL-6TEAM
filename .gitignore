@@ -1,4 +1,5 @@
 .env
+.env.*backup*
 __pycache__
 .pytest_cache
 .claude/settings.local.json
@@ -102,3 +103,10 @@ data/origin/batch_temp/
 scripts/crawling/output/
 scripts/crawling/temp/
 scripts/crawling/forms/
+
+# =============================================
+# RAGAS 평가 결과 (로컬 전용)
+# =============================================
+rag/evaluation/results/*.json
+rag/evaluation/results/*.txt
+rag/reports/

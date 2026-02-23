@@ -168,7 +168,7 @@ class Settings(BaseSettings):
         return v
 
     openai_model: str = Field(default="gpt-4o-mini", description="LLM 모델")
-    openai_temperature: float = Field(default=0.3, description="LLM temperature")
+    openai_temperature: float = Field(default=0.1, description="LLM temperature")
 
     # -- 임베딩 --
     embedding_model: str = Field(
@@ -216,15 +216,15 @@ class Settings(BaseSettings):
     # ================================================================
 
     # -- 검색 --
-    retrieval_k: int = Field(default=3, gt=0, description="도메인별 검색 결과 개수")
+    retrieval_k: int = Field(default=4, gt=0, description="도메인별 검색 결과 개수")
     retrieval_k_common: int = Field(default=2, gt=0, description="공통 법령 DB 검색 결과 개수")
     mmr_fetch_k_multiplier: int = Field(default=4, gt=0, description="MMR 검색 시 초기 후보 배수")
     mmr_lambda_mult: float = Field(default=0.6, ge=0.0, le=1.0, description="MMR 다양성 파라미터 (0=최대 다양성, 1=최대 유사도)")
 
     # 컨텍스트 길이 설정 (조문 단위 청크 평균 500~2,000자를 온전히 LLM에 전달)
-    format_context_length: int = Field(default=2000, description="컨텍스트 포맷팅 시 문서 내용 최대 길이")
+    format_context_length: int = Field(default=4000, description="컨텍스트 포맷팅 시 문서 내용 최대 길이")
     source_content_length: int = Field(default=500, description="SourceDocument 변환 시 내용 최대 길이")
-    evaluator_context_length: int = Field(default=2000, description="평가 시 컨텍스트 최대 길이")
+    evaluator_context_length: int = Field(default=4000, description="평가 시 컨텍스트 최대 길이")
 
     # -- 검색 가중치 --
     vector_search_weight: float = Field(
@@ -234,7 +234,7 @@ class Settings(BaseSettings):
         description="벡터 검색 가중치 (0.0=BM25만, 1.0=벡터만)"
     )
     max_retrieval_docs: int = Field(
-        default=10, description="최대 검색 문서 수"
+        default=15, description="최대 검색 문서 수"
     )
 
     # -- Reranker --
@@ -295,9 +295,14 @@ class Settings(BaseSettings):
     # -- 통합 생성 에이전트 --
     # (enable_action_aware_generation, enable_post_eval_retry는 Feature Flags에 정의)
 
+    # -- 생성 파라미터 --
+    generation_max_tokens: int = Field(
+        default=2048, gt=0, description="답변 생성 LLM max_tokens 제한"
+    )
+
     # -- 법률 보충 검색 --
     legal_supplement_k: int = Field(
-        default=3, gt=0, description="법률 보충 검색 시 가져올 문서 수"
+        default=4, gt=0, description="법률 보충 검색 시 가져올 문서 수"
     )
 
     # -- RetrievalAgent / 동적 K / 재시도 --
@@ -324,7 +329,13 @@ class Settings(BaseSettings):
         default=3, gt=0, description="인접 도메인 검색 시 문서 수"
     )
     min_domain_k: int = Field(
-        default=2, gt=0, description="복합 도메인 시 도메인당 최소 문서 수"
+        default=3, gt=0, description="복합 도메인 시 도메인당 최소 문서 수"
+    )
+    cross_domain_rerank_ratio: float = Field(
+        default=0.7,
+        ge=0.3,
+        le=1.0,
+        description="Cross-Domain Reranking 후 유지할 문서 비율 (총 후보 대비)"
     )
 
     # -- RAGAS --
@@ -432,6 +443,7 @@ class Settings(BaseSettings):
         "post_eval_alt_query_count",
         "max_retry_level",
         "primary_domain_budget_ratio",
+        "cross_domain_rerank_ratio",
         "debug",
     }
 

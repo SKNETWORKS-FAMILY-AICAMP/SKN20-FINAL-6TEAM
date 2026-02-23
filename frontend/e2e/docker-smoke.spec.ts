@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
-const BACKEND_URL = 'http://localhost:8000';
-const RAG_URL = 'http://localhost:8001';
+const BACKEND_URL = 'http://localhost/api';
+const RAG_URL = 'http://localhost/rag';
 
 test.describe('Docker 환경 스모크 테스트', () => {
   test('프론트엔드가 정상적으로 로드된다', async ({ page }) => {

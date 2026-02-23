@@ -89,6 +89,7 @@ class ResponseGeneratorAgent:
             "통합생성",
             temperature=0.1,
             request_timeout=self.settings.llm_timeout,
+            max_tokens=self.settings.generation_max_tokens,
         )
 
     def _collect_actions(
@@ -284,14 +285,15 @@ class ResponseGeneratorAgent:
 
         context = self.rag_chain.format_context(documents)
 
-        # 액션 힌트 주입
+        # 시스템 프롬프트에 액션 힌트 주입
+        system_prompt = agent.get_system_prompt()
         if actions and self.settings.enable_action_aware_generation:
             actions_context = self._format_actions_context(actions)
-            context += ACTION_HINT_TEMPLATE.format(actions_context=actions_context)
+            system_prompt += "\n" + ACTION_HINT_TEMPLATE.format(actions_context=actions_context)
 
         # 도메인 에이전트의 시스템 프롬프트 사용
         prompt = ChatPromptTemplate.from_messages([
-            ("system", agent.get_system_prompt()),
+            ("system", system_prompt),
             ("human", "{query}"),
         ])
 
@@ -423,11 +425,12 @@ class ResponseGeneratorAgent:
 
         context = self.rag_chain.format_context(documents)
 
+        system_prompt = agent.get_system_prompt()
         if actions_context != "없음" and self.settings.enable_action_aware_generation:
-            context += ACTION_HINT_TEMPLATE.format(actions_context=actions_context)
+            system_prompt += "\n" + ACTION_HINT_TEMPLATE.format(actions_context=actions_context)
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", agent.get_system_prompt()),
+            ("system", system_prompt),
             ("human", "{query}"),
         ])
 

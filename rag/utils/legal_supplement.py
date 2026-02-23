@@ -7,6 +7,7 @@ LLM 호출 없이 순수 키워드 매칭으로 동작합니다 (추가 비용/�
 """
 
 import logging
+import re
 
 from langchain_core.documents import Document
 
@@ -18,6 +19,7 @@ LEGAL_SUPPLEMENT_KEYWORDS: set[str] = {
     "법률", "법령", "조문", "판례", "규정", "법적",
     # 주요 법률
     "상법", "민법", "근로기준법", "세법", "공정거래법",
+    "개인정보보호법", "산업안전보건법", "건설산업기본법",
     # 소송/분쟁
     "소송", "분쟁", "손해배상", "고소", "소장", "판결",
     # 지식재산
@@ -26,6 +28,16 @@ LEGAL_SUPPLEMENT_KEYWORDS: set[str] = {
     "변호사", "법무사",
     # 계약/책임
     "위약금", "계약해지", "해제", "위반", "처벌", "벌금", "과태료",
+    # 의무/자격
+    "의무", "자격요건",
+}
+
+# ~법 패턴으로 한국 법률명 자동 감지 (예: 산업안전보건법, 건설근로자퇴직공제법)
+_LAW_NAME_PATTERN = re.compile(r"[가-힣]{2,}법")
+# 법률명이 아닌 일반 단어 제외
+_LAW_NAME_EXCLUSIONS: set[str] = {
+    "방법", "기법", "문법", "용법", "처방", "비법", "수법",
+    "서법", "선법", "주법", "화법", "작법", "어법", "심법",
 }
 
 # 쿼리 키워드 매칭 최소 수 (1개 이상)
@@ -35,10 +47,10 @@ _QUERY_KEYWORD_THRESHOLD = 1
 _DOC_KEYWORD_THRESHOLD = 2
 
 # 문서 검사 시 상위 N건만 확인
-_DOC_CHECK_LIMIT = 5
+_DOC_CHECK_LIMIT = 8
 
 # 문서당 검사 최대 글자수
-_DOC_CONTENT_LIMIT = 500
+_DOC_CONTENT_LIMIT = 800
 
 
 def needs_legal_supplement(
@@ -60,6 +72,16 @@ def needs_legal_supplement(
     if "law_common" in classified_domains:
         logger.debug("[법률 보충] law_common이 주 도메인 → 보충 불필요")
         return False
+
+    # ~법 패턴 매칭 (산업안전보건법, 건설산업기본법 등 구체적 법률명)
+    law_names = _LAW_NAME_PATTERN.findall(query)
+    actual_laws = [name for name in law_names if name not in _LAW_NAME_EXCLUSIONS]
+    if actual_laws:
+        logger.info(
+            "[법률 보충] 법률명 감지: %s → 보충 필요",
+            ", ".join(actual_laws),
+        )
+        return True
 
     # 쿼리 키워드 매칭
     query_matches = sum(1 for kw in LEGAL_SUPPLEMENT_KEYWORDS if kw in query)

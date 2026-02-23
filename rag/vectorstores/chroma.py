@@ -59,7 +59,7 @@ class ChromaVectorStore:
         self._client: chromadb.ClientAPI | None = None
         # LRU 캐시 방식의 OrderedDict 사용
         self._stores: OrderedDict[str, Chroma] = OrderedDict()
-        self._store_lock = threading.Lock()
+        self._store_lock = threading.RLock()
 
         # 저장 디렉토리 생성 (로컬 모드용)
         if not self._is_remote_mode():
