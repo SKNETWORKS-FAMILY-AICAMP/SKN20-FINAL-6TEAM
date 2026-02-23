@@ -100,10 +100,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     };
   }, [isMobile, isOpen, onClose]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     closeSidebar();
-    logout();
-    window.location.href = '/login';
+    await logout();
+    navigate('/', { replace: true });
   };
 
   const handleNewChat = () => {
