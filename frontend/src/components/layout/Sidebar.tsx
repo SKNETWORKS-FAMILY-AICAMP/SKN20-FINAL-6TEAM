@@ -152,21 +152,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ? `fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-out ${
                 isOpen ? 'translate-x-0' : '-translate-x-full'
               }`
-            : 'relative h-full shrink-0'
+            : 'relative h-full shrink-0 border-r border-gray-200 bg-white'
         }
         role={isMobile ? 'dialog' : undefined}
         aria-modal={isMobile ? true : undefined}
         aria-label="사이드바"
       >
         <Card
-          className={`flex flex-col overflow-hidden rounded-none shadow-xl shadow-blue-gray-900/5 ${
+          shadow={false}
+          style={{ boxShadow: 'none' }}
+          className={`flex flex-col overflow-hidden rounded-none bg-white shadow-none ${
             isMobile
               ? `h-full ${MOBILE_SIDEBAR_WIDTH_CLASS}`
               : `h-full ${effectiveCollapsed ? DESKTOP_SIDEBAR_COLLAPSED_WIDTH_CLASS : DESKTOP_SIDEBAR_EXPANDED_WIDTH_CLASS} ${SIDEBAR_WIDTH_TRANSITION_CLASS}`
           }`}
         >
           {/* Logo / Toggle */}
-          <div className="flex h-14 items-center border-b px-3">
+          <div className="flex h-[81px] items-center border-b px-3">
             <div
               className={`min-w-0 overflow-hidden transition-[max-width] duration-180 ease-[cubic-bezier(0.2,0,0,1)] ${
                 !isMobile && effectiveCollapsed ? 'max-w-0 flex-1' : 'max-w-[13rem] flex-1'
