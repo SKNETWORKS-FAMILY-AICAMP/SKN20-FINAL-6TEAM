@@ -4,6 +4,8 @@ import type { ChatMessage, ChatSession } from '../types';
 import api from '../lib/api';
 import { generateId } from '../lib/utils';
 
+const MAX_SESSIONS = 50;
+
 interface ChatState {
   sessions: ChatSession[];
   currentSessionId: string | null;
@@ -60,10 +62,17 @@ export const useChatStore = create<ChatState>()(
 
       createSession: (title?: string) => {
         const session = createNewSession(title);
-        set((state) => ({
-          sessions: [session, ...state.sessions],
-          currentSessionId: session.id,
-        }));
+        set((state) => {
+          // 오래된 세션 자동 정리 (MAX_SESSIONS 초과 시)
+          const updated = [session, ...state.sessions];
+          const trimmed = updated.length > MAX_SESSIONS
+            ? updated.slice(0, MAX_SESSIONS)
+            : updated;
+          return {
+            sessions: trimmed,
+            currentSessionId: session.id,
+          };
+        });
         return session.id;
       },
 

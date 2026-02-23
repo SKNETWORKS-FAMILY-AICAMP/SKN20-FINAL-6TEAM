@@ -13,7 +13,7 @@ from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from schemas.response import SourceDocument
-from utils.config import create_llm, get_settings
+from utils.config import DOMAIN_LABELS, create_llm, get_settings
 from vectorstores.chroma import ChromaVectorStore
 
 if TYPE_CHECKING:
@@ -137,9 +137,10 @@ class RAGChain:
 
         logger.info("[검색 완료] 총 %d건 검색됨", len(documents))
         for idx, doc in enumerate(documents):
-            title = doc.metadata.get("title", "제목 없음")[:50]
-            source = doc.metadata.get("source_name") or doc.metadata.get("source_file") or "출처 없음"
-            score = doc.metadata.get("score")
+            meta = doc.metadata or {}
+            title = meta.get("title", "제목 없음")[:50]
+            source = meta.get("source_name") or meta.get("source_file") or "출처 없음"
+            score = meta.get("score")
             score_str = f"{score:.4f}" if score is not None else "N/A"
             logger.debug("  [%d] %s (score: %s, 출처: %s)", idx + 1, title, score_str, source[:30])
 
@@ -337,8 +338,29 @@ class RAGChain:
         results.sort(key=lambda x: x[1])
         return results
 
+    @staticmethod
+    def _extract_domain_label(doc: Document) -> str:
+        """문서 metadata에서 도메인 라벨을 추출합니다.
+
+        Args:
+            doc: 문서
+
+        Returns:
+            도메인 한글 라벨 (추출 불가 시 빈 문자열)
+        """
+        domain = (
+            doc.metadata.get("domain")
+            or doc.metadata.get("collection_name", "").replace("_db", "")
+        )
+        if domain:
+            return DOMAIN_LABELS.get(domain, "")
+        return ""
+
     def format_context(self, documents: list[Document]) -> str:
         """문서 리스트를 컨텍스트 문자열로 포맷팅합니다.
+
+        멀티 도메인 질문 시 각 문서에 도메인 라벨을 포함하여
+        LLM이 문서의 출처 도메인을 명확히 인식할 수 있게 합니다.
 
         Args:
             documents: 문서 리스트
@@ -365,10 +387,14 @@ class RAGChain:
             title = doc.metadata.get("title", "")
             content = doc.page_content[:self.settings.format_context_length]
 
+            # 도메인 라벨 추출 (멀티 도메인 시 문서-도메인 매핑 정보 제공)
+            domain_label = self._extract_domain_label(doc)
+            domain_tag = f" [분야: {domain_label}]" if domain_label else ""
+
             if title:
-                context_parts.append(f"[{i}] {title}\n출처: {source}\n{content}")
+                context_parts.append(f"[{i}]{domain_tag} {title}\n출처: {source}\n{content}")
             else:
-                context_parts.append(f"[{i}] 출처: {source}\n{content}")
+                context_parts.append(f"[{i}]{domain_tag} 출처: {source}\n{content}")
 
         return "\n\n---\n\n".join(context_parts)
 

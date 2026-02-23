@@ -214,32 +214,76 @@ class ResponseGeneratorAgent:
             all_sources.extend(legal_supplement_result.sources)
 
         # 단일 도메인 vs 복수 도메인
+        # 에이전트가 존재하고 검색 결과가 있는 도메인만 활성
         active_domains = [
             d for d in domains
             if d in self.agents and d in retrieval_results
         ]
 
-        if len(active_domains) == 1:
-            content = await self._agenerate_single(
-                query=query,
-                domain=active_domains[0],
-                retrieval_results=retrieval_results,
-                legal_supplement_docs=legal_supplement_docs,
-                user_type=user_type,
-                company_context=company_context,
+        # 탈락된 도메인 경고 로깅
+        dropped_domains = [d for d in domains if d not in active_domains]
+        if dropped_domains:
+            logger.warning(
+                "[생성기] 도메인 탈락: %s (에이전트 미등록 또는 검색 결과 없음) — "
+                "사용자가 %d개 도메인 답변을 기대했지만 %d개만 활성",
+                dropped_domains,
+                len(domains),
+                len(active_domains),
+            )
+
+        # 빈 결과 도메인 필터링: 문서가 0건인 도메인은 실질적으로 비활성
+        effective_domains = [
+            d for d in active_domains
+            if retrieval_results[d].documents
+        ]
+        empty_domains = [d for d in active_domains if d not in effective_domains]
+        if empty_domains:
+            logger.warning(
+                "[생성기] 검색 결과 0건 도메인: %s — 실질적으로 비활성 처리",
+                empty_domains,
+            )
+
+        try:
+            if len(effective_domains) <= 1 and len(active_domains) <= 1:
+                # 진정한 단일 도메인: 단일 프롬프트 사용
+                target_domain = effective_domains[0] if effective_domains else (active_domains[0] if active_domains else domains[0])
+                content = await self._agenerate_single(
+                    query=query,
+                    domain=target_domain,
+                    retrieval_results=retrieval_results,
+                    legal_supplement_docs=legal_supplement_docs,
+                    user_type=user_type,
+                    company_context=company_context,
+                    actions_context=actions_context,
+                )
+            elif len(effective_domains) <= 1 and len(active_domains) > 1:
+                # 원래 복수 도메인이었으나 실질적으로 단일 도메인만 문서 보유
+                # 단일 프롬프트 사용하되, 누락 안내 추가
+                target_domain = effective_domains[0] if effective_domains else active_domains[0]
+                content = await self._agenerate_single(
+                    query=query,
+                    domain=target_domain,
+                    retrieval_results=retrieval_results,
+                    legal_supplement_docs=legal_supplement_docs,
+                    user_type=user_type,
+                    company_context=company_context,
+                    actions_context=actions_context,
+                )
+            else:
+                # 복수 도메인: effective_domains로 생성
+                content = await self._agenerate_multi(
+                    query=query,
+                    sub_queries=sub_queries,
+                    retrieval_results=retrieval_results,
+                    legal_supplement_docs=legal_supplement_docs,
+                    domains=effective_domains,
+                    user_type=user_type,
+                    company_context=company_context,
                 actions_context=actions_context,
             )
-        else:
-            content = await self._agenerate_multi(
-                query=query,
-                sub_queries=sub_queries,
-                retrieval_results=retrieval_results,
-                legal_supplement_docs=legal_supplement_docs,
-                domains=active_domains,
-                user_type=user_type,
-                company_context=company_context,
-                actions_context=actions_context,
-            )
+        except Exception as e:
+            logger.error("[생성기] LLM 호출 실패: %s", e, exc_info=True)
+            content = self.settings.fallback_message
 
         elapsed = time.time() - start
         logger.info("[생성기] 비동기 완료: %d자 (%.3fs)", len(content), elapsed)
@@ -339,9 +383,17 @@ class ResponseGeneratorAgent:
         """
         user_type, company_context = BaseAgent._extract_user_context(user_context)
 
+        # 빈 결과 도메인 필터링
+        effective_domains = [
+            d for d in domains
+            if d in retrieval_results and retrieval_results[d].documents
+        ]
+        if not effective_domains:
+            effective_domains = domains  # 전부 비어있으면 원본 유지
+
         # 전체 문서 병합
         all_documents: list[Document] = []
-        for domain in domains:
+        for domain in effective_domains:
             if domain in retrieval_results:
                 all_documents.extend(retrieval_results[domain].documents)
         legal_supplement = retrieval_results.get("law_common_supplement")
@@ -356,7 +408,7 @@ class ResponseGeneratorAgent:
 
         context = self.rag_chain.format_context(all_documents)
         domains_description = ", ".join(
-            DOMAIN_LABELS.get(d, d) for d in domains
+            DOMAIN_LABELS.get(d, d) for d in effective_domains
         )
         actions_context = self._format_actions_context(actions or [])
         sub_queries_text = "\n".join(
@@ -452,6 +504,11 @@ class ResponseGeneratorAgent:
             if self.settings.enable_fallback:
                 return self.settings.fallback_message
             raise
+        except Exception as e:
+            logger.exception("[생성기] LLM 호출 실패 (단일 도메인): %s", e)
+            if self.settings.enable_fallback:
+                return self.settings.fallback_message
+            raise
 
     async def _agenerate_multi(
         self,
@@ -521,6 +578,11 @@ class ResponseGeneratorAgent:
             )
         except asyncio.TimeoutError:
             logger.error("[생성기] 복수 도메인 LLM 타임아웃: %s", query[:30])
+            if self.settings.enable_fallback:
+                return self.settings.fallback_message
+            raise
+        except Exception as e:
+            logger.exception("[생성기] LLM 호출 실패 (복수 도메인): %s", e)
             if self.settings.enable_fallback:
                 return self.settings.fallback_message
             raise

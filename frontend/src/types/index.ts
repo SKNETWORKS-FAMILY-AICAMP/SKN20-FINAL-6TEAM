@@ -123,6 +123,7 @@ export interface RagChatResponse {
   sources: RagSourceDocument[];
   actions: RagActionSuggestion[];
   evaluation: RagEvaluationResult | null;
+  evaluation_data?: EvaluationData | null;
   session_id: string | null;
   retry_count: number;
   ragas_metrics: Record<string, unknown> | null;

@@ -41,7 +41,12 @@ const downloadBase64File = (
   fileName: string,
   mimeType: string,
 ) => {
-  const byteCharacters = atob(base64Content);
+  let byteCharacters: string;
+  try {
+    byteCharacters = atob(base64Content);
+  } catch {
+    throw new Error('파일 데이터가 올바르지 않습니다. 다시 시도해주세요.');
+  }
   const byteNumbers = new Array(byteCharacters.length);
   for (let i = 0; i < byteCharacters.length; i++) {
     byteNumbers[i] = byteCharacters.charCodeAt(i);

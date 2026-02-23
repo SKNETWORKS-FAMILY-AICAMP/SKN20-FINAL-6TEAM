@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -124,9 +124,11 @@ const MainPage: React.FC = () => {
   };
 
   // Dynamic quick questions based on display user type + seasonal questions
-  const seasonalQuestions = getSeasonalQuestions();
-  const baseQuestions = USER_QUICK_QUESTIONS[displayUserType] || USER_QUICK_QUESTIONS['U0000002'];
-  const quickQuestions = [...baseQuestions.slice(0, 4), ...seasonalQuestions.slice(0, 2)];
+  const quickQuestions = useMemo(() => {
+    const seasonalQuestions = getSeasonalQuestions();
+    const baseQuestions = USER_QUICK_QUESTIONS[displayUserType] || USER_QUICK_QUESTIONS['U0000002'];
+    return [...baseQuestions.slice(0, 4), ...seasonalQuestions.slice(0, 2)];
+  }, [displayUserType]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">

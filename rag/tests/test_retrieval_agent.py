@@ -361,6 +361,8 @@ class TestDocumentBudgetCalculator:
         settings.enable_fixed_doc_limit = False
         settings.retrieval_k = 3
         settings.max_retrieval_docs = 15
+        settings.primary_domain_budget_ratio = 0.6
+        settings.multi_domain_primary_ratio = 0.5
         mock_settings.return_value = settings
 
         budgets = self.calculator.calculate(
@@ -387,6 +389,8 @@ class TestDocumentBudgetCalculator:
         settings.enable_fixed_doc_limit = False
         settings.retrieval_k = 3
         settings.max_retrieval_docs = 15
+        settings.primary_domain_budget_ratio = 0.6
+        settings.multi_domain_primary_ratio = 0.5
         mock_settings.return_value = settings
 
         budgets = self.calculator.calculate(

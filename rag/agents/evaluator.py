@@ -20,6 +20,12 @@ logger = logging.getLogger(__name__)
 # JSON 파싱 재시도 최대 횟수
 MAX_PARSE_RETRY = 2
 
+# 평가 Fallback 상수
+FALLBACK_SCORE_PER_CRITERION = 10      # 파싱 실패 시 각 기준별 점수
+FALLBACK_TOTAL_SCORE = 50              # 파싱 실패 시 총 점수
+DEFAULT_SCORE_PER_CRITERION = 14       # 기본 각 기준별 점수
+DEFAULT_TOTAL_SCORE = 70               # 기본 총 점수
+
 
 class EvaluatorAgent:
     """평가 에이전트.
@@ -102,26 +108,26 @@ class EvaluatorAgent:
             # 파싱 실패 시 낮은 점수로 재시도 유도
             return {
                 "scores": {
-                    "retrieval_quality": 10,
-                    "accuracy": 10,
-                    "completeness": 10,
-                    "relevance": 10,
-                    "citation": 10,
+                    "retrieval_quality": FALLBACK_SCORE_PER_CRITERION,
+                    "accuracy": FALLBACK_SCORE_PER_CRITERION,
+                    "completeness": FALLBACK_SCORE_PER_CRITERION,
+                    "relevance": FALLBACK_SCORE_PER_CRITERION,
+                    "citation": FALLBACK_SCORE_PER_CRITERION,
                 },
-                "total_score": 50,
+                "total_score": FALLBACK_TOTAL_SCORE,
                 "passed": False,
                 "feedback": "평가 응답 파싱 실패로 재시도가 필요합니다.",
             }
         # 정상적인 기본값
         return {
             "scores": {
-                "retrieval_quality": 14,
-                "accuracy": 14,
-                "completeness": 14,
-                "relevance": 14,
-                "citation": 14,
+                "retrieval_quality": DEFAULT_SCORE_PER_CRITERION,
+                "accuracy": DEFAULT_SCORE_PER_CRITERION,
+                "completeness": DEFAULT_SCORE_PER_CRITERION,
+                "relevance": DEFAULT_SCORE_PER_CRITERION,
+                "citation": DEFAULT_SCORE_PER_CRITERION,
             },
-            "total_score": 70,
+            "total_score": DEFAULT_TOTAL_SCORE,
             "passed": True,
             "feedback": None,
         }
@@ -152,6 +158,7 @@ class EvaluatorAgent:
 
         scores = parsed.get("scores", {})
         total_score = parsed.get("total_score", sum(scores.values()))
+        total_score = max(0, min(100, total_score))  # 0-100 범위 클램프
         passed = total_score >= self.threshold
 
         logger.info(

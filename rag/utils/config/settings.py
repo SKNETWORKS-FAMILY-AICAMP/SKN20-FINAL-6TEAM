@@ -283,7 +283,7 @@ class Settings(BaseSettings):
     evaluation_threshold: int = Field(default=70, ge=0, le=100, description="평가 통과 임계값 (100점 만점)")
     max_retry_count: int = Field(default=1, ge=0, description="최대 재시도 횟수")
     post_eval_alt_query_count: int = Field(
-        default=2, ge=1, le=5,
+        default=1, ge=1, le=5,
         description="평가 실패 재시도 시 생성할 대체 쿼리 수"
     )
 
@@ -336,6 +336,26 @@ class Settings(BaseSettings):
         ge=0.3,
         le=1.0,
         description="Cross-Domain Reranking 후 유지할 문서 비율 (총 후보 대비)"
+    )
+    multi_domain_primary_ratio: float = Field(
+        default=0.5, ge=0.0, le=1.0,
+        description="3+ 도메인 시 주 도메인 예산 비율"
+    )
+    retry_keyword_relaxation: float = Field(
+        default=0.15, ge=0.0, le=1.0,
+        description="재시도 시 키워드 매칭 비율 완화값"
+    )
+    retry_similarity_relaxation: float = Field(
+        default=0.15, ge=0.0, le=1.0,
+        description="재시도 시 유사도 임계값 완화값"
+    )
+    retry_keyword_floor: float = Field(
+        default=0.15, ge=0.0, le=1.0,
+        description="재시도 시 키워드 매칭 비율 하한"
+    )
+    retry_similarity_floor: float = Field(
+        default=0.35, ge=0.0, le=1.0,
+        description="재시도 시 유사도 임계값 하한"
     )
 
     # -- RAGAS --
@@ -399,7 +419,19 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "프로덕션 환경에서 MYSQL_PASSWORD가 설정되지 않았습니다."
                 )
+            if not self.openai_api_key or not self.openai_api_key.strip():
+                raise ValueError(
+                    "프로덕션 환경에서 OPENAI_API_KEY가 설정되지 않았습니다."
+                )
             # 프로덕션에서 CORS localhost 자동 제거
+        # 타임아웃 상호 검증 (환경 무관)
+        if self.total_timeout < self.llm_timeout:
+            logger.warning(
+                "total_timeout(%.1f) < llm_timeout(%.1f) — total_timeout을 llm_timeout+10으로 조정합니다.",
+                self.total_timeout, self.llm_timeout,
+            )
+            self.total_timeout = self.llm_timeout + 10.0
+        if self.environment == "production":
             filtered = [
                 o for o in self.cors_origins
                 if "localhost" not in o and "127.0.0.1" not in o

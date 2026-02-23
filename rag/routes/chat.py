@@ -96,7 +96,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
         return response
     except Exception as e:
-        logger.error(f"채팅 처리 실패: {e}", exc_info=True)
+        logger.error("채팅 처리 실패: %s", e, exc_info=True)
         raise HTTPException(
             status_code=500,
             detail="채팅 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."

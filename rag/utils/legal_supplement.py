@@ -4,6 +4,12 @@
 법률 정보가 필요하다고 판단되면 법률 에이전트가 보충 검색을 수행합니다.
 
 LLM 호출 없이 순수 키워드 매칭으로 동작합니다 (추가 비용/지연 없음).
+
+키워드를 2계층으로 분리하여 과민 트리거를 방지합니다:
+- 강한 키워드 (1개만 있어도 트리거): 핵심 법률 용어
+- 약한 키워드 (2개 이상 있어야 트리거): 범용/맥락 의존 용어
+
+추가로 ~법 패턴(예: 산업안전보건법)을 자동 감지하여 최우선 트리거합니다.
 """
 
 import logging
@@ -13,24 +19,23 @@ from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
 
-# 법률 보충 검색 트리거 키워드
-LEGAL_SUPPLEMENT_KEYWORDS: set[str] = {
-    # 일반 법률
-    "법률", "법령", "조문", "판례", "규정", "법적",
-    # 주요 법률
-    "상법", "민법", "근로기준법", "세법", "공정거래법",
-    "개인정보보호법", "산업안전보건법", "건설산업기본법",
-    # 소송/분쟁
-    "소송", "분쟁", "손해배상", "고소", "소장", "판결",
-    # 지식재산
-    "특허", "상표", "저작권", "지식재산",
-    # 전문가
-    "변호사", "법무사",
-    # 계약/책임
-    "위약금", "계약해지", "해제", "위반", "처벌", "벌금", "과태료",
-    # 의무/자격
-    "의무", "자격요건",
+# 강한 법률 키워드 (쿼리에 1개만 있어도 트리거)
+STRONG_LEGAL_KEYWORDS: set[str] = {
+    "법률", "법령", "판례", "소송", "분쟁", "손해배상",
+    "특허", "상표", "저작권", "변호사", "법무사",
 }
+
+# 약한 법률 키워드 (쿼리에 2개 이상 있어야 트리거)
+WEAK_LEGAL_KEYWORDS: set[str] = {
+    "규정", "법적", "조문", "상법", "민법", "근로기준법",
+    "세법", "공정거래법", "개인정보보호법", "산업안전보건법",
+    "건설산업기본법", "고소", "소장", "판결",
+    "지식재산", "위약금", "계약해지", "해제", "위반",
+    "처벌", "벌금", "과태료", "의무", "자격요건",
+}
+
+# 하위호환: 전체 키워드 합집합 (retrieval_agent.py 등에서 참조)
+LEGAL_SUPPLEMENT_KEYWORDS: set[str] = STRONG_LEGAL_KEYWORDS | WEAK_LEGAL_KEYWORDS
 
 # ~법 패턴으로 한국 법률명 자동 감지 (예: 산업안전보건법, 건설근로자퇴직공제법)
 _LAW_NAME_PATTERN = re.compile(r"[가-힣]{2,}법")
@@ -40,8 +45,8 @@ _LAW_NAME_EXCLUSIONS: set[str] = {
     "서법", "선법", "주법", "화법", "작법", "어법", "심법",
 }
 
-# 쿼리 키워드 매칭 최소 수 (1개 이상)
-_QUERY_KEYWORD_THRESHOLD = 1
+# 쿼리 약한 키워드 매칭 최소 수 (2개 이상)
+_QUERY_WEAK_KEYWORD_THRESHOLD = 2
 
 # 문서 키워드 매칭 최소 수 (2개 이상)
 _DOC_KEYWORD_THRESHOLD = 2
@@ -83,16 +88,25 @@ def needs_legal_supplement(
         )
         return True
 
-    # 쿼리 키워드 매칭
-    query_matches = sum(1 for kw in LEGAL_SUPPLEMENT_KEYWORDS if kw in query)
-    if query_matches >= _QUERY_KEYWORD_THRESHOLD:
+    # 쿼리 강한 키워드 매칭 (1개만 있어도 트리거)
+    strong_matches = sum(1 for kw in STRONG_LEGAL_KEYWORDS if kw in query)
+    if strong_matches >= 1:
         logger.info(
-            "[법률 보충] 쿼리 키워드 %d개 매칭 → 보충 필요",
-            query_matches,
+            "[법률 보충] 쿼리 강한 키워드 %d개 매칭 → 보충 필요",
+            strong_matches,
         )
         return True
 
-    # 문서 키워드 매칭 (상위 N건, 각 M자까지)
+    # 쿼리 약한 키워드 매칭 (2개 이상이어야 트리거)
+    weak_matches = sum(1 for kw in WEAK_LEGAL_KEYWORDS if kw in query)
+    if weak_matches >= _QUERY_WEAK_KEYWORD_THRESHOLD:
+        logger.info(
+            "[법률 보충] 쿼리 약한 키워드 %d개 매칭 → 보충 필요",
+            weak_matches,
+        )
+        return True
+
+    # 문서 키워드 매칭 (전체 키워드 사용, 상위 N건, 각 M자까지)
     doc_matches = 0
     matched_keywords: set[str] = set()
     for doc in documents[:_DOC_CHECK_LIMIT]:
@@ -110,5 +124,8 @@ def needs_legal_supplement(
         )
         return True
 
-    logger.debug("[법률 보충] 키워드 미달 (쿼리=%d, 문서=%d) → 보충 불필요", query_matches, doc_matches)
+    logger.debug(
+        "[법률 보충] 키워드 미달 (강한=%d, 약한=%d, 문서=%d) → 보충 불필요",
+        strong_matches, weak_matches, doc_matches,
+    )
     return False

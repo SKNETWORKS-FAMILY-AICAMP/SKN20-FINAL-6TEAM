@@ -25,6 +25,14 @@ class ScheduleUpdate(BaseModel):
     memo: str | None = Field(None, max_length=5000)
     announce_id: int | None = None
 
+    @model_validator(mode="after")
+    def validate_date_range(self) -> "ScheduleUpdate":
+        """종료일이 시작일 이후인지 검증합니다 (둘 다 제공된 경우)."""
+        if self.start_date is not None and self.end_date is not None:
+            if self.end_date < self.start_date:
+                raise ValueError("종료일은 시작일 이후여야 합니다")
+        return self
+
 
 class ScheduleResponse(BaseModel):
     schedule_id: int

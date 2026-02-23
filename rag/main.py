@@ -92,6 +92,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         else:
             logger.warning("ChromaDB 초기 warmup 실패 (서비스는 정상 시작)")
 
+    # 도메인 벡터 사전 계산 (첫 요청 시 이벤트 루프 블로킹 방지)
+    if settings.enable_vector_domain_classification:
+        try:
+            from utils.domain_classifier import get_domain_classifier
+            classifier = get_domain_classifier()
+            await classifier._aprecompute_vectors()
+            logger.info("도메인 벡터 사전 계산 완료")
+        except Exception as e:
+            logger.warning("도메인 벡터 사전 계산 실패 (서비스는 정상 시작): %s", e)
+
     _log_settings_summary(settings)
     logger.info("RAG 서비스 초기화 완료")
 

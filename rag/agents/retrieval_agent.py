@@ -224,8 +224,8 @@ class DocumentBudgetCalculator:
         self,
         domains: list[str],
         query_chars: QueryCharacteristics,
-        max_total: int = 12,
-        primary_ratio: float = 0.6,
+        max_total: int | None = None,
+        primary_ratio: float | None = None,
     ) -> dict[str, DocumentBudget]:
         """도메인별 문서 할당량 계산.
 
@@ -239,6 +239,11 @@ class DocumentBudgetCalculator:
             도메인 → DocumentBudget 매핑
         """
         settings = get_settings()
+        if max_total is None:
+            max_total = settings.max_retrieval_docs
+        if primary_ratio is None:
+            primary_ratio = settings.primary_domain_budget_ratio
+
         if settings.enable_dynamic_k:
             recommended_k = query_chars.recommended_k
         else:
@@ -291,11 +296,16 @@ class DocumentBudgetCalculator:
                 )
             }
 
-        # 복합 도메인: 각 도메인에 균등 할당하되, 총량이 max_retrieval_docs를 초과하지 않도록 조정
+        # 복합 도메인: 각 도메인에 균등 할당
+        # 도메인 수에 비례하여 effective_max를 자동 확장하여 K값 감소를 방지
         settings = get_settings()
+        effective_max = max(
+            settings.max_retrieval_docs,
+            retrieval_k * len(domains),  # 도메인당 retrieval_k 보장
+        )
         total = k * len(domains)
-        if total > settings.max_retrieval_docs:
-            k = max(settings.min_domain_k, settings.max_retrieval_docs // len(domains))
+        if total > effective_max:
+            k = max(settings.min_domain_k, effective_max // len(domains))
 
         budgets: dict[str, DocumentBudget] = {}
         for i, domain in enumerate(domains):
@@ -357,7 +367,8 @@ class DocumentBudgetCalculator:
             )
         else:
             # 3+ 도메인
-            primary_k = math.ceil(max_total * 0.5)
+            settings = get_settings()
+            primary_k = math.ceil(max_total * settings.multi_domain_primary_ratio)
             remaining = max_total - primary_k
             secondary_count = len(domains) - 1
             per_secondary = max(1, remaining // secondary_count)
@@ -513,10 +524,17 @@ class GraduatedRetryHandler:
 
                 # 완화된 기준으로 평가 (override 파라미터로 thread-safe)
                 evaluator = get_retrieval_evaluator()
+                settings = get_settings()
                 evaluation = evaluator.evaluate(
                     query, documents, scores,
-                    min_keyword_override=max(0.15, evaluator.min_keyword_match_ratio - 0.15),
-                    min_similarity_override=max(0.35, evaluator.min_avg_similarity - 0.15),
+                    min_keyword_override=max(
+                        settings.retry_keyword_floor,
+                        evaluator.min_keyword_match_ratio - settings.retry_keyword_relaxation,
+                    ),
+                    min_similarity_override=max(
+                        settings.retry_similarity_floor,
+                        evaluator.min_avg_similarity - settings.retry_similarity_relaxation,
+                    ),
                 )
 
                 new_result = RetrievalResult(
@@ -675,18 +693,21 @@ class DocumentMerger:
         self,
         retrieval_results: dict[str, RetrievalResult],
         budgets: dict[str, DocumentBudget],
-        max_total: int = 12,
+        max_total: int | None = None,
     ) -> list[Document]:
         """복합 도메인 문서를 병합, 중복 제거, 우선순위 정렬.
 
         Args:
             retrieval_results: 도메인별 검색 결과
             budgets: 도메인별 문서 할당량
-            max_total: 최대 전체 문서 수
+            max_total: 최대 전체 문서 수 (None이면 settings에서 로드)
 
         Returns:
             병합된 문서 리스트
         """
+        if max_total is None:
+            max_total = get_settings().max_retrieval_docs
+
         seen_hashes: set[str] = set()
         domain_docs: dict[str, list[Document]] = {}
 
@@ -852,9 +873,19 @@ class RetrievalAgent:
         all_documents: list[Document] = []
         agent_timings: list[dict] = []
 
-        for result in results:
+        for idx, result in enumerate(results):
             if isinstance(result, Exception):
-                logger.error("[RetrievalAgent] 도메인 에이전트 실패: %s", result)
+                failed_domain = sub_queries[idx].domain if idx < len(sub_queries) else "unknown"
+                logger.error("[RetrievalAgent] 도메인 에이전트 실패 [%s]: %s", failed_domain, result)
+                retrieval_results[failed_domain] = RetrievalResult(
+                    documents=[],
+                    sources=[],
+                    retrieve_time=0.0,
+                    evaluation=RetrievalEvaluationResult(
+                        passed=False, doc_count=0,
+                        keyword_match_ratio=0.0, avg_similarity_score=0.0,
+                    ),
+                )
                 continue
             if result is not None:
                 domain, retrieval_result, elapsed = result
@@ -1003,6 +1034,9 @@ class RetrievalAgent:
     ) -> list[Document]:
         """복합 도메인 병합 후 선택적 cross-domain reranking (비동기).
 
+        3+ 도메인일 때 reranking이 특정 도메인 문서를 전부 밀어내는 것을 방지하기 위해,
+        도메인별 최소 보장 문서 수(min_domain_k)를 확보한 뒤 나머지를 reranking합니다.
+
         Args:
             query: 사용자 질문
             main_results: supplement 제외 도메인별 검색 결과
@@ -1032,12 +1066,22 @@ class RetrievalAgent:
                 final_k = min(candidate_total, self.settings.rerank_top_k)
             reranker = self.rag_chain.reranker
             if reranker and len(merged) > final_k:
-                logger.info(
-                    "[RetrievalAgent] cross-domain rerank: %d건 → %d건",
-                    len(merged),
-                    final_k,
-                )
-                merged = await reranker.arerank(query, merged, top_k=final_k)
+                # 3+ 도메인: 도메인별 최소 보장 후 나머지 reranking
+                if len(main_results) >= 3:
+                    merged = await self._arerank_with_domain_guarantee(
+                        query=query,
+                        merged=merged,
+                        main_results=main_results,
+                        final_k=final_k,
+                        reranker=reranker,
+                    )
+                else:
+                    logger.info(
+                        "[RetrievalAgent] cross-domain rerank: %d건 → %d건",
+                        len(merged),
+                        final_k,
+                    )
+                    merged = await reranker.arerank(query, merged, top_k=final_k)
             else:
                 if not reranker:
                     logger.warning(
@@ -1052,6 +1096,100 @@ class RetrievalAgent:
             budgets=budgets,
             max_total=self.settings.max_retrieval_docs,
         )
+
+    async def _arerank_with_domain_guarantee(
+        self,
+        query: str,
+        merged: list[Document],
+        main_results: dict[str, RetrievalResult],
+        final_k: int,
+        reranker: "BaseReranker",
+    ) -> list[Document]:
+        """3+ 도메인에서 도메인별 최소 보장을 유지하며 reranking합니다.
+
+        전략: 각 도메인에서 min_domain_k개를 먼저 확보(보장 슬롯)하고,
+        나머지 문서를 reranking하여 남은 슬롯을 채웁니다.
+
+        Args:
+            query: 사용자 질문
+            merged: 병합된 전체 문서 리스트
+            main_results: 도메인별 검색 결과
+            final_k: 최종 문서 수
+            reranker: Reranker 인스턴스
+
+        Returns:
+            도메인 균형이 보장된 reranked 문서 리스트
+        """
+        num_domains = len(main_results)
+        # 동적 min_per_domain: 도메인 수가 많을수록 보장 슬롯을 줄여 리랭킹 슬롯 확보
+        # 예: 3도메인 final_k=10 → min(2, max(1, 10//4)) = 2 (변화 없음)
+        #     4도메인 final_k=10 → min(2, max(1, 10//5)) = 2 (변화 없음)
+        #     4도메인 final_k=8  → min(2, max(1, 8//5))  = 1 (리랭킹 슬롯 증가)
+        min_per_domain = min(
+            self.settings.min_domain_k,
+            max(1, final_k // (num_domains + 1)),
+        )
+
+        # 도메인별 문서 분류 (metadata의 domain 또는 collection_name 활용)
+        domain_doc_map: dict[str, list[Document]] = {d: [] for d in main_results}
+        for doc in merged:
+            doc_domain = (
+                doc.metadata.get("domain")
+                or doc.metadata.get("collection_name", "").replace("_db", "")
+            )
+            if doc_domain in domain_doc_map:
+                domain_doc_map[doc_domain].append(doc)
+
+        # 1. 각 도메인에서 최소 보장 문서 확보
+        guaranteed: list[Document] = []
+        remaining: list[Document] = []
+        guaranteed_ids: set[int] = set()
+
+        for domain, docs in domain_doc_map.items():
+            # 도메인 내 점수순 정렬
+            docs.sort(key=lambda d: d.metadata.get("score", 0.0), reverse=True)
+            guarantee_count = min(min_per_domain, len(docs))
+            for doc in docs[:guarantee_count]:
+                guaranteed.append(doc)
+                guaranteed_ids.add(id(doc))
+            for doc in docs[guarantee_count:]:
+                remaining.append(doc)
+
+        # 보장 슬롯 이후 남은 슬롯 계산
+        remaining_slots = final_k - len(guaranteed)
+
+        if remaining_slots <= 0:
+            # 보장 문서만으로 final_k 초과 시 보장 문서를 잘라서 반환
+            logger.info(
+                "[RetrievalAgent] cross-domain rerank (3+도메인): "
+                "보장 문서 %d건으로 final_k=%d 충족",
+                len(guaranteed),
+                final_k,
+            )
+            return guaranteed[:final_k]
+
+        # 2. 나머지 문서를 reranking하여 남은 슬롯 채우기
+        if remaining:
+            logger.info(
+                "[RetrievalAgent] cross-domain rerank (3+도메인): "
+                "보장=%d건 (%d도메인×%d), 나머지 %d건 중 %d건 rerank 선택",
+                len(guaranteed),
+                num_domains,
+                min_per_domain,
+                len(remaining),
+                remaining_slots,
+            )
+            reranked_remaining = await reranker.arerank(
+                query, remaining, top_k=remaining_slots,
+            )
+            return guaranteed + reranked_remaining
+
+        logger.info(
+            "[RetrievalAgent] cross-domain rerank (3+도메인): "
+            "보장 문서 %d건 (나머지 없음)",
+            len(guaranteed),
+        )
+        return guaranteed
 
     def _retrieve_with_strategy(
         self,
@@ -1131,11 +1269,14 @@ class RetrievalAgent:
         query_chars: QueryCharacteristics,
         user_context: "UserContext",
     ) -> RetrievalResult:
-        """메타데이터 필터를 적용하여 검색하되, 결과 부족 시 3단계 fallback.
+        """메타데이터 필터를 적용하여 검색하되, 결과 부족 시 2단계 fallback.
 
         Level 1: region + target_type 필터
-        Level 2: target_type만 (region 제거)
-        Level 3: 필터 없이 검색 (기존 방식)
+        Level 2: 필터 없이 검색 (기존 방식)
+
+        Level1 실패 시 Level2(필터 없음)로 직접 점프합니다.
+        기존 3단계(target만) 중간 단계는 Level1과 결과가 유사한 경우가 많아
+        제거하여 최악 시나리오를 3회→2회 검색으로 개선합니다.
 
         Args:
             agent: 도메인 에이전트
@@ -1168,34 +1309,12 @@ class RetrievalAgent:
                 )
                 return result
             logger.info(
-                "[메타데이터 필터] Level 1 결과 부족 (%d < %d), Level 2로 fallback",
+                "[메타데이터 필터] Level 1 결과 부족 (%d < %d), 필터 없이 fallback",
                 len(result.documents), min_results,
             )
 
-        # Level 2: target_type만
-        target_filter = self._build_metadata_filter(
-            user_context, include_region=False, include_target=True,
-        )
-        if target_filter:
-            logger.info("[메타데이터 필터] Level 2: target_type 필터만 적용")
-            result = await asyncio.to_thread(
-                self._retrieve_with_strategy,
-                agent, query, domain, k, query_chars,
-                metadata_filter=target_filter,
-            )
-            if len(result.documents) >= min_results:
-                logger.info(
-                    "[메타데이터 필터] Level 2 성공: %d건",
-                    len(result.documents),
-                )
-                return result
-            logger.info(
-                "[메타데이터 필터] Level 2 결과 부족 (%d < %d), Level 3으로 fallback",
-                len(result.documents), min_results,
-            )
-
-        # Level 3: 필터 없이 검색
-        logger.info("[메타데이터 필터] Level 3: 필터 없이 검색")
+        # Level 2: 필터 없이 검색
+        logger.info("[메타데이터 필터] Level 2: 필터 없이 검색")
         return await asyncio.to_thread(
             self._retrieve_with_strategy,
             agent, query, domain, k, query_chars,
@@ -1278,9 +1397,14 @@ class RetrievalAgent:
 
         try:
             result = legal_agent.retrieve_only(search_query)
-            if len(result.documents) > self.settings.legal_supplement_k:
-                result.documents = result.documents[: self.settings.legal_supplement_k]
-                result.sources = result.sources[: self.settings.legal_supplement_k]
+            limit = min(
+                len(result.documents),
+                len(result.sources),
+                self.settings.legal_supplement_k,
+            )
+            if len(result.documents) > limit:
+                result.documents = result.documents[:limit]
+                result.sources = result.sources[:limit]
 
             retrieval_results["law_common_supplement"] = result
             all_documents.extend(result.documents)

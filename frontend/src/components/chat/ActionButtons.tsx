@@ -36,9 +36,20 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ actions }) => {
   const handleAction = async (action: RagActionSuggestion) => {
     setError(null);
 
-    // external_link: 비인증 허용
+    // external_link: 비인증 허용 (안전한 프로토콜만)
     if (action.type === 'external_link') {
-      window.open(action.params.url as string, '_blank', 'noopener');
+      const url = action.params.url as string;
+      try {
+        const parsed = new URL(url);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          setError('안전하지 않은 링크입니다.');
+          return;
+        }
+      } catch {
+        setError('유효하지 않은 링크입니다.');
+        return;
+      }
+      window.open(url, '_blank', 'noopener');
       return;
     }
 

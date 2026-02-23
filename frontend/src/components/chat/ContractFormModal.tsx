@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import axios from 'axios';
 import { XMarkIcon, ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
 import { generateContract, downloadDocumentResponse } from '../../lib/documentApi';
 import type { ContractFormData } from '../../lib/documentApi';
@@ -75,7 +76,11 @@ export const ContractFormModal: React.FC<ContractFormModalProps> = ({ onClose })
       downloadDocumentResponse(response);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '문서 생성에 실패했습니다.');
+      if (axios.isAxiosError(err)) {
+        setError(err.response?.data?.detail || err.response?.data?.message || '문서 생성에 실패했습니다.');
+      } else {
+        setError(err instanceof Error ? err.message : '문서 생성에 실패했습니다.');
+      }
     } finally {
       setLoading(false);
     }

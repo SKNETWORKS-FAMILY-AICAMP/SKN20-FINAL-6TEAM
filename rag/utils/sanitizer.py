@@ -6,6 +6,7 @@
 
 import logging
 import re
+import unicodedata
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -105,7 +106,17 @@ def sanitize_query(query: str) -> SanitizeResult:
         )
 
     detected_patterns: list[str] = []
-    sanitized = query
+    # Unicode NFC 정규화 (전각/반각 변환 우회 방지) + 공백 정규화
+    sanitized = unicodedata.normalize("NFC", query)
+    # 전각 영문자를 반각으로 변환 (ｉgnore → ignore 등)
+    sanitized = sanitized.translate(
+        str.maketrans(
+            "ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ",
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+        )
+    )
+    # 제로 폭 문자 및 비정상 공백 제거
+    sanitized = re.sub(r"[\u200b-\u200f\u2028-\u202f\u205f\u2060\ufeff]", "", sanitized)
 
     for pattern, description in _INJECTION_PATTERNS:
         matches = pattern.findall(sanitized)

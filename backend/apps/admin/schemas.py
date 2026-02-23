@@ -1,6 +1,6 @@
 """관리자 API 스키마."""
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from datetime import datetime
 from typing import Any
 
@@ -41,7 +41,7 @@ class HistoryListItem(BaseModel):
     answer_relevancy: float | None = None
     context_precision: float | None = None
     context_recall: float | None = None
-    llm_score: int | None = None
+    llm_score: int | None = Field(default=None, ge=0, le=100)
     llm_passed: bool | None = None
     response_time: float | None = None
     domains: list[str] = Field(default_factory=list)
@@ -82,7 +82,7 @@ class HistoryFilterParams(BaseModel):
 
     start_date: datetime | None = None
     end_date: datetime | None = None
-    domain: str | None = None
+    domain: str | None = Field(None, pattern=r"^[a-zA-Z가-힣_]+$", max_length=50)
     agent_code: str | None = None
     min_score: int | None = Field(default=None, ge=0, le=100)
     max_score: int | None = Field(default=None, ge=0, le=100)

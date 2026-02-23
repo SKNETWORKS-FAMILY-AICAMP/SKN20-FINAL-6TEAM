@@ -182,7 +182,7 @@ export const useChat = () => {
             });
             response = ragResponse.data.content;
             agentCode = domainToAgentCode(ragResponse.data.domain);
-            evaluationData = ((ragResponse.data as unknown as Record<string, unknown>).evaluation_data as EvaluationData | undefined) ?? null;
+            evaluationData = ragResponse.data.evaluation_data ?? null;
 
             // Build multi-domain agent_codes
             const ragDomains = ragResponse.data.domains;

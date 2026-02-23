@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import datetime
 
@@ -45,14 +46,12 @@ def _build_user_context(user: User, db: Session) -> dict:
     if not company:
         return context
 
-    # 업종명 조회
+    # 업종명 조회 (Company 조회와 분리 — 1회 추가 쿼리)
     industry_name = None
     if company.biz_code:
-        code_stmt = select(Code).where(
-            Code.code == company.biz_code, Code.use_yn == True
-        )
-        code = db.execute(code_stmt).scalar_one_or_none()
-        industry_name = code.name if code else None
+        industry_name = db.execute(
+            select(Code.name).where(Code.code == company.biz_code, Code.use_yn == True)
+        ).scalar_one_or_none()
 
     years = None
     if company.open_date:
@@ -111,6 +110,11 @@ async def rag_chat(
     return resp.json()
 
 
+def _sse_error(message: str) -> bytes:
+    """SSE 에러 메시지를 JSON 직렬화하여 반환합니다."""
+    return f'data: {json.dumps({"type": "error", "content": message}, ensure_ascii=False)}\n\n'.encode("utf-8")
+
+
 async def _stream_rag(url: str, payload: dict):
     """RAG SSE 스트림을 바이트 단위로 중계합니다."""
     async with httpx.AsyncClient(timeout=_RAG_TIMEOUT) as client:
@@ -125,14 +129,14 @@ async def _stream_rag(url: str, payload: dict):
                         resp.status_code,
                         error_body[:500],
                     )
-                    yield b'data: {"type":"error","content":"RAG \\uc11c\\ube44\\uc2a4 \\uc624\\ub958"}\n\n'
+                    yield _sse_error("RAG 서비스 오류")
                     return
                 async for chunk in resp.aiter_bytes():
                     yield chunk
         except httpx.ConnectError:
-            yield b'data: {"type":"error","content":"RAG \\uc11c\\ube44\\uc2a4\\uc5d0 \\uc5f0\\uacb0\\ud560 \\uc218 \\uc5c6\\uc2b5\\ub2c8\\ub2e4."}\n\n'
+            yield _sse_error("RAG 서비스에 연결할 수 없습니다.")
         except httpx.TimeoutException:
-            yield b'data: {"type":"error","content":"RAG \\uc11c\\ube44\\uc2a4 \\uc751\\ub2f5 \\uc2dc\\uac04\\uc774 \\ucd08\\uacfc\\ub418\\uc5c8\\uc2b5\\ub2c8\\ub2e4."}\n\n'
+            yield _sse_error("RAG 서비스 응답 시간이 초과되었습니다.")
 
 
 @router.post("/chat/stream")

@@ -4,10 +4,12 @@
 """
 
 import base64
+import uuid
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Any
+from xml.sax.saxutils import escape as xml_escape
 
 from schemas.request import CompanyContext, ContractRequest
 from schemas.response import DocumentResponse
@@ -55,8 +57,14 @@ class ActionExecutor:
         try:
             if request.format == "pdf":
                 return self._generate_contract_pdf(request)
-            else:
+            elif request.format == "docx":
                 return self._generate_contract_docx(request)
+            else:
+                return DocumentResponse(
+                    success=False,
+                    document_type="labor_contract",
+                    message=f"지원하지 않는 형식: {request.format} (pdf 또는 docx만 가능)",
+                )
         except Exception as e:
             return DocumentResponse(
                 success=False,
@@ -113,17 +121,17 @@ class ActionExecutor:
         elements.append(Paragraph("표준 근로계약서", title_style))
         elements.append(Spacer(1, 20))
 
-        # 계약 당사자
+        # 계약 당사자 (사용자 입력 이스케이프)
         company_name = "회사명 미기재"
         if request.company_context:
             company_name = request.company_context.company_name or company_name
 
         elements.append(Paragraph(
-            f"<b>사업주(갑)</b>: {company_name}",
+            f"<b>사업주(갑)</b>: {xml_escape(company_name)}",
             normal_style
         ))
         elements.append(Paragraph(
-            f"<b>근로자(을)</b>: {request.employee_name}",
+            f"<b>근로자(을)</b>: {xml_escape(request.employee_name)}",
             normal_style
         ))
         elements.append(Spacer(1, 20))
@@ -134,25 +142,27 @@ class ActionExecutor:
         if not request.is_permanent and request.contract_end_date:
             contract_period = f"{request.contract_start_date} ~ {request.contract_end_date}"
 
+        # 사용자 입력 이스케이프 (ReportLab HTML 인젝션 방지)
+        esc = xml_escape
         content = f"""
         <b>제1조 (계약 유형)</b><br/>
-        본 계약은 {contract_type}입니다.<br/><br/>
+        본 계약은 {esc(contract_type)}입니다.<br/><br/>
 
         <b>제2조 (계약 기간)</b><br/>
-        계약 시작일: {request.contract_start_date}<br/>
-        계약 기간: {contract_period}<br/><br/>
+        계약 시작일: {esc(request.contract_start_date)}<br/>
+        계약 기간: {esc(contract_period)}<br/><br/>
 
         <b>제3조 (근무 장소)</b><br/>
-        {request.workplace}<br/><br/>
+        {esc(request.workplace)}<br/><br/>
 
         <b>제4조 (업무 내용)</b><br/>
-        직위: {request.job_title}<br/>
-        담당 업무: {request.job_description}<br/><br/>
+        직위: {esc(request.job_title)}<br/>
+        담당 업무: {esc(request.job_description)}<br/><br/>
 
         <b>제5조 (근무 시간)</b><br/>
-        근무 시간: {request.work_start_time} ~ {request.work_end_time}<br/>
-        휴게 시간: {request.rest_time}<br/>
-        근무 요일: {request.work_days}<br/><br/>
+        근무 시간: {esc(request.work_start_time)} ~ {esc(request.work_end_time)}<br/>
+        휴게 시간: {esc(request.rest_time)}<br/>
+        근무 요일: {esc(request.work_days)}<br/><br/>
 
         <b>제6조 (임금)</b><br/>
         기본급: 월 {request.base_salary:,}원<br/>
@@ -178,7 +188,7 @@ class ActionExecutor:
 
         # 파일 저장
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name = f"labor_contract_{timestamp}.pdf"
+        file_name = f"labor_contract_{timestamp}_{uuid.uuid4().hex[:6]}.pdf"
         file_path = self.output_dir / file_name
 
         buffer.seek(0)
@@ -265,7 +275,7 @@ class ActionExecutor:
 
         # 파일 저장
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name = f"labor_contract_{timestamp}.docx"
+        file_name = f"labor_contract_{timestamp}_{uuid.uuid4().hex[:6]}.docx"
         file_path = self.output_dir / file_name
 
         doc.save(file_path)
@@ -349,7 +359,7 @@ class ActionExecutor:
 
             # 파일 저장
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            file_name = f"business_plan_template_{timestamp}.docx"
+            file_name = f"business_plan_template_{timestamp}_{uuid.uuid4().hex[:6]}.docx"
             file_path = self.output_dir / file_name
 
             doc.save(file_path)

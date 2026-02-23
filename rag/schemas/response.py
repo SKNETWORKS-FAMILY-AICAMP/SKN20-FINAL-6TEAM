@@ -189,7 +189,7 @@ class DocumentResponse(BaseModel):
     Attributes:
         success: 성공 여부
         document_type: 문서 유형
-        file_path: 파일 경로
+        file_path: 내부 파일 경로 (응답에서 제외)
         file_name: 파일명
         file_content: 파일 내용 (base64 인코딩)
         message: 메시지
@@ -197,7 +197,7 @@ class DocumentResponse(BaseModel):
 
     success: bool = Field(description="성공 여부")
     document_type: str = Field(description="문서 유형")
-    file_path: str | None = Field(default=None, description="파일 경로")
+    file_path: str | None = Field(default=None, description="내부 파일 경로", exclude=True)
     file_name: str | None = Field(default=None, description="파일명")
     file_content: str | None = Field(default=None, description="파일 내용 (base64)")
     message: str | None = Field(default=None, description="메시지")

@@ -1,7 +1,6 @@
 """관리자 서비스."""
 
 import logging
-import os
 import time
 
 import httpx
@@ -22,7 +21,7 @@ from apps.admin.schemas import (
 )
 from apps.histories.schemas import HistoryDetailResponse, EvaluationData
 
-_START_TIME = time.time()
+_START_TIME: float = time.time()
 
 from config.settings import settings as _app_settings
 

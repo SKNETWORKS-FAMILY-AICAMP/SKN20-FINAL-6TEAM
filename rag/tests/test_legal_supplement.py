@@ -108,9 +108,9 @@ class TestNeedsLegalSupplement:
         assert result is True
 
     def test_doc_content_limit_respected(self) -> None:
-        """문서 내용 검사가 500자로 제한되는지 확인."""
-        # 법률 키워드가 500자 이후에만 있는 문서
-        padding = "가" * 600
+        """문서 내용 검사가 800자로 제한되는지 확인."""
+        # 법률 키워드가 800자 이후에만 있는 문서
+        padding = "가" * 900
         docs = [
             _make_doc(padding + "상법 규정에 따르면"),
             _make_doc(padding + "판례를 참고하세요"),

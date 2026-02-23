@@ -16,6 +16,8 @@ import logging
 import time
 from typing import Any, AsyncGenerator, TypedDict
 
+import threading
+
 from langchain_core.documents import Document
 from langgraph.graph import END, StateGraph
 
@@ -126,29 +128,38 @@ class MainRouter:
         # RAGAS 평가기
         self._ragas_evaluator = None
 
+        # lazy-load 동기화 락 (멀티워커 레이스 컨디션 방지)
+        self._init_lock = threading.Lock()
+
         # 비동기 그래프 빌드
         self.async_graph = self._build_async_graph()
 
     @property
     def domain_classifier(self):
-        """도메인 분류기 (지연 로딩)."""
+        """도메인 분류기 (지연 로딩, double-check locking)."""
         if self._domain_classifier is None:
-            self._domain_classifier = get_domain_classifier()
+            with self._init_lock:
+                if self._domain_classifier is None:
+                    self._domain_classifier = get_domain_classifier()
         return self._domain_classifier
 
     @property
     def question_decomposer(self):
-        """질문 분해기 (지연 로딩)."""
+        """질문 분해기 (지연 로딩, double-check locking)."""
         if self._question_decomposer is None:
-            self._question_decomposer = get_question_decomposer()
+            with self._init_lock:
+                if self._question_decomposer is None:
+                    self._question_decomposer = get_question_decomposer()
         return self._question_decomposer
 
     @property
     def ragas_evaluator(self):
-        """RAGAS 평가기 (지연 로딩)."""
+        """RAGAS 평가기 (지연 로딩, double-check locking)."""
         if self._ragas_evaluator is None and self.settings.enable_ragas_evaluation:
-            from evaluation.ragas_evaluator import RagasEvaluator
-            self._ragas_evaluator = RagasEvaluator()
+            with self._init_lock:
+                if self._ragas_evaluator is None:
+                    from evaluation.ragas_evaluator import RagasEvaluator
+                    self._ragas_evaluator = RagasEvaluator()
         return self._ragas_evaluator
 
     def _build_async_graph(self) -> StateGraph:
@@ -209,14 +220,15 @@ class MainRouter:
     def _should_retry_after_evaluate(self, state: RouterState) -> str:
         """평가 결과에 따라 재시도 여부를 결정합니다.
 
-        LLM 평가 실패 시 멀티쿼리 대체 답변 생성 노드로 라우팅합니다.
+        LLM 평가 실패 시 점수가 50점 미만인 경우에만 멀티쿼리 대체 답변을 생성합니다.
+        50~69점(FAIL이지만 준수)은 재시도 없이 반환하여 불필요한 LLM 호출을 줄입니다.
         PASS이거나 최대 재시도 횟수에 도달하면 종료합니다.
 
         Args:
             state: 라우터 상태
 
         Returns:
-            "retry_with_alternatives": 멀티쿼리 재시도 필요
+            "retry_with_alternatives": 멀티쿼리 재시도 필요 (50점 미만)
             "__end__": 종료
         """
         evaluation = state.get("evaluation")
@@ -227,14 +239,22 @@ class MainRouter:
             and evaluation
             and not evaluation.passed
             and retry_count < self.settings.max_retry_count
+            and evaluation.total_score < 50
         ):
             logger.info(
-                "[평가→재시도] FAIL (점수=%d, retry=%d/%d) → 멀티쿼리 대체 답변 생성",
+                "[평가→재시도] FAIL (점수=%d < 50, retry=%d/%d) → 멀티쿼리 대체 답변 생성",
                 evaluation.total_score,
                 retry_count,
                 self.settings.max_retry_count,
             )
             return "retry_with_alternatives"
+
+        if evaluation and not evaluation.passed:
+            logger.info(
+                "[평가→종료] FAIL (점수=%d, 50점 이상이므로 재시도 스킵)",
+                evaluation.total_score,
+            )
+
         return "__end__"
 
     def _augment_query_for_classification(self, query: str, history: list[dict]) -> str:
@@ -377,8 +397,16 @@ class MainRouter:
         """비동기 평가 노드: LLM 평가 (FAIL 시 재시도) + RAGAS 평가 (항상 로깅용)."""
         start = time.time()
 
-        # 컨텍스트 생성
-        context = "\n".join([s.content for s in state["sources"][:5]])
+        # 컨텍스트 생성 (멀티 도메인 시 도메인 정보 주입)
+        domains = state["domains"]
+        source_contents = [s.content for s in state["sources"][:5]]
+        context = "\n".join(source_contents)
+
+        if len(domains) > 1:
+            domain_labels = ", ".join(
+                DOMAIN_LABELS.get(d, d) for d in domains
+            )
+            context = f"[관련 도메인: {domain_labels}]\n\n{context}"
 
         # LLM 평가 수행
         if self.settings.enable_llm_evaluation:
@@ -588,6 +616,7 @@ class MainRouter:
         # 최고 점수 선택
         best = max(all_candidates, key=lambda c: c[1])
 
+        is_replaced = best[1] > original_score
         state["final_response"] = best[0]
         state["evaluation"] = best[2]
         state["sources"] = best[3]
@@ -595,6 +624,9 @@ class MainRouter:
 
         retry_time = time.time() - start
         state["timing_metrics"]["retry_time"] = retry_time
+        state["timing_metrics"]["retry_replaced"] = is_replaced
+        state["timing_metrics"]["retry_original_score"] = original_score
+        state["timing_metrics"]["retry_best_score"] = best[1]
 
         logger.info(
             "[재시도] 후보 %d개 중 최고 점수 %d점 선택 (원본=%d점, %.3fs)",
@@ -995,6 +1027,12 @@ class MainRouter:
             if self.settings.enable_llm_evaluation and content:
                 try:
                     eval_context = "\n".join([s.content for s in all_sources_multi[:5]])
+                    # 멀티 도메인 정보 주입
+                    domain_labels = ", ".join(
+                        DOMAIN_LABELS.get(d, d) for d in domains
+                    )
+                    eval_context = f"[관련 도메인: {domain_labels}]\n\n{eval_context}"
+
                     evaluation = await self.evaluator.aevaluate(
                         question=query,
                         answer=content,

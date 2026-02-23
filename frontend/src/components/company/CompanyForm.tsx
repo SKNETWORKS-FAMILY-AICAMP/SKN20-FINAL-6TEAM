@@ -18,6 +18,7 @@ import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { INDUSTRY_MAJOR, INDUSTRY_MINOR, INDUSTRY_ALL, COMPANY_STATUS, REGION_SIDO, REGION_SIGUNGU, PROVINCES } from '../../lib/constants';
 import type { CompanyStatusKey } from '../../lib/constants';
 import { RegionSelect } from '../common/RegionSelect';
+import axios from 'axios';
 import api from '../../lib/api';
 import { extractErrorMessage } from '../../lib/errorHandler';
 import { formatDate } from '../../lib/dateUtils';
@@ -208,9 +209,8 @@ export const CompanyForm: React.FC = () => {
       setIsDialogOpen(false);
       fetchCompanies();
     } catch (err: unknown) {
-      if (isAdmin) {
-        const detail = (err as { response?: { data?: unknown } })?.response?.data;
-        setDialogError(detail ? JSON.stringify(detail, null, 2) : extractErrorMessage(err, '저장에 실패했습니다.'));
+      if (isAdmin && axios.isAxiosError(err) && err.response?.data) {
+        setDialogError(JSON.stringify(err.response.data, null, 2));
       } else {
         setDialogError(extractErrorMessage(err, '저장에 실패했습니다.'));
       }

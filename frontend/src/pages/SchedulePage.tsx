@@ -98,12 +98,20 @@ const SchedulePage: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      const [schedulesRes, companiesRes] = await Promise.all([
+      const [schedulesResult, companiesResult] = await Promise.allSettled([
         api.get('/schedules'),
         api.get('/companies'),
       ]);
-      setSchedules(normalizeSchedules(schedulesRes.data));
-      setCompanies(normalizeCompanies(companiesRes.data));
+      if (schedulesResult.status === 'fulfilled') {
+        setSchedules(normalizeSchedules(schedulesResult.value.data));
+      } else {
+        console.error('Failed to fetch schedules:', schedulesResult.reason);
+      }
+      if (companiesResult.status === 'fulfilled') {
+        setCompanies(normalizeCompanies(companiesResult.value.data));
+      } else {
+        console.error('Failed to fetch companies:', companiesResult.reason);
+      }
     } catch (err) {
       console.error('Failed to fetch data:', err);
     } finally {

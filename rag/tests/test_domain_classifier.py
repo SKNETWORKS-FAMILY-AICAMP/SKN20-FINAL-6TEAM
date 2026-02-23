@@ -91,6 +91,7 @@ class TestVectorDomainClassifier:
         mock_settings = Mock()
         mock_settings.domain_classification_threshold = 0.6
         mock_settings.enable_vector_domain_classification = True
+        mock_settings.enable_llm_domain_classification = False
         mock_settings.multi_domain_gap_threshold = 0.15
         return mock_settings
 
@@ -561,6 +562,7 @@ class TestVectorDomainClassifier:
         """벡터 분류 비활성화 시 키워드 결과 사용."""
         mock_settings = Mock()
         mock_settings.enable_vector_domain_classification = False
+        mock_settings.enable_llm_domain_classification = False
 
         with patch("utils.domain_classifier.get_settings") as mock_get_settings:
             mock_get_settings.return_value = mock_settings
@@ -580,6 +582,7 @@ class TestVectorDomainClassifier:
         """벡터 분류 비활성화 + 키워드 미매칭 시 도메인 외 질문으로 거부."""
         mock_settings = Mock()
         mock_settings.enable_vector_domain_classification = False
+        mock_settings.enable_llm_domain_classification = False
 
         with patch("utils.domain_classifier.get_settings") as mock_get_settings:
             mock_get_settings.return_value = mock_settings

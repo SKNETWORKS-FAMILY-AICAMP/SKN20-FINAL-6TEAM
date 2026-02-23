@@ -85,19 +85,23 @@ class CrossEncoderReranker(BaseReranker):
         self.settings = get_settings()
         self.model_name = model_name or self.settings.cross_encoder_model
         self._model = None  # 지연 로딩
+        self._model_load_failed = False  # 로딩 실패 상태
 
     @property
     def model(self):
         """CrossEncoder 모델 인스턴스 (지연 로딩)."""
         if self._model is None:
+            if self._model_load_failed:
+                return None
             logger.info("[CrossEncoder] 모델 로딩: %s", self.model_name)
             try:
                 from sentence_transformers import CrossEncoder
                 self._model = CrossEncoder(self.model_name)
                 logger.info("[CrossEncoder] 모델 로딩 완료")
             except Exception as e:
-                logger.error("[CrossEncoder] 모델 로딩 실패: %s", e)
-                raise
+                logger.error("[CrossEncoder] 모델 로딩 실패: %s — reranking 스킵", e)
+                self._model_load_failed = True
+                return None
         return self._model
 
     def rerank(
@@ -120,6 +124,11 @@ class CrossEncoderReranker(BaseReranker):
             return documents
 
         logger.info("[리랭킹] CrossEncoder 시작: %d건 → top_%d", len(documents), top_k)
+
+        # 모델 로딩 실패 시 원본 반환
+        if self.model is None:
+            logger.warning("[리랭킹] CrossEncoder 모델 미사용 가능 — 원본 순서 유지")
+            return documents[:top_k]
 
         # 쿼리-문서 쌍 생성 (Cross-Encoder 512 토큰 제한으로 500자로 제한)
         pairs = [(query, doc.page_content[:500]) for doc in documents]

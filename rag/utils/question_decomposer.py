@@ -145,12 +145,16 @@ class QuestionDecomposer:
         self,
         response: str,
         detected_domains: list[str],
+        original_query: str = "",
     ) -> list[SubQuery]:
         """LLM 응답을 파싱하여 SubQuery 리스트를 반환합니다.
+
+        누락된 도메인이 있으면 원본 쿼리로 fallback SubQuery를 추가합니다.
 
         Args:
             response: LLM 응답 문자열
             detected_domains: 감지된 도메인 리스트
+            original_query: 원본 질문 (누락 도메인 fallback용)
 
         Returns:
             파싱된 SubQuery 리스트
@@ -180,6 +184,18 @@ class QuestionDecomposer:
                     domain,
                     sub_query[:50],
                 )
+
+        # 누락 도메인 감지 및 fallback SubQuery 추가
+        if sub_queries and original_query:
+            covered_domains = {sq.domain for sq in sub_queries}
+            missing_domains = [d for d in detected_domains if d not in covered_domains]
+            if missing_domains:
+                logger.warning(
+                    "[질문 분해] 도메인 누락 감지: %s — 원본 질문으로 fallback SubQuery 추가",
+                    missing_domains,
+                )
+                for domain in missing_domains:
+                    sub_queries.append(SubQuery(domain=domain, query=original_query))
 
         return sub_queries
 
@@ -228,11 +244,15 @@ class QuestionDecomposer:
             variables = self._build_prompt_variables(query, detected_domains, history)
             response = chain.invoke(variables)
 
-            sub_queries = self._parse_response(response, detected_domains)
+            sub_queries = self._parse_response(response, detected_domains, query)
 
             # 분해 결과가 비어있으면 원본 사용
             if not sub_queries:
-                logger.warning("[질문 분해] 분해 실패, 원본 질문 사용")
+                logger.warning(
+                    "[질문 분해] 분해 실패, 모든 도메인(%s)에 원본 질문 전달 "
+                    "(도메인 간 노이즈 증가 가능)",
+                    detected_domains,
+                )
                 return [
                     SubQuery(domain=domain, query=query)
                     for domain in detected_domains
@@ -249,7 +269,12 @@ class QuestionDecomposer:
             return sub_queries
 
         except (json.JSONDecodeError, Exception) as e:
-            logger.warning("[질문 분해] 파싱 실패: %s", e)
+            logger.warning(
+                "[질문 분해] 파싱 실패: %s — 모든 도메인(%s)에 원본 질문 전달 "
+                "(도메인 간 노이즈 증가 가능)",
+                e,
+                detected_domains,
+            )
             # 실패 시 각 도메인에 원본 질문 전달
             return [
                 SubQuery(domain=domain, query=query)
@@ -303,11 +328,15 @@ class QuestionDecomposer:
             variables = self._build_prompt_variables(query, detected_domains, history)
             response = await chain.ainvoke(variables)
 
-            sub_queries = self._parse_response(response, detected_domains)
+            sub_queries = self._parse_response(response, detected_domains, query)
 
             # 분해 결과가 비어있으면 원본 사용
             if not sub_queries:
-                logger.warning("[질문 분해] 분해 실패, 원본 질문 사용")
+                logger.warning(
+                    "[질문 분해] 분해 실패, 모든 도메인(%s)에 원본 질문 전달 "
+                    "(도메인 간 노이즈 증가 가능)",
+                    detected_domains,
+                )
                 return [
                     SubQuery(domain=domain, query=query)
                     for domain in detected_domains
@@ -324,7 +353,12 @@ class QuestionDecomposer:
             return sub_queries
 
         except (json.JSONDecodeError, Exception) as e:
-            logger.warning("[질문 분해] 파싱 실패: %s", e)
+            logger.warning(
+                "[질문 분해] 파싱 실패: %s — 모든 도메인(%s)에 원본 질문 전달 "
+                "(도메인 간 노이즈 증가 가능)",
+                e,
+                detected_domains,
+            )
             return [
                 SubQuery(domain=domain, query=query)
                 for domain in detected_domains

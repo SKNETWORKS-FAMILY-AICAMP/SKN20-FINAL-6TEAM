@@ -243,6 +243,11 @@ class VectorDomainClassifier:
 
         return None
 
+    async def _aprecompute_vectors(self) -> dict[str, np.ndarray]:
+        """도메인 벡터 사전 계산을 별도 스레드에서 비동기 실행합니다."""
+        import asyncio
+        return await asyncio.to_thread(self._precompute_vectors)
+
     def _vector_classify(self, query: str) -> DomainClassificationResult:
         """벡터 유사도 기반 도메인 분류.
 
