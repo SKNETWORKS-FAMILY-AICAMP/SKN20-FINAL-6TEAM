@@ -257,11 +257,12 @@ class MainRouter:
 
         return "__end__"
 
-    def _augment_query_for_classification(self, query: str, history: list[dict]) -> str:
-        """분류 전 대명사/지시어 질문을 history로 보강합니다.
+    def _augment_query_with_history(self, query: str, history: list[dict]) -> str:
+        """대명사/지시어 질문을 history로 보강합니다.
 
         짧은 후속 질문("그럼 세금은요?")에 이전 사용자 메시지를 접두사로 붙여
-        도메인 분류 정확도를 높입니다. LLM 호출 없이 휴리스틱으로 동작합니다.
+        분류·검색·생성·평가 전체 파이프라인의 정확도를 높입니다.
+        LLM 호출 없이 휴리스틱으로 동작합니다.
 
         Args:
             query: 현재 사용자 질문
@@ -279,7 +280,7 @@ class MainRouter:
 
         for msg in reversed(history):
             if msg.get("role") == "user":
-                logger.info("[분류 보강] '%s' → '%s %s'", query, msg["content"][:30], query)
+                logger.info("[쿼리 보강] '%s' → '%s %s'", query, msg["content"][:30], query)
                 return f"{msg['content']} {query}"
 
         return query
@@ -300,8 +301,10 @@ class MainRouter:
             query = sanitize_result.sanitized_query
             state["query"] = query
 
-        # 대명사/지시어 질문 보강 (분류용, 원본 query는 유지)
-        augmented_query = self._augment_query_for_classification(query, history)
+        # 대명사/지시어 질문 보강 (분류·검색·생성·평가 전체 적용)
+        augmented_query = self._augment_query_with_history(query, history)
+        if augmented_query != query:
+            state["query"] = augmented_query
 
         # 벡터 유사도 기반 도메인 분류 (CPU-bound → 스레드 위임)
         classification = await asyncio.to_thread(
@@ -844,8 +847,10 @@ class MainRouter:
             )
             query = sanitize_result.sanitized_query
 
-        # 대명사/지시어 질문 보강 (분류용)
-        augmented_query = self._augment_query_for_classification(query, history or [])
+        # 대명사/지시어 질문 보강 (분류·검색·생성 전체 적용)
+        augmented_query = self._augment_query_with_history(query, history or [])
+        if augmented_query != query:
+            query = augmented_query
 
         # 도메인 분류
         classification = self.domain_classifier.classify(augmented_query)
