@@ -12,7 +12,7 @@ const ERROR_MESSAGE = '죄송합니다. 응답을 생성하는 중 오류가 발
 const GUEST_LIMIT_MESSAGE = '무료 체험 메시지를 모두 사용했습니다. 로그인하시면 무제한으로 상담을 이용할 수 있습니다.';
 
 export const useChat = () => {
-  const { addMessage, updateMessage, setLoading, setStreaming, isLoading, setLastHistoryId, updateMessageInSession, setLastHistoryIdForSession, guestMessageCount, incrementGuestCount } = useChatStore();
+  const { addMessage, setLoading, setStreaming, isLoading, setLastHistoryId, updateMessageInSession, setLastHistoryIdForSession, guestMessageCount, incrementGuestCount } = useChatStore();
   const { isAuthenticated } = useAuthStore();
   const streamingContentRef = useRef<string>('');
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -119,7 +119,7 @@ export const useChat = () => {
                 // RAF-based throttle: batch store updates to ~60fps max
                 if (rafRef.current === null) {
                   rafRef.current = requestAnimationFrame(() => {
-                    updateMessage(assistantMessageId, {
+                    updateMessageInSession(targetSessionId, assistantMessageId, {
                       content: streamingContentRef.current,
                     });
                     rafRef.current = null;
@@ -153,7 +153,7 @@ export const useChat = () => {
                   }
                 }
 
-                updateMessage(assistantMessageId, {
+                updateMessageInSession(targetSessionId, assistantMessageId, {
                   content: streamingContentRef.current,
                   agent_code: finalAgentCode,
                   ...(agentCodes ? { agent_codes: agentCodes } : {}),
@@ -167,7 +167,7 @@ export const useChat = () => {
                   rafRef.current = null;
                 }
                 setStreaming(false);
-                updateMessage(assistantMessageId, {
+                updateMessageInSession(targetSessionId, assistantMessageId, {
                   content: ERROR_MESSAGE,
                 });
                 console.error('Streaming error:', error);
@@ -285,7 +285,7 @@ export const useChat = () => {
         abortControllerRef.current = null;
       }
     },
-    [addMessage, updateMessage, setLoading, setStreaming, isLoading, isAuthenticated, setLastHistoryId, updateMessageInSession, setLastHistoryIdForSession, guestMessageCount, incrementGuestCount]
+    [addMessage, setLoading, setStreaming, isLoading, isAuthenticated, setLastHistoryId, updateMessageInSession, setLastHistoryIdForSession, guestMessageCount, incrementGuestCount]
   );
 
   return { sendMessage, isLoading };
