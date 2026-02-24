@@ -297,6 +297,16 @@ export const useChatStore = create<ChatState>()(
               }
             }
           }
+
+          // 기존 세션의 모든 메시지를 synced로 마킹 (재로그인 시 중복 방지)
+          // 새 세션을 생성하지 않고 현재 세션 유지 → 채팅 내역 그대로 표시
+          set((prev) => ({
+            sessions: prev.sessions.map((s) =>
+              s.id === sessionId
+                ? { ...s, messages: s.messages.map((m) => ({ ...m, synced: true })) }
+                : s
+            ),
+          }));
         } finally {
           isSyncing = false;
         }
