@@ -1,6 +1,9 @@
 # Release Notes
 
-## [2026-02-24] - RAG 품질 대폭 개선 + 프롬프트 최적화
+## [2026-02-24] - RAG 품질 대폭 개선 + 프롬프트 최적화 + JSON 파일 로깅
+
+### Features
+- **JSON 구조화 로깅** (`utils/json_file_logger.py`): /var/log/app/rag.log에 JSON 형식 로그 출력, 공유 볼륨으로 Admin 대시보드에서 실시간 조회 가능
 
 ### Refactoring
 - **RAG 품질 개선** (`agents/`, `chains/`, `utils/prompts.py`): 프롬프트 강화, 검색 파이프라인 최적화, RAGAS 평가 개선

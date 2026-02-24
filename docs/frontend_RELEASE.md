@@ -1,11 +1,12 @@
 # Release Notes
 
-## [2026-02-24] - 기업 프로필 UI 개선 + 다수 버그 수정
+## [2026-02-24] - 기업 프로필 UI 개선 + 다수 버그 수정 + Admin 모니터링 대시보드
 
 ### Features
 - **기업 대시보드/폼 리팩토링** (`components/company/CompanyDashboard.tsx`, `CompanyForm.tsx`): 기업 관리 UI 기능 강화
 - **Zustand companyStore 추가** (`stores/companyStore.ts`): 기업 상태 관리 전용 스토어 신규 추가
 - **CompanyPage 개선** (`pages/CompanyPage.tsx`): 기업 페이지 구조 개선
+- **Admin 모니터링 대시보드** (`components/admin/`, `hooks/`, `types/admin.ts`): ResourceChart(Recharts LineChart), SchedulerStatusTable, LogViewer 컴포넌트 신규 추가; TanStack Query(`@tanstack/react-query`) 도입, 10초 폴링으로 실시간 메트릭·스케줄러 이력·로그 표시
 
 ### Bug Fixes
 - **스트리밍 중 세션 전환 시 메시지 업데이트 누락 수정** (`hooks/useChat.ts`, `stores/chatStore.ts`)
