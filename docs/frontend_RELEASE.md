@@ -1,6 +1,6 @@
 # Release Notes
 
-## [2026-02-24] - 기업 프로필 UI 개선 + 다수 버그 수정 + Admin 모니터링 대시보드
+## [2026-02-24] - 기업 프로필 UI 개선 + 다수 버그 수정 + Admin 모니터링 대시보드 + 기업 대시보드 UI 수정
 
 ### Features
 - **기업 대시보드/폼 리팩토링** (`components/company/CompanyDashboard.tsx`, `CompanyForm.tsx`): 기업 관리 UI 기능 강화
@@ -15,6 +15,7 @@
 - **캘린더 달력 넘기기 버튼 복구** (`components/schedule/CalendarView.tsx`)
 - **레이아웃 맞추기** (`pages/MainPage.tsx`)
 - **로그아웃시 main으로 돌아가기** (`stores/authStore.ts`)
+- **기업 정보 대시보드 UI 수정** (`components/company/`): 기업 정보 대시보드 레이아웃 및 표시 오류 수정
 
 ### Refactoring
 - **전체 품질 개선**: 보안/안정성/성능/멀티도메인 Phase 6~9 일괄 적용

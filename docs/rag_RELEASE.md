@@ -1,6 +1,6 @@
 # Release Notes
 
-## [2026-02-24] - RAG 품질 대폭 개선 + 프롬프트 최적화 + JSON 파일 로깅
+## [2026-02-24] - RAG 품질 대폭 개선 + 프롬프트 최적화 + JSON 파일 로깅 + 프로덕션 이미지 최적화
 
 ### Features
 - **JSON 구조화 로깅** (`utils/json_file_logger.py`): /var/log/app/rag.log에 JSON 형식 로그 출력, 공유 볼륨으로 Admin 대시보드에서 실시간 조회 가능
@@ -11,6 +11,7 @@
 
 ### Bug Fixes
 - **단일 도메인 대명사 보강** (`agents/`, `utils/`): 검색·생성·평가 전 단계에 대명사 보강 적용
+- **프로덕션 이미지 디스크 절감** (`Dockerfile.prod`): CUDA torch(~2.5GB) → CPU-only torch(~200MB) 교체, RunPod 모드에서 불필요한 BGE-M3/reranker 모델 빌드 시 다운로드 생략
 
 ### Documentation
 - **프로젝트 문서 현행화**: 코드 불일치 27건 수정
