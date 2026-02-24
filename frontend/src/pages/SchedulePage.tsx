@@ -190,7 +190,7 @@ const SchedulePage: React.FC = () => {
   const [isAnnounceDialogOpen, setIsAnnounceDialogOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
   const [pendingAnnounce, setPendingAnnounce] = useState<Announce | null>(null);
-  const [announceMemo, setAnnounceMemo] = useState('');
+  const [announceAdditionalMemo, setAnnounceAdditionalMemo] = useState('');
   const [defaultDate, setDefaultDate] = useState<string>('');
   const [processingAnnounceId, setProcessingAnnounceId] = useState<number | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -433,14 +433,14 @@ const SchedulePage: React.FC = () => {
     }
 
     setPendingAnnounce(announce);
-    setAnnounceMemo(buildDefaultAnnounceMemo(announce));
+    setAnnounceAdditionalMemo('');
     setIsAnnounceDialogOpen(true);
   };
 
   const closeAnnounceDialog = () => {
     setIsAnnounceDialogOpen(false);
     setPendingAnnounce(null);
-    setAnnounceMemo('');
+    setAnnounceAdditionalMemo('');
   };
 
   const handleConfirmCreateScheduleFromAnnounce = async () => {
@@ -449,7 +449,10 @@ const SchedulePage: React.FC = () => {
     }
 
     const announce = pendingAnnounce;
-    const finalMemo = announceMemo.trim() ? announceMemo : buildDefaultAnnounceMemo(announce);
+    const baseMemo = buildDefaultAnnounceMemo(announce);
+    const finalMemo = announceAdditionalMemo.trim()
+      ? `${baseMemo}\n\n추가 메모\n${announceAdditionalMemo.trim()}`
+      : baseMemo;
 
     setProcessingAnnounceId(announce.announce_id);
     try {
@@ -771,14 +774,27 @@ const SchedulePage: React.FC = () => {
 
           <div>
             <Typography variant="small" color="gray" className="mb-1">
-              메모
+              기본 메모 (수정 불가)
             </Typography>
             <Textarea
-              value={announceMemo}
-              onChange={(event) => setAnnounceMemo(event.target.value)}
+              value={pendingAnnounce ? buildDefaultAnnounceMemo(pendingAnnounce) : ''}
+              readOnly
+              disabled
+              className="!border-gray-300 !bg-gray-50 !text-gray-600"
+              labelProps={{ className: 'hidden' }}
+            />
+          </div>
+
+          <div>
+            <Typography variant="small" color="gray" className="mb-1">
+              추가 메모
+            </Typography>
+            <Textarea
+              value={announceAdditionalMemo}
+              onChange={(event) => setAnnounceAdditionalMemo(event.target.value)}
               className="!border-gray-300"
               labelProps={{ className: 'hidden' }}
-              placeholder="일정과 함께 저장할 메모를 입력하세요."
+              placeholder="추가로 남길 메모를 입력하세요."
             />
           </div>
         </DialogBody>
