@@ -437,7 +437,6 @@ class MainRouter:
         else:
             state["evaluation"] = None
 
-        # RAGAS 평가는 Backend BackgroundTask로 비동기 처리 (응답 지연 방지)
         state["ragas_metrics"] = None
 
         evaluate_time = time.time() - start
@@ -1014,7 +1013,6 @@ class MainRouter:
                 except Exception as e:
                     logger.warning("[스트리밍 평가] 단일 도메인 평가 실패: %s", e)
 
-            # RAGAS 평가는 Backend BackgroundTask로 비동기 처리 (응답 지연 방지)
             ragas_metrics_single = None
 
             yield {
@@ -1099,7 +1097,6 @@ class MainRouter:
                 except Exception as e:
                     logger.warning("[스트리밍 평가] 복수 도메인 평가 실패: %s", e)
 
-            # RAGAS 평가는 Backend BackgroundTask로 비동기 처리 (응답 지연 방지)
             ragas_metrics_multi = None
 
             yield {

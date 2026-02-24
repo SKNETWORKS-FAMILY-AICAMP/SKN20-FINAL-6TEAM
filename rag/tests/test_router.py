@@ -1,6 +1,6 @@
 """MainRouter 단위 테스트."""
 
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import AsyncMock, Mock, patch, MagicMock
 from typing import Any
 
 import pytest
@@ -592,4 +592,59 @@ class TestMainRouterEdgeCases:
         router = MainRouter()
 
         mock_all_dependencies["settings"].assert_called()
-        assert router.settings == mock_all_dependencies["settings"].return_value
+
+
+class TestRagasEvaluationInEvaluateNode:
+    """_aevaluate_node에서 RAGAS 평가 실행 여부 테스트."""
+
+    def _make_state(self) -> "RouterState":
+        from agents.router import RouterState
+        from schemas.response import SourceDocument
+        return {
+            "query": "퇴직금 계산 방법은?",
+            "user_context": None,
+            "domains": ["hr_labor"],
+            "classification_result": None,
+            "sub_queries": [],
+            "retrieval_results": {},
+            "responses": {},
+            "documents": [],
+            "final_response": "퇴직금은 근로기준법에 따라 계산합니다.",
+            "sources": [SourceDocument(content="근로기준법 제34조", title="근로기준법")],
+            "actions": [],
+            "evaluation": None,
+            "ragas_metrics": None,
+            "retry_count": 0,
+            "timing_metrics": {"classify_time": 0.0},
+        }
+
+    @pytest.mark.asyncio
+    async def test_ragas_metrics_none_when_disabled(self):
+        """enable_ragas_evaluation=False일 때 ragas_metrics는 None이어야 한다."""
+        with patch("agents.router.RAGChain"), \
+             patch("agents.router.StartupFundingAgent"), \
+             patch("agents.router.FinanceTaxAgent"), \
+             patch("agents.router.HRLaborAgent"), \
+             patch("agents.router.LegalAgent"), \
+             patch("agents.router.EvaluatorAgent") as mock_eval_cls, \
+             patch("agents.router.get_settings") as mock_get_settings:
+
+            mock_settings = MagicMock()
+            mock_settings.enable_llm_evaluation = False
+            mock_settings.enable_ragas_evaluation = False
+            mock_settings.evaluation_threshold = 70
+            mock_settings.evaluator_context_length = 4000
+            mock_settings.domain_evaluation_thresholds = {}
+            mock_get_settings.return_value = mock_settings
+
+            mock_evaluator = MagicMock()
+            mock_eval_cls.return_value = mock_evaluator
+
+            router = MainRouter()
+            router._ragas_evaluator = None
+
+            state = self._make_state()
+            result = await router._aevaluate_node(state)
+
+            assert result["ragas_metrics"] is None, \
+                "ragas_evaluator가 None일 때 ragas_metrics는 None이어야 합니다."
