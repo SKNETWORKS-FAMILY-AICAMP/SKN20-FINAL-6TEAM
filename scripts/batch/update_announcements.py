@@ -28,11 +28,9 @@ import argparse
 import json
 import logging
 import os
-import smtplib
 import sys
 import time
 from datetime import date, datetime
-from email.mime.text import MIMEText
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
@@ -135,36 +133,35 @@ def _safe_error_message(e: Exception) -> str:
 def _send_email_notification(
     subject: str, body: str, logger: logging.Logger
 ) -> None:
-    """SMTP로 이메일 알림을 보냅니다.
+    """AWS SES로 이메일 알림을 보냅니다.
 
-    SMTP_USER, SMTP_PASSWORD, SMTP_TO 중 하나라도 미설정이면 건너뜁니다.
+    SES_FROM, ALERT_EMAIL_TO 중 하나라도 미설정이면 건너뜁니다.
+    EC2 Instance Role의 IAM 권한으로 자동 인증합니다 (별도 자격 증명 불필요).
 
     Args:
         subject: 이메일 제목
-        body: 이메일 본문
+        body: 이메일 본문 (plain text)
         logger: 로거 인스턴스
     """
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
-    smtp_port = int(os.getenv("SMTP_PORT", "587"))
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_password = os.getenv("SMTP_PASSWORD")
-    smtp_from = os.getenv("SMTP_FROM") or smtp_user
-    smtp_to = os.getenv("SMTP_TO")
+    ses_from = os.getenv("SES_FROM")
+    alert_to = os.getenv("ALERT_EMAIL_TO")
+    aws_region = os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "ap-northeast-2"))
 
-    if not all([smtp_user, smtp_password, smtp_to]):
-        return  # SMTP 미설정 시 건너뜀
+    if not ses_from or not alert_to:
+        return  # SES 미설정 시 건너뜀
 
     try:
-        msg = MIMEText(body, "plain", "utf-8")
-        msg["Subject"] = subject
-        msg["From"] = smtp_from
-        msg["To"] = smtp_to
+        import boto3
 
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(smtp_user, smtp_password)
-            server.sendmail(smtp_from, smtp_to.split(","), msg.as_string())
+        client = boto3.client("ses", region_name=aws_region)
+        client.send_email(
+            Source=ses_from,
+            Destination={"ToAddresses": alert_to.split(",")},
+            Message={
+                "Subject": {"Data": f"[Bizi 배치] {subject}", "Charset": "UTF-8"},
+                "Body": {"Text": {"Data": body, "Charset": "UTF-8"}},
+            },
+        )
     except Exception as e:
         logger.warning("이메일 알림 전송 실패: %s", e)
 

@@ -215,13 +215,10 @@ services:
       RUNPOD_ENDPOINT_ID: ${RUNPOD_ENDPOINT_ID}
       S3_BUCKET_NAME: ${S3_BUCKET_NAME:-}
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-northeast-2}
-      # Email SMTP 알림
-      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM: ${SMTP_FROM:-}
-      SMTP_TO: ${SMTP_TO:-}
+      # AWS SES 알림 (EC2 Instance Role 자동 인증)
+      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+      SES_FROM: ${SES_FROM:-}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
       ENVIRONMENT: batch
     depends_on:
       chromadb:
