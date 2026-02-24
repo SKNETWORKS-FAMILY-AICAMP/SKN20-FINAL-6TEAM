@@ -1,5 +1,16 @@
 # Release Notes
 
+## [2026-02-24] - 로그인 Google OAuth 복원 + Admin 모니터링 의존성 추가
+
+### Fixes
+- **로그인 모달 Google OAuth 복원** (`pages/LoginPage.tsx`): 테스트용 관리자 로그인 버튼 제거, Google OAuth 로그인 버튼 복원
+
+### Dependencies
+- `recharts` 추가 (Admin ResourceChart LineChart 지원)
+- `@tanstack/react-query` 추가 (Admin 모니터링 10초 폴링 지원)
+
+---
+
 ## [2026-02-24] - 기업 프로필 UI 개선 + 다수 버그 수정 + Admin 모니터링 대시보드 + 기업 대시보드 UI 수정
 
 ### Features
