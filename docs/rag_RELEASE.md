@@ -1,5 +1,12 @@
 # Release Notes
 
+## [2026-02-24] - RAGAS 인라인 평가 제거 — BackgroundTask 위임 방식 전환
+
+### Refactoring
+- **RAGAS 인라인 평가 제거** (`agents/router.py`): `_aevaluate_node`·단일·복수 도메인 스트리밍에서 인라인 `await aevaluate_answer_quality()` 호출 제거, `ragas_metrics = None` 고정
+- **테스트 정리** (`tests/test_router.py`): 잘못된 인라인 RAGAS 테스트(`test_ragas_metrics_set_when_enabled`) 제거, 올바른 비활성화 테스트(`test_ragas_metrics_none_when_disabled`) 유지
+- RAGAS 평가는 Backend BackgroundTask → `POST /api/evaluate` 경로로 history 저장 후 비동기 처리 (응답 지연 없음)
+
 ## [2026-02-24] - RAG 품질 대폭 개선 + 프롬프트 최적화 + JSON 파일 로깅 + 프로덕션 이미지 최적화
 
 ### Features
