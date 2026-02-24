@@ -1,5 +1,11 @@
 # Release Notes
 
+## [2026-02-25] - EC2 프로덕션 배포 시 RAG .env 파라미터 미참조 버그 수정
+
+### Bug Fixes
+- **RAG `env_file` 누락 수정** (`docker-compose.prod.yaml`): EC2 배포 시 `environment:` 섹션에 없는 `.env` 파라미터(`MULTI_QUERY_COUNT`, `VECTOR_SEARCH_WEIGHT`, `RERANKER_TYPE` 등)가 기본값으로 폴백되던 문제 수정 — `env_file: .env` 추가로 `.env` 전체 변수를 컨테이너에 주입
+- **`EMBEDDING_PROVIDER` 하드코딩 제거** (`docker-compose.prod.yaml`): `runpod` 하드코딩 → `${EMBEDDING_PROVIDER:-runpod}` 변수 참조로 변경
+
 ## [2026-02-24] - RAGAS 인라인 평가 제거 — BackgroundTask 위임 방식 전환
 
 ### Refactoring

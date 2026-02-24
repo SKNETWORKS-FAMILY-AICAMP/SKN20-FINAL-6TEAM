@@ -113,6 +113,8 @@ services:
       - app-logs:/var/log/app
     expose:
       - "8001"
+    env_file:
+      - .env
     environment:
       <<: *db-env
       ENVIRONMENT: production
@@ -135,7 +137,7 @@ services:
       ENABLE_VECTOR_DOMAIN_CLASSIFICATION: ${ENABLE_VECTOR_DOMAIN_CLASSIFICATION:-true}
       ENABLE_LLM_DOMAIN_CLASSIFICATION: ${ENABLE_LLM_DOMAIN_CLASSIFICATION:-false}
       # RunPod GPU 추론
-      EMBEDDING_PROVIDER: runpod
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-runpod}
       RUNPOD_API_KEY: ${RUNPOD_API_KEY}
       RUNPOD_ENDPOINT_ID: ${RUNPOD_ENDPOINT_ID}
     depends_on:
