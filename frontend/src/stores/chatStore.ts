@@ -278,14 +278,15 @@ export const useChatStore = create<ChatState>()(
             }
           }
 
-          // 새 세션 생성하여 전환 — 로그인 후 깨끗한 시작
-          if (anySynced || messages.some(m => m.type === 'user')) {
-            const newSession = createNewSession();
-            set((prev) => ({
-              sessions: [newSession, ...prev.sessions],
-              currentSessionId: newSession.id,
-            }));
-          }
+          // 기존 세션의 모든 메시지를 synced로 마킹 (재로그인 시 중복 방지)
+          // 새 세션을 생성하지 않고 현재 세션 유지 → 채팅 내역 그대로 표시
+          set((prev) => ({
+            sessions: prev.sessions.map((s) =>
+              s.id === sessionId
+                ? { ...s, messages: s.messages.map((m) => ({ ...m, synced: true })) }
+                : s
+            ),
+          }));
         } finally {
           isSyncing = false;
         }
