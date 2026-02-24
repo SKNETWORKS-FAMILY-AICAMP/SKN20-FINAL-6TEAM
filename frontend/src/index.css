@@ -39,6 +39,30 @@
   color: #1f2937;
 }
 
+/* Keep month title truly centered regardless of right-side controls */
+.fc .fc-header-toolbar {
+  position: relative;
+  justify-content: flex-end;
+}
+
+.fc .fc-header-toolbar .fc-toolbar-chunk:nth-child(2) {
+  left: 50%;
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+@media (max-width: 640px) {
+  .fc .fc-header-toolbar {
+    justify-content: space-between;
+  }
+
+  .fc .fc-header-toolbar .fc-toolbar-chunk:nth-child(2) {
+    left: auto;
+    position: static;
+    transform: none;
+  }
+}
+
 .fc .fc-col-header-cell-cushion {
   font-size: 0.875rem;
   font-weight: 500;

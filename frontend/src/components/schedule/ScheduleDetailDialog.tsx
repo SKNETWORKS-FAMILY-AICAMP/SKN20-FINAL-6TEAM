@@ -21,6 +21,7 @@ interface ScheduleDetailDialogProps {
   schedule: Schedule | null;
   companies: Company[];
   defaultDate?: string;
+  defaultCompanyId?: number | null;
 }
 
 export interface ScheduleFormData {
@@ -39,6 +40,7 @@ export const ScheduleDetailDialog: React.FC<ScheduleDetailDialogProps> = ({
   schedule,
   companies,
   defaultDate,
+  defaultCompanyId,
 }) => {
   const [formData, setFormData] = useState<ScheduleFormData>({
     company_id: '',
@@ -58,15 +60,17 @@ export const ScheduleDetailDialog: React.FC<ScheduleDetailDialogProps> = ({
         memo: schedule.memo || '',
       });
     } else {
+      const fallbackCompanyId =
+        defaultCompanyId ?? companies[0]?.company_id ?? null;
       setFormData({
-        company_id: companies[0]?.company_id?.toString() || '',
+        company_id: fallbackCompanyId ? fallbackCompanyId.toString() : '',
         schedule_name: '',
         start_date: defaultDate || '',
         end_date: defaultDate || '',
         memo: '',
       });
     }
-  }, [schedule, companies, defaultDate]);
+  }, [schedule, companies, defaultDate, defaultCompanyId]);
 
   const isValid =
     formData.company_id &&

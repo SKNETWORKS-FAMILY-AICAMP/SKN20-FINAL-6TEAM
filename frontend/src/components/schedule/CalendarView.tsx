@@ -10,6 +10,7 @@ interface CalendarViewProps {
   schedules: Schedule[];
   onDateClick: (dateStr: string) => void;
   onEventClick: (scheduleId: number) => void;
+  className?: string;
 }
 
 const EVENT_COLORS = [
@@ -49,6 +50,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   schedules,
   onDateClick,
   onEventClick,
+  className,
 }) => {
   const events = schedules.reduce<Array<EventInput>>((acc, schedule, index) => {
     const startDatePart = toDatePart(schedule.start_date);
@@ -86,7 +88,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   return (
-    <div className="fc-container bg-white rounded-lg p-4 shadow-sm border">
+    <div className={`fc-container bg-white rounded-lg p-3 shadow-sm border ${className ?? ''}`}>
       <FullCalendar
         plugins={[dayGridPlugin, interactionPlugin]}
         initialView="dayGridMonth"
@@ -95,9 +97,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         dateClick={handleDateClick}
         eventClick={handleEventClick}
         headerToolbar={{
-          left: 'prev,next today',
+          left: '',
           center: 'title',
-          right: '',
+          right: 'prev,next today',
         }}
         buttonIcons={false}
         buttonText={{
@@ -105,7 +107,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           next: '>',
           today: '\uC624\uB298',
         }}
-        height="auto"
+        aspectRatio={1.9}
+        height="100%"
         dayMaxEvents={3}
         eventDisplay="block"
         displayEventTime={false}
