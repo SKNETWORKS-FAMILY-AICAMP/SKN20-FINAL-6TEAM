@@ -8,7 +8,7 @@ import {
   IconButton,
   Chip,
 } from '@material-tailwind/react';
-import { PaperAirplaneIcon, PlusIcon } from '@heroicons/react/24/solid';
+import { PaperAirplaneIcon, PlusIcon, StopIcon } from '@heroicons/react/24/solid';
 import api from '../lib/api';
 import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
@@ -49,7 +49,7 @@ const MainPage: React.FC = () => {
   const { notifications, toastQueue, dismissToast } = useNotificationStore();
   const displayUserType = useDisplayUserType();
   const { sessions, currentSessionId, createSession, isStreaming } = useChatStore();
-  const { sendMessage, isLoading } = useChat();
+  const { sendMessage, isLoading, stopStreaming } = useChat();
   const [inputValue, setInputValue] = useState('');
   const [notificationSchedules, setNotificationSchedules] = useState<Schedule[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -324,14 +324,25 @@ const MainPage: React.FC = () => {
                 className="w-full px-3 py-2 text-sm border-0 focus:outline-none focus:ring-0 bg-transparent placeholder-gray-400"
               />
             </div>
-            <IconButton
-              type="submit"
-              color="blue"
-              disabled={!inputValue.trim() || isLoading || isStreaming}
-              className="rounded-xl"
-            >
-              <PaperAirplaneIcon className="h-5 w-5" />
-            </IconButton>
+            {isLoading || isStreaming ? (
+              <IconButton
+                type="button"
+                color="blue"
+                onClick={stopStreaming}
+                className="rounded-xl !bg-gray-400 hover:!bg-gray-500"
+              >
+                <StopIcon className="h-5 w-5" />
+              </IconButton>
+            ) : (
+              <IconButton
+                type="submit"
+                color="blue"
+                disabled={!inputValue.trim()}
+                className="rounded-xl"
+              >
+                <PaperAirplaneIcon className="h-5 w-5" />
+              </IconButton>
+            )}
           </form>
           <Typography variant="small" color="gray" className="text-center mt-3 mb-2 text-xs !text-gray-600">
             Bizi는 AI 기반 상담 서비스로, 법적 조언이 아닙니다. 중요한 결정은 전문가와 상담하세요.

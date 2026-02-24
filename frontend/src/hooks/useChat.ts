@@ -288,5 +288,14 @@ export const useChat = () => {
     [addMessage, setLoading, setStreaming, isLoading, isAuthenticated, setLastHistoryId, updateMessageInSession, setLastHistoryIdForSession, guestMessageCount, incrementGuestCount]
   );
 
-  return { sendMessage, isLoading };
+  const stopStreaming = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setStreaming(false);
+      setLoading(false);
+    }
+  }, [setStreaming, setLoading]);
+
+  return { sendMessage, isLoading, stopStreaming };
 };
