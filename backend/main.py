@@ -12,7 +12,11 @@ from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from config.settings import settings
-from config.database import SessionLocal
+from config.database import Base, SessionLocal, engine
+from config.logging_config import setup_json_file_logging
+
+# JSON 파일 로깅 설정 (/var/log/app/backend.log)
+setup_json_file_logging(service_name="backend")
 from apps.auth.token_blacklist import cleanup_expired
 
 logger = logging.getLogger(__name__)
@@ -22,23 +26,32 @@ limiter = Limiter(key_func=get_remote_address)
 
 
 async def _cleanup_blacklist_loop():
-    """만료된 토큰 블랙리스트를 주기적으로 정리합니다."""
+    """만료된 토큰 블랙리스트를 주기적으로 정리합니다.
+
+    track_job()으로 실행 상태를 job_logs 테이블에 자동 기록합니다.
+    """
+    from apps.common.job_tracker import track_job
+
     while True:
         await asyncio.sleep(3600)  # 1시간마다
+        db = SessionLocal()
         try:
-            db = SessionLocal()
-            try:
+            async with track_job(db, "token_cleanup") as job:
                 count = cleanup_expired(db)
+                job.record_count = count
                 if count > 0:
                     logger.info("Cleaned up %d expired blacklist entries", count)
-            finally:
-                db.close()
         except Exception:
             logger.exception("Blacklist cleanup failed")
+        finally:
+            db.close()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # job_logs 테이블만 생성 (기존 테이블은 건드리지 않음)
+    from apps.common.models import JobLog
+    JobLog.__table__.create(bind=engine, checkfirst=True)
     task = asyncio.create_task(_cleanup_blacklist_loop())
     yield
     task.cancel()

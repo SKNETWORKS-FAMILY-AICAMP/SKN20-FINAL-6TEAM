@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, Integer, String, DateTime, ForeignKey, Text, Boolean, JSON
+from sqlalchemy import BigInteger, Column, Date, Integer, String, DateTime, ForeignKey, Text, Boolean, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from config.database import Base
@@ -141,3 +141,23 @@ class Schedule(Base):
     # Relationships
     company = relationship("Company", back_populates="schedules")
     announce = relationship("Announce", back_populates="schedules")
+
+
+class JobLog(Base):
+    """스케줄러 작업 실행 이력.
+
+    lifespan에서 Base.metadata.create_all()로 자동 생성됩니다.
+    apps/common/job_tracker.py의 track_job() 컨텍스트 매니저로 기록합니다.
+    """
+
+    __tablename__ = "job_logs"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    job_name = Column(String(100), nullable=False, comment="작업명 (예: token_cleanup)")
+    status = Column(String(20), nullable=False, comment="started | success | failed")
+    started_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    finished_at = Column(DateTime, nullable=True)
+    duration_ms = Column(Integer, nullable=True, comment="실행 시간(ms)")
+    record_count = Column(Integer, nullable=True, comment="처리된 레코드 수")
+    error_msg = Column(Text, nullable=True, comment="실패 시 오류 메시지 (최대 2000자)")
+    meta = Column(JSON, nullable=True, comment="추가 메타데이터")

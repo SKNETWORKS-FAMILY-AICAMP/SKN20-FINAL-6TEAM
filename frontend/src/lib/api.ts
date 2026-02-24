@@ -71,3 +71,17 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+// ─── 관리자 모니터링 API ────────────────────────────────────────
+
+export const fetchAdminMetrics = () =>
+  api.get('/admin/metrics');
+
+export const fetchSchedulerStatus = (limit = 50) =>
+  api.get('/admin/scheduler/status', { params: { limit } });
+
+export const fetchAdminLogs = (
+  file: 'backend' | 'rag',
+  page = 1,
+  pageSize = 100,
+) => api.get('/admin/logs', { params: { file, page, page_size: pageSize } });

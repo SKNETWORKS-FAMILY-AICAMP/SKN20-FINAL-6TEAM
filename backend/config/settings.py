@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     RAG_SERVICE_URL: str = "http://rag:8001"
     RAG_API_KEY: str = ""
 
+    # AWS SES 이메일 알림 (EC2 Instance Role로 자동 인증)
+    AWS_REGION: str = "ap-northeast-2"
+    SES_FROM: str = ""                    # SES 검증된 발신자 이메일
+    ALERT_EMAIL_TO: str = ""              # 알림 수신 이메일
+    ALERT_RESOURCE_THRESHOLD: float = 90.0  # CPU/Memory/Disk % 초과 시 알림
+
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 

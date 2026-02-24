@@ -16,6 +16,9 @@ import {
 import api from '../lib/api';
 import type { AdminEvaluationStats, ServerStatusResponse } from '../types';
 import { DOMAIN_NAMES } from '../types';
+import ResourceChart from '../components/admin/ResourceChart';
+import SchedulerStatusTable from '../components/admin/SchedulerStatusTable';
+import LogViewer from '../components/admin/LogViewer';
 
 const STATUS_CONFIG: Record<string, { color: 'green' | 'amber' | 'red'; icon: React.ElementType }> = {
   healthy: { color: 'green', icon: CheckCircleIcon },
@@ -205,6 +208,46 @@ const AdminDashboardPage: React.FC = () => {
             </Card>
           </>
         ) : null}
+
+        {/* ─── 모니터링 섹션 ─── */}
+
+        {/* 리소스 모니터링 */}
+        <Card>
+          <CardHeader floated={false} shadow={false} className="rounded-none">
+            <Typography variant="h6" color="blue-gray" className="!text-gray-900">
+              리소스 모니터링
+              <span className="ml-2 text-xs font-normal text-gray-400">10초 자동 갱신</span>
+            </Typography>
+          </CardHeader>
+          <CardBody>
+            <ResourceChart />
+          </CardBody>
+        </Card>
+
+        {/* 스케줄러 실행 이력 */}
+        <Card>
+          <CardHeader floated={false} shadow={false} className="rounded-none">
+            <Typography variant="h6" color="blue-gray" className="!text-gray-900">
+              스케줄러 실행 이력
+              <span className="ml-2 text-xs font-normal text-gray-400">최근 50건 · 10초 자동 갱신</span>
+            </Typography>
+          </CardHeader>
+          <CardBody>
+            <SchedulerStatusTable />
+          </CardBody>
+        </Card>
+
+        {/* 실시간 로그 뷰어 */}
+        <Card>
+          <CardHeader floated={false} shadow={false} className="rounded-none">
+            <Typography variant="h6" color="blue-gray" className="!text-gray-900">
+              실시간 로그
+            </Typography>
+          </CardHeader>
+          <CardBody>
+            <LogViewer />
+          </CardBody>
+        </Card>
 
         {/* 서버 상태 */}
         <Card>

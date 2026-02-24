@@ -64,8 +64,14 @@ services:
     restart: unless-stopped
     volumes:
       - ./backend:/app
+      - app-logs:/var/log/app
     expose:
       - "8000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       - MYSQL_HOST=ssh-tunnel
       - MYSQL_PORT=3306
@@ -124,8 +130,14 @@ services:
     volumes:
       - ./rag:/app
       - ./data/preprocessed:/data/preprocessed:ro
+      - app-logs:/var/log/app
     expose:
       - "8001"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - RAG_API_KEY=${RAG_API_KEY:-}
@@ -216,3 +228,4 @@ services:
 volumes:
   ssh-known-hosts:
   chromadb_data:
+  app-logs:    # backend/rag 공유 로그 볼륨 (/var/log/app)

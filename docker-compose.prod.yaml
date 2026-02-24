@@ -59,6 +59,8 @@ services:
       - no-new-privileges:true
     tmpfs:
       - /tmp
+    volumes:
+      - app-logs:/var/log/app
     expose:
       - "8000"
     environment:
@@ -74,6 +76,11 @@ services:
       ENABLE_TEST_LOGIN: "false"
       RAG_API_KEY: ${RAG_API_KEY:-}
       RAG_SERVICE_URL: http://rag:8001
+      # AWS SES 알림 (미설정 시 알림 비활성화)
+      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+      SES_FROM: ${SES_FROM:-}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
+      ALERT_RESOURCE_THRESHOLD: ${ALERT_RESOURCE_THRESHOLD:-90.0}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
@@ -103,6 +110,7 @@ services:
     volumes:
       - rag_logs:/app/logs
       - rag_output:/app/output
+      - app-logs:/var/log/app
     expose:
       - "8001"
     environment:
@@ -261,6 +269,8 @@ networks:
   backend:
 
 volumes:
+  app-logs:
+    driver: local
   chromadb_data:
     driver: local
   certbot_conf:

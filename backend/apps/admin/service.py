@@ -1,21 +1,27 @@
 """관리자 서비스."""
 
+import asyncio
 import logging
 import time
+from pathlib import Path
 
 import httpx
-from sqlalchemy import select, func, and_, or_, text
+import psutil
+from sqlalchemy import select, func, and_, text
 from sqlalchemy.orm import Session
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-from apps.common.models import Code, History, User
+from apps.common.models import Code, History, JobLog, User
 from apps.admin.schemas import (
     HistoryListItem,
     HistoryListResponse,
     EvaluationStats,
     HistoryFilterParams,
+    JobLogResponse,
+    LogPageResponse,
+    MetricsResponse,
     ServiceStatus,
     ServerStatusResponse,
 )
@@ -280,6 +286,139 @@ class AdminService:
             update_date=history.update_date,
             user_email=user_email,
             username=username,
+        )
+
+    # ─── 모니터링 메서드 ─────────────────────────────────────────
+
+    def get_system_metrics(self) -> MetricsResponse:
+        """psutil로 현재 서버 리소스 사용량을 반환합니다.
+
+        Returns:
+            CPU/Memory/Disk 수치 응답
+        """
+        cpu = psutil.cpu_percent(interval=0.5)
+        mem = psutil.virtual_memory()
+        disk = psutil.disk_usage("/")
+
+        return MetricsResponse(
+            cpu_percent=round(cpu, 1),
+            memory_percent=round(mem.percent, 1),
+            disk_percent=round(disk.percent, 1),
+            memory_total_gb=round(mem.total / (1024 ** 3), 2),
+            memory_used_gb=round(mem.used / (1024 ** 3), 2),
+            disk_total_gb=round(disk.total / (1024 ** 3), 2),
+            disk_used_gb=round(disk.used / (1024 ** 3), 2),
+            timestamp=datetime.now(),
+        )
+
+    def get_scheduler_status(self, limit: int = 50) -> list[JobLogResponse]:
+        """최근 스케줄러 작업 실행 이력을 반환합니다.
+
+        Args:
+            limit: 최대 반환 건수 (기본 50)
+
+        Returns:
+            JobLogResponse 리스트 (최신 순)
+        """
+        stmt = select(JobLog).order_by(JobLog.started_at.desc()).limit(limit)
+        logs = self.db.execute(stmt).scalars().all()
+        return [JobLogResponse.model_validate(log) for log in logs]
+
+    def get_log_content(
+        self,
+        file: str,
+        page: int = 1,
+        page_size: int = 100,
+    ) -> LogPageResponse:
+        """지정된 서비스의 로그 파일을 최신 순으로 페이징하여 반환합니다.
+
+        Args:
+            file: 로그 파일명 (backend | rag)
+            page: 페이지 번호 (1-based, 1=가장 최신)
+            page_size: 페이지당 줄 수 (기본 100)
+
+        Returns:
+            로그 라인 목록 (최신 순)
+
+        Raises:
+            ValueError: 허용되지 않은 파일명
+        """
+        _ALLOWED = {"backend", "rag"}
+        if file not in _ALLOWED:
+            raise ValueError(f"허용되지 않은 로그 파일: {file!r}")
+
+        log_path = Path(f"/var/log/app/{file}.log")
+        if not log_path.exists():
+            return LogPageResponse(
+                total_lines=0, page=page, page_size=page_size, lines=[], file=file
+            )
+
+        # deque로 최대 10,000줄만 메모리에 유지 (로테이션 파일 기준 적정값)
+        from collections import deque
+        _MAX_LINES = 10_000
+        with log_path.open(errors="replace") as f:
+            dq = deque(f, maxlen=_MAX_LINES)
+        reversed_lines = [line.rstrip("\n") for line in reversed(dq)]
+        total = len(reversed_lines)
+        start = (page - 1) * page_size
+        page_lines = reversed_lines[start : start + page_size]
+
+        return LogPageResponse(
+            total_lines=total,
+            page=page,
+            page_size=page_size,
+            lines=page_lines,
+            file=file,
+        )
+
+    async def send_resource_alert(
+        self, cpu: float, memory: float, disk: float
+    ) -> None:
+        """리소스 임계치 초과 시 이메일 알림을 발송합니다 (fire-and-forget).
+
+        Args:
+            cpu: CPU 사용률 (%)
+            memory: 메모리 사용률 (%)
+            disk: 디스크 사용률 (%)
+        """
+        from apps.common.email_service import email_service
+
+        body_html = f"""
+        <h2 style="color:#d32f2f;">⚠️ Bizi 서버 리소스 경고</h2>
+        <p>다음 리소스가 임계치(90%)를 초과했습니다.</p>
+        <table border="1" cellpadding="6" style="border-collapse:collapse;">
+          <tr><th>항목</th><th>현재 사용률</th><th>임계치</th></tr>
+          <tr><td>CPU</td><td>{cpu:.1f}%</td><td>90%</td></tr>
+          <tr><td>메모리</td><td>{memory:.1f}%</td><td>90%</td></tr>
+          <tr><td>디스크</td><td>{disk:.1f}%</td><td>90%</td></tr>
+        </table>
+        <p style="color:#555;">측정 시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+        <p>즉시 서버 상태를 확인하세요.</p>
+        """
+        await asyncio.to_thread(
+            email_service.send, "서버 리소스 임계치 초과 경고", body_html
+        )
+
+    async def send_job_failure_alert(self, job_name: str, error_msg: str) -> None:
+        """스케줄러 작업 실패 시 이메일 알림을 발송합니다 (fire-and-forget).
+
+        Args:
+            job_name: 실패한 작업 이름
+            error_msg: 오류 메시지
+        """
+        from apps.common.email_service import email_service
+
+        body_html = f"""
+        <h2 style="color:#d32f2f;">❌ Bizi 스케줄러 작업 실패</h2>
+        <table border="1" cellpadding="6" style="border-collapse:collapse;">
+          <tr><th>작업명</th><td>{job_name}</td></tr>
+          <tr><th>오류 메시지</th><td style="color:#d32f2f;">{error_msg}</td></tr>
+          <tr><th>발생 시각</th><td>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</td></tr>
+        </table>
+        <p>로그를 확인하여 원인을 분석하세요.</p>
+        """
+        await asyncio.to_thread(
+            email_service.send, f"스케줄러 작업 실패: {job_name}", body_html
         )
 
     def get_evaluation_stats(

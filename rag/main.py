@@ -28,6 +28,13 @@ from utils.logging_utils import SensitiveDataFilter
 root_logger = logging.getLogger()
 root_logger.addFilter(SensitiveDataFilter())
 
+# JSON 파일 로깅 추가 (/var/log/app/rag.log)
+try:
+    from utils.json_file_logger import setup_json_file_logging
+    setup_json_file_logging(service_name="rag")
+except Exception as _file_log_err:
+    logger.warning("JSON 파일 로깅 설정 실패: %s", _file_log_err)
+
 from agents import ActionExecutor, MainRouter
 from routes import all_routers
 import routes._state as state
