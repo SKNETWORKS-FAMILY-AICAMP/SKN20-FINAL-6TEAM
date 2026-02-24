@@ -89,7 +89,10 @@ async def _warmup_collections(vector_store: ChromaVectorStore) -> bool:
 
 
 async def _warmup_bm25_indexes(vector_store: ChromaVectorStore) -> bool:
-    """Phase 2: 4개 도메인의 BM25 인덱스를 병렬로 사전 빌드합니다."""
+    """Phase 2: 4개 도메인의 BM25 인덱스를 병렬로 사전 빌드합니다.
+
+    실패한 도메인이 있으면 백그라운드에서 1회 재시도를 스케줄링합니다.
+    """
     from utils.search import get_hybrid_searcher
 
     searcher = get_hybrid_searcher(vector_store)
@@ -102,12 +105,65 @@ async def _warmup_bm25_indexes(vector_store: ChromaVectorStore) -> bool:
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     all_ok = True
+    failed_domains: list[str] = []
     for domain, result in zip(_WARMUP_DOMAINS, results):
         if isinstance(result, Exception):
             logger.warning("[ChromaDB Warmup] BM25 빌드 실패: %s — %s", domain, result)
+            failed_domains.append(domain)
             all_ok = False
 
+    # 실패한 도메인이 있으면 백그라운드 재시도 스케줄링
+    if failed_domains:
+        from utils.config import get_settings
+        settings = get_settings()
+        delay = settings.bm25_warmup_retry_delay
+        logger.info(
+            "[ChromaDB Warmup] BM25 실패 도메인 %s — %.0f초 후 백그라운드 재시도 예정",
+            failed_domains, delay,
+        )
+        asyncio.create_task(
+            _retry_bm25_warmup(searcher, vector_store, failed_domains, delay)
+        )
+
     return all_ok
+
+
+async def _retry_bm25_warmup(
+    searcher: HybridSearcher,
+    vector_store: ChromaVectorStore,
+    failed_domains: list[str],
+    delay: float,
+) -> None:
+    """BM25 warmup 실패 도메인을 백그라운드에서 1회 재시도합니다.
+
+    Args:
+        searcher: HybridSearcher 인스턴스
+        vector_store: ChromaVectorStore 인스턴스
+        failed_domains: 재시도할 도메인 목록
+        delay: 재시도 전 대기 시간 (초)
+    """
+    await asyncio.sleep(delay)
+    logger.info("[ChromaDB Warmup] BM25 백그라운드 재시도 시작: %s", failed_domains)
+
+    for domain in failed_domains:
+        # _bm25_init_attempted에서 제거하여 _ensure_bm25_index가 다시 시도할 수 있도록 함
+        searcher._bm25_init_attempted.discard(domain)
+
+    retry_tasks = [
+        asyncio.to_thread(_build_bm25_for_domain, searcher, vector_store, domain)
+        for domain in failed_domains
+    ]
+
+    results = await asyncio.gather(*retry_tasks, return_exceptions=True)
+
+    for domain, result in zip(failed_domains, results):
+        if isinstance(result, Exception):
+            logger.warning(
+                "[ChromaDB Warmup] BM25 백그라운드 재시도 실패: %s — %s (서비스는 계속 운행)",
+                domain, result,
+            )
+        else:
+            logger.info("[ChromaDB Warmup] BM25 백그라운드 재시도 성공: %s", domain)
 
 
 def _build_bm25_for_domain(searcher: HybridSearcher, vector_store: ChromaVectorStore, domain: str) -> None:

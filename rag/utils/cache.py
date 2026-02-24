@@ -242,9 +242,27 @@ class ResponseCache:
         from utils.query import QueryProcessor
 
         base_key = QueryProcessor.generate_cache_key(query)
+        if domain:
+            base_key = f"{base_key}:domain={domain}"
         if user_context_hash:
             return f"{base_key}:{user_context_hash}"
         return base_key
+
+    def _get_ttl_for_domain(self, domain: str | None) -> float:
+        """도메인별 캐시 TTL을 반환합니다.
+
+        Args:
+            domain: 도메인 이름 (None이면 기본 TTL 반환)
+
+        Returns:
+            해당 도메인의 TTL (초)
+        """
+        if domain:
+            from utils.config import get_settings
+
+            ttl_map = get_settings().cache_ttl_by_domain
+            return float(ttl_map.get(domain, self._cache.default_ttl or 3600))
+        return float(self._cache.default_ttl or 3600)
 
     def get(
         self,
@@ -293,10 +311,12 @@ class ResponseCache:
             query: 사용자 쿼리
             response: 응답 딕셔너리
             domain: 도메인 (선택)
-            ttl: TTL (초)
+            ttl: TTL (초), None이면 도메인별 TTL 자동 적용
             user_context_hash: 사용자 컨텍스트 해시 (선택)
         """
         key = self._generate_key(query, domain, user_context_hash)
+        if ttl is None and domain:
+            ttl = self._get_ttl_for_domain(domain)
         self._cache.set(key, response, ttl)
         stats = self._cache.get_stats()
         logger.info(

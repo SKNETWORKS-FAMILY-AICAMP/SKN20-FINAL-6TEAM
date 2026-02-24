@@ -15,6 +15,7 @@ from langchain_core.documents import Document
 
 from utils.config import get_settings
 from utils.reranker import get_reranker
+from utils.score_normalizer import ScoreNormalizer
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +160,9 @@ class BM25Index:
         # 점수로 정렬
         scores.sort(key=lambda x: x[1], reverse=True)
 
+        # Min-Max 정규화 (0~1 범위로 변환)
+        scores = ScoreNormalizer.min_max_normalize(scores)
+
         # 상위 k개 반환
         results = []
         for idx, score in scores[:k]:
@@ -174,18 +178,21 @@ class BM25Index:
 def reciprocal_rank_fusion(
     results_list: list[list[SearchResult]],
     weights: list[float] | None = None,
-    k: int = 60,
+    k: int | None = None,
 ) -> list[SearchResult]:
     """가중치를 적용한 Reciprocal Rank Fusion으로 여러 검색 결과를 융합합니다.
 
     Args:
         results_list: 여러 검색 결과 리스트
         weights: 각 결과 리스트의 가중치 (예: [vector_weight, bm25_weight])
-        k: RRF 파라미터 (기본 60)
+        k: RRF 파라미터 (None이면 settings.rrf_k 사용)
 
     Returns:
         융합된 검색 결과
     """
+    if k is None:
+        k = get_settings().rrf_k
+
     if weights is None:
         weights = [1.0] * len(results_list)
 
@@ -225,17 +232,19 @@ def reciprocal_rank_fusion(
 
 def reciprocal_rank_fusion_docs(
     doc_lists: list[list[Document]],
-    k: int = 60,
+    k: int | None = None,
 ) -> list[Document]:
     """Document 리스트 기반 RRF 융합 (Multi-Query용).
 
     Args:
         doc_lists: 각 쿼리별 검색 결과 Document 리스트
-        k: RRF 상수 (기본 60)
+        k: RRF 상수 (None이면 settings.rrf_k 사용)
 
     Returns:
         RRF 점수로 정렬된 Document 리스트 (메타데이터에 rrf_score/score 포함)
     """
+    if k is None:
+        k = get_settings().rrf_k
     fused_scores: dict[int, float] = {}
     doc_map: dict[int, Document] = {}
 

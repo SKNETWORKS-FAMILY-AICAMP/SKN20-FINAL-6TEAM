@@ -580,6 +580,7 @@ class TestGraduatedRetryHandler:
             mock_mq.retrieve.return_value = (
                 [_make_doc(f"재검색 문서 {i}", 0.8) for i in range(6)],
                 "확장 쿼리",
+                ["테스트 쿼리", "확장 쿼리"],
             )
             mock_mq_fn.return_value = mock_mq
 
@@ -615,6 +616,7 @@ class TestGraduatedRetryHandler:
             mock_mq.retrieve.return_value = (
                 [_make_doc("MQ 결과", 0.8)],
                 "재작성된 쿼리",
+                ["테스트 쿼리", "재작성된 쿼리"],
             )
             mock_mq_fn.return_value = mock_mq
 
@@ -648,9 +650,9 @@ class TestGraduatedRetryHandler:
         with patch("utils.query.get_multi_query_retriever") as mock_mq_fn:
             mock_mq = MagicMock()
             mock_mq.retrieve.side_effect = [
-                ([], "L1"),  # Level 1
-                ([], "L2"),  # Level 2
-                ([_make_doc("인접 도메인 결과", 0.7)], "L3"),  # Level 3
+                ([], "L1", ["쿼리", "L1"]),  # Level 1
+                ([], "L2", ["쿼리", "L2"]),  # Level 2
+                ([_make_doc("인접 도메인 결과", 0.7)], "L3", ["쿼리", "L3"]),  # Level 3
             ]
             mock_mq_fn.return_value = mock_mq
 

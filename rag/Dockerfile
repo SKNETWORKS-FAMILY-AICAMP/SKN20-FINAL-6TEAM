@@ -6,6 +6,7 @@ WORKDIR /app
 # Install system build tools (required for C extension compilation)
 RUN apt-get update && apt-get install -y \
     build-essential \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
@@ -18,6 +19,10 @@ COPY . .
 
 # Expose port
 EXPOSE 8001
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD curl -f http://localhost:8001/health || exit 1
 
 # Run with uvicorn
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]

@@ -121,7 +121,7 @@ class RAGChain:
 
         try:
             multi_retriever = get_multi_query_retriever(self)
-            documents, _ = multi_retriever.retrieve(
+            documents, _, _ = multi_retriever.retrieve(
                 query=query,
                 domain=domain,
                 k=k,
@@ -157,6 +157,7 @@ class RAGChain:
         use_hybrid: bool | None = None,
         search_strategy: "SearchStrategy | None" = None,
         metadata_filter: dict[str, Any] | None = None,
+        vector_weight: float | None = None,
     ) -> list[Document]:
         """단일 쿼리 검색을 수행합니다 (Hybrid Search + Re-ranking)."""
         strategy_k_common: int | None = None
@@ -200,6 +201,7 @@ class RAGChain:
                     domain=domain,
                     k=k,
                     use_rerank=False,
+                    vector_weight=vector_weight,
                     filter=metadata_filter,
                 )
                 domain_search_time = time.time() - domain_search_start
@@ -356,11 +358,59 @@ class RAGChain:
             return DOMAIN_LABELS.get(domain, "")
         return ""
 
+    @staticmethod
+    def _sandwich_reorder(documents: list[Document]) -> list[Document]:
+        """Lost in the Middle 문제 완화를 위한 Sandwich 패턴 재배치.
+
+        score 기준 내림차순 정렬 후, 가장 관련성 높은 문서를 첫 번째와
+        마지막 위치에 배치하여 LLM이 중요 문서를 놓치지 않게 합니다.
+
+        배치 순서: [1st, 3rd, 5th, ..., 6th, 4th, 2nd]
+        (홀수 인덱스 0,2,4,...는 앞에서, 짝수 인덱스 1,3,5,...는 뒤에서)
+
+        Args:
+            documents: score metadata가 포함된 문서 리스트
+
+        Returns:
+            Sandwich 패턴으로 재배치된 문서 리스트
+        """
+        if len(documents) <= 3:
+            # 문서가 3개 이하면 score 내림차순 정렬만 적용
+            return sorted(
+                documents,
+                key=lambda d: d.metadata.get("score", 0.0),
+                reverse=True,
+            )
+
+        # score 내림차순 정렬
+        sorted_docs = sorted(
+            documents,
+            key=lambda d: d.metadata.get("score", 0.0),
+            reverse=True,
+        )
+
+        # Sandwich 배치: 홀수 인덱스(0,2,4,...)는 앞, 짝수 인덱스(1,3,5,...)는 뒤(역순)
+        front = [sorted_docs[i] for i in range(0, len(sorted_docs), 2)]
+        back = [sorted_docs[i] for i in range(1, len(sorted_docs), 2)]
+        back.reverse()
+
+        result = front + back
+
+        logger.debug(
+            "[Sandwich] 재배치 완료: %d건 (top score=%.4f, mid score=%.4f, last score=%.4f)",
+            len(result),
+            result[0].metadata.get("score", 0.0),
+            result[len(result) // 2].metadata.get("score", 0.0),
+            result[-1].metadata.get("score", 0.0),
+        )
+        return result
+
     def format_context(self, documents: list[Document]) -> str:
         """문서 리스트를 컨텍스트 문자열로 포맷팅합니다.
 
         멀티 도메인 질문 시 각 문서에 도메인 라벨을 포함하여
         LLM이 문서의 출처 도메인을 명확히 인식할 수 있게 합니다.
+        Sandwich 패턴을 적용하여 중요 문서를 첫/마지막 위치에 배치합니다.
 
         Args:
             documents: 문서 리스트
@@ -371,6 +421,9 @@ class RAGChain:
         if not documents:
             logger.info("[컨텍스트] 포맷팅 대상 문서 없음")
             return "관련 참고 자료가 없습니다."
+
+        # Sandwich 패턴 적용: 중요 문서를 첫/마지막 위치에 배치
+        documents = self._sandwich_reorder(documents)
 
         titles = [doc.metadata.get("title", "제목 없음") for doc in documents]
         logger.debug("[컨텍스트] 포맷팅 대상 %d건: %s", len(documents), titles)

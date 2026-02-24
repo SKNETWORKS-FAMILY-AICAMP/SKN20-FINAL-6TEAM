@@ -67,6 +67,23 @@ async def get_endpoint_metrics() -> dict[str, Any]:
     return metrics_collector.get_endpoint_stats()
 
 
+@router.get("/api/metrics/rag-pipeline", dependencies=[Depends(verify_admin_key)])
+async def get_rag_pipeline_metrics() -> dict[str, Any]:
+    """RAG 파이프라인 단계별 메트릭 조회."""
+    stats = metrics_collector.get_stats()
+    gauges = stats.get("gauges", {})
+    counters = stats.get("counters", {})
+
+    # RAG 관련 게이지/카운터만 필터링
+    rag_gauges = {k: v for k, v in gauges.items() if k.startswith("rag_")}
+    rag_counters = {k: v for k, v in counters.items() if k.startswith("rag_")}
+
+    return {
+        "pipeline_timing": rag_gauges,
+        "domain_counts": rag_counters,
+    }
+
+
 # --- 캐시 ---
 
 

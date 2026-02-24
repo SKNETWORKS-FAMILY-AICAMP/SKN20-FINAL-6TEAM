@@ -20,36 +20,51 @@ logger = logging.getLogger(__name__)
 # JSON 파싱 재시도 최대 횟수
 MAX_PARSE_RETRY = 2
 
-# 평가 Fallback 상수
-FALLBACK_SCORE_PER_CRITERION = 10      # 파싱 실패 시 각 기준별 점수
-FALLBACK_TOTAL_SCORE = 50              # 파싱 실패 시 총 점수
-DEFAULT_SCORE_PER_CRITERION = 14       # 기본 각 기준별 점수
-DEFAULT_TOTAL_SCORE = 70               # 기본 총 점수
+# 평가 Fallback 상수 (가중치 반영)
+FALLBACK_SCORES: dict[str, int] = {
+    "accuracy": 6,
+    "citation": 6,
+    "completeness": 5,
+    "retrieval_quality": 4,
+    "relevance": 4,
+}
+FALLBACK_TOTAL_SCORE = 25  # 파싱 실패 시 총 점수 (재시도 유도)
+
+DEFAULT_SCORES: dict[str, int] = {
+    "accuracy": 18,
+    "citation": 18,
+    "completeness": 14,
+    "retrieval_quality": 10,
+    "relevance": 10,
+}
+DEFAULT_TOTAL_SCORE = 70  # 기본 총 점수
 
 
 class EvaluatorAgent:
     """평가 에이전트.
 
-    전문 에이전트의 답변을 5가지 기준으로 평가합니다:
-    - 검색 품질 (0-20점): 참고 컨텍스트가 질문과 관련 있는지
-    - 정확성 (0-20점): 정보의 사실 부합 여부
+    전문 에이전트의 답변을 5가지 기준으로 가중치 차등 평가합니다:
+    - 정확성 (0-25점): 정보의 사실 부합 여부
+    - 출처 명시 (0-25점): 법령/규정 인용 시 출처 여부
     - 완성도 (0-20점): 질문에 대한 충분한 답변 여부
-    - 관련성 (0-20점): 질문 의도와의 일치 여부
-    - 출처 명시 (0-20점): 법령/규정 인용 시 출처 여부
+    - 검색 품질 (0-15점): 참고 컨텍스트가 질문과 관련 있는지
+    - 관련성 (0-15점): 질문 의도와의 일치 여부
 
-    평가 임계값 (기본 70점) 미만 시 FAIL 처리하고 피드백을 제공합니다.
+    도메인별 차등 임계값을 지원합니다 (domain 파라미터).
+    기본 임계값 (70점) 미만 시 FAIL 처리하고 피드백을 제공합니다.
 
     Attributes:
         settings: 설정 객체
         llm: OpenAI LLM 인스턴스
-        threshold: 평가 통과 임계값
+        threshold: 기본 평가 통과 임계값
 
     Example:
         >>> evaluator = EvaluatorAgent()
         >>> result = evaluator.evaluate(
         ...     question="퇴직금 계산 방법 알려주세요",
         ...     answer="퇴직금은 근로기준법 제34조에 따라...",
-        ...     context="검색된 문서 내용..."
+        ...     context="검색된 문서 내용...",
+        ...     domain="hr_labor",
         ... )
         >>> print(result.passed)
         True
@@ -60,6 +75,21 @@ class EvaluatorAgent:
         self.settings = get_settings()
         self.llm = create_llm("평가", temperature=0.0)
         self.threshold = self.settings.evaluation_threshold
+
+    def _get_threshold(self, domain: str | None = None) -> int:
+        """도메인별 평가 임계값을 반환합니다.
+
+        Args:
+            domain: 도메인 이름 (None이면 기본 임계값 사용)
+
+        Returns:
+            평가 통과 임계값
+        """
+        if domain:
+            return self.settings.domain_evaluation_thresholds.get(
+                domain, self.threshold
+            )
+        return self.threshold
 
     def _parse_evaluation_response(self, response: str) -> tuple[dict[str, Any], bool]:
         """평가 응답을 파싱합니다.
@@ -107,26 +137,14 @@ class EvaluatorAgent:
         if needs_retry:
             # 파싱 실패 시 낮은 점수로 재시도 유도
             return {
-                "scores": {
-                    "retrieval_quality": FALLBACK_SCORE_PER_CRITERION,
-                    "accuracy": FALLBACK_SCORE_PER_CRITERION,
-                    "completeness": FALLBACK_SCORE_PER_CRITERION,
-                    "relevance": FALLBACK_SCORE_PER_CRITERION,
-                    "citation": FALLBACK_SCORE_PER_CRITERION,
-                },
+                "scores": dict(FALLBACK_SCORES),
                 "total_score": FALLBACK_TOTAL_SCORE,
                 "passed": False,
                 "feedback": "평가 응답 파싱 실패로 재시도가 필요합니다.",
             }
         # 정상적인 기본값
         return {
-            "scores": {
-                "retrieval_quality": DEFAULT_SCORE_PER_CRITERION,
-                "accuracy": DEFAULT_SCORE_PER_CRITERION,
-                "completeness": DEFAULT_SCORE_PER_CRITERION,
-                "relevance": DEFAULT_SCORE_PER_CRITERION,
-                "citation": DEFAULT_SCORE_PER_CRITERION,
-            },
+            "scores": dict(DEFAULT_SCORES),
             "total_score": DEFAULT_TOTAL_SCORE,
             "passed": True,
             "feedback": None,
@@ -151,25 +169,39 @@ class EvaluatorAgent:
             "context": context[:max_context_len] if context else "컨텍스트 없음",
         }
 
-    def _build_result(self, response: str) -> EvaluationResult:
-        """LLM 응답을 파싱하여 EvaluationResult를 생성합니다."""
+    def _build_result(
+        self, response: str, domain: str | None = None
+    ) -> EvaluationResult:
+        """LLM 응답을 파싱하여 EvaluationResult를 생성합니다.
+
+        Args:
+            response: LLM 응답 문자열
+            domain: 도메인 (도메인별 임계값 적용)
+
+        Returns:
+            EvaluationResult
+        """
         parsed, parse_success = self._parse_evaluation_response(response)
         logger.info("[평가] LLM 응답 파싱 %s", "성공" if parse_success else "실패")
 
         scores = parsed.get("scores", {})
         total_score = parsed.get("total_score", sum(scores.values()))
         total_score = max(0, min(100, total_score))  # 0-100 범위 클램프
-        passed = total_score >= self.threshold
+
+        threshold = self._get_threshold(domain)
+        passed = total_score >= threshold
 
         logger.info(
-            "[평가] 기준별 점수: 검색품질=%d, 정확성=%d, 완성도=%d, 관련성=%d, 출처=%d",
-            scores.get("retrieval_quality", 0), scores.get("accuracy", 0),
-            scores.get("completeness", 0), scores.get("relevance", 0),
-            scores.get("citation", 0),
+            "[평가] 기준별 점수: 정확성=%d/25, 출처=%d/25, 완성도=%d/20, 검색품질=%d/15, 관련성=%d/15",
+            scores.get("accuracy", 0), scores.get("citation", 0),
+            scores.get("completeness", 0), scores.get("retrieval_quality", 0),
+            scores.get("relevance", 0),
         )
         logger.info(
-            "[평가] 총점=%d/100, 임계값=%d → %s",
-            total_score, self.threshold, "PASS" if passed else "FAIL",
+            "[평가] 총점=%d/100, 임계값=%d%s → %s",
+            total_score, threshold,
+            f" (도메인: {domain})" if domain else "",
+            "PASS" if passed else "FAIL",
         )
 
         return EvaluationResult(
@@ -184,6 +216,7 @@ class EvaluatorAgent:
         question: str,
         answer: str,
         context: str = "",
+        domain: str | None = None,
     ) -> EvaluationResult:
         """답변을 평가합니다.
 
@@ -191,24 +224,26 @@ class EvaluatorAgent:
             question: 사용자 질문
             answer: 에이전트 답변
             context: 검색된 컨텍스트 (참고용)
+            domain: 도메인 (도메인별 임계값 적용)
 
         Returns:
             평가 결과
         """
         logger.info(
-            "[평가] 평가 시작: 질문='%s', 답변=%d자, 컨텍스트=%d자",
-            question[:50], len(answer), len(context),
+            "[평가] 평가 시작: 질문='%s', 답변=%d자, 컨텍스트=%d자, 도메인=%s",
+            question[:50], len(answer), len(context), domain or "없음",
         )
 
         chain = self._build_chain()
         response = chain.invoke(self._build_invoke_kwargs(question, answer, context))
-        return self._build_result(response)
+        return self._build_result(response, domain=domain)
 
     async def aevaluate(
         self,
         question: str,
         answer: str,
         context: str = "",
+        domain: str | None = None,
     ) -> EvaluationResult:
         """답변을 비동기로 평가합니다.
 
@@ -216,18 +251,19 @@ class EvaluatorAgent:
             question: 사용자 질문
             answer: 에이전트 답변
             context: 검색된 컨텍스트
+            domain: 도메인 (도메인별 임계값 적용)
 
         Returns:
             평가 결과
         """
         logger.info(
-            "[평가] 평가 시작: 질문='%s', 답변=%d자, 컨텍스트=%d자",
-            question[:50], len(answer), len(context),
+            "[평가] 평가 시작: 질문='%s', 답변=%d자, 컨텍스트=%d자, 도메인=%s",
+            question[:50], len(answer), len(context), domain or "없음",
         )
 
         chain = self._build_chain()
         response = await chain.ainvoke(self._build_invoke_kwargs(question, answer, context))
-        return self._build_result(response)
+        return self._build_result(response, domain=domain)
 
     def needs_retry(self, evaluation: EvaluationResult) -> bool:
         """재시도가 필요한지 판단합니다.

@@ -42,9 +42,10 @@ from schemas.response import (
     TimingMetrics,
 )
 from utils.config import DOMAIN_LABELS, get_settings
+from utils.middleware import get_metrics_collector
 from utils.domain_classifier import DomainClassificationResult, get_domain_classifier
 from utils.legal_supplement import needs_legal_supplement
-from utils.prompts import REJECTION_RESPONSE
+from utils.prompts import LLM_CLASSIFICATION_FAILURE_RESPONSE, REJECTION_RESPONSE
 from utils.question_decomposer import SubQuery, get_question_decomposer
 from utils.sanitizer import sanitize_query
 from vectorstores.chroma import ChromaVectorStore
@@ -314,8 +315,11 @@ class MainRouter:
         state["domains"] = classification.domains
 
         if not classification.is_relevant:
-            # 도메인 외 질문: 거부 응답 설정
-            state["final_response"] = REJECTION_RESPONSE
+            # LLM 재시도 실패 vs 도메인 외 질문 분기
+            if classification.method == "llm_retry_failed":
+                state["final_response"] = LLM_CLASSIFICATION_FAILURE_RESPONSE
+            else:
+                state["final_response"] = REJECTION_RESPONSE
             state["sources"] = []
             state["actions"] = []
             logger.info(
@@ -411,21 +415,24 @@ class MainRouter:
             )
             context = f"[관련 도메인: {domain_labels}]\n\n{context}"
 
-        # LLM 평가 수행
+        # LLM 평가 수행 (주 도메인 기반 임계값 적용)
+        primary_domain = domains[0] if domains else None
         if self.settings.enable_llm_evaluation:
             evaluation = await self.evaluator.aevaluate(
                 question=state["query"],
                 answer=state["final_response"],
                 context=context,
+                domain=primary_domain,
             )
             state["evaluation"] = evaluation
 
             logger.info(
-                "[LLM 평가] 점수=%d/100, %s (retry=%d/%d)",
+                "[LLM 평가] 점수=%d/100, %s (retry=%d/%d, domain=%s)",
                 evaluation.total_score,
                 "PASS" if evaluation.passed else "FAIL",
                 state.get("retry_count", 0),
                 self.settings.max_retry_count,
+                primary_domain or "없음",
             )
         else:
             state["evaluation"] = None
@@ -504,6 +511,16 @@ class MainRouter:
             str, int, EvaluationResult, list[SourceDocument], list[ActionSuggestion]
         ]
 
+        # 평가 피드백 분석: 검색 부족 문제인지 생성 품질 문제인지 판단
+        _RETRIEVAL_ISSUE_KEYWORDS = {"검색 결과 부족", "관련 없는 문서", "검색", "문서 부족", "컨텍스트 부족"}
+        feedback_text = original_evaluation.feedback or "" if original_evaluation else ""
+        needs_re_retrieval = any(kw in feedback_text for kw in _RETRIEVAL_ISSUE_KEYWORDS)
+        if not needs_re_retrieval and feedback_text:
+            logger.info("[재시도] 생성 품질 문제 — 기존 문서 재활용하여 재생성만 수행")
+
+        # 기존 검색 결과 (재검색 스킵 시 재활용)
+        existing_retrieval_results = state.get("retrieval_results", {})
+
         async def _generate_candidate(alt_query: str) -> CandidateTuple | None:
             """대체 쿼리로 검색→생성→평가를 수행합니다.
 
@@ -514,59 +531,63 @@ class MainRouter:
                 (content, score, evaluation, sources, actions) 또는 실패 시 None
             """
             try:
-                # 1. 도메인별 병렬 검색
-                retrieval_results: dict[str, RetrievalResult] = {}
-                retrieve_tasks = []
-                retrieve_domains = []
-                for domain in domains:
-                    if domain in self.agents:
-                        retrieve_tasks.append(
-                            self.agents[domain].aretrieve_only(alt_query)
-                        )
-                        retrieve_domains.append(domain)
+                if needs_re_retrieval:
+                    # 검색 부족 → 대체 쿼리로 재검색
+                    retrieval_results: dict[str, RetrievalResult] = {}
+                    retrieve_tasks = []
+                    retrieve_domains = []
+                    for domain in domains:
+                        if domain in self.agents:
+                            retrieve_tasks.append(
+                                self.agents[domain].aretrieve_only(alt_query)
+                            )
+                            retrieve_domains.append(domain)
 
-                results = await asyncio.gather(*retrieve_tasks, return_exceptions=True)
+                    results = await asyncio.gather(*retrieve_tasks, return_exceptions=True)
 
-                for domain, result in zip(retrieve_domains, results):
-                    if isinstance(result, Exception):
-                        logger.warning("[재시도] %s 검색 실패: %s", domain, result)
-                        continue
-                    retrieval_results[domain] = result
+                    for domain, result in zip(retrieve_domains, results):
+                        if isinstance(result, Exception):
+                            logger.warning("[재시도] %s 검색 실패: %s", domain, result)
+                            continue
+                        retrieval_results[domain] = result
 
-                if not retrieval_results:
-                    return None
+                    if not retrieval_results:
+                        return None
 
-                # 2. 법률 보충 검색 (원본 파이프라인과 동일)
-                all_documents = [
-                    doc
-                    for r in retrieval_results.values()
-                    for doc in r.documents
-                ]
-                if (
-                    self.settings.enable_legal_supplement
-                    and "law_common" not in domains
-                    and needs_legal_supplement(alt_query, all_documents, domains)
-                    and "law_common" in self.agents
-                ):
-                    try:
-                        law_result = await self.agents["law_common"].aretrieve_only(alt_query)
-                        law_k = self.settings.legal_supplement_k
-                        law_result.documents = law_result.documents[:law_k]
-                        law_result.sources = law_result.sources[:law_k]
-                        retrieval_results["law_common_supplement"] = law_result
-                        logger.info(
-                            "[재시도] 법률 보충 검색: %d건",
-                            len(law_result.documents),
-                        )
-                    except Exception as e:
-                        logger.warning("[재시도] 법률 보충 검색 실패: %s", e)
+                    # 법률 보충 검색 (원본 파이프라인과 동일)
+                    all_documents = [
+                        doc
+                        for r in retrieval_results.values()
+                        for doc in r.documents
+                    ]
+                    if (
+                        self.settings.enable_legal_supplement
+                        and "law_common" not in domains
+                        and needs_legal_supplement(alt_query, all_documents, domains)
+                        and "law_common" in self.agents
+                    ):
+                        try:
+                            law_result = await self.agents["law_common"].aretrieve_only(alt_query)
+                            law_k = self.settings.legal_supplement_k
+                            law_result.documents = law_result.documents[:law_k]
+                            law_result.sources = law_result.sources[:law_k]
+                            retrieval_results["law_common_supplement"] = law_result
+                            logger.info(
+                                "[재시도] 법률 보충 검색: %d건",
+                                len(law_result.documents),
+                            )
+                        except Exception as e:
+                            logger.warning("[재시도] 법률 보충 검색 실패: %s", e)
+                else:
+                    # 생성 품질 문제 → 기존 검색 결과 재활용 (재검색 스킵)
+                    retrieval_results = existing_retrieval_results
 
-                # 3. sub_queries 구성
+                # sub_queries 구성
                 alt_sub_queries = [
                     SubQuery(domain=d, query=alt_query) for d in domains
                 ]
 
-                # 4. 답변 생성 (원본 쿼리로 생성하여 사용자 질문에 직접 응답)
+                # 답변 생성 (원본 쿼리로 생성하여 사용자 질문에 직접 응답)
                 gen_result = await self.generator.agenerate(
                     query=query,
                     sub_queries=alt_sub_queries,
@@ -575,18 +596,21 @@ class MainRouter:
                     domains=domains,
                 )
 
-                # 5. 평가 (원본 쿼리 기준으로 평가)
+                # 평가 (원본 쿼리 기준으로 평가, 주 도메인 임계값 적용)
                 context = "\n".join([s.content for s in gen_result.sources[:5]])
+                primary_domain = domains[0] if domains else None
                 evaluation = await self.evaluator.aevaluate(
                     question=query,
                     answer=gen_result.content,
                     context=context,
+                    domain=primary_domain,
                 )
 
                 logger.info(
-                    "[재시도] 후보 '%s...' → 점수=%d",
+                    "[재시도] 후보 '%s...' → 점수=%d (재검색=%s)",
                     alt_query[:30],
                     evaluation.total_score,
+                    needs_re_retrieval,
                 )
 
                 return (
@@ -817,6 +841,20 @@ class MainRouter:
             )
 
         total_time = time.time() - total_start
+
+        # 파이프라인 메트릭 기록
+        timing = final_state.get("timing_metrics", {})
+        metrics = get_metrics_collector()
+        metrics.record_rag_pipeline(
+            classify_time=timing.get("classify_time"),
+            retrieve_time=timing.get("retrieve_time"),
+            generate_time=timing.get("generate_time"),
+            evaluate_time=timing.get("evaluate_time"),
+            total_time=total_time,
+            domain=final_state.get("domains", ["unknown"])[0] if final_state.get("domains") else None,
+            retry_count=final_state.get("retry_count", 0),
+        )
+
         return self._create_response(final_state, total_time)
 
     async def astream(
@@ -857,13 +895,18 @@ class MainRouter:
 
         # 도메인 외 질문 거부 (LLM 토큰 스트리밍과 동일한 방식)
         if not classification.is_relevant:
-            logger.info("[스트리밍] 도메인 외 질문 - 거부 응답 반환")
-            for char in REJECTION_RESPONSE:
+            if classification.method == "llm_retry_failed":
+                reject_msg = LLM_CLASSIFICATION_FAILURE_RESPONSE
+                logger.info("[스트리밍] LLM 분류 재시도 실패 - 오류 안내 반환")
+            else:
+                reject_msg = REJECTION_RESPONSE
+                logger.info("[스트리밍] 도메인 외 질문 - 거부 응답 반환")
+            for char in reject_msg:
                 yield {"type": "token", "content": char}
                 await asyncio.sleep(0.02)
             yield {
                 "type": "done",
-                "content": REJECTION_RESPONSE,
+                "content": reject_msg,
                 "domain": "general",
                 "domains": [],
                 "sources": [],
@@ -960,11 +1003,13 @@ class MainRouter:
                         question=query,
                         answer=content,
                         context=eval_context,
+                        domain=domain,
                     )
                     logger.info(
-                        "[스트리밍 평가] 단일 도메인 점수=%d/100, %s",
+                        "[스트리밍 평가] 단일 도메인 점수=%d/100, %s (domain=%s)",
                         single_evaluation.total_score,
                         "PASS" if single_evaluation.passed else "FAIL",
+                        domain,
                     )
                 except Exception as e:
                     logger.warning("[스트리밍 평가] 단일 도메인 평가 실패: %s", e)
@@ -1038,15 +1083,18 @@ class MainRouter:
                     )
                     eval_context = f"[관련 도메인: {domain_labels}]\n\n{eval_context}"
 
+                    multi_primary_domain = domains[0] if domains else None
                     evaluation = await self.evaluator.aevaluate(
                         question=query,
                         answer=content,
                         context=eval_context,
+                        domain=multi_primary_domain,
                     )
                     logger.info(
-                        "[스트리밍 평가] 복수 도메인 점수=%d/100, %s",
+                        "[스트리밍 평가] 복수 도메인 점수=%d/100, %s (primary=%s)",
                         evaluation.total_score,
                         "PASS" if evaluation.passed else "FAIL",
+                        multi_primary_domain or "없음",
                     )
                 except Exception as e:
                     logger.warning("[스트리밍 평가] 복수 도메인 평가 실패: %s", e)

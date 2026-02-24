@@ -47,6 +47,7 @@ class TestRAGChainRetrieve:
             mock_mq.retrieve.return_value = (
                 [Document(page_content="MQ 결과", metadata={"score": 0.9})],
                 "확장 쿼리 1 | 확장 쿼리 2",
+                ["테스트 쿼리", "확장 쿼리 1", "확장 쿼리 2"],
             )
             mock_mq_fn.return_value = mock_mq
 

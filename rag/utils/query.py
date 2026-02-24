@@ -415,17 +415,19 @@ class MultiQueryRetriever:
     def _reciprocal_rank_fusion(
         self,
         doc_lists: list[list[Document]],
-        k: int = 60,
+        k: int | None = None,
     ) -> list[Document]:
         """RRF (Reciprocal Rank Fusion)로 검색 결과를 융합합니다.
 
         Args:
             doc_lists: 각 쿼리별 검색 결과 리스트
-            k: RRF 상수 (기본 60)
+            k: RRF 상수 (None이면 settings.rrf_k 사용)
 
         Returns:
             융합된 문서 리스트 (점수순 정렬)
         """
+        if k is None:
+            k = get_settings().rrf_k
         # 문서 ID → RRF 점수
         fused_scores: dict[str, float] = {}
         # 문서 ID → 문서 객체
@@ -473,7 +475,8 @@ class MultiQueryRetriever:
         use_rerank: bool | None = None,
         use_hybrid: bool | None = None,
         search_strategy: "SearchStrategy | None" = None,
-    ) -> tuple[list[Document], str]:
+        expanded_queries: list[str] | None = None,
+    ) -> tuple[list[Document], str, list[str]]:
         """Multi-Query 검색을 수행합니다.
 
         Args:
@@ -485,9 +488,10 @@ class MultiQueryRetriever:
             use_rerank: 최종 융합 결과 Re-ranking 사용 여부
             use_hybrid: 단일 쿼리 primitive 검색 시 Hybrid 사용 여부
             search_strategy: 검색 전략
+            expanded_queries: 이전 단계에서 캐싱된 확장 쿼리. 제공 시 LLM 호출 생략.
 
         Returns:
-            (검색된 문서 리스트, 확장된 쿼리들 문자열)
+            (검색된 문서 리스트, 확장된 쿼리들 문자열, 사용된 확장 쿼리 리스트)
         """
         if search_strategy is not None:
             target_k = search_strategy.k
@@ -502,11 +506,15 @@ class MultiQueryRetriever:
 
         max_docs = self.settings.max_retrieval_docs
 
-        # 1. 쿼리 확장
-        queries = self._generate_queries(query)
+        # 1. 쿼리 확장 (캐싱된 쿼리가 있으면 LLM 호출 생략)
+        if expanded_queries:
+            queries = expanded_queries
+            logger.info("[Multi-Query] 캐싱된 쿼리 재사용: %d개 (LLM 호출 생략)", len(queries))
+        else:
+            queries = self._generate_queries(query)
         if not queries:
             logger.warning("[Multi-Query] 쿼리 확장 실패로 검색 중단")
-            return [], ""
+            return [], "", []
 
         # 2. 각 쿼리로 primitive 검색 (쿼리별 rerank 비활성화 후 RRF 적용)
         doc_lists: list[list[Document]] = []
@@ -563,7 +571,7 @@ class MultiQueryRetriever:
         )
 
         queries_str = " | ".join(queries)
-        return final_docs, queries_str
+        return final_docs, queries_str, queries
 
     async def aretrieve(
         self,
@@ -575,7 +583,8 @@ class MultiQueryRetriever:
         use_rerank: bool | None = None,
         use_hybrid: bool | None = None,
         search_strategy: "SearchStrategy | None" = None,
-    ) -> tuple[list[Document], str]:
+        expanded_queries: list[str] | None = None,
+    ) -> tuple[list[Document], str, list[str]]:
         """Multi-Query 검색을 비동기로 수행합니다.
 
         Args:
@@ -583,9 +592,10 @@ class MultiQueryRetriever:
             domain: 검색할 도메인
             k: 최종 반환할 문서 수
             include_common: 공통 법령 DB 포함 여부
+            expanded_queries: 캐싱된 확장 쿼리 (LLM 호출 생략)
 
         Returns:
-            (검색된 문서 리스트, 확장된 쿼리들 문자열)
+            (검색된 문서 리스트, 확장된 쿼리들 문자열, 사용된 확장 쿼리 리스트)
         """
         return await asyncio.to_thread(
             self.retrieve,
@@ -597,6 +607,7 @@ class MultiQueryRetriever:
             use_rerank,
             use_hybrid,
             search_strategy,
+            expanded_queries,
         )
 
 

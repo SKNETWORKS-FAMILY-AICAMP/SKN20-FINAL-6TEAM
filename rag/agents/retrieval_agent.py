@@ -21,6 +21,7 @@ from langchain_core.documents import Document
 from agents.base import RetrievalResult, RetrievalStatus, RetrievalEvaluationResult
 from utils.config import get_settings
 from utils.legal_supplement import LEGAL_SUPPLEMENT_KEYWORDS, needs_legal_supplement
+from utils.score_normalizer import ScoreNormalizer
 
 if TYPE_CHECKING:
     from agents.base import BaseAgent
@@ -46,7 +47,8 @@ class SearchMode(str, Enum):
     VECTOR_HEAVY = "vector"  # 벡터 중심 검색
     BM25_HEAVY = "bm25"  # 키워드(BM25) 중심 검색
     MMR_DIVERSE = "mmr"  # MMR로 다양성 극대화
-    EXACT_PLUS_VECTOR = "exact"  # 법조문 인용 등 정확 매칭 우선
+    # Deprecated: HYBRID와 동일하게 동작 (별도 정확 매칭 미구현)
+    EXACT_PLUS_VECTOR = "exact"
 
 
 class RetryLevel(int, Enum):
@@ -100,6 +102,7 @@ class RetryContext:
     relaxed_similarity_threshold: float = 0.0
     extra_k: int = 0
     cross_domains_tried: list[str] = field(default_factory=list)
+    cached_expanded_queries: list[str] | None = None  # L1에서 생성한 쿼리 캐시
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +168,9 @@ class SearchStrategySelector:
         Returns:
             QueryCharacteristics (모드, 추천 K 포함)
         """
+        settings = get_settings()
+        thresholds = settings.query_analysis_thresholds
+
         length = len(query)
         words = re.findall(r"[가-힣a-zA-Z0-9]+", query)
         word_count = len(words)
@@ -176,10 +182,19 @@ class SearchStrategySelector:
         domain_kw_count = sum(1 for w in words if w in _ALL_DOMAIN_KEYWORDS)
         keyword_density = domain_kw_count / max(word_count, 1)
 
-        # 쿼리 유형 판별
-        is_factual = length <= 20 and keyword_density >= 0.3
-        is_complex = length >= 50 or word_count >= 10
-        is_vague = length >= 15 and keyword_density < 0.1
+        # 쿼리 유형 판별 (임계값은 settings에서 로드)
+        is_factual = (
+            length <= thresholds.get("factual_max_length", 20)
+            and keyword_density >= thresholds.get("factual_min_keyword_density", 0.3)
+        )
+        is_complex = (
+            length >= thresholds.get("complex_min_length", 50)
+            or word_count >= thresholds.get("complex_min_word_count", 10)
+        )
+        is_vague = (
+            length >= thresholds.get("vague_min_length", 15)
+            and keyword_density < thresholds.get("vague_max_keyword_density", 0.1)
+        )
 
         # 전략 결정
         if has_legal_citation:
@@ -481,19 +496,29 @@ class GraduatedRetryHandler:
         include_common: bool,
         use_mmr: bool | None = None,
         use_hybrid: bool | None = None,
-    ) -> tuple[list[Document], str]:
-        """도메인별 Multi-Query 검색 공통 헬퍼."""
+        expanded_queries: list[str] | None = None,
+    ) -> tuple[list[Document], str, list[str]]:
+        """도메인별 Multi-Query 검색 공통 헬퍼.
+
+        Args:
+            expanded_queries: 이전 단계에서 캐싱된 확장 쿼리. 제공 시 LLM 호출 생략.
+
+        Returns:
+            (문서 리스트, 쿼리 문자열, 확장 쿼리 리스트)
+        """
         from utils.query import get_multi_query_retriever
 
         multi_retriever = get_multi_query_retriever(self.rag_chain)
-        return multi_retriever.retrieve(
+        documents, queries_str, used_queries = multi_retriever.retrieve(
             query=query,
             domain=domain,
             k=k,
             include_common=include_common,
             use_mmr=use_mmr,
             use_hybrid=use_hybrid,
+            expanded_queries=expanded_queries,
         )
+        return documents, queries_str, used_queries
 
     def _retry_relax_params(
         self,
@@ -514,12 +539,14 @@ class GraduatedRetryHandler:
         new_k = budget.allocated_k + self.settings.retry_k_increment
         if domain in self.agents:
             try:
-                documents, expanded_queries = self._multi_query_retrieve(
+                documents, expanded_queries, used_queries = self._multi_query_retrieve(
                     query=query,
                     domain=domain,
                     k=new_k,
                     include_common=False,
                 )
+                # 확장 쿼리를 캐싱하여 L2에서 재사용
+                ctx.cached_expanded_queries = used_queries
                 scores = [doc.metadata.get("score", 0.0) for doc in documents]
 
                 # 완화된 기준으로 평가 (override 파라미터로 thread-safe)
@@ -577,11 +604,12 @@ class GraduatedRetryHandler:
         ctx.attempts += 1
 
         try:
-            documents, rewritten_query = self._multi_query_retrieve(
+            documents, rewritten_query, _ = self._multi_query_retrieve(
                 query=query,
                 domain=domain,
                 k=budget.allocated_k,
                 include_common=True,
+                expanded_queries=ctx.cached_expanded_queries,
             )
             scores = [doc.metadata.get("score", 0.0) for doc in documents]
 
@@ -640,11 +668,12 @@ class GraduatedRetryHandler:
                 continue
 
             try:
-                adj_docs, _ = self._multi_query_retrieve(
+                adj_docs, _, _ = self._multi_query_retrieve(
                     query=query,
                     domain=adj_domain,
                     k=self.settings.cross_domain_k,
                     include_common=False,
+                    expanded_queries=ctx.cached_expanded_queries,
                 )
                 combined_docs.extend(adj_docs)
                 logger.info(
@@ -719,6 +748,10 @@ class DocumentMerger:
                 if h not in seen_hashes:
                     seen_hashes.add(h)
                     domain_docs[domain].append(doc)
+
+        # 1.5. 도메인별 Min-Max 점수 정규화 (이종 컬렉션 간 점수 비교 가능)
+        for domain, docs in domain_docs.items():
+            ScoreNormalizer.normalize_documents(docs)
 
         # 2. 도메인별 예산 적용 + 점수순 정렬
         for domain, docs in domain_docs.items():
@@ -1089,6 +1122,43 @@ class RetrievalAgent:
                         "reranker 없음 (enable_reranking=False?). 점수순 슬라이스로 대체"
                     )
                 merged = merged[:final_k]
+
+            # 복합 도메인 병합 후 품질 평가 (단일 도메인은 스킵)
+            if len(main_results) > 1:
+                from utils.retrieval_evaluator import get_retrieval_evaluator
+
+                evaluator = get_retrieval_evaluator()
+                merged_scores = [d.metadata.get("score", 0.0) for d in merged]
+                merge_eval = evaluator.evaluate(query, merged, merged_scores)
+                if not merge_eval.passed:
+                    logger.warning(
+                        "[RetrievalAgent] 병합 후 평가 FAIL (doc_count=%d, kw_ratio=%.2f, sim=%.2f). ratio 완화 재시도.",
+                        merge_eval.doc_count,
+                        merge_eval.keyword_match_ratio,
+                        merge_eval.avg_similarity_score,
+                    )
+                    # ratio를 10% 완화하여 더 많은 문서 포함
+                    relaxed_ratio = min(1.0, self.settings.cross_domain_rerank_ratio + 0.1)
+                    relaxed_k = min(
+                        max(5, int(candidate_total * relaxed_ratio)),
+                        self.settings.max_retrieval_docs,
+                    )
+                    if relaxed_k > final_k:
+                        merged = self.merger.merge_and_prioritize(
+                            retrieval_results=main_results,
+                            budgets=budgets,
+                            max_total=candidate_total,
+                        )
+                        if reranker and len(merged) > relaxed_k:
+                            merged = await reranker.arerank(query, merged, top_k=relaxed_k)
+                        else:
+                            merged = merged[:relaxed_k]
+                        logger.info(
+                            "[RetrievalAgent] 병합 후 평가 FAIL → ratio 완화 재병합: %d건 → %d건",
+                            final_k,
+                            len(merged),
+                        )
+
             return merged
 
         return self.merger.merge_and_prioritize(
@@ -1223,9 +1293,16 @@ class RetrievalAgent:
 
         mode = query_chars.recommended_mode
 
-        # 모드별 파라미터 결정
-        use_hybrid = mode in (SearchMode.HYBRID, SearchMode.BM25_HEAVY, SearchMode.VECTOR_HEAVY)
+        # 모드별 파라미터 결정 (EXACT_PLUS_VECTOR은 HYBRID와 동일하게 처리)
+        use_hybrid = mode in (
+            SearchMode.HYBRID, SearchMode.BM25_HEAVY,
+            SearchMode.VECTOR_HEAVY, SearchMode.EXACT_PLUS_VECTOR,
+        )
         use_mmr = mode == SearchMode.MMR_DIVERSE
+
+        # 모드별 벡터 가중치 적용
+        mode_weights = self.settings.search_mode_vector_weights
+        vector_weight = mode_weights.get(mode.value, self.settings.vector_search_weight)
 
         try:
             documents = self.rag_chain._retrieve_documents(
@@ -1236,6 +1313,7 @@ class RetrievalAgent:
                 use_mmr=use_mmr,
                 use_hybrid=use_hybrid if mode != SearchMode.MMR_DIVERSE else False,
                 metadata_filter=metadata_filter,
+                vector_weight=vector_weight,
             )
         except Exception as e:
             logger.error("[RetrievalAgent] 검색 실패 (%s): %s", domain, e)
@@ -1405,6 +1483,24 @@ class RetrievalAgent:
             if len(result.documents) > limit:
                 result.documents = result.documents[:limit]
                 result.sources = result.sources[:limit]
+
+            # 기존 문서와 중복 제거 (content hash 기반)
+            existing_hashes = {
+                self.merger._content_hash(doc) for doc in all_documents
+            }
+            unique_docs = []
+            unique_sources = []
+            for doc, src in zip(result.documents, result.sources):
+                h = self.merger._content_hash(doc)
+                if h not in existing_hashes:
+                    existing_hashes.add(h)
+                    unique_docs.append(doc)
+                    unique_sources.append(src)
+            dedup_removed = len(result.documents) - len(unique_docs)
+            if dedup_removed > 0:
+                logger.info("[법률 보충] 중복 제거: %d건 → %d건", len(result.documents), len(unique_docs))
+            result.documents = unique_docs
+            result.sources = unique_sources
 
             retrieval_results["law_common_supplement"] = result
             all_documents.extend(result.documents)

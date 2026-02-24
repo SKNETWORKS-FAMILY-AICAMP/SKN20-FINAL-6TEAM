@@ -401,7 +401,7 @@ class VectorDomainClassifier:
         Returns:
             도메인 분류 결과
         """
-        # 0. LLM 분류 모드: 순수 LLM만 사용, 실패 시 거부 (fallback 없음)
+        # 0. LLM 분류 모드: 순수 LLM만 사용, 실패 시 1회 재시도
         if self.settings.enable_llm_domain_classification:
             llm_result = self._llm_classify(query)
             if llm_result.method != "llm_error":
@@ -411,13 +411,26 @@ class VectorDomainClassifier:
                     llm_result.confidence,
                 )
                 return llm_result
-            # LLM 호출 자체가 실패한 경우 → 거부 (fallback 없음)
-            logger.warning("[도메인 분류] LLM 분류 실패 → 도메인 외 질문으로 거부")
+
+            # 1차 실패 → LLM 1회 재시도
+            logger.warning("[도메인 분류] LLM 분류 1차 실패 → 재시도")
+            retry_result = self._llm_classify(query)
+            if retry_result.method != "llm_error":
+                logger.info(
+                    "[도메인 분류] LLM 재시도 성공: %s (신뢰도: %.2f)",
+                    retry_result.domains,
+                    retry_result.confidence,
+                )
+                retry_result.method = "llm_retry"
+                return retry_result
+
+            # 2차 실패 → 사용자에게 실패 사유 안내
+            logger.error("[도메인 분류] LLM 분류 재시도 실패 → 일시적 오류 안내")
             return DomainClassificationResult(
                 domains=[],
                 confidence=0.0,
                 is_relevant=False,
-                method="llm_error_rejected",
+                method="llm_retry_failed",
             )
 
         # 1. 키워드 매칭 (0ms, 즉시)

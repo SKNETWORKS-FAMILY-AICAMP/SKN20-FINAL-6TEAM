@@ -75,30 +75,34 @@ class RateLimiter:
             logger.debug("Rate limiter cleanup: %d개 항목 제거", len(stale_keys))
         self._last_cleanup = now
 
-    def is_allowed(self, key: str, tokens: float = 1.0) -> bool:
+    def is_allowed(
+        self, key: str, tokens: float = 1.0, capacity_override: float | None = None,
+    ) -> bool:
         """요청이 허용되는지 확인합니다.
 
         Args:
             key: 클라이언트 식별자 (IP, user_id 등)
             tokens: 소비할 토큰 수
+            capacity_override: 용량 오버라이드 (인증 사용자 등에 더 큰 용량 부여)
 
         Returns:
             요청 허용 여부
         """
         now = time.time()
+        effective_capacity = capacity_override if capacity_override is not None else self.capacity
 
         # 주기적 stale 상태 정리
         if now - self._last_cleanup > self._cleanup_interval:
             self._cleanup_stale_states(now)
 
         if key not in self._states:
-            self._states[key] = RateLimitState(tokens=self.capacity)
+            self._states[key] = RateLimitState(tokens=effective_capacity)
 
         state = self._states[key]
 
-        # 토큰 충전
+        # 토큰 충전 (effective_capacity를 상한으로 사용)
         elapsed = now - state.last_update
-        state.tokens = min(self.capacity, state.tokens + elapsed * self.rate)
+        state.tokens = min(effective_capacity, state.tokens + elapsed * self.rate)
         state.last_update = now
 
         # 토큰 소비 가능 여부
@@ -152,6 +156,7 @@ class RateLimitMiddleware:
         app: ASGIApp,
         rate: float = 10.0,
         capacity: float = 100.0,
+        auth_multiplier: float = 2.0,
     ):
         """RateLimitMiddleware를 초기화합니다.
 
@@ -159,21 +164,40 @@ class RateLimitMiddleware:
             app: ASGI 앱
             rate: 초당 토큰 충전 속도
             capacity: 최대 토큰 수
+            auth_multiplier: 인증된 사용자의 Rate Limit 용량 배수
         """
         self.app = app
         self.limiter = RateLimiter(rate=rate, capacity=capacity)
+        self.auth_multiplier = auth_multiplier
 
     @staticmethod
-    def _extract_client_ip(scope: Scope) -> str:
-        """ASGI scope에서 클라이언트 IP를 추출합니다."""
+    def _extract_client_key(scope: Scope) -> tuple[str, bool]:
+        """ASGI scope에서 클라이언트 키와 인증 여부를 추출합니다.
+
+        X-Forwarded-For IP와 X-API-Key 조합으로 키를 생성합니다.
+        API 키가 있는 인증 사용자는 더 큰 Rate Limit 용량을 받습니다.
+
+        Args:
+            scope: ASGI scope
+
+        Returns:
+            (클라이언트 키, 인증 여부) 튜플
+        """
         headers = dict(scope.get("headers", []))
+
+        # IP 추출
         forwarded = headers.get(b"x-forwarded-for")
         if forwarded:
-            return forwarded.decode("latin-1").split(",")[0].strip()
-        client = scope.get("client")
-        if client:
-            return client[0]
-        return "unknown"
+            ip = forwarded.decode("latin-1").split(",")[0].strip()
+        else:
+            client = scope.get("client")
+            ip = client[0] if client else "unknown"
+
+        # API 키 존재 여부로 인증 판단
+        api_key = headers.get(b"x-api-key", b"").decode("latin-1")
+        if api_key:
+            return f"{ip}:{api_key[:8]}", True
+        return ip, False
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -185,11 +209,16 @@ class RateLimitMiddleware:
             await self.app(scope, receive, send)
             return
 
-        key = self._extract_client_ip(scope)
+        key, is_authenticated = self._extract_client_key(scope)
 
-        if not self.limiter.is_allowed(key):
+        # 인증된 사용자에게 더 큰 용량 부여
+        effective_capacity = self.limiter.capacity * (
+            self.auth_multiplier if is_authenticated else 1.0
+        )
+
+        if not self.limiter.is_allowed(key, capacity_override=effective_capacity):
             retry_after = self.limiter.get_retry_after(key)
-            logger.warning("Rate limit exceeded: %s", key)
+            logger.warning("Rate limit exceeded: %s (authenticated=%s)", key, is_authenticated)
             body = f'{{"detail":"Too many requests. Retry after {retry_after:.1f} seconds."}}'.encode()
             await send({
                 "type": "http.response.start",
@@ -320,6 +349,42 @@ class MetricsCollector:
             "counters": dict(self._counters),
             "gauges": dict(self._gauges),
         }
+
+    def record_rag_pipeline(
+        self,
+        classify_time: float | None = None,
+        retrieve_time: float | None = None,
+        generate_time: float | None = None,
+        evaluate_time: float | None = None,
+        total_time: float | None = None,
+        domain: str | None = None,
+        retry_count: int = 0,
+    ) -> None:
+        """RAG 파이프라인 단계별 메트릭을 기록합니다.
+
+        Args:
+            classify_time: 도메인 분류 시간 (초)
+            retrieve_time: 검색 시간 (초)
+            generate_time: 답변 생성 시간 (초)
+            evaluate_time: 평가 시간 (초)
+            total_time: 전체 파이프라인 시간 (초)
+            domain: 주 도메인
+            retry_count: 재시도 횟수
+        """
+        if classify_time is not None:
+            self.set_gauge("rag_classify_time", classify_time)
+        if retrieve_time is not None:
+            self.set_gauge("rag_retrieve_time", retrieve_time)
+        if generate_time is not None:
+            self.set_gauge("rag_generate_time", generate_time)
+        if evaluate_time is not None:
+            self.set_gauge("rag_evaluate_time", evaluate_time)
+        if total_time is not None:
+            self.set_gauge("rag_total_time", total_time)
+        if domain:
+            self.increment_counter(f"rag_domain:{domain}")
+        if retry_count > 0:
+            self.increment_counter("rag_retry_total", retry_count)
 
     def get_endpoint_stats(self) -> dict[str, dict[str, Any]]:
         """엔드포인트별 통계를 반환합니다."""

@@ -226,6 +226,12 @@ class Settings(BaseSettings):
     source_content_length: int = Field(default=500, description="SourceDocument 변환 시 내용 최대 길이")
     evaluator_context_length: int = Field(default=4000, description="평가 시 컨텍스트 최대 길이")
 
+    # -- RRF 파라미터 --
+    rrf_k: int = Field(
+        default=30, gt=0,
+        description="Reciprocal Rank Fusion 상수 (작을수록 상위 순위 차이 강조, 기본 30)"
+    )
+
     # -- 검색 가중치 --
     vector_search_weight: float = Field(
         default=0.7,
@@ -281,6 +287,25 @@ class Settings(BaseSettings):
 
     # -- LLM 평가 --
     evaluation_threshold: int = Field(default=70, ge=0, le=100, description="평가 통과 임계값 (100점 만점)")
+    evaluation_weights: dict[str, int] = Field(
+        default={
+            "accuracy": 25,
+            "citation": 25,
+            "completeness": 20,
+            "retrieval_quality": 15,
+            "relevance": 15,
+        },
+        description="평가 기준별 가중치 (합계 100)"
+    )
+    domain_evaluation_thresholds: dict[str, int] = Field(
+        default={
+            "law_common": 75,
+            "finance_tax": 75,
+            "hr_labor": 70,
+            "startup_funding": 65,
+        },
+        description="도메인별 평가 통과 임계값"
+    )
     max_retry_count: int = Field(default=1, ge=0, description="최대 재시도 횟수")
     post_eval_alt_query_count: int = Field(
         default=1, ge=1, le=5,
@@ -299,10 +324,43 @@ class Settings(BaseSettings):
     generation_max_tokens: int = Field(
         default=2048, gt=0, description="답변 생성 LLM max_tokens 제한"
     )
+    domain_temperatures: dict[str, float] = Field(
+        default={
+            "law_common": 0.0,
+            "finance_tax": 0.0,
+            "hr_labor": 0.05,
+            "startup_funding": 0.15,
+        },
+        description="도메인별 LLM temperature (정밀도 요구 도메인은 낮게)"
+    )
 
     # -- 법률 보충 검색 --
     legal_supplement_k: int = Field(
         default=4, gt=0, description="법률 보충 검색 시 가져올 문서 수"
+    )
+
+    # -- 쿼리 분석 임계값 (SearchStrategySelector) --
+    query_analysis_thresholds: dict[str, float] = Field(
+        default={
+            "factual_max_length": 20,
+            "factual_min_keyword_density": 0.3,
+            "complex_min_length": 50,
+            "complex_min_word_count": 10,
+            "vague_min_length": 15,
+            "vague_max_keyword_density": 0.1,
+        },
+        description="쿼리 유형 판별 임계값 (factual/complex/vague 분류 기준)"
+    )
+
+    # -- 검색 모드별 벡터 가중치 --
+    search_mode_vector_weights: dict[str, float] = Field(
+        default={
+            "hybrid": 0.7,
+            "vector": 0.9,
+            "bm25": 0.3,
+            "mmr": 0.7,
+        },
+        description="검색 모드별 벡터 검색 가중치 (0.0=BM25만, 1.0=벡터만)"
     )
 
     # -- RetrievalAgent / 동적 K / 재시도 --
@@ -375,8 +433,29 @@ class Settings(BaseSettings):
     total_timeout: float = Field(default=60.0, gt=0, description="전체 요청 타임아웃 (초)")
     cache_max_size: int = Field(default=500, gt=0, description="캐시 최대 크기")
     cache_ttl: int = Field(default=3600, gt=0, description="캐시 TTL (초)")
+    cache_ttl_by_domain: dict[str, int] = Field(
+        default={
+            "startup_funding": 1800,  # 30분 (지원사업 변경 잦음)
+            "finance_tax": 7200,      # 2시간
+            "hr_labor": 7200,         # 2시간
+            "law_common": 7200,       # 2시간 (법률 변경 드묾)
+        },
+        description="도메인별 캐시 TTL (초). 미지정 도메인은 cache_ttl 사용."
+    )
     rate_limit_rate: float = Field(default=10.0, description="초당 토큰 충전 속도")
     rate_limit_capacity: float = Field(default=100.0, description="최대 토큰 수 (버스트)")
+    rate_limit_authenticated_multiplier: float = Field(
+        default=2.0, ge=1.0,
+        description="인증된 사용자의 Rate Limit 용량 배수"
+    )
+    stream_hard_timeout: float = Field(
+        default=90.0, gt=0,
+        description="스트리밍 응답 hard timeout (초). 이 시간 초과 시 강제 종료."
+    )
+    bm25_warmup_retry_delay: float = Field(
+        default=30.0, ge=0,
+        description="BM25 warmup 실패 시 백그라운드 재시도 지연 (초)"
+    )
     fallback_message: str = Field(
         default="죄송합니다. 현재 요청을 처리할 수 없습니다. 잠시 후 다시 시도해주세요.",
         description="Fallback 메시지"

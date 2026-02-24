@@ -5,6 +5,7 @@ Bizi의 RAG 서비스 API 서버를 구동합니다.
 """
 
 import asyncio
+import hmac
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -191,8 +192,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization", "X-Requested-With"],
 )
 
 
@@ -216,7 +217,7 @@ class APIKeyMiddleware:
             if any(path.startswith(prefix) for prefix in self.PROTECTED_PREFIXES):
                 headers = dict(scope.get("headers", []))
                 provided_key = headers.get(b"x-api-key", b"").decode("latin-1")
-                if provided_key != api_key:
+                if not hmac.compare_digest(provided_key, api_key):
                     body = b'{"detail":"Invalid or missing API key"}'
                     await send({
                         "type": "http.response.start",
@@ -243,8 +244,13 @@ if _settings.enable_rate_limit:
         RateLimitMiddleware,
         rate=_settings.rate_limit_rate,
         capacity=_settings.rate_limit_capacity,
+        auth_multiplier=_settings.rate_limit_authenticated_multiplier,
     )
-    logger.info(f"Rate Limiting 활성화: rate={_settings.rate_limit_rate}/s, capacity={_settings.rate_limit_capacity}")
+    logger.info(
+        "Rate Limiting 활성화: rate=%.1f/s, capacity=%.0f, auth_multiplier=%.1f",
+        _settings.rate_limit_rate, _settings.rate_limit_capacity,
+        _settings.rate_limit_authenticated_multiplier,
+    )
 
 # 라우터 등록
 for r in all_routers:

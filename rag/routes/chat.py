@@ -1,5 +1,6 @@
 """채팅 엔드포인트 (일반 + 스트리밍)."""
 
+import asyncio
 import logging
 import time
 from typing import Any
@@ -13,9 +14,13 @@ from schemas.response import StreamResponse
 from utils.cache import get_response_cache
 from utils.chat_logger import log_chat_interaction
 from utils.config import get_settings
+from utils.sanitizer import sanitize_query
 from utils.token_tracker import RequestTokenTracker
 
 logger = logging.getLogger(__name__)
+
+# 심각 패턴 수 임계값: 이 이상 탐지되면 HTTP 400 반환
+_SEVERE_INJECTION_THRESHOLD = 3
 
 router = APIRouter(prefix="/api", tags=["Chat"])
 
@@ -26,15 +31,21 @@ async def chat(request: ChatRequest) -> ChatResponse:
     if not _state.router_agent:
         raise HTTPException(status_code=503, detail="서비스가 초기화되지 않았습니다")
 
+    # 프롬프트 인젝션 방어
+    sanitize_result = sanitize_query(request.message)
+    if len(sanitize_result.detected_patterns) >= _SEVERE_INJECTION_THRESHOLD:
+        raise HTTPException(status_code=400, detail="요청이 보안 정책에 의해 차단되었습니다.")
+    query = sanitize_result.sanitized_query
+
     try:
         # 캐시 조회 (user_context 해시 포함)
         settings = get_settings()
         cache = get_response_cache() if settings.enable_response_cache else None
         uc_hash = request.user_context.get_filter_hash() if request.user_context else None
         if cache:
-            cached = cache.get(request.message, user_context_hash=uc_hash)
+            cached = cache.get(query, user_context_hash=uc_hash)
             if cached:
-                logger.info("[chat] 캐시 히트: '%s...'", request.message[:30])
+                logger.info("[chat] 캐시 히트: '%s...'", query[:30])
                 cached_response = ChatResponse(**cached)
                 cached_response.session_id = request.session_id
                 return cached_response
@@ -43,7 +54,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
         async with RequestTokenTracker() as tracker:
             response = await _state.router_agent.aprocess(
-                query=request.message,
+                query=query,
                 user_context=request.user_context,
                 history=[msg.model_dump() for msg in request.history],
             )
@@ -92,7 +103,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         # 캐시 저장
         if cache and response.content != settings.fallback_message:
             domain = response.domains[0] if response.domains else None
-            cache.set(request.message, response.model_dump(mode="json"), domain, user_context_hash=uc_hash)
+            cache.set(query, response.model_dump(mode="json"), domain, user_context_hash=uc_hash)
 
         return response
     except Exception as e:
@@ -109,6 +120,12 @@ async def chat_stream(request: ChatRequest):
     if not _state.router_agent:
         raise HTTPException(status_code=503, detail="서비스가 초기화되지 않았습니다")
 
+    # 프롬프트 인젝션 방어
+    sanitize_result = sanitize_query(request.message)
+    if len(sanitize_result.detected_patterns) >= _SEVERE_INJECTION_THRESHOLD:
+        raise HTTPException(status_code=400, detail="요청이 보안 정책에 의해 차단되었습니다.")
+    stream_query = sanitize_result.sanitized_query
+
     async def generate():
         try:
             # 캐시 조회 (user_context 해시 포함)
@@ -116,9 +133,9 @@ async def chat_stream(request: ChatRequest):
             cache = get_response_cache() if settings.enable_response_cache else None
             stream_uc_hash = request.user_context.get_filter_hash() if request.user_context else None
             if cache:
-                cached = cache.get(request.message, user_context_hash=stream_uc_hash)
+                cached = cache.get(stream_query, user_context_hash=stream_uc_hash)
                 if cached:
-                    logger.info("[stream] 캐시 히트: '%s...'", request.message[:30])
+                    logger.info("[stream] 캐시 히트: '%s...'", stream_query[:30])
                     cached_content = cached.get("content", "")
                     chunk_size = 4
                     token_index = 0
@@ -159,6 +176,7 @@ async def chat_stream(request: ChatRequest):
 
             start_time = time.time()
             stream_timeout = settings.total_timeout
+            hard_timeout = settings.stream_hard_timeout
             final_content = ""
             final_sources: list[Any] = []
             final_domains: list[str] = []
@@ -170,11 +188,43 @@ async def chat_stream(request: ChatRequest):
 
             async with RequestTokenTracker() as tracker:
                 token_index = 0
-                async for chunk in _state.router_agent.astream(
-                    query=request.message,
+                stream_iter = _state.router_agent.astream(
+                    query=stream_query,
                     user_context=request.user_context,
                     history=[msg.model_dump() for msg in request.history],
-                ):
+                ).__aiter__()
+                hard_deadline = time.time() + hard_timeout
+
+                while True:
+                    remaining = hard_deadline - time.time()
+                    if remaining <= 0:
+                        logger.warning(
+                            "[stream] hard timeout 초과 (%.1fs)", hard_timeout,
+                        )
+                        error_chunk = StreamResponse(
+                            type="error",
+                            content="응답 생성 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.",
+                        )
+                        yield f"data: {error_chunk.model_dump_json()}\n\n"
+                        return
+                    try:
+                        chunk = await asyncio.wait_for(
+                            stream_iter.__anext__(), timeout=remaining,
+                        )
+                    except StopAsyncIteration:
+                        break
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            "[stream] hard timeout 초과 (%.1fs)", hard_timeout,
+                        )
+                        error_chunk = StreamResponse(
+                            type="error",
+                            content="응답 생성 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.",
+                        )
+                        yield f"data: {error_chunk.model_dump_json()}\n\n"
+                        return
+
+                    # 소프트 타임아웃 체크 (기존 호환)
                     if time.time() - start_time > stream_timeout:
                         error_chunk = StreamResponse(
                             type="error",
@@ -182,6 +232,7 @@ async def chat_stream(request: ChatRequest):
                         )
                         yield f"data: {error_chunk.model_dump_json()}\n\n"
                         return
+
                     if chunk["type"] == "token":
                         stream_chunk = StreamResponse(
                             type="token",
@@ -198,6 +249,7 @@ async def chat_stream(request: ChatRequest):
                         done_evaluation = chunk.get("evaluation")
                         done_ragas_metrics = chunk.get("ragas_metrics")
                         done_retrieval_results = chunk.get("retrieval_results")
+
                 token_usage = tracker.get_usage()
 
             response_time = time.time() - start_time
@@ -253,7 +305,7 @@ async def chat_stream(request: ChatRequest):
                         for s in final_sources
                     ],
                 }
-                cache.set(request.message, cache_data, cache_domain, user_context_hash=stream_uc_hash)
+                cache.set(stream_query, cache_data, cache_domain, user_context_hash=stream_uc_hash)
 
             # evaluation_data 생성
             eval_data_dict = None

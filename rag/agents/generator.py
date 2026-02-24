@@ -29,6 +29,15 @@ from utils.question_decomposer import SubQuery
 
 logger = logging.getLogger(__name__)
 
+# 에러 종류별 Fallback 메시지
+FALLBACK_NO_DOCUMENTS = (
+    "검색된 참고 자료가 부족하여 정확한 답변을 드리기 어렵습니다. "
+    "질문의 핵심 키워드를 포함하여 더 구체적으로 작성해 주시거나, "
+    "다른 표현으로 다시 질문해 주세요."
+)
+FALLBACK_TIMEOUT = "응답 생성에 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."
+FALLBACK_SYSTEM_ERROR = "일시적인 시스템 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+
 
 @dataclass
 class GenerationResult:
@@ -79,15 +88,23 @@ class ResponseGeneratorAgent:
         self.agents = agents
         self.rag_chain = rag_chain or RAGChain()
 
-    def _get_llm(self) -> "ChatOpenAI":
+    def _get_llm(self, domain: str | None = None) -> "ChatOpenAI":
         """LLM 인스턴스를 생성합니다.
+
+        Args:
+            domain: 도메인 (주어지면 도메인별 temperature 적용)
 
         Returns:
             ChatOpenAI 인스턴스
         """
+        if domain:
+            temperature = self.settings.domain_temperatures.get(domain, 0.1)
+        else:
+            temperature = 0.1
+
         return create_llm(
             "통합생성",
-            temperature=0.1,
+            temperature=temperature,
             request_timeout=self.settings.llm_timeout,
             max_tokens=self.settings.generation_max_tokens,
         )
@@ -281,9 +298,12 @@ class ResponseGeneratorAgent:
                     company_context=company_context,
                 actions_context=actions_context,
             )
+        except asyncio.TimeoutError:
+            logger.error("[생성기] LLM 호출 타임아웃", exc_info=True)
+            content = FALLBACK_TIMEOUT
         except Exception as e:
             logger.error("[생성기] LLM 호출 실패: %s", e, exc_info=True)
-            content = self.settings.fallback_message
+            content = FALLBACK_SYSTEM_ERROR
 
         elapsed = time.time() - start
         logger.info("[생성기] 비동기 완료: %d자 (%.3fs)", len(content), elapsed)
@@ -322,9 +342,8 @@ class ResponseGeneratorAgent:
             return
 
         if not documents:
-            fallback = "검색된 참고 자료가 부족하여 정확한 답변을 드리기 어렵습니다. 질문을 더 구체적으로 작성해 주시거나, 다른 표현으로 다시 질문해 주세요."
-            yield {"type": "token", "content": fallback}
-            yield {"type": "generation_done", "content": fallback}
+            yield {"type": "token", "content": FALLBACK_NO_DOCUMENTS}
+            yield {"type": "generation_done", "content": FALLBACK_NO_DOCUMENTS}
             return
 
         context = self.rag_chain.format_context(documents)
@@ -341,7 +360,7 @@ class ResponseGeneratorAgent:
             ("human", "{query}"),
         ])
 
-        llm = self._get_llm()
+        llm = self._get_llm(domain)
         chain = prompt | llm | StrOutputParser()
 
         content_buffer = ""
@@ -401,9 +420,8 @@ class ResponseGeneratorAgent:
             all_documents.extend(legal_supplement.documents)
 
         if not all_documents:
-            fallback = "검색된 참고 자료가 부족하여 정확한 답변을 드리기 어렵습니다. 질문을 더 구체적으로 작성해 주시거나, 다른 표현으로 다시 질문해 주세요."
-            yield {"type": "token", "content": fallback}
-            yield {"type": "generation_done", "content": fallback}
+            yield {"type": "token", "content": FALLBACK_NO_DOCUMENTS}
+            yield {"type": "generation_done", "content": FALLBACK_NO_DOCUMENTS}
             return
 
         context = self.rag_chain.format_context(all_documents)
@@ -473,7 +491,7 @@ class ResponseGeneratorAgent:
             documents = result.documents + legal_supplement_docs
 
         if not documents:
-            return "검색된 참고 자료가 부족하여 정확한 답변을 드리기 어렵습니다. 질문을 더 구체적으로 작성해 주시거나, 다른 표현으로 다시 질문해 주세요."
+            return FALLBACK_NO_DOCUMENTS
 
         context = self.rag_chain.format_context(documents)
 
@@ -486,7 +504,7 @@ class ResponseGeneratorAgent:
             ("human", "{query}"),
         ])
 
-        llm = self._get_llm()
+        llm = self._get_llm(domain)
         chain = prompt | llm | StrOutputParser()
 
         try:
@@ -502,12 +520,12 @@ class ResponseGeneratorAgent:
         except asyncio.TimeoutError:
             logger.error("[생성기] LLM 타임아웃: %s", query[:30])
             if self.settings.enable_fallback:
-                return self.settings.fallback_message
+                return FALLBACK_TIMEOUT
             raise
         except Exception as e:
             logger.exception("[생성기] LLM 호출 실패 (단일 도메인): %s", e)
             if self.settings.enable_fallback:
-                return self.settings.fallback_message
+                return FALLBACK_SYSTEM_ERROR
             raise
 
     async def _agenerate_multi(
@@ -544,7 +562,7 @@ class ResponseGeneratorAgent:
             all_documents.extend(legal_supplement_docs)
 
         if not all_documents:
-            return "검색된 참고 자료가 부족하여 정확한 답변을 드리기 어렵습니다. 질문을 더 구체적으로 작성해 주시거나, 다른 표현으로 다시 질문해 주세요."
+            return FALLBACK_NO_DOCUMENTS
 
         context = self.rag_chain.format_context(all_documents)
         domains_description = ", ".join(
@@ -579,10 +597,10 @@ class ResponseGeneratorAgent:
         except asyncio.TimeoutError:
             logger.error("[생성기] 복수 도메인 LLM 타임아웃: %s", query[:30])
             if self.settings.enable_fallback:
-                return self.settings.fallback_message
+                return FALLBACK_TIMEOUT
             raise
         except Exception as e:
             logger.exception("[생성기] LLM 호출 실패 (복수 도메인): %s", e)
             if self.settings.enable_fallback:
-                return self.settings.fallback_message
+                return FALLBACK_SYSTEM_ERROR
             raise

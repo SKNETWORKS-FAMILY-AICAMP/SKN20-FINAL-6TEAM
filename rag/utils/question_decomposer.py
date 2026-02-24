@@ -22,6 +22,38 @@ logger = logging.getLogger(__name__)
 # 프롬프트에 포함할 최근 대화 턴 수
 MAX_HISTORY_TURNS = 3
 
+# 대명사/지시어 패턴 (단일 도메인 대명사 해소용)
+_PRONOUN_PATTERNS = re.compile(
+    r"그것|이것|저것|그거|이거|저거|거기|여기|저기"
+    r"|그건|이건|저건|그게|이게|저게"
+    r"|그래서|그러면|그렇다면|그런데"
+    r"|위에서|앞에서|아까|방금"
+    r"|해당\s*(사항|내용|부분|절차|제도|방법|조건)"
+)
+
+PRONOUN_RESOLUTION_PROMPT = """이전 대화를 참고하여 다음 질문의 대명사를 구체적 명사로 바꿔주세요.
+원래 의도를 유지하고 질문만 출력하세요. 추가 설명이나 서두 없이 변환된 질문 한 문장만 출력하세요.
+
+## 이전 대화
+{history}
+
+## 현재 질문
+{query}
+
+## 변환된 질문"""
+
+
+def _has_pronoun(query: str) -> bool:
+    """질문에 대명사/지시어가 포함되어 있는지 감지합니다.
+
+    Args:
+        query: 사용자 질문
+
+    Returns:
+        대명사가 감지되면 True
+    """
+    return bool(_PRONOUN_PATTERNS.search(query))
+
 
 @dataclass
 class SubQuery:
@@ -199,6 +231,74 @@ class QuestionDecomposer:
 
         return sub_queries
 
+    def _resolve_pronouns_sync(
+        self,
+        query: str,
+        history: list[dict] | None = None,
+    ) -> str:
+        """대명사가 포함된 질문을 동기적으로 해소합니다.
+
+        history가 없거나 대명사가 감지되지 않으면 원본 쿼리를 그대로 반환합니다.
+
+        Args:
+            query: 원본 질문
+            history: 대화 이력
+
+        Returns:
+            대명사가 해소된 질문 (또는 원본)
+        """
+        if not history or not _has_pronoun(query):
+            return query
+
+        try:
+            history_text = _format_history(history)
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", PRONOUN_RESOLUTION_PROMPT),
+            ])
+            chain = prompt | self.llm | StrOutputParser()
+            resolved = chain.invoke({"history": history_text, "query": query})
+            resolved = resolved.strip()
+            if resolved:
+                return resolved
+        except Exception as e:
+            logger.warning("[대명사 해소] 실패 (동기): %s — 원본 사용", e)
+
+        return query
+
+    async def _aresolve_pronouns(
+        self,
+        query: str,
+        history: list[dict] | None = None,
+    ) -> str:
+        """대명사가 포함된 질문을 비동기적으로 해소합니다.
+
+        history가 없거나 대명사가 감지되지 않으면 원본 쿼리를 그대로 반환합니다.
+
+        Args:
+            query: 원본 질문
+            history: 대화 이력
+
+        Returns:
+            대명사가 해소된 질문 (또는 원본)
+        """
+        if not history or not _has_pronoun(query):
+            return query
+
+        try:
+            history_text = _format_history(history)
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", PRONOUN_RESOLUTION_PROMPT),
+            ])
+            chain = prompt | self.llm | StrOutputParser()
+            resolved = await chain.ainvoke({"history": history_text, "query": query})
+            resolved = resolved.strip()
+            if resolved:
+                return resolved
+        except Exception as e:
+            logger.warning("[대명사 해소] 실패 (비동기): %s — 원본 사용", e)
+
+        return query
+
     def decompose(
         self,
         query: str,
@@ -215,11 +315,18 @@ class QuestionDecomposer:
         Returns:
             분해된 하위 질문 리스트
         """
-        # 단일 도메인이면 분해 불필요
+        # 단일 도메인이면 분해 불필요 (대명사 해소만 수행)
         if len(detected_domains) <= 1:
             domain = detected_domains[0] if detected_domains else "startup_funding"
-            logger.info("[질문 분해] 단일 도메인 (%s) - 분해 불필요", domain)
-            return [SubQuery(domain=domain, query=query)]
+            resolved_query = self._resolve_pronouns_sync(query, history)
+            if resolved_query != query:
+                logger.info(
+                    "[질문 분해] 단일 도메인 (%s) 대명사 해소: '%s' → '%s'",
+                    domain, query[:30], resolved_query[:30],
+                )
+            else:
+                logger.info("[질문 분해] 단일 도메인 (%s) - 분해 불필요", domain)
+            return [SubQuery(domain=domain, query=resolved_query)]
 
         # 캐시 확인
         cache_key = _build_cache_key(query, detected_domains, history)
@@ -299,11 +406,18 @@ class QuestionDecomposer:
         Returns:
             분해된 하위 질문 리스트
         """
-        # 단일 도메인이면 분해 불필요
+        # 단일 도메인이면 분해 불필요 (대명사 해소만 수행)
         if len(detected_domains) <= 1:
             domain = detected_domains[0] if detected_domains else "startup_funding"
-            logger.info("[질문 분해] 단일 도메인 (%s) - 분해 불필요", domain)
-            return [SubQuery(domain=domain, query=query)]
+            resolved_query = await self._aresolve_pronouns(query, history)
+            if resolved_query != query:
+                logger.info(
+                    "[질문 분해] 단일 도메인 (%s) 대명사 해소: '%s' → '%s'",
+                    domain, query[:30], resolved_query[:30],
+                )
+            else:
+                logger.info("[질문 분해] 단일 도메인 (%s) - 분해 불필요", domain)
+            return [SubQuery(domain=domain, query=resolved_query)]
 
         # 캐시 확인
         cache_key = _build_cache_key(query, detected_domains, history)

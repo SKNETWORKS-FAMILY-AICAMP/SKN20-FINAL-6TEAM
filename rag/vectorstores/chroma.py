@@ -91,9 +91,22 @@ class ChromaVectorStore:
 
         return False
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True)
     def _get_client(self) -> chromadb.ClientAPI:
         """ChromaDB 클라이언트를 가져옵니다 (싱글톤, 스레드 안전).
+
+        이미 연결된 클라이언트가 있으면 즉시 반환합니다 (빠른 경로).
+        연결이 없으면 _connect_client()를 호출하여 재시도 포함 연결을 수행합니다.
+
+        Returns:
+            ChromaDB ClientAPI 인스턴스
+        """
+        if self._client is not None:
+            return self._client
+        return self._connect_client()
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True)
+    def _connect_client(self) -> chromadb.ClientAPI:
+        """ChromaDB 클라이언트 연결을 수행합니다 (재시도 포함).
 
         CHROMA_HOST 환경변수에 따라 클라이언트 유형을 자동 선택합니다:
         - 미설정 또는 localhost: PersistentClient (로컬 파일 기반)
@@ -102,8 +115,6 @@ class ChromaVectorStore:
         Returns:
             ChromaDB ClientAPI 인스턴스
         """
-        if self._client is not None:
-            return self._client
         with self._store_lock:
             if self._client is not None:
                 return self._client
