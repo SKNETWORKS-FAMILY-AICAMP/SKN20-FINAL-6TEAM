@@ -18,6 +18,7 @@ import {
   ClipboardDocumentListIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  UserCircleIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '../../stores/authStore';
@@ -302,7 +303,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
               ) : (
                 <>
-                  <div className="mb-1 flex items-center justify-between px-2">
+                  <div className="mb-1 flex items-center rounded-lg px-2">
+                    <span className="flex h-10 w-10 items-center justify-center">
+                      <UserCircleIcon className="h-5 w-5 text-gray-500" />
+                    </span>
                     <div className="min-w-0 flex-1">
                       <Typography
                         variant="small"
@@ -320,7 +324,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </div>
                     <button
                       type="button"
-                      className="ml-2 flex h-10 w-10 items-center justify-center rounded-lg transition-colors hover:bg-gray-100"
+                      className="ml-1 flex h-10 w-10 items-center justify-center rounded-lg transition-colors hover:bg-gray-100"
                       onClick={handleProfileOpen}
                       title="설정"
                     >
@@ -330,7 +334,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <button
                     type="button"
                     onClick={handleLogout}
-                    className="flex h-10 w-full items-center gap-2 rounded-lg px-2 text-red-500 transition-colors hover:bg-red-50"
+                    className="flex h-10 w-full items-center justify-start gap-0 rounded-lg px-2 text-red-500 transition-colors duration-150 hover:bg-red-50"
                   >
                     <span className="flex h-10 w-10 items-center justify-center">
                       <ArrowLeftOnRectangleIcon className="h-5 w-5" />
@@ -347,7 +351,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   closeSidebar();
                 }}
                 title={effectiveCollapsed ? '로그인' : undefined}
-                className="flex h-10 w-full items-center justify-start gap-2 overflow-hidden rounded-lg px-2 text-blue-500 transition-colors hover:bg-blue-50"
+                className="flex h-10 w-full items-center justify-start gap-0 overflow-hidden rounded-lg px-2 text-blue-500 transition-colors duration-150 hover:bg-blue-50"
               >
                 <span className="flex h-10 w-10 items-center justify-center">
                   <ArrowRightOnRectangleIcon className="h-5 w-5 flex-shrink-0" />

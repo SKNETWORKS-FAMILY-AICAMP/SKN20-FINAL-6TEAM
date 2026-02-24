@@ -645,7 +645,8 @@ const SchedulePage: React.FC = () => {
           </ButtonGroup>
 
           <Button
-            className="flex items-center gap-2"
+            size="sm"
+            className="flex items-center gap-1"
             onClick={() => openCreateDialog()}
             disabled={companies.length === 0}
           >

@@ -52,7 +52,7 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
   const grouped = groupSessionsByDate(sessions);
 
   return (
-    <div className="flex-1 overflow-auto px-1">
+    <div className="flex-1 overflow-auto px-2">
       {grouped.map((group) => (
         <div key={group.label} className="mb-2">
           {group.label && (
@@ -63,14 +63,16 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
           {group.sessions.map((session) => (
             <div
               key={session.id}
-              className={`group flex h-10 cursor-pointer items-center gap-2 rounded-lg px-2 transition-colors ${
+              className={`group flex h-10 w-full cursor-pointer items-center justify-start gap-0 rounded-lg px-2 transition-colors duration-150 ${
                 session.id === effectiveCurrentId
                   ? 'bg-blue-50 text-blue-700'
                   : 'hover:bg-gray-100 text-gray-700'
-              } ${mobile ? 'h-11' : ''}`}
+              }`}
               onClick={() => handleSelectSession(session.id)}
             >
-              <ChatBubbleLeftIcon className="h-4 w-4 flex-shrink-0" />
+              <span className="flex h-10 w-10 items-center justify-center">
+                <ChatBubbleLeftIcon className="h-5 w-5 flex-shrink-0" />
+              </span>
               <Typography variant="small" className={`flex-1 truncate ${mobile ? 'text-sm' : 'text-xs'}`}>
                 {session.title}
               </Typography>
@@ -78,7 +80,7 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
                 variant="text"
                 size="sm"
                 aria-label="세션 삭제"
-                className={`min-w-0 transition-opacity ${
+                className={`ml-1 min-w-0 transition-opacity ${
                   mobile ? 'h-8 w-8 opacity-100' : 'h-6 w-6 opacity-0 group-hover:opacity-100'
                 }`}
                 onClick={(event) => {
