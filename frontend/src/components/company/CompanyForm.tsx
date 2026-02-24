@@ -15,6 +15,8 @@ import {
   Alert,
 } from '@material-tailwind/react';
 import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { StarIcon as StarSolid } from '@heroicons/react/24/solid';
+import { StarIcon as StarOutline } from '@heroicons/react/24/outline';
 import { INDUSTRY_MAJOR, INDUSTRY_MINOR, INDUSTRY_ALL, COMPANY_STATUS, REGION_SIDO, REGION_SIGUNGU, PROVINCES } from '../../lib/constants';
 import type { CompanyStatusKey } from '../../lib/constants';
 import { RegionSelect } from '../common/RegionSelect';
@@ -23,6 +25,7 @@ import api from '../../lib/api';
 import { extractErrorMessage } from '../../lib/errorHandler';
 import { formatDate } from '../../lib/dateUtils';
 import { useAuthStore } from '../../stores/authStore';
+import { useCompanyStore } from '../../stores/companyStore';
 import type { Company } from '../../types';
 
 /** Convert R-code to human-readable address (e.g. "서울특별시 강남구") */
@@ -98,37 +101,27 @@ const INITIAL_FORM_DATA: CompanyFormData = {
   open_date: '',
 };
 
-const TABLE_HEADERS = ['회사명', '사업자번호', '업종', '주소', '개업일', '액션'];
+const TABLE_HEADERS = ['대표', '회사명', '사업자번호', '업종', '주소', '개업일', '액션'];
+
+const COMPANIES_PER_PAGE = 3;
 
 export const CompanyForm: React.FC = () => {
   const { updateUser, user } = useAuthStore();
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { companies, isLoading, selectedCompanyId, fetchCompanies, setMainCompany, selectCompany } = useCompanyStore();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [listPage, setListPage] = useState(0);
+
+  const totalListPages = Math.max(1, Math.ceil(companies.length / COMPANIES_PER_PAGE));
+  const pagedCompanies = companies.slice(listPage * COMPANIES_PER_PAGE, (listPage + 1) * COMPANIES_PER_PAGE);
 
   const [formData, setFormData] = useState<CompanyFormData>(INITIAL_FORM_DATA);
 
   const isPreparing = formData.status === 'PREPARING';
   const isAdmin = user?.type_code === 'U0000001';
-
-  const fetchCompanies = async () => {
-    try {
-      const response = await api.get('/companies');
-      setCompanies(response.data);
-    } catch (err) {
-      console.error('Failed to fetch companies:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchCompanies();
-  }, []);
 
   // 성공/에러 알림 5초 후 자동 사라짐
   useEffect(() => {
@@ -136,6 +129,13 @@ export const CompanyForm: React.FC = () => {
     const timer = setTimeout(() => setMessage(null), 5000);
     return () => clearTimeout(timer);
   }, [message]);
+
+  // listPage가 범위를 벗어나면 마지막 페이지로 보정
+  useEffect(() => {
+    if (listPage >= totalListPages) {
+      setListPage(Math.max(0, totalListPages - 1));
+    }
+  }, [listPage, totalListPages]);
 
   const openCreateDialog = () => {
     setEditingCompany(null);
@@ -228,7 +228,6 @@ export const CompanyForm: React.FC = () => {
 
       const response = await api.get('/companies');
       const remaining: Company[] = response.data;
-      setCompanies(remaining);
 
       if (user?.type_code === 'U0000003') {
         const hasBizNum = remaining.some((c) => c.biz_num);
@@ -239,6 +238,8 @@ export const CompanyForm: React.FC = () => {
           } catch { /* non-critical */ }
         }
       }
+
+      fetchCompanies();
     } catch (err: unknown) {
       setMessage({
         type: 'error',
@@ -247,16 +248,23 @@ export const CompanyForm: React.FC = () => {
     }
   };
 
+  const handleStarClick = async (e: React.MouseEvent, companyId: number) => {
+    e.stopPropagation();
+    await setMainCompany(companyId);
+  };
+
   return (
     <>
-      <div className="flex items-center justify-between mb-4">
-        <Typography variant="h5" color="blue-gray" className="!text-gray-900">
-          기업 목록
-        </Typography>
-        <Button className="flex items-center gap-2" size="sm" onClick={openCreateDialog}>
-          <PlusIcon className="h-4 w-4" />
-          기업 추가
-        </Button>
+      <div className="mb-4">
+        <div className="flex items-center justify-between">
+          <Typography variant="h5" color="blue-gray" className="!text-gray-900">
+            기업 목록
+          </Typography>
+          <Button className="flex items-center gap-2" size="sm" onClick={openCreateDialog}>
+            <PlusIcon className="h-4 w-4" />
+            기업 추가
+          </Button>
+        </div>
       </div>
 
       {message && (
@@ -270,7 +278,7 @@ export const CompanyForm: React.FC = () => {
         </Alert>
       )}
 
-      {isLoading ? (
+      {companies.length === 0 && isLoading ? (
         <div className="text-center py-10">
           <Typography color="gray">로딩 중...</Typography>
         </div>
@@ -284,8 +292,8 @@ export const CompanyForm: React.FC = () => {
           </CardBody>
         </Card>
       ) : (
-        <Card>
-          <CardBody className="overflow-x-auto px-0">
+        <Card className="overflow-hidden flex-1 min-h-0 flex flex-col">
+          <CardBody className="overflow-x-auto p-0 flex flex-col flex-1 min-h-0">
             <table className="w-full min-w-max table-auto text-left">
               <thead>
                 <tr>
@@ -299,11 +307,32 @@ export const CompanyForm: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {companies.map((company, index) => {
-                  const isLast = index === companies.length - 1;
-                  const rowClass = isLast ? 'p-4' : 'p-4 border-b border-blue-gray-50';
+                {pagedCompanies.map((company, index) => {
+                  const isLast = index === pagedCompanies.length - 1;
+                  const isSelected = company.company_id === selectedCompanyId;
+                  const rowClass = isLast
+                    ? 'p-4'
+                    : 'p-4 border-b border-blue-gray-50';
                   return (
-                    <tr key={company.company_id} className="hover:bg-blue-gray-50 cursor-pointer transition-colors">
+                    <tr
+                      key={company.company_id}
+                      className={`cursor-pointer transition-colors duration-150 ${isSelected ? 'bg-white shadow-[inset_4px_0_0_#3b82f6]' : 'hover:bg-blue-gray-50'}`}
+                      onClick={() => selectCompany(company.company_id)}
+                    >
+                      <td className={rowClass}>
+                        <IconButton
+                          variant="text"
+                          size="sm"
+                          onClick={(e) => handleStarClick(e, company.company_id)}
+                          title={company.main_yn ? '대표 기업' : '대표 기업으로 설정'}
+                        >
+                          {company.main_yn ? (
+                            <StarSolid className="h-4 w-4 text-yellow-500" />
+                          ) : (
+                            <StarOutline className="h-4 w-4 text-gray-400" />
+                          )}
+                        </IconButton>
+                      </td>
                       <td className={rowClass}>
                         <Typography variant="small" color="blue-gray" className="font-medium !text-gray-900">
                           {company.com_name}
@@ -332,8 +361,12 @@ export const CompanyForm: React.FC = () => {
                         </Typography>
                       </td>
                       <td className={rowClass}>
-                        <div className="flex gap-1">
-                          <IconButton variant="text" size="sm" onClick={() => openEditDialog(company)}>
+                        <div className="flex gap-1 items-center" onClick={(e) => e.stopPropagation()}>
+                          <IconButton
+                            variant="text"
+                            size="sm"
+                            onClick={() => openEditDialog(company)}
+                          >
                             <PencilIcon className="h-4 w-4" />
                           </IconButton>
                           <IconButton
@@ -351,6 +384,33 @@ export const CompanyForm: React.FC = () => {
                 })}
               </tbody>
             </table>
+            {companies.length > COMPANIES_PER_PAGE && (
+              <div className="flex items-center justify-center gap-2 py-3 mt-auto">
+                <button
+                  aria-label="이전 페이지"
+                  onClick={() => setListPage((p) => Math.max(0, p - 1))}
+                  disabled={listPage === 0}
+                  className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <Typography variant="small" color="gray" className="text-xs !text-gray-500 min-w-[40px] text-center">
+                  {listPage + 1} / {totalListPages}
+                </Typography>
+                <button
+                  aria-label="다음 페이지"
+                  onClick={() => setListPage((p) => Math.min(totalListPages - 1, p + 1))}
+                  disabled={listPage === totalListPages - 1}
+                  className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            )}
           </CardBody>
         </Card>
       )}

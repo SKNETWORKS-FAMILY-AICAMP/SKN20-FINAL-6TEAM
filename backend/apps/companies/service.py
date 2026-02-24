@@ -96,6 +96,18 @@ class CompanyService:
             return None
 
         update_data = data.model_dump(exclude_unset=True)
+
+        # main_yn=True 설정 시 동일 사용자의 다른 기업들을 False로 초기화
+        if update_data.get("main_yn"):
+            stmt = select(Company).where(
+                Company.user_id == user_id,
+                Company.company_id != company_id,
+                Company.use_yn == True,
+            )
+            other_companies = list(self.db.execute(stmt).scalars().all())
+            for other in other_companies:
+                other.main_yn = False
+
         for key, value in update_data.items():
             setattr(company, key, value)
 

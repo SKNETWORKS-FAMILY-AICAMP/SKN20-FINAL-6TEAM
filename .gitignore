@@ -3,6 +3,10 @@
 __pycache__
 .pytest_cache
 .claude/settings.local.json
+.claude/worktrees
+.omc
+.claude/settings.json
+.claude/launch.json
 
 # =============================================
 # Windows 특수 파일
@@ -104,9 +108,12 @@ scripts/crawling/output/
 scripts/crawling/temp/
 scripts/crawling/forms/
 
+
 # =============================================
 # RAGAS 평가 결과 (로컬 전용)
 # =============================================
 rag/evaluation/results/*.json
 rag/evaluation/results/*.txt
 rag/reports/
+
+.claude/settings.json

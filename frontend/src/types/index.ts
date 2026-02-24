@@ -33,6 +33,20 @@ export interface History {
   create_date?: string;
 }
 
+// Announce types
+export interface Announce {
+  announce_id: number;
+  ann_name: string;
+  source_type: string;
+  apply_start?: string;
+  apply_end?: string;
+  region: string;
+  organization: string;
+  source_url: string;
+  biz_code?: string;
+  create_date?: string;
+}
+
 // Schedule types
 export interface Schedule {
   schedule_id: number;
