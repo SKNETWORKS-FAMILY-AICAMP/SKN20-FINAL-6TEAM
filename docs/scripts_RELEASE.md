@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-02-24] - 이메일 알림 SMTP → AWS SES 통합
+
+### Features
+- **AWS SES 이메일 알림** (`scripts/batch/update_announcements.py`): smtplib/SMTP 제거, boto3 SES로 교체 — EC2 Instance Role 자동 인증, `SES_FROM`·`ALERT_EMAIL_TO` 미설정 시 graceful 건너뜀
+
 ## [2026-02-20] - 지원사업 공고 배치 스케줄러 구현 (Docker + systemd)
 
 ### Features
