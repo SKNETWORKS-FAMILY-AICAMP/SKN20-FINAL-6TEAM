@@ -1,4 +1,4 @@
-"""민감 정보 마스킹 유틸리티 모듈.
+"""민감 정보 마스킹 유틸리티 모듈 (Backend용).
 
 로그에서 개인정보를 자동으로 마스킹하는 기능을 제공합니다.
 """
@@ -58,10 +58,6 @@ def mask_sensitive_data(text: str) -> str:
 
     Returns:
         민감 정보가 마스킹된 텍스트
-
-    Example:
-        >>> mask_sensitive_data("연락처: 010-1234-5678, 이메일: test@example.com")
-        '연락처: 010-****-****, 이메일: ***@***.***'
     """
     if not isinstance(text, str):
         return text
@@ -74,14 +70,7 @@ def mask_sensitive_data(text: str) -> str:
 
 
 def mask_dict_values(data: dict[str, Any]) -> dict[str, Any]:
-    """딕셔너리의 모든 문자열 값에서 민감 정보를 마스킹합니다.
-
-    Args:
-        data: 마스킹할 딕셔너리
-
-    Returns:
-        마스킹된 딕셔너리 (원본 수정 안 함)
-    """
+    """딕셔너리의 모든 문자열 값에서 민감 정보를 마스킹합니다."""
     result = {}
     for key, value in data.items():
         if isinstance(value, str):
@@ -101,29 +90,13 @@ def mask_dict_values(data: dict[str, Any]) -> dict[str, Any]:
 class SensitiveDataFilter(logging.Filter):
     """로그에서 민감 정보를 마스킹하는 필터.
 
-    로거에 추가하여 모든 로그 메시지에서 민감 정보를 자동으로 마스킹합니다.
-
-    Example:
-        >>> import logging
-        >>> logger = logging.getLogger("my_logger")
-        >>> logger.addFilter(SensitiveDataFilter())
-        >>> logger.info("사용자 전화번호: 010-1234-5678")
-        # 출력: 사용자 전화번호: 010-****-****
+    루트 로거에 추가하여 모든 로그 메시지에서 민감 정보를 자동으로 마스킹합니다.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
-        """로그 레코드의 메시지를 마스킹합니다.
-
-        Args:
-            record: 로그 레코드
-
-        Returns:
-            항상 True (로그 기록 허용)
-        """
         if isinstance(record.msg, str):
             record.msg = mask_sensitive_data(record.msg)
 
-        # args가 있는 경우 (포맷 문자열)
         if record.args:
             if isinstance(record.args, dict):
                 record.args = mask_dict_values(record.args)

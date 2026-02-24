@@ -5,6 +5,7 @@ Bizi의 RAG 서비스 API 서버를 구동합니다.
 """
 
 import asyncio
+import contextvars
 import hmac
 import logging
 from collections.abc import AsyncGenerator
@@ -13,20 +14,47 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.types import ASGIApp as _ASGIApp, Receive as _Receive, Scope as _Scope, Send as _Send
-
 from utils.config import get_settings
+from utils.logging_utils import SensitiveDataFilter
+
+# 요청 ID 컨텍스트 변수
+_request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="-")
+
+
+class RequestIdFilter(logging.Filter):
+    """로그 레코드에 request_id 속성을 추가하는 필터."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.request_id = _request_id_var.get()
+        return True
+
+
+class RequestIdMiddleware:
+    """Backend에서 전달된 X-Request-ID를 ContextVar에 설정하는 순수 ASGI 미들웨어."""
+
+    def __init__(self, app: _ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: _Scope, receive: _Receive, send: _Send) -> None:
+        if scope["type"] == "http":
+            headers = dict(scope.get("headers", []))
+            request_id = headers.get(b"x-request-id", b"-").decode("latin-1")
+            _request_id_var.set(request_id)
+        await self.app(scope, receive, send)
+
+
+# 필터를 핸들러 등록(basicConfig) 전에 루트 로거에 추가
+# → %(request_id)s 포맷이 모든 핸들러에서 안전하게 동작
+root_logger = logging.getLogger()
+root_logger.addFilter(RequestIdFilter())
+root_logger.addFilter(SensitiveDataFilter())
 
 # 로깅 설정
 logging.basicConfig(
     level=getattr(logging, get_settings().log_level, logging.INFO),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format="%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] %(message)s",
 )
 logger = logging.getLogger(__name__)
-
-# 민감 정보 마스킹 필터 (루트 로거에 적용)
-from utils.logging_utils import SensitiveDataFilter
-root_logger = logging.getLogger()
-root_logger.addFilter(SensitiveDataFilter())
 
 # JSON 파일 로깅 추가 (/var/log/app/rag.log)
 try:
@@ -258,6 +286,9 @@ if _settings.enable_rate_limit:
         _settings.rate_limit_rate, _settings.rate_limit_capacity,
         _settings.rate_limit_authenticated_multiplier,
     )
+
+# Request ID 미들웨어 (순수 ASGI — 가장 외곽에서 request_id를 ContextVar에 설정)
+app.add_middleware(RequestIdMiddleware)
 
 # 라우터 등록
 for r in all_routers:

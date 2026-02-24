@@ -3,8 +3,10 @@
 import json
 import logging
 import logging.handlers
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+_KST = timezone(timedelta(hours=9))
 
 
 class JSONFormatter(logging.Formatter):
@@ -16,7 +18,7 @@ class JSONFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         log_data: dict = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(_KST).isoformat(),
             "level": record.levelname,
             "service": self._service_name,
             "logger": record.name,
@@ -24,6 +26,7 @@ class JSONFormatter(logging.Formatter):
             "module": record.module,
             "func": record.funcName,
             "line": record.lineno,
+            "request_id": getattr(record, "request_id", "-"),
         }
         if record.exc_info:
             log_data["exception"] = self.formatException(record.exc_info)

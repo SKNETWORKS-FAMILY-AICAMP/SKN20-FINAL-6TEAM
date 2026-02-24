@@ -42,6 +42,7 @@ class Settings(BaseSettings):
 
     # Environment
     ENVIRONMENT: str = "development"
+    LOG_LEVEL: str = "INFO"
 
     # Test login
     ENABLE_TEST_LOGIN: bool = False

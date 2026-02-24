@@ -1,5 +1,17 @@
 # Release Notes
 
+## [2026-02-25] - 로깅 시스템 전면 개선 — 보안 마스킹 · 로그 제한 · LOG_LEVEL · X-Request-ID 추적
+
+### Features
+- **LOG_LEVEL 동적 제어** (`config/settings.py`, `main.py`, `docker-compose*.yaml`): `LOG_LEVEL` 환경변수 추가 — 재빌드 없이 로그 레벨 변경 가능 (기본값 `INFO`)
+- **X-Request-ID 서비스 간 요청 추적** (`main.py`, `apps/rag/router.py`, `config/logging_config.py`): `AuditLoggingMiddleware`에서 요청마다 UUID 생성 → `request.state`·`ContextVar` 동시 저장, 응답 헤더 `X-Request-ID` 추가, RAG 프록시 요청 헤더에 전달, JSON 로그·stdout 포맷에 `request_id` 필드 포함
+
+### Security
+- **Backend 민감정보 마스킹** (`config/logging_utils.py` 신규, `main.py`): `SensitiveDataFilter` Backend 전체 적용 — 이메일·휴대폰·주민번호·사업자번호·신용카드·계좌번호를 `backend.log`에 평문 기록 방지
+
+### Performance
+- **Docker 로그 용량 제한** (`docker-compose.prod.yaml`, `docker-compose.yaml`): 전 서비스 `json-file` 드라이버 명시 — prod 총 130MB 예산(10m×3개), dev 누락 4개 서비스 동일 설정 추가 (t3.medium 디스크 고갈 방지)
+
 ## [2026-02-24] - 기업 프로필 개선 + 지원사업 공고 API + 관리자 모니터링
 
 ### Features

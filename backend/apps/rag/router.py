@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -70,16 +70,21 @@ def _build_user_context(user: User, db: Session) -> dict:
     return context
 
 
-def _build_rag_headers() -> dict[str, str]:
+def _build_rag_headers(request: Request | None = None) -> dict[str, str]:
     """RAG 서비스 요청 헤더를 구성합니다."""
     headers: dict[str, str] = {"Content-Type": "application/json"}
     if settings.RAG_API_KEY:
         headers["X-API-Key"] = settings.RAG_API_KEY
+    if request is not None:
+        request_id = getattr(request.state, "request_id", None)
+        if request_id:
+            headers["X-Request-ID"] = request_id
     return headers
 
 
 @router.post("/chat")
 async def rag_chat(
+    request: Request,
     body: RagChatRequest,
     user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
@@ -96,7 +101,7 @@ async def rag_chat(
     async with httpx.AsyncClient(timeout=_RAG_TIMEOUT) as client:
         try:
             resp = await client.post(
-                url, json=payload, headers=_build_rag_headers()
+                url, json=payload, headers=_build_rag_headers(request)
             )
         except httpx.ConnectError:
             raise HTTPException(status_code=502, detail="RAG 서비스에 연결할 수 없습니다.")
@@ -115,12 +120,12 @@ def _sse_error(message: str) -> bytes:
     return f'data: {json.dumps({"type": "error", "content": message}, ensure_ascii=False)}\n\n'.encode("utf-8")
 
 
-async def _stream_rag(url: str, payload: dict):
+async def _stream_rag(url: str, payload: dict, request: Request | None = None):
     """RAG SSE 스트림을 바이트 단위로 중계합니다."""
     async with httpx.AsyncClient(timeout=_RAG_TIMEOUT) as client:
         try:
             async with client.stream(
-                "POST", url, json=payload, headers=_build_rag_headers()
+                "POST", url, json=payload, headers=_build_rag_headers(request)
             ) as resp:
                 if resp.status_code != 200:
                     error_body = await resp.aread()
@@ -141,6 +146,7 @@ async def _stream_rag(url: str, payload: dict):
 
 @router.post("/chat/stream")
 async def rag_chat_stream(
+    request: Request,
     body: RagChatRequest,
     user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
@@ -155,7 +161,7 @@ async def rag_chat_stream(
     url = f"{settings.RAG_SERVICE_URL}/api/chat/stream"
 
     return StreamingResponse(
-        _stream_rag(url, payload),
+        _stream_rag(url, payload, request),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -167,6 +173,7 @@ async def rag_chat_stream(
 
 @router.post("/documents/contract")
 async def generate_contract(
+    request: Request,
     body: ContractGenerateRequest,
     user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
@@ -188,7 +195,7 @@ async def generate_contract(
     url = f"{settings.RAG_SERVICE_URL}/api/documents/contract"
     async with httpx.AsyncClient(timeout=_RAG_TIMEOUT) as client:
         try:
-            resp = await client.post(url, json=payload, headers=_build_rag_headers())
+            resp = await client.post(url, json=payload, headers=_build_rag_headers(request))
         except httpx.ConnectError:
             raise HTTPException(502, "RAG 서비스에 연결할 수 없습니다.")
         except httpx.TimeoutException:
@@ -203,6 +210,7 @@ async def generate_contract(
 
 @router.post("/documents/business-plan")
 async def generate_business_plan(
+    request: Request,
     format: str = Query(default="docx", pattern=r"^(pdf|docx)$"),
     user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
@@ -218,7 +226,7 @@ async def generate_business_plan(
 
     async with httpx.AsyncClient(timeout=_RAG_TIMEOUT) as client:
         try:
-            resp = await client.post(url, json=payload, headers=_build_rag_headers())
+            resp = await client.post(url, json=payload, headers=_build_rag_headers(request))
         except httpx.ConnectError:
             raise HTTPException(502, "RAG 서비스에 연결할 수 없습니다.")
         except httpx.TimeoutException:

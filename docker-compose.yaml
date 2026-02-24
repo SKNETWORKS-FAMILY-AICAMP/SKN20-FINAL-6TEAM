@@ -11,12 +11,22 @@ services:
     depends_on:
       - frontend
       - backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # SSH Tunnel to AWS RDS (via Bastion EC2)
   ssh-tunnel:
     image: alpine:3.21
     container_name: bizi-ssh-tunnel
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     volumes:
       - ./.ssh/bizi-key.pem:/tmp/bizi-key.pem:ro
       - ./.ssh/known_hosts:/tmp/known_hosts:ro
@@ -73,6 +83,7 @@ services:
         max-size: "10m"
         max-file: "3"
     environment:
+      - TZ=Asia/Seoul
       - MYSQL_HOST=ssh-tunnel
       - MYSQL_PORT=3306
       - MYSQL_DATABASE=${MYSQL_DATABASE:-bizi_db}
@@ -84,6 +95,7 @@ services:
       - ENABLE_TEST_LOGIN=${ENABLE_TEST_LOGIN:-false}
       - RAG_API_KEY=${RAG_API_KEY:-}
       - RAG_SERVICE_URL=http://rag:8001
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
       ssh-tunnel:
         condition: service_healthy
@@ -114,6 +126,11 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
     depends_on:
       - backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:5173/ || exit 1"]
       interval: 30s
@@ -139,6 +156,7 @@ services:
         max-size: "10m"
         max-file: "3"
     environment:
+      - TZ=Asia/Seoul
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - RAG_API_KEY=${RAG_API_KEY:-}
       - BIZINFO_API_KEY=${BIZINFO_API_KEY:-}
@@ -191,6 +209,11 @@ services:
       - ANONYMIZED_TELEMETRY=false
       - CHROMA_SERVER_AUTHN_PROVIDER=${CHROMA_AUTH_TOKEN:+chromadb.auth.token_authn.TokenAuthenticationServerProvider}
       - CHROMA_SERVER_AUTHN_CREDENTIALS=${CHROMA_AUTH_TOKEN:-}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8000'"]
       interval: 10s

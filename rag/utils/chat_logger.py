@@ -5,13 +5,15 @@
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
 from utils.config import get_settings
 from utils.logging_utils import mask_sensitive_data
+
+_KST = timezone(timedelta(hours=9))
 
 LOG_DIR = Path(__file__).parent.parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
@@ -51,7 +53,7 @@ def log_chat_interaction(
         evaluation: 평가 결과 (선택)
         token_usage: 토큰 사용량 (선택)
     """
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = datetime.now(_KST).strftime("%Y-%m-%d %H:%M:%S")
 
     # 민감 정보 마스킹 적용
     masked_question = mask_sensitive_data(question)
@@ -155,11 +157,11 @@ def log_ragas_metrics(
         domains: 처리된 도메인 리스트
         response_time: 응답 시간 (초)
     """
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = datetime.now(_KST).strftime("%Y-%m-%d %H:%M:%S")
     log_data = {
         "timestamp": timestamp,
-        "question": question[:200],
-        "answer_preview": answer[:200],
+        "question": mask_sensitive_data(question)[:200],
+        "answer_preview": mask_sensitive_data(answer)[:200],
         "domains": domains,
         "response_time": round(response_time, 2),
         "ragas_metrics": metrics_dict,

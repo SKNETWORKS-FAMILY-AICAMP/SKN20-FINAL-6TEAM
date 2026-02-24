@@ -1,4 +1,5 @@
 import asyncio
+import contextvars
 import logging
 import time
 import uuid
@@ -14,9 +15,34 @@ from starlette.responses import JSONResponse
 from config.settings import settings
 from config.database import Base, SessionLocal, engine
 from config.logging_config import setup_json_file_logging
+from config.logging_utils import SensitiveDataFilter
+
+# 요청 ID 컨텍스트 변수 및 필터
+_request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="-")
+
+
+class RequestIdFilter(logging.Filter):
+    """로그 레코드에 request_id 속성을 추가하는 필터."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.request_id = _request_id_var.get()
+        return True
+
+
+# 필터를 핸들러 등록(basicConfig) 전에 루트 로거에 추가
+# → %(request_id)s 포맷이 모든 핸들러에서 안전하게 동작
+logging.getLogger().addFilter(RequestIdFilter())
+logging.getLogger().addFilter(SensitiveDataFilter())
+
+# stdout 로깅 기본 설정
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
+    format="%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] %(message)s",
+)
 
 # JSON 파일 로깅 설정 (/var/log/app/backend.log)
 setup_json_file_logging(service_name="backend")
+
 from apps.auth.token_blacklist import cleanup_expired
 
 logger = logging.getLogger(__name__)
@@ -129,8 +155,16 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start = time.time()
         request_id = str(uuid.uuid4())[:8]
+
+        # 요청 상태 및 컨텍스트 변수에 request_id 저장 (로그 전파용)
+        request.state.request_id = request_id
+        _request_id_var.set(request_id)
+
         response = await call_next(request)
         duration = time.time() - start
+
+        # 응답 헤더에 X-Request-ID 추가 (서비스 간 추적용)
+        response.headers["X-Request-ID"] = request_id
 
         if request.method in self.AUDIT_METHODS:
             client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()

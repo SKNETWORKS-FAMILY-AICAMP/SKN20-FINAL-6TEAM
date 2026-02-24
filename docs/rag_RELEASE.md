@@ -1,6 +1,16 @@
 # Release Notes
 
-## [2026-02-25] - EC2 프로덕션 배포 시 RAG .env 파라미터 미참조 버그 수정
+## [2026-02-25] - 로깅 시스템 전면 개선 + EC2 .env 파라미터 수정
+
+### Features
+- **X-Request-ID 요청 추적** (`main.py`, `utils/json_file_logger.py`): `RequestIdMiddleware`(순수 ASGI) 추가 — Backend에서 전달된 `X-Request-ID` 헤더를 `ContextVar`에 설정, `RequestIdFilter`로 모든 로그에 `request_id` 포함, JSON 로그·stdout 포맷 `[%(request_id)s]` 추가
+- **KST 타임존 명시 적용** (`utils/chat_logger.py`): `datetime.now(_KST)` 명시 — Docker `TZ=Asia/Seoul` 환경변수 의존 제거
+
+### Security
+- **민감정보 마스킹 누락 수정** (`utils/chat_logger.py`): `log_ragas_metrics()`의 question/answer에 `mask_sensitive_data()` 적용 — RAGAS 로그 파일 평문 노출 방지
+
+### Performance
+- **regex 사전 컴파일** (`utils/logging_utils.py`): `SENSITIVE_PATTERNS` → `_COMPILED_PATTERNS` 사전 컴파일 — 매 호출 재컴파일 제거로 마스킹 처리 성능 개선
 
 ### Bug Fixes
 - **RAG `env_file` 누락 수정** (`docker-compose.prod.yaml`): EC2 배포 시 `environment:` 섹션에 없는 `.env` 파라미터(`MULTI_QUERY_COUNT`, `VECTOR_SEARCH_WEIGHT`, `RERANKER_TYPE` 등)가 기본값으로 폴백되던 문제 수정 — `env_file: .env` 추가로 `.env` 전체 변수를 컨테이너에 주입
