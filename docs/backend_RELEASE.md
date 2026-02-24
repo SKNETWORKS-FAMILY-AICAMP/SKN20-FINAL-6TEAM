@@ -1,5 +1,16 @@
 # Release Notes
 
+## [2026-02-24] - 기업 프로필 개선 + 지원사업 공고 API 추가
+
+### Features
+- **기업 프로필 개선 및 지원사업 공고 API** (`apps/announces/`, `apps/companies/service.py`): announces CRUD 모듈 신규 추가 (router, service, schemas), 기업 서비스 로직 확장
+
+### Refactoring
+- **전체 품질 개선** (`main.py` 외): 보안/안정성/성능/멀티도메인 Phase 6~9 일괄 적용
+
+### Documentation
+- **프로젝트 문서 현행화**: 코드 불일치 27건 수정
+
 ## [2026-02-23] - 문서 현행화 + 문서 자동 생성 + 멀티턴 대화
 
 ### Features

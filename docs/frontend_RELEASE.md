@@ -1,5 +1,27 @@
 # Release Notes
 
+## [2026-02-24] - 기업 프로필 UI 개선 + 다수 버그 수정
+
+### Features
+- **기업 대시보드/폼 리팩토링** (`components/company/CompanyDashboard.tsx`, `CompanyForm.tsx`): 기업 관리 UI 기능 강화
+- **Zustand companyStore 추가** (`stores/companyStore.ts`): 기업 상태 관리 전용 스토어 신규 추가
+- **CompanyPage 개선** (`pages/CompanyPage.tsx`): 기업 페이지 구조 개선
+
+### Bug Fixes
+- **스트리밍 중 세션 전환 시 메시지 업데이트 누락 수정** (`hooks/useChat.ts`, `stores/chatStore.ts`)
+- **멀티턴 히스토리 중복 저장 버그 수정** (`stores/chatStore.ts`)
+- **스케쥴러 알림 수정** (`components/layout/NotificationBell.tsx`)
+- **캘린더 달력 넘기기 버튼 복구** (`components/schedule/CalendarView.tsx`)
+- **레이아웃 맞추기** (`pages/MainPage.tsx`)
+- **로그아웃시 main으로 돌아가기** (`stores/authStore.ts`)
+
+### Refactoring
+- **전체 품질 개선**: 보안/안정성/성능/멀티도메인 Phase 6~9 일괄 적용
+- **RAG 품질 개선**: 프롬프트 강화, 검색 파이프라인 최적화, RAGAS 평가 개선
+
+### Documentation
+- **프로젝트 문서 현행화**: 코드 불일치 27건 수정
+
 ## [2026-02-23] - 문서 자동 생성 + 멀티턴 대화 + history 최적화
 
 ### Features

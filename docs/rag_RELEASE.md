@@ -1,5 +1,17 @@
 # Release Notes
 
+## [2026-02-24] - RAG 품질 대폭 개선 + 프롬프트 최적화
+
+### Refactoring
+- **RAG 품질 개선** (`agents/`, `chains/`, `utils/prompts.py`): 프롬프트 강화, 검색 파이프라인 최적화, RAGAS 평가 개선
+- **전체 품질 개선** (`utils/`, `routes/`): 보안/안정성/성능/멀티도메인 Phase 6~9 일괄 적용
+
+### Bug Fixes
+- **단일 도메인 대명사 보강** (`agents/`, `utils/`): 검색·생성·평가 전 단계에 대명사 보강 적용
+
+### Documentation
+- **프로젝트 문서 현행화**: 코드 불일치 27건 수정
+
 ## [2026-02-23] - 문서 현행화 + RAG 답변 품질 개선
 
 ### Performance
