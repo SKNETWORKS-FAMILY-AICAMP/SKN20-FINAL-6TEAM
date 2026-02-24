@@ -12,6 +12,7 @@
 ### Bug Fixes
 - **단일 도메인 대명사 보강** (`agents/`, `utils/`): 검색·생성·평가 전 단계에 대명사 보강 적용
 - **프로덕션 이미지 디스크 절감** (`Dockerfile.prod`): CUDA torch(~2.5GB) → CPU-only torch(~200MB) 교체, RunPod 모드에서 불필요한 BGE-M3/reranker 모델 빌드 시 다운로드 생략
+- **로그 파일 핸들러 PermissionError 수정** (`utils/json_file_logger.py`): named volume 권한 오류 시 graceful 처리, 컨테이너 기동 실패 방지
 
 ### Documentation
 - **프로젝트 문서 현행화**: 코드 불일치 27건 수정

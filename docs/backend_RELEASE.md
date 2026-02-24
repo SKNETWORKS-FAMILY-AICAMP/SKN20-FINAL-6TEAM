@@ -6,6 +6,9 @@
 - **기업 프로필 개선 및 지원사업 공고 API** (`apps/announces/`, `apps/companies/service.py`): announces CRUD 모듈 신규 추가 (router, service, schemas), 기업 서비스 로직 확장
 - **관리자 모니터링 시스템** (`apps/admin/`, `apps/common/`, `config/logging_config.py`): JSON 파일 로깅(/var/log/app/backend.log), job_logs 테이블(스케줄러 실행 이력), `/admin/metrics`(psutil), `/admin/scheduler/status`, `/admin/logs` 엔드포인트 추가, AWS SES 이메일 알림(리소스 90% 초과·스케줄러 실패 시)
 
+### Bug Fixes
+- **로그 파일 핸들러 PermissionError 수정** (`config/logging_config.py`): named volume 권한 오류 시 graceful 처리, 컨테이너 기동 실패 방지
+
 ### Refactoring
 - **전체 품질 개선** (`main.py` 외): 보안/안정성/성능/멀티도메인 Phase 6~9 일괄 적용
 
