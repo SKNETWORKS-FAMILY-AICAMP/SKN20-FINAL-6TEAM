@@ -60,12 +60,19 @@ def setup_json_file_logging(
             if getattr(handler, "baseFilename", "").endswith(f"{service_name}.log"):
                 return
 
-    file_handler = logging.handlers.RotatingFileHandler(
-        filename=log_file,
-        maxBytes=10 * 1024 * 1024,  # 10MB
-        backupCount=3,
-        encoding="utf-8",
-    )
+    try:
+        file_handler = logging.handlers.RotatingFileHandler(
+            filename=log_file,
+            maxBytes=10 * 1024 * 1024,  # 10MB
+            backupCount=3,
+            encoding="utf-8",
+        )
+    except OSError as e:
+        logging.getLogger(__name__).warning(
+            "로그 파일 핸들러 생성 실패: %s — 파일 로깅 비활성화 (%s)", log_file, e
+        )
+        return
+
     file_handler.setFormatter(_JSONFormatter(service_name=service_name))
     file_handler.setLevel(level)
 
