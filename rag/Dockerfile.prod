@@ -14,16 +14,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Python 의존성 설치
+# Python 의존성 설치 (CPU-only torch — RunPod 모드에서 로컬 GPU 불필요)
 RUN pip install --no-cache-dir --upgrade pip
 COPY requirements.txt .
+# CPU-only torch 먼저 설치 (~200MB, CUDA 버전 ~2.5GB 대신)
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+# 나머지 의존성 설치 (torch는 이미 설치됐으므로 재설치 건너뜀)
 RUN pip install --no-cache-dir -r requirements.txt
 
-# BGE-M3 임베딩 모델 프리다운로드 (이미지에 포함)
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-m3')"
-
-# bge-reranker-base 모델 프리다운로드
-RUN python -c "from sentence_transformers import CrossEncoder; CrossEncoder('BAAI/bge-reranker-base')"
+# 모델 프리다운로드 생략 — EMBEDDING_PROVIDER=runpod 사용 시 불필요
+# 로컬 모델이 필요한 경우 EMBEDDING_PROVIDER=local 로 변경 후 아래 주석 해제:
+# RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-m3')"
+# RUN python -c "from sentence_transformers import CrossEncoder; CrossEncoder('BAAI/bge-reranker-base')"
 
 # --- Stage 2: Runtime ---
 FROM python:3.10-slim-bookworm
