@@ -97,6 +97,22 @@ async def delete_company(
     return None
 
 
+@router.patch("/{company_id}/main", response_model=CompanyResponse)
+async def toggle_main_company(
+    company_id: int,
+    service: CompanyService = Depends(get_company_service),
+    current_user: User = Depends(get_current_user),
+):
+    """대표 기업 토글"""
+    company = service.set_main_company(company_id, current_user.user_id)
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found",
+        )
+    return company
+
+
 @router.post("/{company_id}/upload", response_model=CompanyResponse)
 @limiter.limit("5/minute")
 async def upload_business_registration(

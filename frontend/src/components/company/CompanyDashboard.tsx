@@ -4,13 +4,12 @@ import {
   NewspaperIcon,
   CalendarDaysIcon,
   MegaphoneIcon,
-  BuildingOfficeIcon,
+  BuildingOffice2Icon,
   ChevronLeftIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/outline';
-import { useCompanyStore } from '../../stores/companyStore';
 import api from '../../lib/api';
-import type { Announce, Schedule } from '../../types';
+import type { Announce, Company, Schedule } from '../../types';
 
 const formatDate = (dateStr: string | undefined): string => {
   if (!dateStr) return '-';
@@ -29,10 +28,11 @@ const safeUrl = (url: string | undefined): string => {
 
 const ITEMS_PER_PAGE = 3;
 
-export const CompanyDashboard: React.FC = () => {
-  const { companies, selectedCompanyId } = useCompanyStore();
-  const selectedCompany = companies.find((c) => c.company_id === selectedCompanyId) ?? null;
+interface CompanyDashboardProps {
+  selectedCompany: Company | null;
+}
 
+export const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ selectedCompany }) => {
   const [announces, setAnnounces] = useState<Announce[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loadingAnnounces, setLoadingAnnounces] = useState(false);
@@ -109,30 +109,31 @@ export const CompanyDashboard: React.FC = () => {
     fetchSchedules();
   }, [selectedCompany?.company_id, selectedCompany?.biz_code]);
 
+  if (!selectedCompany) {
+    return (
+      <Card className="border border-blue-gray-100 shadow-sm">
+        <CardBody className="py-10 text-center">
+          <div className="mx-auto mb-4 inline-flex rounded-2xl bg-gradient-to-br from-blue-50 to-cyan-50 p-4 ring-1 ring-blue-100">
+            <BuildingOffice2Icon className="h-8 w-8 text-blue-600" />
+          </div>
+          <Typography variant="h5" color="blue-gray" className="mb-2 !text-gray-900">
+            기업을 먼저 선택하세요
+          </Typography>
+          <Typography variant="small" color="gray" className="mx-auto max-w-xl !text-gray-700">
+            기업을 클릭하면 해당 기업 기준의 대시보드(공고, 일정, 뉴스)를 볼 수 있습니다.
+          </Typography>
+        </CardBody>
+      </Card>
+    );
+  }
+
   return (
     <div>
-      {!selectedCompany ? (
-        <Card className="mt-4">
-          <CardBody className="text-center py-10">
-            <BuildingOfficeIcon className="h-8 w-8 text-gray-400 mx-auto mb-3" />
-            <Typography color="gray">기업을 선택하면 대시보드가 표시됩니다.</Typography>
-          </CardBody>
-        </Card>
-      ) : (
-        <div>
-      <div className="flex items-center gap-3 mb-4">
-        <Typography variant="h5" color="blue-gray" className="!text-gray-900">
-          기업 대시보드
-        </Typography>
-        <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-0.5 text-sm font-medium text-blue-700">
-          {selectedCompany.com_name}
-        </span>
-      </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         {/* 최근 공고 */}
         <Card className="hover:shadow-lg transition-shadow">
-          <CardBody className="h-[220px] overflow-hidden flex flex-col">
+          <CardBody className="h-[288px] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className="inline-flex p-2 rounded-full bg-blue-50">
@@ -203,7 +204,7 @@ export const CompanyDashboard: React.FC = () => {
 
         {/* 다가오는 일정 */}
         <Card className="hover:shadow-lg transition-shadow">
-          <CardBody className="h-[220px] overflow-hidden flex flex-col">
+          <CardBody className="h-[288px] overflow-hidden flex flex-col">
             <div className="flex items-center gap-2 mb-3">
               <div className="inline-flex p-2 rounded-full bg-green-50">
                 <CalendarDaysIcon className="h-5 w-5 text-green-500" />
@@ -235,7 +236,7 @@ export const CompanyDashboard: React.FC = () => {
 
         {/* 관련 뉴스 (Coming Soon) */}
         <Card className="hover:shadow-lg transition-shadow">
-          <CardBody className="h-[220px] overflow-hidden flex flex-col">
+          <CardBody className="h-[288px] overflow-hidden flex flex-col">
             <div className="flex items-center gap-2 mb-3">
               <div className="inline-flex p-2 rounded-full bg-purple-50">
                 <NewspaperIcon className="h-5 w-5 text-purple-500" />
@@ -250,8 +251,6 @@ export const CompanyDashboard: React.FC = () => {
           </CardBody>
         </Card>
       </div>
-    </div>
-      )}
     </div>
   );
 };

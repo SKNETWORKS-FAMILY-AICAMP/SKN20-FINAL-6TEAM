@@ -96,18 +96,6 @@ class CompanyService:
             return None
 
         update_data = data.model_dump(exclude_unset=True)
-
-        # main_yn=True 설정 시 동일 사용자의 다른 기업들을 False로 초기화
-        if update_data.get("main_yn"):
-            stmt = select(Company).where(
-                Company.user_id == user_id,
-                Company.company_id != company_id,
-                Company.use_yn == True,
-            )
-            other_companies = list(self.db.execute(stmt).scalars().all())
-            for other in other_companies:
-                other.main_yn = False
-
         for key, value in update_data.items():
             setattr(company, key, value)
 
@@ -132,6 +120,39 @@ class CompanyService:
         company.use_yn = False
         self.db.commit()
         return True
+
+    def set_main_company(self, company_id: int, user_id: int) -> Company | None:
+        """대표 기업을 토글합니다.
+
+        이미 대표인 기업을 다시 토글하면 해제(False).
+        새 기업을 대표로 설정하면 기존 대표 기업은 해제됩니다.
+
+        Args:
+            company_id: 기업 ID
+            user_id: 사용자 ID
+
+        Returns:
+            업데이트된 기업 객체 또는 None
+        """
+        company = self.get_company(company_id, user_id)
+        if not company:
+            return None
+
+        if company.main_yn:
+            company.main_yn = False
+        else:
+            stmt = select(Company).where(
+                Company.user_id == user_id,
+                Company.use_yn == True,
+            )
+            all_companies = list(self.db.execute(stmt).scalars().all())
+            for c in all_companies:
+                c.main_yn = False
+            company.main_yn = True
+
+        self.db.commit()
+        self.db.refresh(company)
+        return company
 
     async def upload_business_registration(
         self,
