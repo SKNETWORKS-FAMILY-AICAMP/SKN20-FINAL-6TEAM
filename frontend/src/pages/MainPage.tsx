@@ -64,13 +64,35 @@ const MainPage: React.FC = () => {
 
   useNotifications(notificationSchedules);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const prevSessionIdRef = useRef<string | null>(null);
+  const prevMessagesLengthRef = useRef<number>(0);
+
+  const scrollToBottom = (instant = false) => {
+    messagesEndRef.current?.scrollIntoView({ behavior: instant ? 'instant' : 'smooth' });
   };
 
+  // 스크롤 로직: 세션 변경 시 즉시, 메시지 추가 시 부드럽게
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    const sessionChanged = prevSessionIdRef.current !== currentSessionId;
+    const messagesAdded = messages.length > prevMessagesLengthRef.current;
+
+    if (sessionChanged) {
+      scrollToBottom(true);
+    } else if (messagesAdded) {
+      scrollToBottom(false);
+    }
+
+    prevSessionIdRef.current = currentSessionId;
+    prevMessagesLengthRef.current = messages.length;
+  }, [currentSessionId, messages.length]);
+
+  // 스트리밍 중 스크롤 따라가기
+  useEffect(() => {
+    if (isStreaming) {
+      const interval = setInterval(() => scrollToBottom(false), 100);
+      return () => clearInterval(interval);
+    }
+  }, [isStreaming]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -101,16 +123,16 @@ const MainPage: React.FC = () => {
   }, [isAuthenticated]);
 
   const handleSendMessage = async (message: string) => {
-    if (!message.trim() || isLoading) return;
+    if (!message.trim() || isLoading || isStreaming) return;
     setInputValue('');
     await sendMessage(message);
+    // 메시지 전송 완료 후 focus 복원
+    requestAnimationFrame(() => inputRef.current?.focus());
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     handleSendMessage(inputValue);
-    // submit 후 focus 유지
-    inputRef.current?.focus();
   };
 
   const handleNewChat = () => {
@@ -299,14 +321,13 @@ const MainPage: React.FC = () => {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                disabled={isLoading}
                 className="w-full px-3 py-2 text-sm border-0 focus:outline-none focus:ring-0 bg-transparent placeholder-gray-400"
               />
             </div>
             <IconButton
               type="submit"
               color="blue"
-              disabled={!inputValue.trim() || isLoading}
+              disabled={!inputValue.trim() || isLoading || isStreaming}
               className="rounded-xl"
             >
               <PaperAirplaneIcon className="h-5 w-5" />
