@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-02-25] - migrate_chroma_volume.sh 볼륨명 수정
+
+### Bug Fixes
+- **볼륨명 오류 수정** (`migrate_chroma_volume.sh`): EC2 실제 데이터 볼륨명이 `bizi_chromadb_data`임을 확인 — `skn20-final-6team_chromadb_data`(빈 볼륨)에서 복사하던 문제 수정
+
 ## [2026-02-25] - ChromaDB 볼륨 마이그레이션 스크립트 chmod 오류 수정
 
 ### Bug Fixes
