@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-02-25] - RAG 로깅 request_id propagation 우회 버그 수정
+
+### Bug Fixes
+- **`request_id` 필터 핸들러 이전** (`main.py`): Python logging의 `callHandlers()`는 child logger(starlette, uvicorn 등) → root 전파 시 `root_logger.filter()`를 우회하므로 `RequestIdFilter`가 실행되지 않아 `%(request_id)s` 포맷에서 `ValueError` 발생하던 문제 수정 — 필터를 루트 로거가 아닌 각 핸들러에 직접 추가
+
 ## [2026-02-25] - 로깅 시스템 전면 개선 + EC2 .env 파라미터 수정
 
 ### Features
