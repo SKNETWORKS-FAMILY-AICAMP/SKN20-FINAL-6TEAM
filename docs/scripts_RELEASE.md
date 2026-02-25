@@ -1,5 +1,11 @@
 # Release Notes
 
+## [2026-02-25] - ChromaDB 볼륨 bind mount 전환 + 마이그레이션 스크립트
+
+### Infrastructure
+- **ChromaDB bind mount 전환** (`docker-compose.prod.yaml`): `chromadb_data` named volume → `./chroma-data:/data` bind mount로 변경 — 호스트 경로 직접 접근으로 볼륨 데이터 관리 단순화, `volumes:` 섹션에서 `chromadb_data` 선언 제거
+- **마이그레이션 스크립트 추가** (`migrate_chroma_volume.sh`): 기존 named volume 데이터를 `./chroma-data/`로 복사 → 권한 설정 → `docker compose down/up` → ChromaDB 헬스체크(60초 폴링)까지 자동화 — 기존 named volume은 삭제하지 않으므로 수동 확인 후 제거 가능
+
 ## [2026-02-25] - 로그 영속화 및 S3 아카이브 배치 구현
 
 ### Features

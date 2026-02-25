@@ -184,7 +184,7 @@ services:
     expose:
       - "8000"
     volumes:
-      - chromadb_data:/data
+      - ./chroma-data:/data
     environment:
       ANONYMIZED_TELEMETRY: "false"
       CHROMA_SERVER_AUTHN_PROVIDER: ${CHROMA_AUTH_TOKEN:+chromadb.auth.token_authn.TokenAuthenticationServerProvider}
@@ -297,8 +297,6 @@ networks:
 
 volumes:
   app-logs:
-    driver: local
-  chromadb_data:
     driver: local
   certbot_conf:
     driver: local
