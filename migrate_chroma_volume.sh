@@ -9,20 +9,19 @@ COMPOSE_FILE="docker-compose.prod.yaml"
 
 echo "=== ChromaDB 볼륨 마이그레이션 시작 ==="
 
-# 1. 기존 named volume 데이터를 ./chroma-data/ 로 복사
-echo "[1/5] named volume → ${TARGET_DIR} 복사 중..."
+# 1. 기존 named volume 데이터를 ./chroma-data/ 로 복사 + 권한 설정
+# (chmod를 컨테이너 내부 root로 실행 — 호스트 사용자 권한 문제 우회)
+echo "[1/5] named volume → ${TARGET_DIR} 복사 및 권한 설정 중..."
 mkdir -p "${TARGET_DIR}"
 docker run --rm \
   -v "${VOLUME_NAME}:/source:ro" \
   -v "$(pwd)/${TARGET_DIR#./}:/dest" \
   alpine:3.21 \
-  sh -c "cp -a /source/. /dest/"
-echo "      복사 완료"
+  sh -c "cp -a /source/. /dest/ && chmod -R 777 /dest/"
+echo "      복사 및 권한 설정 완료"
 
-# 2. 권한 설정
-echo "[2/5] 권한 설정 (chmod 777 ${TARGET_DIR})..."
-chmod 777 "${TARGET_DIR}"
-echo "      완료"
+# 2. (skip — 권한 설정은 step 1에서 컨테이너 내부 처리 완료)
+echo "[2/5] 권한 설정 완료 (step 1에서 처리)"
 
 # 3. docker compose down (절대 -v 없이)
 echo "[3/5] docker compose down (볼륨 보존)..."
