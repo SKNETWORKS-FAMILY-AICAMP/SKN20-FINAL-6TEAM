@@ -43,17 +43,19 @@ class RequestIdMiddleware:
         await self.app(scope, receive, send)
 
 
-# 필터를 핸들러 등록(basicConfig) 전에 루트 로거에 추가
-# → %(request_id)s 포맷이 모든 핸들러에서 안전하게 동작
-root_logger = logging.getLogger()
-root_logger.addFilter(RequestIdFilter())
-root_logger.addFilter(SensitiveDataFilter())
-
 # 로깅 설정
+root_logger = logging.getLogger()
 logging.basicConfig(
     level=getattr(logging, get_settings().log_level, logging.INFO),
     format="%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] %(message)s",
 )
+
+# 필터를 핸들러에 직접 추가
+# (루트 로거의 filter()는 child logger → root 전파 시 callHandlers()에 의해 우회되므로
+#  루트 로거에만 추가하면 starlette/uvicorn 등 서드파티 로그에는 적용되지 않음)
+for _handler in root_logger.handlers:
+    _handler.addFilter(RequestIdFilter())
+    _handler.addFilter(SensitiveDataFilter())
 logger = logging.getLogger(__name__)
 
 # JSON 파일 로깅 추가 (/var/log/app/rag.log)
