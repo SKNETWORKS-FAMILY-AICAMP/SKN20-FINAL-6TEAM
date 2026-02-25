@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-02-25] - 로그인 화면 폰트 수정
+
+### Bug Fixes
+- **로그인 화면 및 Bizi 폰트 수정** (`pages/LoginPage.tsx`, `components/layout/Sidebar.tsx`, `index.css`): 로그인 페이지 레이아웃 개선, Bizi 브랜드 폰트 CSS 적용
+
 ## [2026-02-24] - 로그인 Google OAuth 복원 + Admin 모니터링 의존성 추가
 
 ### Fixes
