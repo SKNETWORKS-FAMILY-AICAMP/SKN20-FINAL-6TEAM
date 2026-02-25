@@ -1,5 +1,12 @@
 # Release Notes
 
+## [2026-02-25] - 로그 영속화 및 S3 아카이브 배치 구현
+
+### Features
+- **로그 S3 업로드 배치** (`scripts/batch/upload_logs.py`): 로테이션된 로그 파일(.log.N)을 `logs/{service}/YYYY/MM/DD/{filename}` 구조로 S3에 업로드하는 배치 스크립트 신규 추가 — `--dry-run`, `--delete-after-upload`, `--service` 옵션 지원, docker-compose `log-uploader` 서비스(`profiles: ["logs"]`)로 실행
+- **S3Uploader 로그 메서드 추가** (`scripts/batch/s3_uploader.py`): `generate_log_key(service, filename, date)` · `upload_log_file(file_path, service, date)` 메서드 추가 — 기존 공고문 업로드와 동일 버킷(`S3_BUCKET_NAME`) 사용
+- **Nginx 로그 영속화** (`nginx.conf`, `docker-compose.yaml`): `access_log`/`error_log` 지시어 추가, `nginx-logs` named volume 마운트 및 Docker `json-file` 로그 드라이버(10MB × 3개) 설정 — 컨테이너 재시작 후에도 로그 보존
+
 ## [2026-02-24] - 이메일 알림 SMTP → AWS SES 통합
 
 ### Features
