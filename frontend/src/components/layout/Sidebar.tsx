@@ -177,15 +177,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <button
                 onClick={() => navigate('/')}
-                className={`min-w-0 overflow-hidden text-left transition-[transform,opacity] duration-140 ease-[cubic-bezier(0.2,0,0,1)] hover:opacity-80 ${
+                className={`flex h-10 min-w-0 flex-col justify-center overflow-hidden text-left transition-[transform,opacity] duration-140 ease-[cubic-bezier(0.2,0,0,1)] hover:opacity-80 ${
                   effectiveCollapsed ? '-translate-x-1 opacity-0 pointer-events-none' : 'translate-x-0 opacity-100'
                 }`}
                 title="메인 페이지로 이동"
               >
-                <Typography variant="h5" color="blue">
+                <Typography variant="h5" color="blue" className="brand-logo-font !leading-none">
                   Bizi
                 </Typography>
-                <Typography variant="small" color="gray" className="text-xs !text-gray-600">
+                <Typography
+                  variant="small"
+                  color="gray"
+                  className="chiron-korean-font mt-0.5 text-xs !leading-none !text-gray-600"
+                >
                   통합 창업/경영 상담
                 </Typography>
               </button>

@@ -12,10 +12,14 @@ interface LoginRouteState {
 }
 
 const FEATURE_ITEMS = [
+  '.',
+  '.',
   '창업 절차, 지원사업, 세무/회계 상담',
   '인사/노무, 법률 리스크 기본 가이드',
   '기업 프로필 기반 맞춤형 상담 지원',
   '대화 히스토리 기반 연속 상담',
+  '.',
+  '.'
 ];
 
 const LoginPage: React.FC = () => {
@@ -102,21 +106,21 @@ const LoginPage: React.FC = () => {
           </button>
 
           <CardBody className="p-0">
-            <div className="flex flex-col px-8 pt-10 pb-8">
+            <div className="chiron-korean-font flex flex-col px-8 pt-10 pb-8">
               <div className="relative mb-1 pb-1">
-                <h1 className="relative z-10 font-serif text-[6.2rem] leading-[0.9] tracking-tight text-indigo-500">
+                <h1 className="brand-logo-font login-brand-logo-offset relative z-10 text-[6.2rem] leading-[0.9] tracking-tight text-indigo-500">
                   Biz
                   <span className="relative inline-block">
                     i
                     <span
                       aria-hidden
-                      className="absolute left-[33%] bottom-[0.12em] h-[2px] w-[30rem] bg-indigo-500"
+                      className="absolute left-[33%] bottom-[0.23em] h-[2px] w-[30rem] bg-indigo-500"
                     />
                   </span>
                 </h1>
               </div>
 
-              <Typography variant="paragraph" className="mt-1 !text-gray-600">
+              <Typography variant="paragraph" className="login-welcome-font -mt-6 !text-gray-600">
                 통합 창업/경영 상담 챗봇에
                 <br />
                 오신 것을 환영합니다.
