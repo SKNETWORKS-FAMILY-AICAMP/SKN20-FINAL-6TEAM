@@ -24,6 +24,7 @@ import { ResponseProgress } from '../components/chat/ResponseProgress';
 import { SourceReferences } from '../components/chat/SourceReferences';
 import { ActionButtons } from '../components/chat/ActionButtons';
 import { NotificationToast } from '../components/layout/NotificationToast';
+import { PageHeader } from '../components/common/PageHeader';
 import { stripSourcesSection } from '../lib/utils';
 
 const MAX_VISIBLE_TOASTS = 5;
@@ -165,21 +166,11 @@ const MainPage: React.FC = () => {
           />
         ))}
       {/* Header */}
-      <div className="p-4 border-b bg-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <Typography variant="h5" color="blue-gray" className="!text-gray-900">
-              AI 상담
-            </Typography>
-            <Typography variant="small" color="gray" className="!text-gray-700">
-              창업, 세무, 노무, 법률, 지원사업, 마케팅 통합 상담
-            </Typography>
-          </div>
-          <div className="flex items-center gap-3">
-            {isAuthenticated && <NotificationBell />}
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title={'\u0041\u0049 \uC0C1\uB2F4'}
+        description={'\uCC3D\uC5C5, \uC138\uBB34, \uB178\uBB34, \uBC95\uB960, \uC9C0\uC6D0\uC0AC\uC5C5, \uB9C8\uCF00\uD305 \uD1B5\uD569 \uC0C1\uB2F4'}
+        rightSlot={isAuthenticated ? <NotificationBell /> : null}
+      />
 
       {/* Quick questions */}
       <div className="p-4 bg-gray-50 border-b">

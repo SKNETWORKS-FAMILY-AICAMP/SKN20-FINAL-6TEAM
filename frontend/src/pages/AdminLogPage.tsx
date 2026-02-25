@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Typography } from '@material-tailwind/react';
 import api from '../lib/api';
 import type {
   AdminHistoryListResponse,
@@ -9,6 +8,7 @@ import type {
 import { HistoryFilterBar } from '../components/admin/HistoryFilterBar';
 import { HistoryTable } from '../components/admin/HistoryTable';
 import { HistoryDetailModal } from '../components/admin/HistoryDetailModal';
+import { PageHeader } from '../components/common/PageHeader';
 
 const AdminLogPage: React.FC = () => {
   const [data, setData] = useState<AdminHistoryListResponse | null>(null);
@@ -69,31 +69,33 @@ const AdminLogPage: React.FC = () => {
   };
 
   return (
-    <div className="p-6">
-      <Typography variant="h4" color="blue-gray" className="mb-6">
-        상담 로그
-      </Typography>
+    <div className="flex h-full min-h-0 flex-col">
+      <PageHeader
+        title={'\uC0C1\uB2F4 \uB85C\uADF8'}
+      />
 
-      <div className="space-y-4">
-        <HistoryFilterBar
-          filters={filters}
-          onFiltersChange={setFilters}
-          onSearch={handleSearch}
-        />
+      <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
+        <div className="space-y-4">
+          <HistoryFilterBar
+            filters={filters}
+            onFiltersChange={setFilters}
+            onSearch={handleSearch}
+          />
 
-        <HistoryTable
-          data={data}
-          loading={loading}
-          error={error}
-          onRowClick={fetchHistoryDetail}
-          onPageChange={handlePageChange}
-        />
+          <HistoryTable
+            data={data}
+            loading={loading}
+            error={error}
+            onRowClick={fetchHistoryDetail}
+            onPageChange={handlePageChange}
+          />
 
-        <HistoryDetailModal
-          history={selectedHistory}
-          loading={detailLoading}
-          onClose={() => setSelectedHistory(null)}
-        />
+          <HistoryDetailModal
+            history={selectedHistory}
+            loading={detailLoading}
+            onClose={() => setSelectedHistory(null)}
+          />
+        </div>
       </div>
     </div>
   );

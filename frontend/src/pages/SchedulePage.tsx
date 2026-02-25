@@ -31,6 +31,7 @@ import { CalendarErrorBoundary } from '../components/schedule/CalendarErrorBound
 import { ScheduleDetailDialog } from '../components/schedule/ScheduleDetailDialog';
 import type { ScheduleFormData } from '../components/schedule/ScheduleDetailDialog';
 import { useNotifications } from '../hooks/useNotifications';
+import { PageHeader } from '../components/common/PageHeader';
 import type { Announce, Company, Schedule } from '../types';
 
 type ViewMode = 'calendar' | 'list';
@@ -599,11 +600,13 @@ const SchedulePage: React.FC = () => {
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col p-3 lg:p-4">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <Typography variant="h5" color="blue-gray" className="!text-gray-900">
-          일정 관리
-        </Typography>
+    <div className="flex h-full min-h-0 flex-col">
+      <PageHeader
+        title={'\uC77C\uC815 \uAD00\uB9AC'}
+      />
+
+      <div className="min-h-0 flex-1 flex flex-col p-3 lg:p-4">
+        <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="min-w-[220px]">
@@ -761,6 +764,8 @@ const SchedulePage: React.FC = () => {
           {relatedAnnouncePanel}
         </div>
       )}
+      </div>
+
       <Dialog open={isAnnounceDialogOpen} handler={closeAnnounceDialog} size="sm">
         <DialogHeader>공고 일정 자동 등록</DialogHeader>
         <DialogBody className="space-y-3">

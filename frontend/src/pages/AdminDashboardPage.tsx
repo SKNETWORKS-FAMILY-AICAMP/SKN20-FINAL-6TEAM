@@ -19,6 +19,7 @@ import { DOMAIN_NAMES } from '../types';
 import ResourceChart from '../components/admin/ResourceChart';
 import SchedulerStatusTable from '../components/admin/SchedulerStatusTable';
 import LogViewer from '../components/admin/LogViewer';
+import { PageHeader } from '../components/common/PageHeader';
 
 const STATUS_CONFIG: Record<string, { color: 'green' | 'amber' | 'red'; icon: React.ElementType }> = {
   healthy: { color: 'green', icon: CheckCircleIcon },
@@ -85,22 +86,24 @@ const AdminDashboardPage: React.FC = () => {
   }, [fetchStats, fetchServerStatus]);
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <Typography variant="h4" color="blue-gray" className="!text-gray-900">
-          대시보드
-        </Typography>
-        <button
-          onClick={() => { fetchStats(); fetchServerStatus(); }}
-          disabled={statsLoading || statusLoading}
-          className="p-1.5 rounded hover:bg-gray-100 transition-colors disabled:opacity-50"
-          title="새로고침"
-        >
-          <ArrowPathIcon className={`h-5 w-5 text-gray-500 ${(statsLoading || statusLoading) ? 'animate-spin' : ''}`} />
-        </button>
-      </div>
+    <div className="flex h-full min-h-0 flex-col">
+      <PageHeader
+        title={'\uB300\uC2DC\uBCF4\uB4DC'}
+        rightSlot={(
+          <button
+            onClick={() => { fetchStats(); fetchServerStatus(); }}
+            disabled={statsLoading || statusLoading}
+            className="p-1.5 rounded hover:bg-gray-100 transition-colors disabled:opacity-50"
+            title={'\uC0C8\uB85C\uACE0\uCE68'}
+          >
+            <ArrowPathIcon
+              className={`h-5 w-5 text-gray-500 ${(statsLoading || statusLoading) ? 'animate-spin' : ''}`}
+            />
+          </button>
+        )}
+      />
 
-      <div className="space-y-6">
+      <div className="min-h-0 flex-1 overflow-auto space-y-6 p-4 sm:p-6">
         {/* 통계 카드 */}
         {statsLoading ? (
           <div className="flex justify-center py-10">
