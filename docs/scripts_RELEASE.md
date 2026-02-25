@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-02-25] - ChromaDB 볼륨 마이그레이션 스크립트 chmod 오류 수정
+
+### Bug Fixes
+- **migrate_chroma_volume.sh chmod 권한 오류 수정**: `cp -a`로 복사된 파일이 컨테이너 내부 root 소유라 호스트 사용자가 `chmod` 불가한 문제 수정 — `chmod -R 777 /dest/`를 `docker run` 내부에서 함께 실행하도록 변경
+
 ## [2026-02-25] - ChromaDB 볼륨 bind mount 전환 + 마이그레이션 스크립트
 
 ### Infrastructure
