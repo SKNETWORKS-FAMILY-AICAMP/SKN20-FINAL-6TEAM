@@ -3,7 +3,7 @@
 # 사용법: bash migrate_chroma_volume.sh
 set -euo pipefail
 
-VOLUME_NAME="skn20-final-6team_chromadb_data"
+VOLUME_NAME="bizi_chromadb_data"
 TARGET_DIR="./chroma-data"
 COMPOSE_FILE="docker-compose.prod.yaml"
 
