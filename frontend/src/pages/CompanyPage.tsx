@@ -6,13 +6,10 @@ import {
 import { CompanyForm, type CompanyFormHandle } from '../components/company/CompanyForm';
 import { CompanyDashboard } from '../components/company/CompanyDashboard';
 import { PageHeader } from '../components/common/PageHeader';
-import { NotificationBell } from '../components/layout/NotificationBell';
-import { useAuthStore } from '../stores/authStore';
 import type { Company } from '../types';
 
 const CompanyPage: React.FC = () => {
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
-  const { isAuthenticated } = useAuthStore();
   const companyFormRef = useRef<CompanyFormHandle>(null);
 
   return (
@@ -20,7 +17,6 @@ const CompanyPage: React.FC = () => {
       <PageHeader
         title={'\uAE30\uC5C5 \uC815\uBCF4'}
         description={'\uAE30\uC5C5\uC744 \uC120\uD0DD\uD558\uBA74 \uD558\uB2E8\uC5D0\uC11C \uD574\uB2F9 \uAE30\uC5C5 \uAE30\uC900 \uB300\uC2DC\uBCF4\uB4DC\uB97C \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.'}
-        rightSlot={isAuthenticated ? <NotificationBell /> : null}
       />
 
       <div className="min-h-0 flex-1 flex flex-col gap-6 overflow-auto p-4 sm:p-6">

@@ -19,7 +19,6 @@ import { useNotifications } from '../hooks/useNotifications';
 import { AGENT_NAMES, AGENT_COLORS, type Schedule } from '../types';
 import { USER_QUICK_QUESTIONS } from '../lib/constants';
 import { getSeasonalQuestions } from '../lib/seasonalQuestions';
-import { NotificationBell } from '../components/layout/NotificationBell';
 import { ResponseProgress } from '../components/chat/ResponseProgress';
 import { SourceReferences } from '../components/chat/SourceReferences';
 import { ActionButtons } from '../components/chat/ActionButtons';
@@ -169,7 +168,6 @@ const MainPage: React.FC = () => {
       <PageHeader
         title={'\u0041\u0049 \uC0C1\uB2F4'}
         description={'\uCC3D\uC5C5, \uC138\uBB34, \uB178\uBB34, \uBC95\uB960, \uC9C0\uC6D0\uC0AC\uC5C5, \uB9C8\uCF00\uD305 \uD1B5\uD569 \uC0C1\uB2F4'}
-        rightSlot={isAuthenticated ? <NotificationBell /> : null}
       />
 
       {/* Quick questions */}

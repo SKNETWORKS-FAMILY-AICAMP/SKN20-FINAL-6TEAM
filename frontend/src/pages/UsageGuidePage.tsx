@@ -175,11 +175,11 @@ const UsageGuidePage: React.FC = () => {
             </div>
           </section>
 
-          <section aria-label="자주 묻는 질문 섹션" className="space-y-3">
+          <section aria-label="FAQ 섹션" className="space-y-3">
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-green-500" />
               <Typography variant="h6" color="blue-gray" className="!text-gray-900">
-                자주 묻는 질문
+                FAQ
               </Typography>
             </div>
 

@@ -1,5 +1,7 @@
 import React from 'react';
 import { Typography } from '@material-tailwind/react';
+import { NotificationBell } from '../layout/NotificationBell';
+import { useAuthStore } from '../../stores/authStore';
 
 interface PageHeaderProps {
   title: React.ReactNode;
@@ -16,6 +18,9 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   className = '',
   contentClassName = '',
 }) => {
+  const { isAuthenticated } = useAuthStore();
+  const hasActions = Boolean(rightSlot) || isAuthenticated;
+
   return (
     <div className={`border-b bg-white p-4 ${className}`.trim()}>
       <div className={`flex items-center justify-between gap-3 ${contentClassName}`.trim()}>
@@ -33,7 +38,12 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
           </Typography>
         </div>
 
-        {rightSlot ? <div className="flex shrink-0 items-center gap-3">{rightSlot}</div> : null}
+        {hasActions ? (
+          <div className="flex shrink-0 items-center gap-3">
+            {rightSlot}
+            {isAuthenticated ? <NotificationBell /> : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );
