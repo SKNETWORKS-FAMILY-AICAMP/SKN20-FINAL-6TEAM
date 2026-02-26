@@ -600,8 +600,8 @@ const SchedulePage: React.FC = () => {
   );
 
   const scheduleHeaderControls = (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="min-w-[220px]">
+    <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+      <div className="w-full sm:min-w-[220px] sm:w-auto">
         <select
           value={selectedCompanyId?.toString() ?? ''}
           onChange={(event) => {
@@ -622,32 +622,34 @@ const SchedulePage: React.FC = () => {
         </select>
       </div>
 
-      <ButtonGroup variant="outlined" size="sm">
-        <Button
-          className={`flex items-center gap-1 ${viewMode === 'calendar' ? 'bg-blue-50' : ''}`}
-          onClick={() => setViewMode('calendar')}
-        >
-          <CalendarIcon className="h-4 w-4" />
-          {'\uCE98\uB9B0\uB354'}
-        </Button>
-        <Button
-          className={`flex items-center gap-1 ${viewMode === 'list' ? 'bg-blue-50' : ''}`}
-          onClick={() => setViewMode('list')}
-        >
-          <ListBulletIcon className="h-4 w-4" />
-          {'\uB9AC\uC2A4\uD2B8'}
-        </Button>
-      </ButtonGroup>
+      <div className="flex items-center justify-between gap-2 sm:justify-start">
+        <ButtonGroup variant="outlined" size="sm">
+          <Button
+            className={`flex items-center gap-1 ${viewMode === 'calendar' ? 'bg-blue-50' : ''}`}
+            onClick={() => setViewMode('calendar')}
+          >
+            <CalendarIcon className="h-4 w-4" />
+            {'\uCE98\uB9B0\uB354'}
+          </Button>
+          <Button
+            className={`flex items-center gap-1 ${viewMode === 'list' ? 'bg-blue-50' : ''}`}
+            onClick={() => setViewMode('list')}
+          >
+            <ListBulletIcon className="h-4 w-4" />
+            {'\uB9AC\uC2A4\uD2B8'}
+          </Button>
+        </ButtonGroup>
 
-      <Button
-        size="sm"
-        className="flex items-center gap-1"
-        onClick={() => openCreateDialog()}
-        disabled={companies.length === 0}
-      >
-        <PlusIcon className="h-4 w-4" />
-        {'\uC77C\uC815 \uCD94\uAC00'}
-      </Button>
+        <Button
+          size="sm"
+          className="flex items-center gap-1 whitespace-nowrap"
+          onClick={() => openCreateDialog()}
+          disabled={companies.length === 0}
+        >
+          <PlusIcon className="h-4 w-4" />
+          {'\uC77C\uC815 \uCD94\uAC00'}
+        </Button>
+      </div>
     </div>
   );
 
@@ -656,6 +658,7 @@ const SchedulePage: React.FC = () => {
       <PageHeader
         title={'\uC77C\uC815 \uAD00\uB9AC'}
         contentClassName="flex-wrap"
+        mobileNotificationOnTop
         rightSlot={scheduleHeaderControls}
       />
 
