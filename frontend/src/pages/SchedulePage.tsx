@@ -657,7 +657,7 @@ const SchedulePage: React.FC = () => {
     <div className="flex h-full min-h-0 flex-col">
       <PageHeader
         title={'\uC77C\uC815 \uAD00\uB9AC'}
-        contentClassName="flex-wrap"
+        contentClassName="flex-wrap lg:flex-nowrap"
         mobileNotificationOnTop
         rightSlot={scheduleHeaderControls}
       />
