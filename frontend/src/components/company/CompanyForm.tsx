@@ -14,6 +14,7 @@ import {
   IconButton,
   Alert,
 } from '@material-tailwind/react';
+import { useToastStore } from '../../stores/toastStore';
 import { PlusIcon, PencilIcon, TrashIcon, StarIcon as StarIconOutline } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import { INDUSTRY_MAJOR, INDUSTRY_MINOR, INDUSTRY_ALL, COMPANY_STATUS, REGION_SIDO, REGION_SIGUNGU, PROVINCES } from '../../lib/constants';
@@ -119,13 +120,13 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
   showTopAddButton = true,
 }, ref) => {
   const { updateUser, user } = useAuthStore();
+  const addToast = useToastStore((s) => s.addToast);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<CompanyFormData>(INITIAL_FORM_DATA);
@@ -165,17 +166,9 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
     fetchCompanies();
   }, []);
 
-  // 성공/에러 알림 5초 후 자동 사라짐
-  useEffect(() => {
-    if (!message) return;
-    const timer = setTimeout(() => setMessage(null), 5000);
-    return () => clearTimeout(timer);
-  }, [message]);
-
   const openCreateDialog = () => {
     setEditingCompany(null);
     setDialogError(null);
-    setMessage(null);
     setFormData({
       ...INITIAL_FORM_DATA,
       open_date: new Date().toISOString().split('T')[0],
@@ -191,7 +184,6 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
     onSelectCompany?.(company);
     setEditingCompany(company);
     setDialogError(null);
-    setMessage(null);
     const isOperating = Boolean(company.biz_num);
     const existingAddr = company.addr || '';
     setFormData({
@@ -234,7 +226,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
           ...data,
           open_date: data.open_date ?? undefined,
         } as Company);
-        setMessage({ type: 'success', text: '기업 정보가 수정되었습니다.' });
+        addToast({ type: 'success', message: '기업 정보가 수정되었습니다.' });
       } else {
         await api.post('/companies', data);
 
@@ -248,7 +240,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
           }
         }
 
-        setMessage({ type: 'success', text: '기업이 등록되었습니다.' });
+        addToast({ type: 'success', message: '기업이 등록되었습니다.' });
       }
 
       setIsDialogOpen(false);
@@ -269,7 +261,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
       await api.patch(`/companies/${companyId}/main`);
       await fetchCompanies();
     } catch (err) {
-      setMessage({ type: 'error', text: extractErrorMessage(err, '대표 기업 설정에 실패했습니다.') });
+      addToast({ type: 'error', message: extractErrorMessage(err, '대표 기업 설정에 실패했습니다.') });
     }
   };
 
@@ -278,7 +270,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
 
     try {
       await api.delete(`/companies/${companyId}`);
-      setMessage({ type: 'success', text: '기업이 삭제되었습니다.' });
+      addToast({ type: 'success', message: '기업이 삭제되었습니다.' });
 
       const response = await api.get('/companies');
       const remaining: Company[] = response.data;
@@ -297,10 +289,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
         }
       }
     } catch (err: unknown) {
-      setMessage({
-        type: 'error',
-        text: extractErrorMessage(err, '삭제에 실패했습니다.'),
-      });
+      addToast({ type: 'error', message: extractErrorMessage(err, '삭제에 실패했습니다.') });
     }
   };
 
@@ -313,17 +302,6 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
           기업 추가
         </Button>
       </div>
-      )}
-
-      {message && (
-        <Alert
-          key={`${message.type}-${message.text}`}
-          color={message.type === 'success' ? 'green' : 'red'}
-          className="mb-4 relative z-[9999]"
-          onClose={() => setMessage(null)}
-        >
-          {message.text}
-        </Alert>
       )}
 
       {isLoading ? (

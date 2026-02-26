@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { IconButton } from '@material-tailwind/react';
 import { Bars3Icon } from '@heroicons/react/24/outline';
 import { Sidebar } from './Sidebar';
+import { ToastContainer } from '../common/ToastContainer';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'bizi.sidebar.collapsed.desktop';
@@ -80,6 +81,7 @@ export const MainLayout: React.FC = () => {
           </div>
         )}
         <Outlet />
+        <ToastContainer />
       </main>
     </div>
   );
