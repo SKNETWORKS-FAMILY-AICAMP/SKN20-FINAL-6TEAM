@@ -9,6 +9,8 @@ from schemas.request import (
     ChatRequest,
     DocumentRequest,
     ContractRequest,
+    GenerateDocumentRequest,
+    ModifyDocumentRequest,
 )
 from schemas.response import (
     ActionSuggestion,
@@ -26,6 +28,8 @@ __all__ = [
     "ChatRequest",
     "DocumentRequest",
     "ContractRequest",
+    "GenerateDocumentRequest",
+    "ModifyDocumentRequest",
     # Response
     "ActionSuggestion",
     "EvaluationResult",

@@ -243,6 +243,97 @@ async def generate_business_plan(
     return resp.json()
 
 
+@router.post("/documents/generate")
+async def generate_document(
+    request: Request,
+    body: dict,
+    user: User | None = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
+    """범용 문서 생성 프록시.
+
+    Args:
+        request: FastAPI Request
+        body: 문서 생성 요청 (RAG에서 검증)
+        user: 인증된 사용자 (선택)
+        db: DB 세션
+    """
+    if user:
+        context = _build_user_context(user, db)
+        if context.get("company"):
+            body["company_context"] = {
+                "company_name": context["company"]["company_name"],
+                "business_number": context["company"]["business_number"],
+                "industry_code": context["company"]["industry_code"],
+                "industry_name": context["company"]["industry_name"],
+            }
+
+    url = f"{settings.RAG_SERVICE_URL}/api/documents/generate"
+    async with httpx.AsyncClient(timeout=_RAG_TIMEOUT) as client:
+        try:
+            resp = await client.post(url, json=body, headers=_build_rag_headers(request))
+        except httpx.ConnectError:
+            raise HTTPException(502, "RAG 서비스에 연결할 수 없습니다.")
+        except httpx.TimeoutException:
+            raise HTTPException(504, "RAG 서비스 응답 시간이 초과되었습니다.")
+
+    if resp.status_code != 200:
+        logger.error("Document generate error: status=%d body=%s", resp.status_code, resp.text[:500])
+        raise HTTPException(502, "문서 생성 중 오류가 발생했습니다.")
+
+    return resp.json()
+
+
+@router.post("/documents/modify")
+async def modify_document(
+    request: Request,
+    body: dict,
+) -> dict:
+    """문서 수정 프록시.
+
+    Args:
+        request: FastAPI Request
+        body: 문서 수정 요청 (RAG에서 검증)
+    """
+    url = f"{settings.RAG_SERVICE_URL}/api/documents/modify"
+    async with httpx.AsyncClient(timeout=_RAG_TIMEOUT) as client:
+        try:
+            resp = await client.post(url, json=body, headers=_build_rag_headers(request))
+        except httpx.ConnectError:
+            raise HTTPException(502, "RAG 서비스에 연결할 수 없습니다.")
+        except httpx.TimeoutException:
+            raise HTTPException(504, "RAG 서비스 응답 시간이 초과되었습니다.")
+
+    if resp.status_code != 200:
+        logger.error("Document modify error: status=%d body=%s", resp.status_code, resp.text[:500])
+        raise HTTPException(502, "문서 수정 중 오류가 발생했습니다.")
+
+    return resp.json()
+
+
+@router.get("/documents/types")
+async def list_document_types(request: Request) -> list:
+    """문서 유형 목록 프록시.
+
+    Args:
+        request: FastAPI Request
+    """
+    url = f"{settings.RAG_SERVICE_URL}/api/documents/types"
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+        try:
+            resp = await client.get(url, headers=_build_rag_headers(request))
+        except httpx.ConnectError:
+            raise HTTPException(502, "RAG 서비스에 연결할 수 없습니다.")
+        except httpx.TimeoutException:
+            raise HTTPException(504, "RAG 서비스 응답 시간이 초과되었습니다.")
+
+    if resp.status_code != 200:
+        logger.error("Document types error: status=%d body=%s", resp.status_code, resp.text[:500])
+        raise HTTPException(502, "문서 유형 목록 조회 실패")
+
+    return resp.json()
+
+
 @router.get("/health")
 async def rag_health():
     """RAG 서비스 헬스체크 프록시."""

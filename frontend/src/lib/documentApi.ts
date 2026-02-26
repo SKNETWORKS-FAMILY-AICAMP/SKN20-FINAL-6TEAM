@@ -15,6 +15,19 @@ export interface ContractFormData {
   work_days?: string;
   payment_date?: number;
   format?: string;
+  // 휴일·휴가
+  holidays?: string;
+  annual_leave_days?: number;
+  // 단시간근로자
+  is_part_time?: boolean;
+  weekly_work_hours?: number;
+  // 임금 상세
+  overtime_pay_rate?: number;
+  night_pay_rate?: number;
+  holiday_pay_rate?: number;
+  bonus?: string;
+  allowances?: string;
+  payment_method?: string;
 }
 
 interface DocumentResponse {
@@ -33,6 +46,75 @@ export const generateContract = async (data: ContractFormData): Promise<Document
 export const generateBusinessPlan = async (format = 'docx'): Promise<DocumentResponse> => {
   const response = await api.post(`/rag/documents/business-plan?format=${format}`);
   return response.data;
+};
+
+/* ---------- 범용 문서 생성 API ---------- */
+
+export interface DocumentTypeField {
+  name: string;
+  label: string;
+  field_type: 'text' | 'date' | 'number' | 'textarea' | 'select';
+  required: boolean;
+  placeholder: string;
+  options?: string[];
+}
+
+export interface DocumentTypeInfo {
+  type_key: string;
+  label: string;
+  description: string;
+  fields: DocumentTypeField[];
+  default_format: string;
+}
+
+export const fetchDocumentTypes = async (): Promise<DocumentTypeInfo[]> => {
+  const response = await api.get('/rag/documents/types');
+  return response.data;
+};
+
+export const generateDocument = async (
+  documentType: string,
+  params: Record<string, unknown>,
+  format?: string,
+): Promise<DocumentResponse> => {
+  const response = await api.post('/rag/documents/generate', {
+    document_type: documentType,
+    params,
+    format: format || 'docx',
+  });
+  return response.data;
+};
+
+/* ---------- 문서 수정 API ---------- */
+
+export const modifyDocument = async (
+  fileContent: string,
+  fileName: string,
+  instructions: string,
+  format?: string,
+): Promise<DocumentResponse> => {
+  const response = await api.post('/rag/documents/modify', {
+    file_content: fileContent,
+    file_name: fileName,
+    instructions,
+    format: format || 'docx',
+  });
+  return response.data;
+};
+
+/** File → base64 문자열 변환 */
+export const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // "data:...;base64," 접두사 제거
+      const base64 = result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 };
 
 /** base64 -> Blob -> 다운로드 트리거 */

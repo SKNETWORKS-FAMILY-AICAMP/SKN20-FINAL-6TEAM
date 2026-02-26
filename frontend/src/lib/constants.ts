@@ -6,6 +6,7 @@ export const DOMAIN_TO_AGENT_CODE: Record<string, AgentCode> = {
   finance_tax: 'A0000003',
   hr_labor: 'A0000004',
   law_common: 'A0000007',
+  document: 'A0000008',
   general: 'A0000001',
 };
 

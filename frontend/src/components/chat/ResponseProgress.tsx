@@ -4,6 +4,7 @@ import { Card, CardBody, Typography } from '@material-tailwind/react';
 interface ResponseProgressProps {
   isLoading: boolean;
   isStreaming?: boolean;
+  isFileProcessing?: boolean;
 }
 
 const PROGRESS_STAGES = [
@@ -12,13 +13,22 @@ const PROGRESS_STAGES = [
   { text: '답변을 생성하고 있습니다', duration: Infinity },
 ];
 
-export const ResponseProgress: React.FC<ResponseProgressProps> = ({ isLoading, isStreaming = false }) => {
+const FILE_PROCESSING_STAGES = [
+  { text: '문서를 분석하고 있습니다', duration: 2000 },
+  { text: '문서를 수정하고 있습니다', duration: Infinity },
+];
+
+export const ResponseProgress: React.FC<ResponseProgressProps> = ({
+  isLoading,
+  isStreaming = false,
+  isFileProcessing = false,
+}) => {
   const [stageIndex, setStageIndex] = useState(0);
   const [dots, setDots] = useState('');
 
-  // Determine if we should show the progress indicator
-  // Hide when not loading OR when streaming has started (response is being received)
-  const shouldShow = isLoading && !isStreaming;
+  // 파일 처리 중이거나, 로딩 중(스트리밍 시작 전)일 때 표시
+  const shouldShow = isFileProcessing || (isLoading && !isStreaming);
+  const stages = isFileProcessing ? FILE_PROCESSING_STAGES : PROGRESS_STAGES;
 
   useEffect(() => {
     if (!shouldShow) {
@@ -31,15 +41,15 @@ export const ResponseProgress: React.FC<ResponseProgressProps> = ({ isLoading, i
     let elapsed = 0;
     const stageTimer = setInterval(() => {
       elapsed += 100;
-      const currentStageDuration = PROGRESS_STAGES[stageIndex]?.duration ?? Infinity;
-      if (elapsed >= currentStageDuration && stageIndex < PROGRESS_STAGES.length - 1) {
-        setStageIndex((prev) => Math.min(prev + 1, PROGRESS_STAGES.length - 1));
+      const currentStageDuration = stages[stageIndex]?.duration ?? Infinity;
+      if (elapsed >= currentStageDuration && stageIndex < stages.length - 1) {
+        setStageIndex((prev) => Math.min(prev + 1, stages.length - 1));
         elapsed = 0;
       }
     }, 100);
 
     return () => clearInterval(stageTimer);
-  }, [shouldShow, stageIndex]);
+  }, [shouldShow, stageIndex, stages]);
 
   // Animate dots
   useEffect(() => {
@@ -54,7 +64,7 @@ export const ResponseProgress: React.FC<ResponseProgressProps> = ({ isLoading, i
 
   if (!shouldShow) return null;
 
-  const currentStage = PROGRESS_STAGES[stageIndex];
+  const currentStage = stages[stageIndex];
 
   return (
     <div className="flex justify-start">
@@ -62,7 +72,7 @@ export const ResponseProgress: React.FC<ResponseProgressProps> = ({ isLoading, i
         <CardBody className="p-3">
           <div className="flex items-center gap-3">
             <div className="flex gap-1">
-              {[0, 1, 2].map((i) => (
+              {stages.map((_, i) => (
                 <div
                   key={i}
                   className={`w-2 h-2 rounded-full transition-colors duration-300 ${

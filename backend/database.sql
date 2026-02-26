@@ -45,6 +45,7 @@ SELECT * FROM (
     UNION ALL SELECT '인사·노무', 'A', 'A0000004'
     UNION ALL SELECT '평가·검증', 'A', 'A0000005'
     UNION ALL SELECT '법률', 'A', 'A0000007'
+    UNION ALL SELECT '문서', 'A', 'A0000008'
     -- 업종 코드 - KSIC(한국표준산업분류) 기반 (대분류 21개)
     UNION ALL SELECT '농업, 임업 및 어업', 'B', 'BA000000'
     UNION ALL SELECT '광업', 'B', 'BB000000'

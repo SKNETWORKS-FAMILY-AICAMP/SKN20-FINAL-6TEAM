@@ -169,6 +169,7 @@ export const useChat = () => {
                 setStreaming(false);
                 updateMessageInSession(targetSessionId, assistantMessageId, {
                   content: ERROR_MESSAGE,
+                  ...(collectedActions.length > 0 ? { actions: collectedActions } : {}),
                 });
                 console.error('Streaming error:', error);
               },

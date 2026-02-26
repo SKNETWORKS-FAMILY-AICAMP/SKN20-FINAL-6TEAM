@@ -23,7 +23,11 @@ from langgraph.graph import END, StateGraph
 
 from agents.base import RetrievalEvaluationResult, RetrievalResult, RetrievalStatus
 from agents.evaluator import EvaluatorAgent
-from agents.generator import ResponseGeneratorAgent
+from agents.generator import (
+    FALLBACK_NO_DOCUMENTS,
+    FALLBACK_NO_DOCUMENTS_WITH_ACTIONS,
+    ResponseGeneratorAgent,
+)
 from agents.finance_tax import FinanceTaxAgent
 from agents.hr_labor import HRLaborAgent
 from agents.legal import LegalAgent
@@ -45,7 +49,11 @@ from utils.config import DOMAIN_LABELS, get_settings
 from utils.middleware import get_metrics_collector
 from utils.domain_classifier import DomainClassificationResult, get_domain_classifier
 from utils.legal_supplement import needs_legal_supplement
-from utils.prompts import LLM_CLASSIFICATION_FAILURE_RESPONSE, REJECTION_RESPONSE
+from utils.prompts import (
+    DOCUMENT_GENERATION_SHORTCUT_RESPONSE,
+    LLM_CLASSIFICATION_FAILURE_RESPONSE,
+    REJECTION_RESPONSE,
+)
 from utils.query_rewriter import get_query_rewriter
 from utils.question_decomposer import SubQuery, get_question_decomposer
 from utils.sanitizer import sanitize_query
@@ -201,6 +209,7 @@ class MainRouter:
             self._should_continue_after_classify,
             {
                 "continue": "decompose",
+                "document_shortcut": END,
                 "reject": END,
             },
         )
@@ -218,18 +227,22 @@ class MainRouter:
         return workflow.compile()
 
     def _should_continue_after_classify(self, state: RouterState) -> str:
-        """분류 후 계속 진행할지 거부할지 판단합니다.
+        """분류 후 계속 진행할지, 문서 단축할지, 거부할지 판단합니다.
 
         Args:
             state: 라우터 상태
 
         Returns:
             "continue": 관련 질문이면 계속 진행
+            "document_shortcut": 문서 생성 단축 (검색 파이프라인 스킵)
             "reject": 도메인 외 질문이면 종료
         """
         classification = state.get("classification_result")
         if classification and not classification.is_relevant:
             return "reject"
+        # actions가 이미 설정되어 있으면 document shortcut (_aclassify_node에서 설정)
+        if state.get("actions"):
+            return "document_shortcut"
         return "continue"
 
     def _should_retry_after_evaluate(self, state: RouterState) -> str:
@@ -272,6 +285,61 @@ class MainRouter:
 
         return "__end__"
 
+    def _augment_query_with_history(self, query: str, history: list[dict]) -> str:
+        """대명사/지시어 질문을 history로 보강합니다.
+
+        짧은 후속 질문("그럼 세금은요?")에 이전 사용자 메시지를 접두사로 붙여
+        분류·검색·생성·평가 전체 파이프라인의 정확도를 높입니다.
+        LLM 호출 없이 휴리스틱으로 동작합니다.
+
+        Args:
+            query: 현재 사용자 질문
+            history: 대화 이력 (role/content dict 리스트)
+
+        Returns:
+            보강된 쿼리 (조건 불충족 시 원본 그대로 반환)
+        """
+        if not history or len(query) > 30:
+            return query
+
+        pronouns = ["그럼", "그거", "그건", "그러면", "이거", "저거", "거기", "이건"]
+        if not any(p in query for p in pronouns):
+            return query
+
+        for msg in reversed(history):
+            if msg.get("role") == "user":
+                logger.info("[쿼리 보강] '%s' → '%s %s'", query, msg["content"][:30], query)
+                return f"{msg['content']} {query}"
+
+        return query
+
+    def _is_document_shortcut(self, query: str) -> list[ActionSuggestion] | None:
+        """문서 생성만 요청하는 질문인지 판별합니다.
+
+        document_generation 액션만 매칭되면 shortcut 대상으로 판단합니다.
+        다른 타입 액션(funding_search, schedule_alert 등)이 함께 매칭되면
+        일반 질문이므로 shortcut하지 않습니다.
+
+        Args:
+            query: 사용자 질문
+
+        Returns:
+            document_generation 액션 리스트 (shortcut 대상이면), 아니면 None
+        """
+        actions = self.generator._collect_actions(query, {}, [])
+        if not actions:
+            return None
+
+        doc_actions = [a for a in actions if a.type == "document_generation"]
+        if not doc_actions:
+            return None
+
+        # document_generation 액션만 있으면 shortcut (다른 타입 액션이 섞이면 일반 질문)
+        if len(doc_actions) == len(actions):
+            return doc_actions
+
+        return None
+
     async def _aclassify_node(self, state: RouterState) -> RouterState:
         """비동기 분류 노드: 벡터 유사도 기반으로 도메인을 식별합니다."""
         start = time.time()
@@ -310,25 +378,48 @@ class MainRouter:
         state["domains"] = classification.domains
 
         if not classification.is_relevant:
+            # 거부 시에도 키워드 기반 액션 수집 (문서 생성 버튼 등)
+            fallback_actions = self.generator._collect_actions(
+                augmented_query, {}, []
+            )
+
             # LLM 재시도 실패 vs 도메인 외 질문 분기
             if classification.method == "llm_retry_failed":
                 state["final_response"] = LLM_CLASSIFICATION_FAILURE_RESPONSE
             else:
-                state["final_response"] = REJECTION_RESPONSE
+                if fallback_actions:
+                    state["domains"] = ["document"]
+                    state["final_response"] = DOCUMENT_GENERATION_SHORTCUT_RESPONSE
+                else:
+                    state["final_response"] = REJECTION_RESPONSE
             state["sources"] = []
-            state["actions"] = []
+            state["actions"] = fallback_actions
             logger.info(
-                "[분류] 도메인 외 질문 거부 (방법: %s, 신뢰도: %.2f)",
+                "[분류] 도메인 외 질문 거부 (방법: %s, 신뢰도: %.2f, 액션: %d건)",
                 classification.method,
                 classification.confidence,
+                len(fallback_actions),
             )
         else:
-            logger.info(
-                "[분류] 도메인=%s (방법: %s, 신뢰도: %.2f)",
-                classification.domains,
-                classification.method,
-                classification.confidence,
-            )
+            # 문서 생성 shortcut 판별: document_generation 액션만 매칭되면 검색 파이프라인 스킵
+            doc_actions = self._is_document_shortcut(augmented_query)
+            if doc_actions:
+                state["domains"] = ["document"]
+                state["final_response"] = DOCUMENT_GENERATION_SHORTCUT_RESPONSE
+                state["sources"] = []
+                state["actions"] = doc_actions
+                logger.info(
+                    "[분류→단축] 문서 생성 shortcut (원본 도메인=%s, 액션=%d건)",
+                    classification.domains,
+                    len(doc_actions),
+                )
+            else:
+                logger.info(
+                    "[분류] 도메인=%s (방법: %s, 신뢰도: %.2f)",
+                    classification.domains,
+                    classification.method,
+                    classification.confidence,
+                )
 
         classify_time = time.time() - start
         state["timing_metrics"]["classify_time"] = classify_time
@@ -830,11 +921,11 @@ class MainRouter:
                 self.settings.total_timeout,
                 query[:30],
             )
-            # 타임아웃 시 fallback 응답 생성
+            # 타임아웃 시 fallback 응답 생성 (키워드 기반 액션은 수집)
             final_state = initial_state
             final_state["final_response"] = self.settings.fallback_message
             final_state["sources"] = []
-            final_state["actions"] = []
+            final_state["actions"] = self.generator._collect_actions(query, {}, [])
             final_state["timing_metrics"]["timeout_cause"] = "pipeline_total_timeout"
             final_state["evaluation"] = EvaluationResult(
                 scores={},
@@ -903,24 +994,64 @@ class MainRouter:
 
         # 도메인 외 질문 거부 (LLM 토큰 스트리밍과 동일한 방식)
         if not classification.is_relevant:
+            # 거부 시에도 키워드 기반 액션은 수집 (문서 생성 버튼 등)
+            fallback_actions = self.generator._collect_actions(
+                augmented_query, {}, []
+            )
+
             if classification.method == "llm_retry_failed":
                 reject_msg = LLM_CLASSIFICATION_FAILURE_RESPONSE
                 logger.info("[스트리밍] LLM 분류 재시도 실패 - 오류 안내 반환")
             else:
-                reject_msg = REJECTION_RESPONSE
-                logger.info("[스트리밍] 도메인 외 질문 - 거부 응답 반환")
+                if fallback_actions:
+                    reject_msg = DOCUMENT_GENERATION_SHORTCUT_RESPONSE
+                    logger.info(
+                        "[스트리밍] 도메인 외 질문이지만 액션 %d건 발견 - 문서 도메인으로 응답",
+                        len(fallback_actions),
+                    )
+                else:
+                    reject_msg = REJECTION_RESPONSE
+                    logger.info("[스트리밍] 도메인 외 질문 - 거부 응답 반환")
+
+            # fallback 액션이 있으면 domain을 "document"로 설정
+            done_domain = "document" if fallback_actions else "general"
+            done_domains = ["document"] if fallback_actions else []
+
             for char in reject_msg:
                 yield {"type": "token", "content": char}
                 await asyncio.sleep(0.02)
             yield {
                 "type": "done",
                 "content": reject_msg,
-                "domain": "general",
-                "domains": [],
+                "domain": done_domain,
+                "domains": done_domains,
                 "sources": [],
-                "actions": [],
+                "actions": fallback_actions,
             }
             return
+
+        # 문서 생성 shortcut (스트리밍 경로)
+        if classification.is_relevant:
+            doc_actions = self._is_document_shortcut(augmented_query)
+            if doc_actions:
+                logger.info(
+                    "[스트리밍→단축] 문서 생성 shortcut (원본 도메인=%s, 액션=%d건)",
+                    classification.domains,
+                    len(doc_actions),
+                )
+                msg = DOCUMENT_GENERATION_SHORTCUT_RESPONSE
+                for char in msg:
+                    yield {"type": "token", "content": char}
+                    await asyncio.sleep(0.02)
+                yield {
+                    "type": "done",
+                    "content": msg,
+                    "domain": "document",
+                    "domains": ["document"],
+                    "sources": [],
+                    "actions": doc_actions,
+                }
+                return
 
         domains = classification.domains
 
@@ -1001,11 +1132,12 @@ class MainRouter:
                     content = chunk["content"]
                     all_actions = pre_actions
 
-            # 단일 도메인 스트리밍에서도 평가 수행
+            # 단일 도메인 스트리밍에서도 평가 수행 (fallback 메시지는 평가 스킵)
+            _is_fallback = content in (FALLBACK_NO_DOCUMENTS, FALLBACK_NO_DOCUMENTS_WITH_ACTIONS)
             single_evaluation = None
             single_ragas_metrics = None
 
-            if self.settings.enable_llm_evaluation and content:
+            if self.settings.enable_llm_evaluation and content and not _is_fallback:
                 try:
                     eval_context = "\n".join([s.content for s in all_sources[:5]])
                     single_evaluation = await self.evaluator.aevaluate(
@@ -1081,10 +1213,11 @@ class MainRouter:
                 elif chunk["type"] == "generation_done":
                     content = chunk["content"]
 
-            # 복수 도메인 스트리밍 경로에서도 평가 수행 (비동기, 스트리밍 완료 후)
+            # 복수 도메인 스트리밍 경로에서도 평가 수행 (fallback 메시지는 스킵)
+            _is_fallback_multi = content in (FALLBACK_NO_DOCUMENTS, FALLBACK_NO_DOCUMENTS_WITH_ACTIONS)
             evaluation = None
 
-            if self.settings.enable_llm_evaluation and content:
+            if self.settings.enable_llm_evaluation and content and not _is_fallback_multi:
                 try:
                     eval_context = "\n".join([s.content for s in all_sources_multi[:5]])
                     # 멀티 도메인 정보 주입

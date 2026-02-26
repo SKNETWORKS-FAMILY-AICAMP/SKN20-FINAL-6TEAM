@@ -206,7 +206,7 @@ class BaseAgent(ABC):
             texts = [query_lower]
             if rule.match_response:
                 texts.append(response_lower)
-            if any(kw in text for kw in rule.keywords for text in texts):
+            if any(kw.lower() in text for kw in rule.keywords for text in texts):
                 base = rule.action
                 params = {**base.params, "query": query} if rule.dynamic_query_param else base.params.copy()
                 actions.append(ActionSuggestion(

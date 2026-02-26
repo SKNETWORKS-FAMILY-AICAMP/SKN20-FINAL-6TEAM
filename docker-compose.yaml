@@ -17,7 +17,8 @@ services:
     depends_on:
       - frontend
       - backend
-      
+
+
   # SSH Tunnel to AWS RDS (via Bastion EC2)
   ssh-tunnel:
     image: alpine:3.21
@@ -193,11 +194,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    command: uvicorn main:app --host 0.0.0.0 --port 8001
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 
   # ChromaDB (벡터 데이터베이스 서버)
   chromadb:
-    image: chromadb/chroma:1.5.0
+    image: bizi-chromadb:latest
     container_name: bizi-chromadb
     restart: unless-stopped
     expose:

@@ -55,6 +55,33 @@ class StartupFundingAgent(BaseAgent):
                 params={"url": "https://www.hometax.go.kr"},
             ),
         ),
+        ActionRule(
+            keywords=["공동창업", "공동 창업", "동업", "동업계약"],
+            action=ActionSuggestion(
+                type="document_generation",
+                label="공동 창업 계약서 생성",
+                description="공동 창업자 간 계약서를 생성합니다",
+                params={"document_type": "cofounder_agreement"},
+            ),
+        ),
+        ActionRule(
+            keywords=["투자", "투자유치", "투자의향서", "LOI", "텀시트"],
+            action=ActionSuggestion(
+                type="document_generation",
+                label="투자 의향서(LOI) 생성",
+                description="투자 의향서를 생성합니다",
+                params={"document_type": "investment_loi"},
+            ),
+        ),
+        ActionRule(
+            keywords=["MOU", "업무협약", "양해각서", "협약서"],
+            action=ActionSuggestion(
+                type="document_generation",
+                label="업무 협약서(MOU) 생성",
+                description="업무 협약서(MOU)를 생성합니다",
+                params={"document_type": "mou"},
+            ),
+        ),
     ]
 
     def get_system_prompt(self) -> str:

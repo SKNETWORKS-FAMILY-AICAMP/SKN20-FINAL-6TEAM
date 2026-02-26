@@ -53,6 +53,33 @@ class LegalAgent(BaseAgent):
                 params={"url": "https://www.law.go.kr"},
             ),
         ),
+        ActionRule(
+            keywords=["NDA", "비밀유지", "기밀유지", "비밀유지계약"],
+            action=ActionSuggestion(
+                type="document_generation",
+                label="비밀유지계약서(NDA) 생성",
+                description="비밀유지계약서(NDA)를 생성합니다",
+                params={"document_type": "nda"},
+            ),
+        ),
+        ActionRule(
+            keywords=["주주간", "주주간계약", "주주 계약", "주주간 합의"],
+            action=ActionSuggestion(
+                type="document_generation",
+                label="주주간 계약서 생성",
+                description="주주간 계약서를 생성합니다",
+                params={"document_type": "shareholders_agreement"},
+            ),
+        ),
+        ActionRule(
+            keywords=["용역", "용역계약", "외주", "아웃소싱", "프리랜서 계약"],
+            action=ActionSuggestion(
+                type="document_generation",
+                label="용역 계약서 생성",
+                description="용역(외주) 계약서를 생성합니다",
+                params={"document_type": "service_agreement"},
+            ),
+        ),
     ]
 
     def get_system_prompt(self) -> str:

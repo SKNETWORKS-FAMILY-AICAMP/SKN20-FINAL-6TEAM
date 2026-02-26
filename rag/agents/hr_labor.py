@@ -28,7 +28,7 @@ class HRLaborAgent(BaseAgent):
 
     ACTION_RULES = [
         ActionRule(
-            keywords=["근로계약서", "근로 계약서", "고용계약서", "계약서 작성"],
+            keywords=["근로계약서", "근로 계약서", "고용계약서", "계약서 작성", "근로계획서"],
             action=ActionSuggestion(
                 type="document_generation",
                 label="근로계약서 생성",
@@ -70,6 +70,24 @@ class HRLaborAgent(BaseAgent):
                 label="4대보험 포털",
                 description="4대보험 관련 업무는 4대보험 정보연계센터에서 가능합니다",
                 params={"url": "https://www.4insure.or.kr"},
+            ),
+        ),
+        ActionRule(
+            keywords=["용역", "용역계약", "외주", "아웃소싱", "프리랜서 계약"],
+            action=ActionSuggestion(
+                type="document_generation",
+                label="용역 계약서 생성",
+                description="용역(외주) 계약서를 생성합니다",
+                params={"document_type": "service_agreement"},
+            ),
+        ),
+        ActionRule(
+            keywords=["개인정보", "개인정보동의", "개인정보 수집", "개인정보 처리"],
+            action=ActionSuggestion(
+                type="document_generation",
+                label="개인정보 동의서 생성",
+                description="개인정보 수집·이용 동의서를 생성합니다",
+                params={"document_type": "privacy_consent"},
             ),
         ),
     ]

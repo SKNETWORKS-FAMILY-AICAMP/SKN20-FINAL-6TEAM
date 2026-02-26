@@ -3,10 +3,11 @@ FROM python:3.10-slim-bookworm
 
 WORKDIR /app
 
-# Install system build tools (required for C extension compilation)
+# Install system build tools + 한글 폰트 (PDF 생성용)
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
+    fonts-nanum \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies

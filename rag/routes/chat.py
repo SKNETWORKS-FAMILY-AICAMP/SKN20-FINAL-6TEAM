@@ -247,6 +247,21 @@ async def chat_stream(request: ChatRequest):
                         )
                         yield f"data: {source_chunk.model_dump_json()}\n\n"
 
+                    # 캐시 히트 시에도 키워드 기반 액션 전송
+                    cache_actions = _state.router_agent.generator._collect_actions(
+                        stream_query, {}, []
+                    )
+                    for act in cache_actions:
+                        act_chunk = StreamResponse(
+                            type="action",
+                            content=act.label if hasattr(act, 'label') else "",
+                            metadata={
+                                "type": act.type if hasattr(act, 'type') else "",
+                                "params": act.params if hasattr(act, 'params') else {},
+                            },
+                        )
+                        yield f"data: {act_chunk.model_dump_json()}\n\n"
+
                     cached_domains = cached.get("domains", [])
                     done_chunk = StreamResponse(
                         type="done",
@@ -273,6 +288,11 @@ async def chat_stream(request: ChatRequest):
             final_sources: list[Any] = []
             final_domains: list[str] = []
             final_actions: list[Any] = []
+
+            # 키워드 기반 액션 사전 수집 (타임아웃과 무관하게 즉시 실행)
+            pre_collected_actions = _state.router_agent.generator._collect_actions(
+                stream_query, {}, []
+            )
             token_usage = None
             done_evaluation = None
             done_ragas_metrics = None
@@ -287,17 +307,65 @@ async def chat_stream(request: ChatRequest):
                 ).__aiter__()
                 hard_deadline = time.time() + hard_timeout
 
+                def _build_timeout_events(
+                    timeout_content: str,
+                    streamed_content: str,
+                ) -> list[str]:
+                    """타임아웃 시 액션 안내 토큰 + 액션 이벤트 + done 이벤트를 생성합니다."""
+                    events: list[str] = []
+                    # 스트리밍된 콘텐츠가 없으면 안내 메시지를 토큰으로 전송
+                    if not streamed_content.strip():
+                        friendly_msg = (
+                            "검색된 참고 자료가 부족하여 상세한 답변을 드리기 어렵지만, "
+                            "요청하신 문서는 아래 버튼을 통해 바로 작성하실 수 있습니다."
+                        )
+                        token_chunk = StreamResponse(
+                            type="token",
+                            content=friendly_msg,
+                            metadata={"index": 0},
+                        )
+                        events.append(f"data: {token_chunk.model_dump_json()}\n\n")
+                    for act in pre_collected_actions:
+                        act_chunk = StreamResponse(
+                            type="action",
+                            content=act.label if hasattr(act, 'label') else "",
+                            metadata={
+                                "type": act.type if hasattr(act, 'type') else "",
+                                "params": act.params if hasattr(act, 'params') else {},
+                            },
+                        )
+                        events.append(f"data: {act_chunk.model_dump_json()}\n\n")
+                    done = StreamResponse(
+                        type="done",
+                        metadata={
+                            "domain": "general",
+                            "domains": [],
+                            "response_time": time.time() - start_time,
+                            "timeout": True,
+                        },
+                    )
+                    events.append(f"data: {done.model_dump_json()}\n\n")
+                    return events
+
+                # 스트리밍 도중 누적된 토큰 (타임아웃 시 콘텐츠 보존용)
+                streamed_so_far = ""
+
                 while True:
                     remaining = hard_deadline - time.time()
                     if remaining <= 0:
                         logger.warning(
                             "[stream] hard timeout 珥덇낵 (%.1fs)", hard_timeout,
                         )
-                        error_chunk = StreamResponse(
-                            type="error",
-                            content="?묐떟 ?앹꽦 ?쒓컙??珥덇낵?섏뿀?듬땲?? ?좎떆 ???ㅼ떆 ?쒕룄?댁＜?몄슂.",
-                        )
-                        yield f"data: {error_chunk.model_dump_json()}\n\n"
+                        timeout_msg = "응답 생성 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."
+                        if pre_collected_actions:
+                            for evt in _build_timeout_events(timeout_msg, streamed_so_far):
+                                yield evt
+                        else:
+                            error_chunk = StreamResponse(
+                                type="error", content=timeout_msg,
+                            )
+                            yield f"data: {error_chunk.model_dump_json()}\n\n"
+
                         return
                     try:
                         chunk = await asyncio.wait_for(
@@ -309,23 +377,34 @@ async def chat_stream(request: ChatRequest):
                         logger.warning(
                             "[stream] hard timeout 珥덇낵 (%.1fs)", hard_timeout,
                         )
-                        error_chunk = StreamResponse(
-                            type="error",
-                            content="?묐떟 ?앹꽦 ?쒓컙??珥덇낵?섏뿀?듬땲?? ?좎떆 ???ㅼ떆 ?쒕룄?댁＜?몄슂.",
-                        )
-                        yield f"data: {error_chunk.model_dump_json()}\n\n"
+                        timeout_msg = "응답 생성 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."
+                        if pre_collected_actions:
+                            for evt in _build_timeout_events(timeout_msg, streamed_so_far):
+                                yield evt
+                        else:
+                            error_chunk = StreamResponse(
+                                type="error", content=timeout_msg,
+                            )
+                            yield f"data: {error_chunk.model_dump_json()}\n\n"
+
                         return
 
                     # ?뚰봽????꾩븘??泥댄겕 (湲곗〈 ?명솚)
                     if time.time() - start_time > stream_timeout:
-                        error_chunk = StreamResponse(
-                            type="error",
-                            content="?묐떟 ?쒓컙??珥덇낵?섏뿀?듬땲?? ?좎떆 ???ㅼ떆 ?쒕룄?댁＜?몄슂.",
-                        )
-                        yield f"data: {error_chunk.model_dump_json()}\n\n"
+                        timeout_msg = "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."
+                        if pre_collected_actions:
+                            for evt in _build_timeout_events(timeout_msg, streamed_so_far):
+                                yield evt
+                        else:
+                            error_chunk = StreamResponse(
+                                type="error", content=timeout_msg,
+                            )
+                            yield f"data: {error_chunk.model_dump_json()}\n\n"
+
                         return
 
                     if chunk["type"] == "token":
+                        streamed_so_far += chunk["content"]
                         stream_chunk = StreamResponse(
                             type="token",
                             content=chunk["content"],

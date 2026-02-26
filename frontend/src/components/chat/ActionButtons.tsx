@@ -7,10 +7,22 @@ import {
   MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '../../stores/authStore';
-import { generateBusinessPlan, downloadDocumentResponse } from '../../lib/documentApi';
 import { ContractFormModal } from './ContractFormModal';
+import { DocumentFormModal } from './DocumentFormModal';
 import { LoginPromptModal } from './LoginPromptModal';
 import type { RagActionSuggestion } from '../../types';
+
+/** LLM 기반 동적 폼을 사용하는 문서 유형 */
+const LLM_DOC_TYPES = new Set([
+  'business_plan',
+  'nda',
+  'service_agreement',
+  'cofounder_agreement',
+  'investment_loi',
+  'mou',
+  'privacy_consent',
+  'shareholders_agreement',
+]);
 
 const ACTION_ICONS: Record<string, typeof DocumentArrowDownIcon> = {
   document_generation: DocumentArrowDownIcon,
@@ -29,8 +41,8 @@ interface ActionButtonsProps {
 export const ActionButtons: React.FC<ActionButtonsProps> = ({ actions }) => {
   const { isAuthenticated } = useAuthStore();
   const [contractModalOpen, setContractModalOpen] = useState(false);
+  const [docModalType, setDocModalType] = useState<string | null>(null);
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
-  const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleAction = async (action: RagActionSuggestion) => {
@@ -66,22 +78,9 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ actions }) => {
       const docType = action.params.document_type as string;
       if (docType === 'labor_contract') {
         setContractModalOpen(true);
-      } else if (docType === 'business_plan') {
-        await downloadBusinessPlan();
+      } else if (LLM_DOC_TYPES.has(docType)) {
+        setDocModalType(docType);
       }
-    }
-  };
-
-  const downloadBusinessPlan = async () => {
-    setDownloading(true);
-    setError(null);
-    try {
-      const response = await generateBusinessPlan('docx');
-      downloadDocumentResponse(response);
-    } catch {
-      setError('사업계획서 생성에 실패했습니다. 잠시 후 다시 시도해주세요.');
-    } finally {
-      setDownloading(false);
     }
   };
 
@@ -96,7 +95,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ actions }) => {
             <button
               key={i}
               onClick={() => handleAction(action)}
-              disabled={disabled || downloading}
+              disabled={disabled}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors ${
                 disabled
                   ? 'border-gray-200 text-gray-400 cursor-not-allowed bg-gray-50'
@@ -104,14 +103,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ actions }) => {
               }`}
               title={disabled ? '추후 지원 예정' : action.label}
             >
-              {downloading && !disabled ? (
-                <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-              ) : (
-                <Icon className="h-4 w-4" />
-              )}
+              <Icon className="h-4 w-4" />
               {action.label}
               {disabled && <span className="text-[10px] text-gray-400">(예정)</span>}
             </button>
@@ -125,6 +117,12 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ actions }) => {
 
       {contractModalOpen && (
         <ContractFormModal onClose={() => setContractModalOpen(false)} />
+      )}
+      {docModalType && (
+        <DocumentFormModal
+          documentType={docModalType}
+          onClose={() => setDocModalType(null)}
+        />
       )}
       {loginPromptOpen && (
         <LoginPromptModal onClose={() => setLoginPromptOpen(false)} />

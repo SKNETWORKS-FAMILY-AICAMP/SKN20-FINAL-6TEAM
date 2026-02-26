@@ -60,7 +60,7 @@ export interface Schedule {
 }
 
 // Agent codes
-export type AgentCode = 'A0000001' | 'A0000002' | 'A0000003' | 'A0000004' | 'A0000005' | 'A0000006' | 'A0000007';
+export type AgentCode = 'A0000001' | 'A0000002' | 'A0000003' | 'A0000004' | 'A0000005' | 'A0000006' | 'A0000007' | 'A0000008';
 
 export const AGENT_NAMES: Record<AgentCode, string> = {
   A0000001: '메인',
@@ -70,6 +70,7 @@ export const AGENT_NAMES: Record<AgentCode, string> = {
   A0000005: '평가·검증',
   A0000006: '마케팅',
   A0000007: '법률',
+  A0000008: '문서',
 };
 
 export const AGENT_COLORS: Record<AgentCode, string> = {
@@ -80,6 +81,7 @@ export const AGENT_COLORS: Record<AgentCode, string> = {
   A0000005: 'bg-cyan-500',
   A0000006: 'bg-pink-500',
   A0000007: 'bg-red-500',
+  A0000008: 'bg-indigo-500',
 };
 
 // User type codes
@@ -297,5 +299,6 @@ export const DOMAIN_NAMES: Record<string, string> = {
   finance_tax: '재무/세무',
   hr_labor: '인사/노무',
   law_common: '법률',
+  document: '문서',
   general: '일반',
 };

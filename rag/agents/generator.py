@@ -36,6 +36,10 @@ FALLBACK_NO_DOCUMENTS = (
     "질문의 핵심 키워드를 포함하여 더 구체적으로 작성해 주시거나, "
     "다른 표현으로 다시 질문해 주세요."
 )
+FALLBACK_NO_DOCUMENTS_WITH_ACTIONS = (
+    "검색된 참고 자료가 부족하여 상세한 답변을 드리기 어렵지만, "
+    "요청하신 문서는 아래 버튼을 통해 바로 작성하실 수 있습니다."
+)
 FALLBACK_TIMEOUT = "응답 생성에 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."
 FALLBACK_SYSTEM_ERROR = "일시적인 시스템 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
 
@@ -116,10 +120,10 @@ class ResponseGeneratorAgent:
         retrieval_results: dict[str, RetrievalResult],
         domains: list[str],
     ) -> list[ActionSuggestion]:
-        """생성 전에 문서 내용 기반으로 액션을 수집합니다.
+        """모든 에이전트의 ACTION_RULES를 쿼리에 대해 검사하여 액션을 수집합니다.
 
-        기존 suggest_actions(query, content)는 응답 텍스트 기반이지만,
-        여기서는 문서 내용을 프록시로 사용하여 생성 전에 액션을 결정합니다.
+        도메인 라우팅과 독립적으로 전체 에이전트를 스캔하여,
+        키워드가 매칭되는 액션은 모두 수집합니다.
 
         Args:
             query: 사용자 질문
@@ -133,40 +137,29 @@ class ResponseGeneratorAgent:
             return []
 
         actions: list[ActionSuggestion] = []
-        seen_types: set[str] = set()
+        seen_keys: set[str] = set()
 
-        for domain in domains:
-            if domain not in self.agents or domain not in retrieval_results:
-                continue
+        def _dedup_key(action: ActionSuggestion) -> str:
+            """액션의 중복 제거 키를 생성합니다.
 
-            agent = self.agents[domain]
-            result = retrieval_results[domain]
+            Args:
+                action: 액션 제안 객체
 
-            # 문서 내용을 응답 프록시로 사용
-            doc_content = "\n".join(
-                doc.page_content[:200] for doc in result.documents
-            )
-            domain_actions = agent.suggest_actions(query, doc_content)
+            Returns:
+                "type:document_type" 형태의 고유 키
+            """
+            doc_type: str = action.params.get("document_type", "")
+            return f"{action.type}:{doc_type}" if doc_type else action.type
+
+        # 모든 에이전트의 ACTION_RULES를 쿼리 기반으로 검사
+        for agent in self.agents.values():
+            domain_actions = agent.suggest_actions(query, "")
 
             for action in domain_actions:
-                if action.type not in seen_types:
-                    seen_types.add(action.type)
+                key = _dedup_key(action)
+                if key not in seen_keys:
+                    seen_keys.add(key)
                     actions.append(action)
-
-        # 법률 보충 검색 결과의 액션도 수집
-        if "law_common_supplement" in retrieval_results:
-            legal_agent = self.agents.get("law_common")
-            if legal_agent:
-                supplement_result = retrieval_results["law_common_supplement"]
-                doc_content = "\n".join(
-                    doc.page_content[:200]
-                    for doc in supplement_result.documents
-                )
-                legal_actions = legal_agent.suggest_actions(query, doc_content)
-                for action in legal_actions:
-                    if action.type not in seen_types:
-                        seen_types.add(action.type)
-                        actions.append(action)
 
         logger.info("[생성기] 액션 %d건 사전 수집", len(actions))
         return actions
@@ -350,8 +343,9 @@ class ResponseGeneratorAgent:
             return
 
         if not documents:
-            yield {"type": "token", "content": FALLBACK_NO_DOCUMENTS}
-            yield {"type": "generation_done", "content": FALLBACK_NO_DOCUMENTS}
+            msg = FALLBACK_NO_DOCUMENTS_WITH_ACTIONS if actions else FALLBACK_NO_DOCUMENTS
+            yield {"type": "token", "content": msg}
+            yield {"type": "generation_done", "content": msg}
             return
 
         context = self.rag_chain.format_context(documents)
@@ -435,8 +429,9 @@ class ResponseGeneratorAgent:
             all_documents.extend(legal_supplement.documents)
 
         if not all_documents:
-            yield {"type": "token", "content": FALLBACK_NO_DOCUMENTS}
-            yield {"type": "generation_done", "content": FALLBACK_NO_DOCUMENTS}
+            msg = FALLBACK_NO_DOCUMENTS_WITH_ACTIONS if actions else FALLBACK_NO_DOCUMENTS
+            yield {"type": "token", "content": msg}
+            yield {"type": "generation_done", "content": msg}
             return
 
         context = self.rag_chain.format_context(all_documents)

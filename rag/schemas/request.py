@@ -231,5 +231,85 @@ class ContractRequest(BaseModel):
     base_salary: int = Field(description="기본급 (월)", gt=0)
     payment_date: int = Field(default=25, description="급여 지급일", ge=1, le=31)
     is_permanent: bool = Field(default=True, description="무기계약 여부")
+
+    # 휴일 (근로기준법 제55조)
+    holidays: str = Field(
+        default="주휴일 및 근로자의 날, 관공서의 공휴일에 관한 규정에 따른 공휴일",
+        description="휴일 (근로기준법 제55조)",
+        max_length=300,
+    )
+
+    # 연차유급휴가 (근로기준법 제60조)
+    annual_leave_days: int = Field(
+        default=15,
+        description="연차유급휴가 일수 (근로기준법 제60조)",
+        ge=0,
+        le=365,
+    )
+
+    # 단시간근로자 (근로기준법 제18조)
+    is_part_time: bool = Field(default=False, description="단시간근로자 여부")
+    weekly_work_hours: float | None = Field(
+        default=None,
+        description="주당 소정근로시간 (단시간근로자)",
+        ge=0,
+        le=168,
+    )
+
+    # 임금 상세 (근로기준법 제43조, 제56조)
+    overtime_pay_rate: int = Field(
+        default=150,
+        description="연장근로 가산율 (%)",
+        ge=100,
+        le=300,
+    )
+    night_pay_rate: int = Field(
+        default=150,
+        description="야간근로 가산율 (%)",
+        ge=100,
+        le=300,
+    )
+    holiday_pay_rate: int = Field(
+        default=150,
+        description="휴일근로 가산율 (%)",
+        ge=100,
+        le=300,
+    )
+    bonus: str | None = Field(default=None, description="상여금", max_length=200)
+    allowances: str | None = Field(default=None, description="제 수당", max_length=200)
+    payment_method: str = Field(default="계좌이체", description="임금 지급 방법", max_length=50)
+
     company_context: CompanyContext | None = Field(default=None, description="회사 정보")
     format: str = Field(default="pdf", description="출력 형식", pattern=r"^(pdf|docx)$")
+
+
+class GenerateDocumentRequest(BaseModel):
+    """범용 문서 생성 요청 스키마.
+
+    Attributes:
+        document_type: 문서 유형 키 (예: "nda", "service_agreement")
+        params: 문서 필드 값
+        format: 출력 형식 (pdf, docx)
+        company_context: 회사 정보 (인증 시 자동 주입)
+    """
+
+    document_type: str = Field(description="문서 유형 키")
+    params: dict[str, Any] = Field(default_factory=dict, description="문서 필드 값")
+    format: str = Field(default="docx", description="출력 형식", pattern=r"^(pdf|docx)$")
+    company_context: CompanyContext | None = Field(default=None, description="회사 정보")
+
+
+class ModifyDocumentRequest(BaseModel):
+    """문서 수정 요청 스키마.
+
+    Attributes:
+        file_content: 원본 파일 (base64 인코딩)
+        file_name: 원본 파일명 (확장자 포함)
+        instructions: 수정 지시사항
+        format: 출력 형식 (pdf, docx)
+    """
+
+    file_content: str = Field(description="원본 파일 (base64 인코딩)")
+    file_name: str = Field(description="원본 파일명 (확장자 포함)")
+    instructions: str = Field(description="수정 지시사항", min_length=1, max_length=5000)
+    format: str = Field(default="docx", description="출력 형식", pattern=r"^(pdf|docx)$")
