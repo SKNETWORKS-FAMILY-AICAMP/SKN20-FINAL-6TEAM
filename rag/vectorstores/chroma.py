@@ -368,33 +368,20 @@ class ChromaVectorStore:
             "metadata": collection.metadata,
         }
 
-    def get_domain_documents(self, domain: str) -> list[Document]:
-        """도메인 컬렉션의 전체 문서를 반환합니다.
-
-        BM25 인덱스 초기화 등 오프라인/초기화용 전체 문서 로딩에 사용됩니다.
+    def _parse_get_payload(self, payload: dict[str, Any]) -> list[Document]:
+        """collection.get() 응답 payload를 Document 리스트로 변환합니다.
 
         Args:
-            domain: 도메인 키
+            payload: ChromaDB collection.get() 반환값
 
         Returns:
             Document 리스트
         """
-        collection_name = self._get_collection_name(domain)
-        client = self._get_client()
-
-        try:
-            collection = client.get_collection(collection_name)
-            payload = collection.get(include=["documents", "metadatas"])
-        except Exception as e:
-            logger.warning("[벡터스토어] 전체 문서 로드 실패 (%s): %s", domain, e)
-            return []
-
         raw_documents = payload.get("documents", []) if isinstance(payload, dict) else []
         raw_metadatas = payload.get("metadatas", []) if isinstance(payload, dict) else []
         raw_ids = payload.get("ids", []) if isinstance(payload, dict) else []
 
         if not isinstance(raw_documents, list):
-            logger.warning("[벡터스토어] 전체 문서 포맷 오류 (%s): documents 타입 불일치", domain)
             return []
 
         documents: list[Document] = []
@@ -411,7 +398,74 @@ class ChromaVectorStore:
 
             documents.append(Document(page_content=content, metadata=metadata))
 
-        logger.info("[벡터스토어] 전체 문서 로드 완료: %s (%d건)", domain, len(documents))
+        return documents
+
+    def get_domain_documents(self, domain: str) -> list[Document]:
+        """도메인 컬렉션의 전체 문서를 반환합니다.
+
+        BM25 인덱스 초기화 등 오프라인/초기화용 전체 문서 로딩에 사용됩니다.
+        대규모 컬렉션(chroma_batch_load_size 초과)은 배치 로딩을 사용합니다.
+
+        Args:
+            domain: 도메인 키
+
+        Returns:
+            Document 리스트
+        """
+        from utils.config import get_settings
+
+        collection_name = self._get_collection_name(domain)
+        client = self._get_client()
+
+        try:
+            collection = client.get_collection(collection_name)
+            total = collection.count()
+        except Exception as e:
+            logger.warning("[벡터스토어] 컬렉션 접근 실패 (%s): %s", domain, e)
+            return []
+
+        batch_size = get_settings().chroma_batch_load_size
+
+        if total <= batch_size:
+            try:
+                payload = collection.get(include=["documents", "metadatas"])
+            except Exception as e:
+                logger.warning("[벡터스토어] 전체 문서 로드 실패 (%s): %s", domain, e)
+                return []
+            documents = self._parse_get_payload(payload)
+            if not documents and total > 0:
+                logger.warning("[벡터스토어] 전체 문서 포맷 오류 (%s): documents 타입 불일치", domain)
+            logger.info("[벡터스토어] 전체 문서 로드 완료: %s (%d건)", domain, len(documents))
+            return documents
+
+        logger.info(
+            "[벡터스토어] 배치 로딩 시작: %s (%d건, 배치 크기=%d)",
+            domain, total, batch_size,
+        )
+        documents: list[Document] = []
+        offset = 0
+        while offset < total:
+            try:
+                payload = collection.get(
+                    limit=batch_size,
+                    offset=offset,
+                    include=["documents", "metadatas"],
+                )
+                batch_docs = self._parse_get_payload(payload)
+                documents.extend(batch_docs)
+                offset += batch_size
+                logger.info(
+                    "[벡터스토어] 배치 로딩 진행: %s (%d/%d건)",
+                    domain, min(offset, total), total,
+                )
+            except Exception as e:
+                logger.warning(
+                    "[벡터스토어] 배치 로딩 실패 (%s, offset=%d): %s — 부분 결과 반환 (%d건)",
+                    domain, offset, e, len(documents),
+                )
+                break
+
+        logger.info("[벡터스토어] 배치 로딩 완료: %s (%d건)", domain, len(documents))
         return documents
 
     def get_all_stats(self) -> dict[str, dict[str, Any]]:
