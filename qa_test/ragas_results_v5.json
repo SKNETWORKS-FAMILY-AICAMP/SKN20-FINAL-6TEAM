@@ -1,0 +1,469 @@
+{
+  "dataset": "../qa_test/ragas_dataset_v5.jsonl",
+  "count": 30,
+  "has_ground_truth": true,
+  "embedding_provider": "runpod",
+  "question_timeout": 300,
+  "timeout_count": 0,
+  "valid_count": 30,
+  "results": [
+    {
+      "question": "네일아트 샵을 운영하면서 주 3일, 하루 4시간(주 12시간) 일하는 단시간 근로자를 고용하려고 합니다. 이 직원도 국민연금에 가입해야 하나요? 단시간 근로자의 4대보험 가입 기준이 어떻게 되나요?",
+      "timeout": false,
+      "elapsed_seconds": 9.44,
+      "metrics": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.543,
+        "context_precision": 0.9167,
+        "context_recall": 1.0,
+        "context_f1": 0.9565
+      },
+      "domain": "hr",
+      "difficulty": "Easy",
+      "id": "V5-001"
+    },
+    {
+      "question": "IT 스타트업에서 3년 근무한 개발자가 퇴사했습니다. 퇴사 후 이 직원이 사용증명서 발급을 요청했는데, 발급 의무가 있나요? '즉시' 발급해야 한다고 하는데, 당일 발급이 어려우면 법 위반인가요? 직원이 실제와 다른 직위를 기재해달라고 요청하면 어떻게 해야 하나요?",
+      "timeout": false,
+      "elapsed_seconds": 37.6,
+      "metrics": {
+        "faithfulness": 0.8333,
+        "answer_relevancy": 0.5748,
+        "context_precision": 1.0,
+        "context_recall": 0.875,
+        "context_f1": 0.9333
+      },
+      "domain": "hr",
+      "difficulty": "Medium",
+      "id": "V5-002"
+    },
+    {
+      "question": "수도권 밖 지방에서 소규모 빵집(제과점)을 창업하려고 합니다. 창업중소기업 세액감면을 받을 수 있나요? 감면율은 얼마이고, 어떤 요건을 충족해야 하나요? 청년(만 30세)인 경우 추가 혜택이 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 19.54,
+      "metrics": {
+        "faithfulness": 0.5833,
+        "answer_relevancy": 0.8284,
+        "context_precision": 0.826,
+        "context_recall": 0.7273,
+        "context_f1": 0.7735
+      },
+      "domain": "tax",
+      "difficulty": "Easy",
+      "id": "V5-003"
+    },
+    {
+      "question": "의류 제조·수출 중소기업을 운영하면서 올해 신규 직원을 5명 채용했습니다. 고용증대 세액공제를 받을 수 있나요? 공제 금액은 얼마이고, 수도권과 지방의 차이가 있나요? 사회보험료 세액공제도 함께 받을 수 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 27.04,
+      "metrics": {
+        "faithfulness": 0.7143,
+        "answer_relevancy": 0.571,
+        "context_precision": 0.3655,
+        "context_recall": 0.6,
+        "context_f1": 0.4543
+      },
+      "domain": "tax",
+      "difficulty": "Medium",
+      "id": "V5-004"
+    },
+    {
+      "question": "한식당을 창업하려고 합니다. 일반음식점 영업신고는 어떻게 하나요? 영업시설 기준(조리장, 급수시설, 화장실 등)은 어떻게 되나요? 영업신고에 필요한 서류와 수수료는 얼마인가요?",
+      "timeout": false,
+      "elapsed_seconds": 18.52,
+      "metrics": {
+        "faithfulness": 0.5714,
+        "answer_relevancy": 0.8811,
+        "context_precision": 1.0,
+        "context_recall": 0.5556,
+        "context_f1": 0.7143
+      },
+      "domain": "startup",
+      "difficulty": "Easy",
+      "id": "V5-005"
+    },
+    {
+      "question": "코딩 교육 학원을 설립하려고 합니다. 학원 등록 절차는 어떻게 되나요? 어떤 서류가 필요하고, 시설기준은 어떤 것이 있나요? 등록 후 개원 의무기한이 있나요? 미등록 운영 시 처벌은 어떻게 되나요?",
+      "timeout": false,
+      "elapsed_seconds": 27.03,
+      "metrics": {
+        "faithfulness": 0.8077,
+        "answer_relevancy": 0.7939,
+        "context_precision": 0.7885,
+        "context_recall": 0.7273,
+        "context_f1": 0.7566
+      },
+      "domain": "startup",
+      "difficulty": "Medium",
+      "id": "V5-006"
+    },
+    {
+      "question": "유기농 식품을 온라인으로 판매하고 있습니다. 식품위생법에서 정하는 식품 판매업의 영업 종류와 신고 절차는 어떻게 되나요? 식품 표시·광고에서 '유기농'이라는 표현을 사용하려면 어떤 인증이 필요한가요?",
+      "timeout": false,
+      "elapsed_seconds": 45.76,
+      "metrics": {
+        "faithfulness": 0.6154,
+        "answer_relevancy": 0.8177,
+        "context_precision": 0.7885,
+        "context_recall": 0.75,
+        "context_f1": 0.7688
+      },
+      "domain": "law",
+      "difficulty": "Medium",
+      "id": "V5-007"
+    },
+    {
+      "question": "건축설계사무소를 10년째 운영하고 있습니다. 건축사법에서 정하는 건축사의 업무 범위는 무엇인가요? 건축사사무소 개설 등록 요건은 어떻게 되나요? 건축사가 아닌 사람이 설계 업무를 하면 어떤 법적 제재가 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 12.49,
+      "metrics": {
+        "faithfulness": 0.5556,
+        "answer_relevancy": 0.7191,
+        "context_precision": 1.0,
+        "context_recall": 0.3333,
+        "context_f1": 0.5
+      },
+      "domain": "law",
+      "difficulty": "Hard",
+      "id": "V5-008"
+    },
+    {
+      "question": "물류 스타트업을 설립하고 직원 3명을 처음 채용했습니다. 4대보험 신규 적용 신고는 어떻게 하나요? 신고 기한은 언제까지인가요? 국민연금 보험료는 어떻게 산정되나요?",
+      "timeout": false,
+      "elapsed_seconds": 22.91,
+      "metrics": {
+        "faithfulness": 0.5625,
+        "answer_relevancy": 0.7996,
+        "context_precision": 0.6,
+        "context_recall": 0.5455,
+        "context_f1": 0.5714
+      },
+      "domain": "hr+tax",
+      "difficulty": "Easy",
+      "id": "V5-009"
+    },
+    {
+      "question": "반도체 부품 중소기업에서 올해 상시근로자를 10명 증가시켰습니다. 사회보험료 세액공제를 받으려면 어떤 요건이 필요한가요? 신규 채용 직원들에 대한 국민연금 사업장 가입자 자격취득 신고는 어떻게 하나요?",
+      "timeout": false,
+      "elapsed_seconds": 18.69,
+      "metrics": {
+        "faithfulness": 0.5333,
+        "answer_relevancy": 0.8943,
+        "context_precision": 1.0,
+        "context_recall": 0.7273,
+        "context_f1": 0.8421
+      },
+      "domain": "hr+tax",
+      "difficulty": "Medium",
+      "id": "V5-010"
+    },
+    {
+      "question": "네일아트 샵을 창업하면서 네일 아티스트 1명을 고용하려고 합니다. 네일미용업 영업신고에 필요한 자격요건과 절차는 어떻게 되나요? 고용한 직원과 근로계약서를 작성할 때 반드시 포함해야 하는 내용은 무엇인가요?",
+      "timeout": false,
+      "elapsed_seconds": 20.1,
+      "metrics": {
+        "faithfulness": 0.8,
+        "answer_relevancy": 0.6757,
+        "context_precision": 0.7052,
+        "context_recall": 0.8,
+        "context_f1": 0.7496
+      },
+      "domain": "hr+startup",
+      "difficulty": "Easy",
+      "id": "V5-011"
+    },
+    {
+      "question": "헬스장(피트니스 센터)을 창업하면서 트레이너 3명을 채용하려고 합니다. 체육시설업 등록 또는 신고 절차는 어떻게 되나요? 트레이너의 근로시간은 어떻게 관리해야 하나요? 헬스장에서도 안전·보건 교육을 실시해야 하나요?",
+      "timeout": false,
+      "elapsed_seconds": 25.82,
+      "metrics": {
+        "faithfulness": 0.4615,
+        "answer_relevancy": 0.6328,
+        "context_precision": 0.6333,
+        "context_recall": 0.6364,
+        "context_f1": 0.6348
+      },
+      "domain": "hr+startup",
+      "difficulty": "Medium",
+      "id": "V5-012"
+    },
+    {
+      "question": "음식점을 운영하고 있는데 경영이 악화되어 직원을 정리해고해야 합니다. 경영상 이유에 의한 해고 시 어떤 절차를 거쳐야 하나요? 회사를 완전히 폐업하는 경우에도 근로기준법 제24조의 절차를 거쳐야 하나요?",
+      "timeout": false,
+      "elapsed_seconds": 22.8,
+      "metrics": {
+        "faithfulness": 0.0952,
+        "answer_relevancy": 0.5514,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "context_f1": 1.0
+      },
+      "domain": "hr+law",
+      "difficulty": "Medium",
+      "id": "V5-013"
+    },
+    {
+      "question": "IT 스타트업에서 프리랜서 개발자와 업무위탁 계약을 맺고 있습니다. 이 프리랜서가 근로기준법상 근로자에 해당하는지 어떻게 판단하나요? 근로자로 인정되면 어떤 의무가 발생하나요?",
+      "timeout": false,
+      "elapsed_seconds": 26.8,
+      "metrics": {
+        "faithfulness": 0.7826,
+        "answer_relevancy": 0.8191,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "context_f1": 1.0
+      },
+      "domain": "hr+law",
+      "difficulty": "Hard",
+      "id": "V5-014"
+    },
+    {
+      "question": "지방(수도권 밖)에서 빵집(제과점)을 창업하려는 만 28세 청년입니다. 제과점업 영업신고 절차와 함께, 창업중소기업 세액감면을 받으려면 어떤 요건을 충족해야 하나요? 간이과세자로 시작해도 세액감면을 받을 수 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 19.32,
+      "metrics": {
+        "faithfulness": 0.5652,
+        "answer_relevancy": 0.6467,
+        "context_precision": 0.8736,
+        "context_recall": 0.9167,
+        "context_f1": 0.8946
+      },
+      "domain": "tax+startup",
+      "difficulty": "Easy",
+      "id": "V5-015"
+    },
+    {
+      "question": "유기농 식품 온라인쇼핑몰을 창업하려고 합니다. 통신판매업 신고는 어떻게 하나요? 사업자등록과 통신판매업 신고의 순서는 어떻게 되나요? 창업 시 조세특례제한법상 '창업'으로 인정받으려면 어떤 조건을 충족해야 하나요?",
+      "timeout": false,
+      "elapsed_seconds": 53.37,
+      "metrics": {
+        "faithfulness": 0.6667,
+        "answer_relevancy": 0.8348,
+        "context_precision": 0.9762,
+        "context_recall": 0.6923,
+        "context_f1": 0.8101
+      },
+      "domain": "tax+startup",
+      "difficulty": "Medium",
+      "id": "V5-016"
+    },
+    {
+      "question": "의류 제조·수출 중소기업을 운영하면서 해외 수출 비중이 늘고 있습니다. 수출 시 부가가치세 영세율이 적용된다고 하는데, 영세율 적용 요건은 무엇인가요? 영세율과 면세의 차이는 무엇인가요? 관련 법률 조항은 어디에 규정되어 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 21.77,
+      "metrics": {
+        "faithfulness": 0.5909,
+        "answer_relevancy": 0.622,
+        "context_precision": 0.9267,
+        "context_recall": 0.8182,
+        "context_f1": 0.8691
+      },
+      "domain": "tax+law",
+      "difficulty": "Medium",
+      "id": "V5-017"
+    },
+    {
+      "question": "반도체 부품 중소기업에서 연구개발에 매년 상당한 금액을 투자하고 있습니다. 통합투자세액공제를 받을 수 있나요? 중소기업의 공제율은 얼마인가요? 조세특례제한법상 사후관리 의무는 무엇인가요?",
+      "timeout": false,
+      "elapsed_seconds": 9.01,
+      "metrics": {
+        "faithfulness": 0.2,
+        "answer_relevancy": 0.6287,
+        "context_precision": 1.0,
+        "context_recall": 0.9091,
+        "context_f1": 0.9524
+      },
+      "domain": "tax+law",
+      "difficulty": "Hard",
+      "id": "V5-018"
+    },
+    {
+      "question": "코딩 교육 학원을 설립하려고 합니다. 학원의 설립·운영 및 과외교습에 관한 법률(학원법)에 따른 등록 요건과 절차는 어떻게 되나요? 학원법 위반 시 어떤 행정처분이나 형사처벌을 받을 수 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 21.07,
+      "metrics": {
+        "faithfulness": 0.8889,
+        "answer_relevancy": 0.6757,
+        "context_precision": 0.9094,
+        "context_recall": 0.9091,
+        "context_f1": 0.9092
+      },
+      "domain": "startup+law",
+      "difficulty": "Medium",
+      "id": "V5-019"
+    },
+    {
+      "question": "한식당 프랜차이즈에 가맹하려고 합니다. 가맹사업거래의 공정화에 관한 법률(가맹사업법)에 따라 가맹본부가 제공해야 하는 정보공개서에는 어떤 내용이 포함되나요? 가맹계약 체결 시 주의할 점은 무엇인가요? 음식점 영업신고도 별도로 해야 하나요?",
+      "timeout": false,
+      "elapsed_seconds": 26.53,
+      "metrics": {
+        "faithfulness": 0.5517,
+        "answer_relevancy": 0.6525,
+        "context_precision": 0.8972,
+        "context_recall": 0.9091,
+        "context_f1": 0.9031
+      },
+      "domain": "startup+law",
+      "difficulty": "Medium",
+      "id": "V5-020"
+    },
+    {
+      "question": "네일아트 샵을 수도권 밖 지방에서 창업하려는 만 32세입니다. 직원 2명을 채용할 예정인데, 영업신고부터 직원 채용, 세무 신고까지 종합적으로 알려주세요. 미용사 면허 요건, 근로계약서 작성 의무, 4대보험 가입, 창업중소기업 세액감면은 각각 어떻게 되나요?",
+      "timeout": false,
+      "elapsed_seconds": 30.15,
+      "metrics": {
+        "faithfulness": 0.5806,
+        "answer_relevancy": 0.6486,
+        "context_precision": 0.7287,
+        "context_recall": 0.8333,
+        "context_f1": 0.7775
+      },
+      "domain": "hr+tax+startup",
+      "difficulty": "Medium",
+      "id": "V5-021"
+    },
+    {
+      "question": "헬스장(피트니스 센터)을 창업하면서 트레이너 5명을 채용하여 고용을 확대합니다. 체육시설업 신고 절차, 트레이너의 근로시간 관리 및 연장근로 수당, 고용증대 세액공제와 사회보험료 세액공제를 종합적으로 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 36.18,
+      "metrics": {
+        "faithfulness": 0.88,
+        "answer_relevancy": 0.7108,
+        "context_precision": 0.6913,
+        "context_recall": 0.8571,
+        "context_f1": 0.7653
+      },
+      "domain": "hr+tax+startup",
+      "difficulty": "Hard",
+      "id": "V5-022"
+    },
+    {
+      "question": "물류 스타트업에서 성수기에 직원들에게 연장근로를 시키고 있습니다. 연장근로 수당은 어떻게 계산하나요? 인건비(급여, 연장수당)의 세무처리는 어떻게 하나요? 연장근로 한도를 초과하면 근로기준법상 어떤 처벌을 받나요?",
+      "timeout": false,
+      "elapsed_seconds": 45.06,
+      "metrics": {
+        "faithfulness": 0.75,
+        "answer_relevancy": 0.7098,
+        "context_precision": 0.749,
+        "context_recall": 0.5833,
+        "context_f1": 0.6559
+      },
+      "domain": "hr+tax+law",
+      "difficulty": "Medium",
+      "id": "V5-023"
+    },
+    {
+      "question": "건축설계사무소에서 20년 근속한 직원이 60세 정년에 도달합니다. 정년 후 재고용 시 근로조건 변경이 가능한가요? 퇴직금 세무처리는 어떻게 되나요? 고용상 연령차별금지법에서 정하는 정년 관련 규정은 무엇인가요?",
+      "timeout": false,
+      "elapsed_seconds": 31.85,
+      "metrics": {
+        "faithfulness": 0.7368,
+        "answer_relevancy": 0.8391,
+        "context_precision": 0.892,
+        "context_recall": 1.0,
+        "context_f1": 0.9429
+      },
+      "domain": "hr+tax+law",
+      "difficulty": "Hard",
+      "id": "V5-024"
+    },
+    {
+      "question": "음식점(한식당)을 창업하면서 주방보조 2명을 채용합니다. 영업신고와 시설기준은 어떻게 되나요? 직원들에게 위생교육과 안전보건교육을 모두 실시해야 하나요? 식품위생법 위반 시 어떤 처벌을 받나요?",
+      "timeout": false,
+      "elapsed_seconds": 26.73,
+      "metrics": {
+        "faithfulness": 0.7,
+        "answer_relevancy": 0.641,
+        "context_precision": 0.853,
+        "context_recall": 0.9167,
+        "context_f1": 0.8837
+      },
+      "domain": "hr+startup+law",
+      "difficulty": "Medium",
+      "id": "V5-025"
+    },
+    {
+      "question": "코딩 교육 학원을 설립하면서 프로그래밍 강사 3명을 채용합니다. 학원법에 따른 등록 절차는 어떻게 되나요? 강사가 프리랜서인지 근로자인지 어떻게 판단하나요? 학원법상 교습비 관련 의무는 무엇인가요?",
+      "timeout": false,
+      "elapsed_seconds": 30.69,
+      "metrics": {
+        "faithfulness": 0.8929,
+        "answer_relevancy": 0.6537,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "context_f1": 1.0
+      },
+      "domain": "hr+startup+law",
+      "difficulty": "Hard",
+      "id": "V5-026"
+    },
+    {
+      "question": "IT 보안 솔루션 스타트업을 창업하여 벤처기업 인증을 받으려고 합니다. 벤처기업 인증을 받으면 어떤 세제 혜택이 있나요? 벤처기업육성에 관한 특별법상 벤처기업의 요건은 무엇인가요? 창업벤처중소기업 세액감면을 받으려면 어떤 조건이 필요한가요?",
+      "timeout": false,
+      "elapsed_seconds": 35.27,
+      "metrics": {
+        "faithfulness": 0.75,
+        "answer_relevancy": 0.7017,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "context_f1": 1.0
+      },
+      "domain": "tax+startup+law",
+      "difficulty": "Medium",
+      "id": "V5-027"
+    },
+    {
+      "question": "유기농 식품 온라인쇼핑몰을 창업하려고 합니다. 통신판매업 신고 절차, 식품 판매 관련 면세·과세 구분, 전자상거래법상 소비자 보호 의무를 종합적으로 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 25.15,
+      "metrics": {
+        "faithfulness": 0.4091,
+        "answer_relevancy": 0.8678,
+        "context_precision": 0.8,
+        "context_recall": 0.8462,
+        "context_f1": 0.8224
+      },
+      "domain": "tax+startup+law",
+      "difficulty": "Hard",
+      "id": "V5-028"
+    },
+    {
+      "question": "의류 제조·수출 중소기업(직원 30명, 연 매출 50억)을 운영하고 있습니다. 올해 직원 5명을 추가 채용하고 해외 수출을 확대할 계획입니다. 직원 관리(근로계약, 연장근로), 세무(고용증대 세액공제, 영세율), 정부 지원사업 활용, 수출 관련 법률 의무를 종합적으로 상담해주세요.",
+      "timeout": false,
+      "elapsed_seconds": 29.62,
+      "metrics": {
+        "faithfulness": 0.931,
+        "answer_relevancy": 0.7402,
+        "context_precision": 0.923,
+        "context_recall": 0.8333,
+        "context_f1": 0.8759
+      },
+      "domain": "hr+tax+startup+law",
+      "difficulty": "Hard",
+      "id": "V5-029"
+    },
+    {
+      "question": "반도체 부품 중소기업(직원 50명, 연 매출 100억)을 운영하면서 R&D 투자를 확대하고 신규 채용도 진행합니다. 직원 채용·관리(4대보험, 연장근로), R&D 세액공제(통합투자, 연구인력개발비), 정부 기술개발 지원사업, 하도급법 준수 의무를 종합적으로 상담해주세요.",
+      "timeout": false,
+      "elapsed_seconds": 43.42,
+      "metrics": {
+        "faithfulness": 0.5484,
+        "answer_relevancy": 0.6911,
+        "context_precision": 1.0,
+        "context_recall": 0.85,
+        "context_f1": 0.9189
+      },
+      "domain": "hr+tax+startup+law",
+      "difficulty": "Hard",
+      "id": "V5-030"
+    }
+  ],
+  "averages": {
+    "faithfulness": 0.6519,
+    "answer_relevancy": 0.7122,
+    "context_precision": 0.8615,
+    "context_recall": 0.8051,
+    "context_f1": 0.8212,
+    "ragas_score": 0.7624
+  }
+}

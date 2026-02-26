@@ -1,0 +1,231 @@
+{
+  "dataset": "evaluation/ragas_dataset_v4_single.jsonl",
+  "count": 20,
+  "has_ground_truth": true,
+  "embedding_provider": "runpod",
+  "question_timeout": 600,
+  "timeout_count": 0,
+  "valid_count": 20,
+  "results": [
+    {
+      "question": "플라워샵을 운영하면서 직원 1명을 채용했습니다. 근로계약서를 꼭 작성해야 하나요? 근로계약서에 반드시 들어가야 하는 내용은 무엇인가요? 서면으로 교부하지 않으면 불이익이 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 14.9,
+      "metrics": {}
+    },
+    {
+      "question": "시니어 케어 플랫폼을 운영하면서 상담 직원 일부가 재택근무를 하고 있습니다. 재택근무 시 근로시간은 어떻게 관리해야 하나요? 재택근무자의 근로시간을 인정하는 기준이 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 14.79,
+      "metrics": {
+        "answer_relevancy": 0.6449,
+        "context_precision": 1.0,
+        "context_recall": 0.4286
+      }
+    },
+    {
+      "question": "전기공사 현장에서 일하는 직원들에게 안전보건교육을 반드시 실시해야 하나요? 교육 시간과 내용은 어떻게 되나요? 교육을 실시하지 않으면 어떤 처벌이 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 10.53,
+      "metrics": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 1.0,
+        "context_recall": 0.375
+      }
+    },
+    {
+      "question": "친환경 패키징 제조회사에서 직원 25명이 근무하고 있습니다. 납기가 급할 때 연장근로를 시키려고 하는데, 연장근로 한도가 어떻게 되나요? 한도를 초과해서 근무시키려면 어떤 절차가 필요한가요? 연장근로 수당은 어떻게 계산하나요?",
+      "timeout": false,
+      "elapsed_seconds": 12.57,
+      "metrics": {
+        "faithfulness": 0.4,
+        "answer_relevancy": 0.7068,
+        "context_precision": 1.0,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "question": "인쇄회사에서 20년간 근무한 직원이 곧 60세 정년에 도달합니다. 이 직원을 정년 이후에도 재고용하려고 하는데, 재고용 시 임금이나 근로조건을 변경할 수 있나요? 퇴직금과 연차휴가 계속근로기간은 어떻게 처리되나요? 재고용하지 않으면 위법인가요?",
+      "timeout": false,
+      "elapsed_seconds": 33.1,
+      "metrics": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.5722,
+        "context_precision": 0.9617,
+        "context_recall": 0.4286
+      }
+    },
+    {
+      "question": "디저트카페를 창업하려고 합니다. 사업자등록 시 간이과세자와 일반과세자 중 어떤 것을 선택해야 하나요? 간이과세자의 기준과 혜택은 무엇인가요? 매출이 늘면 자동으로 일반과세자로 전환되나요?",
+      "timeout": false,
+      "elapsed_seconds": 21.57,
+      "metrics": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.7324,
+        "context_precision": 1.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "플라워샵에서 직원 1명을 고용하고 있습니다. 4대보험(국민연금, 건강보험, 고용보험, 산재보험)에 모두 가입해야 하나요? 보험료는 사업주와 근로자가 각각 얼마나 부담하나요?",
+      "timeout": false,
+      "elapsed_seconds": 10.73,
+      "metrics": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.8033,
+        "context_precision": 1.0,
+        "context_recall": 0.8889
+      }
+    },
+    {
+      "question": "화장품 제조·유통 회사를 운영하면서 해외 수출을 확대하고 있습니다. 수출 시 부가가치세 영세율이 적용된다고 들었는데, 영세율 적용 요건과 절차가 어떻게 되나요? 영세율과 면세의 차이는 무엇인가요?",
+      "timeout": false,
+      "elapsed_seconds": 25.21,
+      "metrics": {
+        "faithfulness": 0.5263,
+        "answer_relevancy": 0.5761,
+        "context_precision": 1.0,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "question": "AI 기반 학습 플랫폼을 개발하는 에드테크 회사를 운영하고 있습니다. R&D 투자에 대한 세액공제를 받을 수 있나요? 통합투자세액공제라는 제도도 있다고 하는데 어떤 차이가 있나요? 중소기업의 공제율은 얼마인가요?",
+      "timeout": false,
+      "elapsed_seconds": 26.27,
+      "metrics": {
+        "faithfulness": 0.8,
+        "answer_relevancy": 0.729,
+        "context_precision": 0.9667,
+        "context_recall": 0.25
+      }
+    },
+    {
+      "question": "인쇄회사를 20년째 운영하고 있으며 아들에게 가업승계를 준비하고 있습니다. 가업승계 시 상속세나 증여세에 대한 특례 제도가 있나요? 가업상속공제를 받으려면 어떤 요건을 충족해야 하나요? 사후관리 의무는 무엇인가요?",
+      "timeout": false,
+      "elapsed_seconds": 34.65,
+      "metrics": {
+        "faithfulness": 0.8462,
+        "answer_relevancy": 0.0,
+        "context_precision": 1.0,
+        "context_recall": 0.625
+      }
+    },
+    {
+      "question": "디저트카페(베이킹 카페)를 창업하려고 합니다. 카페 창업에 필요한 인허가 절차가 어떻게 되나요? 식품위생법상 영업신고를 해야 하나요? 식품위생교육도 받아야 하나요?",
+      "timeout": false,
+      "elapsed_seconds": 14.5,
+      "metrics": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.7033,
+        "context_precision": 0.8056,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "question": "키즈카페(실내놀이터)를 창업하려고 합니다. 어린이놀이시설 안전관리법에 따른 안전검사를 받아야 하나요? 무인 운영도 가능한가요? 창업 시 필요한 인허가 절차가 어떻게 되나요?",
+      "timeout": false,
+      "elapsed_seconds": 20.76,
+      "metrics": {
+        "faithfulness": 0.7059,
+        "answer_relevancy": 0.7251,
+        "context_precision": 0.7783,
+        "context_recall": 0.625
+      }
+    },
+    {
+      "question": "반려동물 용품 온라인쇼핑몰을 창업하려고 합니다. 통신판매업 신고는 어떻게 하나요? 사업자등록과 통신판매업 신고의 순서는 어떻게 되나요? 구매안전서비스 가입도 필요한가요?",
+      "timeout": false,
+      "elapsed_seconds": 9.83,
+      "metrics": {
+        "faithfulness": 0.9167,
+        "answer_relevancy": 0.7624,
+        "context_precision": 1.0,
+        "context_recall": 0.875
+      }
+    },
+    {
+      "question": "공유오피스(코워킹스페이스) 사업을 위해 법인(주식회사)을 설립하려고 합니다. 주식회사 설립 절차와 필요한 서류는 무엇인가요? 최소 자본금 요건이 있나요? 설립 후 사업자등록은 어떻게 하나요?",
+      "timeout": false,
+      "elapsed_seconds": 20.7,
+      "metrics": {
+        "faithfulness": 0.8947,
+        "answer_relevancy": 0.5425,
+        "context_precision": 0.7885,
+        "context_recall": 0.625
+      }
+    },
+    {
+      "question": "자동차정비소를 운영 중인데 프랜차이즈 가맹을 고민하고 있습니다. 프랜차이즈 가맹 시 정보공개서를 받아야 한다고 하는데, 정보공개서에 어떤 내용이 포함되나요? 가맹계약 체결 시 주의할 점은 무엇인가요?",
+      "timeout": false,
+      "elapsed_seconds": 38.6,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 1.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "반려동물 용품 온라인쇼핑몰을 운영하면서 반려동물 사료와 간식도 판매하려고 합니다. 동물보호법에 따라 영업 등록을 해야 하나요? 동물보호법에서 정하는 '동물' 관련 영업의 종류는 무엇인가요?",
+      "timeout": false,
+      "elapsed_seconds": 999.05,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 1.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "시니어 케어 플랫폼을 통해 요양보호사를 파견하는 서비스를 제공하고 있습니다. 노인복지법에서 정하는 노인복지시설의 종류와 설치 기준은 무엇인가요? 의료법과의 경계는 어디까지인가요?",
+      "timeout": false,
+      "elapsed_seconds": 2.62,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 1.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "화장품 제조·유통 회사를 운영하면서 자체 브랜드 제품을 해외에 수출하고 있습니다. 화장품법에서 정하는 화장품의 정의와 제조업자의 의무는 무엇인가요? 기능성화장품은 별도 심사가 필요한가요?",
+      "timeout": false,
+      "elapsed_seconds": 30446.46,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 1.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "전기공사업을 25년간 운영하고 있습니다. 전기공사업법에서 정하는 공사업 등록 기준은 무엇인가요? 하도급 관련 규정은 어떻게 되나요? 건설산업기본법과의 관계는 어떻게 되나요?",
+      "timeout": false,
+      "elapsed_seconds": 6.16,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 1.0,
+        "context_recall": 0.625
+      }
+    },
+    {
+      "question": "AI 기반 학습 플랫폼을 운영하면서 학생들의 학습 데이터를 수집·분석하고 있습니다. AI가 생성한 학습 콘텐츠의 저작권은 누구에게 있나요? 학생들의 학습 데이터 수집 시 개인정보 보호법상 어떤 의무가 있나요? 미성년자의 개인정보 처리 시 별도 동의가 필요한가요?",
+      "timeout": false,
+      "elapsed_seconds": 3.19,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 1.0,
+        "context_recall": 0.0
+      }
+    }
+  ],
+  "averages": {
+    "faithfulness": 0.5605,
+    "answer_relevancy": 0.3946,
+    "context_precision": 0.9632,
+    "context_recall": 0.4603
+  }
+}

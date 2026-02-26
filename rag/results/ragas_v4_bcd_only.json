@@ -1,0 +1,897 @@
+{
+  "dataset": "/app/ragas_dataset_v4.jsonl",
+  "count": 80,
+  "has_ground_truth": true,
+  "embedding_provider": "runpod",
+  "question_timeout": 300,
+  "timeout_count": 0,
+  "valid_count": 80,
+  "results": [
+    {
+      "question": "플라워샵을 운영하면서 직원 1명을 채용했습니다. 근로계약서를 꼭 작성해야 하나요? 근로계약서에 반드시 들어가야 하는 내용은 무엇인가요? 서면으로 교부하지 않으면 불이익이 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.06,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "시니어 케어 플랫폼을 운영하면서 상담 직원 일부가 재택근무를 하고 있습니다. 재택근무 시 근로시간은 어떻게 관리해야 하나요? 재택근무자의 근로시간을 인정하는 기준이 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.02,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.7778
+      }
+    },
+    {
+      "question": "전기공사 현장에서 일하는 직원들에게 안전보건교육을 반드시 실시해야 하나요? 교육 시간과 내용은 어떻게 되나요? 교육을 실시하지 않으면 어떤 처벌이 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.02,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "친환경 패키징 제조회사에서 직원 25명이 근무하고 있습니다. 납기가 급할 때 연장근로를 시키려고 하는데, 연장근로 한도가 어떻게 되나요? 한도를 초과해서 근무시키려면 어떤 절차가 필요한가요? 연장근로 수당은 어떻게 계산하나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.0,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "인쇄회사에서 20년간 근무한 직원이 곧 60세 정년에 도달합니다. 이 직원을 정년 이후에도 재고용하려고 하는데, 재고용 시 임금이나 근로조건을 변경할 수 있나요? 퇴직금과 연차휴가 계속근로기간은 어떻게 처리되나요? 재고용하지 않으면 위법인가요?",
+      "timeout": false,
+      "elapsed_seconds": 56.01,
+      "metrics": {
+        "faithfulness": 0.7,
+        "answer_relevancy": 0.671,
+        "context_precision": 1.0,
+        "context_recall": 0.8571
+      }
+    },
+    {
+      "question": "디저트카페를 창업하려고 합니다. 사업자등록 시 간이과세자와 일반과세자 중 어떤 것을 선택해야 하나요? 간이과세자의 기준과 혜택은 무엇인가요? 매출이 늘면 자동으로 일반과세자로 전환되나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.12,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "플라워샵에서 직원 1명을 고용하고 있습니다. 4대보험(국민연금, 건강보험, 고용보험, 산재보험)에 모두 가입해야 하나요? 보험료는 사업주와 근로자가 각각 얼마나 부담하나요?",
+      "timeout": false,
+      "elapsed_seconds": 11.23,
+      "metrics": {
+        "faithfulness": 0.3077,
+        "answer_relevancy": 0.8356,
+        "context_precision": 0.8875,
+        "context_recall": 0.6364
+      }
+    },
+    {
+      "question": "화장품 제조·유통 회사를 운영하면서 해외 수출을 확대하고 있습니다. 수출 시 부가가치세 영세율이 적용된다고 들었는데, 영세율 적용 요건과 절차가 어떻게 되나요? 영세율과 면세의 차이는 무엇인가요?",
+      "timeout": false,
+      "elapsed_seconds": 60.13,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "AI 기반 학습 플랫폼을 개발하는 에드테크 회사를 운영하고 있습니다. R&D 투자에 대한 세액공제를 받을 수 있나요? 통합투자세액공제라는 제도도 있다고 하는데 어떤 차이가 있나요? 중소기업의 공제율은 얼마인가요?",
+      "timeout": false,
+      "elapsed_seconds": 60.02,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "인쇄회사를 20년째 운영하고 있으며 아들에게 가업승계를 준비하고 있습니다. 가업승계 시 상속세나 증여세에 대한 특례 제도가 있나요? 가업상속공제를 받으려면 어떤 요건을 충족해야 하나요? 사후관리 의무는 무엇인가요?",
+      "timeout": false,
+      "elapsed_seconds": 60.01,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "디저트카페(베이킹 카페)를 창업하려고 합니다. 카페 창업에 필요한 인허가 절차가 어떻게 되나요? 식품위생법상 영업신고를 해야 하나요? 식품위생교육도 받아야 하나요?",
+      "timeout": false,
+      "elapsed_seconds": 10.16,
+      "metrics": {
+        "faithfulness": 0.7059,
+        "answer_relevancy": 0.7254,
+        "context_precision": 0.8333,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "question": "키즈카페(실내놀이터)를 창업하려고 합니다. 어린이놀이시설 안전관리법에 따른 안전검사를 받아야 하나요? 무인 운영도 가능한가요? 창업 시 필요한 인허가 절차가 어떻게 되나요?",
+      "timeout": false,
+      "elapsed_seconds": 32.57,
+      "metrics": {
+        "faithfulness": 0.75,
+        "answer_relevancy": 0.7877,
+        "context_precision": 1.0,
+        "context_recall": 0.625
+      }
+    },
+    {
+      "question": "반려동물 용품 온라인쇼핑몰을 창업하려고 합니다. 통신판매업 신고는 어떻게 하나요? 사업자등록과 통신판매업 신고의 순서는 어떻게 되나요? 구매안전서비스 가입도 필요한가요?",
+      "timeout": false,
+      "elapsed_seconds": 12.1,
+      "metrics": {
+        "faithfulness": 0.4615,
+        "answer_relevancy": 0.0,
+        "context_precision": 1.0,
+        "context_recall": 0.875
+      }
+    },
+    {
+      "question": "공유오피스(코워킹스페이스) 사업을 위해 법인(주식회사)을 설립하려고 합니다. 주식회사 설립 절차와 필요한 서류는 무엇인가요? 최소 자본금 요건이 있나요? 설립 후 사업자등록은 어떻게 하나요?",
+      "timeout": false,
+      "elapsed_seconds": 37.89,
+      "metrics": {
+        "faithfulness": 0.65,
+        "answer_relevancy": 0.8294,
+        "context_precision": 0.9667,
+        "context_recall": 0.75
+      }
+    },
+    {
+      "question": "자동차정비소를 운영 중인데 프랜차이즈 가맹을 고민하고 있습니다. 프랜차이즈 가맹 시 정보공개서를 받아야 한다고 하는데, 정보공개서에 어떤 내용이 포함되나요? 가맹계약 체결 시 주의할 점은 무엇인가요?",
+      "timeout": false,
+      "elapsed_seconds": 28.01,
+      "metrics": {
+        "faithfulness": 0.1333,
+        "answer_relevancy": 0.817,
+        "context_precision": 1.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "반려동물 용품 온라인쇼핑몰을 운영하면서 반려동물 사료와 간식도 판매하려고 합니다. 동물보호법에 따라 영업 등록을 해야 하나요? 동물보호법에서 정하는 '동물' 관련 영업의 종류는 무엇인가요?",
+      "timeout": false,
+      "elapsed_seconds": 41.23,
+      "metrics": {
+        "faithfulness": 0.6,
+        "answer_relevancy": 0.0,
+        "context_precision": 1.0,
+        "context_recall": 0.3333
+      }
+    },
+    {
+      "question": "시니어 케어 플랫폼을 통해 요양보호사를 파견하는 서비스를 제공하고 있습니다. 노인복지법에서 정하는 노인복지시설의 종류와 설치 기준은 무엇인가요? 의료법과의 경계는 어디까지인가요?",
+      "timeout": false,
+      "elapsed_seconds": 15.9,
+      "metrics": {
+        "faithfulness": 0.3636,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.8042,
+        "context_recall": 0.7143
+      }
+    },
+    {
+      "question": "화장품 제조·유통 회사를 운영하면서 자체 브랜드 제품을 해외에 수출하고 있습니다. 화장품법에서 정하는 화장품의 정의와 제조업자의 의무는 무엇인가요? 기능성화장품은 별도 심사가 필요한가요?",
+      "timeout": false,
+      "elapsed_seconds": 13.29,
+      "metrics": {
+        "faithfulness": 0.5833,
+        "answer_relevancy": 0.606,
+        "context_precision": 0.95,
+        "context_recall": 0.5
+      }
+    },
+    {
+      "question": "전기공사업을 25년간 운영하고 있습니다. 전기공사업법에서 정하는 공사업 등록 기준은 무엇인가요? 하도급 관련 규정은 어떻게 되나요? 건설산업기본법과의 관계는 어떻게 되나요?",
+      "timeout": false,
+      "elapsed_seconds": 40.35,
+      "metrics": {
+        "faithfulness": 0.3636,
+        "answer_relevancy": 0.6904,
+        "context_precision": 1.0,
+        "context_recall": 0.5
+      }
+    },
+    {
+      "question": "AI 기반 학습 플랫폼을 운영하면서 학생들의 학습 데이터를 수집·분석하고 있습니다. AI가 생성한 학습 콘텐츠의 저작권은 누구에게 있나요? 학생들의 학습 데이터 수집 시 개인정보 보호법상 어떤 의무가 있나요? 미성년자의 개인정보 처리 시 별도 동의가 필요한가요?",
+      "timeout": false,
+      "elapsed_seconds": 56.63,
+      "metrics": {
+        "faithfulness": 0.3636,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.8333,
+        "context_recall": 0.5556
+      }
+    },
+    {
+      "question": "친환경 패키징 제조회사 직원 25명의 연말정산을 준비하고 있습니다. 직원들에게 지급하는 식대, 차량유지비, 자녀학자금 등이 비과세 항목에 해당하나요? 비과세 한도는 얼마인가요? 또한 식비를 매달 정기적으로 지급하면 통상임금에도 포함되나요?",
+      "timeout": false,
+      "elapsed_seconds": 58.21,
+      "metrics": {
+        "faithfulness": 0.75,
+        "answer_relevancy": 0.69,
+        "context_precision": 0.7233,
+        "context_recall": 0.6667
+      }
+    },
+    {
+      "question": "전기공사 현장에서 일용직 근로자를 많이 사용하고 있습니다. 일용직 근로자의 퇴직공제부금은 어떻게 납부하나요? 일용직 급여에 대한 원천징수는 어떻게 처리하나요? 일용직도 4대보험에 가입해야 하나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.01,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "인쇄회사 직원 40명의 퇴직연금제도를 도입하려고 합니다. DB형(확정급여형)과 DC형(확정기여형)의 차이는 무엇인가요? 각 유형별 세무 처리(손금 산입, 퇴직소득세)는 어떻게 다른가요? 직원이 퇴직 시 퇴직금과 퇴직연금 중 어느 것이 세금 면에서 유리한가요?",
+      "timeout": false,
+      "elapsed_seconds": 39.92,
+      "metrics": {
+        "faithfulness": 0.5217,
+        "answer_relevancy": 0.6977,
+        "context_precision": 0.5556,
+        "context_recall": 0.3636
+      }
+    },
+    {
+      "question": "플라워샵에서 직원 1명에게 월급을 지급하고 있습니다. 매월 급여에서 4대보험료와 소득세를 공제하고 지급해야 한다고 하는데, 구체적으로 어떻게 처리하나요? 임금명세서도 반드시 교부해야 하나요?",
+      "timeout": false,
+      "elapsed_seconds": 26.13,
+      "metrics": {
+        "faithfulness": 0.25,
+        "answer_relevancy": 0.8688,
+        "context_precision": 1.0,
+        "context_recall": 0.3077
+      }
+    },
+    {
+      "question": "시니어 케어 플랫폼에서 요양보호사를 직접 고용하여 파견하고 있습니다. 요양보호사 인건비는 어떻게 세무 처리하나요? 최저임금 기준도 동일하게 적용되나요?",
+      "timeout": false,
+      "elapsed_seconds": 29.28,
+      "metrics": {
+        "faithfulness": 0.4,
+        "answer_relevancy": 0.8499,
+        "context_precision": 0.5804,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "question": "디저트카페를 창업하면서 아르바이트 직원 1명을 채용하려고 합니다. 아르바이트도 근로계약서를 작성해야 하나요? 소상공인을 위한 고용 관련 지원사업이 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.01,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "키즈카페를 창업하면서 안전관리 담당 직원을 채용하려고 합니다. 어린이놀이시설 안전관리자의 자격 요건이 있나요? 키즈카페 창업을 지원하는 정부 지원사업이 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 30.48,
+      "metrics": {
+        "faithfulness": 0.5833,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.1,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "question": "공유오피스를 창업하면서 청년(만 15~34세) 직원을 채용하려고 합니다. 청년 고용 시 활용할 수 있는 정부 지원사업이 있나요? 채용 시 근로계약서 작성 외에 추가로 주의할 점이 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.06,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "에드테크 스타트업에서 AI 개발 핵심인력을 채용하려고 합니다. 스톡옵션(주식매수선택권)을 부여하려면 어떤 절차가 필요한가요? 스톡옵션의 법적 요건과 행사 시 세무 처리는 어떻게 되나요? 정부의 스타트업 인력 채용 지원사업이 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.02,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "반려동물 용품 온라인쇼핑몰을 1인으로 창업한 후 주문이 늘면 단시간근로자(아르바이트)를 고용하려고 합니다. 단시간근로자의 근로계약 시 주의할 점과 주휴수당 지급 기준은 어떻게 되나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.0,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "전기공사 현장에서 직원이 감전사고로 다쳤습니다. 산업재해가 발생하면 사업주로서 어떤 법적 책임이 있나요? 산업안전보건법상 처벌 규정은 어떻게 되나요? 산재보험으로 보상이 되나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.05,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "친환경 패키징 제조회사에서 직원 간 직장 내 괴롭힘 신고가 접수되었습니다. 사업주로서 어떤 조치를 해야 하나요? 근로기준법에서 정하는 직장 내 괴롭힘의 정의와 사업주의 의무는 무엇인가요?",
+      "timeout": false,
+      "elapsed_seconds": 60.02,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "인쇄회사에서 60세 정년에 도달한 숙련공을 촉탁직으로 재고용하려고 합니다. 촉탁 재고용 시 근로조건(임금, 직급)을 변경할 수 있나요? 고령자고용촉진법에서 정하는 정년 규정과 차별금지 규정은 어떻게 적용되나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.02,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "자동차정비소에서 직원 3명이 일하고 있습니다. 정비 작업 시 안전보호구(안전화, 보안경, 장갑 등)를 반드시 지급해야 하나요? 안전보호구를 지급하지 않으면 어떤 법적 처벌이 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.02,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "시니어 케어 플랫폼을 통해 요양보호사를 가정에 파견하고 있습니다. 요양보호사가 근로기준법상 근로자인지, 아니면 프리랜서(독립사업자)인지 어떻게 판단하나요? 또한 서비스 범위가 의료행위에 해당하지 않도록 하려면 어디까지 서비스를 제공할 수 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.02,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "디저트카페 창업을 준비하면서 인테리어비, 장비 구입비, 임차보증금 등 초기 비용이 발생합니다. 이런 비용들은 세무적으로 어떻게 처리하나요? 소상공인을 위한 정책자금 지원도 받을 수 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.02,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "반려동물 용품 온라인쇼핑몰을 시작하려고 합니다. 초기 매출이 적을 때 세무신고는 어떻게 하나요? 간이과세자로 시작할 수 있나요? 소규모 온라인 창업을 지원하는 정부사업이 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.02,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "공유오피스 사업을 위해 법인을 설립했습니다. 첫 해 법인세 신고는 어떻게 하나요? 창업중소기업 세액감면을 받을 수 있나요? 법인 설립 비용은 어떻게 처리하나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.0,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.75
+      }
+    },
+    {
+      "question": "화장품을 해외에 수출하면서 영세율 적용, 관세 환급 등 세무 이슈가 복잡합니다. 수출바우처 등 정부의 수출 지원사업을 활용하고 싶은데, 어떤 지원을 받을 수 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.02,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "키즈카페 창업을 위해 인테리어와 놀이기구에 큰 투자가 필요합니다. 인테리어비와 놀이기구 구입비는 세무적으로 어떻게 처리하나요? 소상공인 시설자금 대출은 어떻게 신청하나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.02,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "인쇄회사를 아들에게 가업승계하려고 합니다. 상속세 및 증여세법에서 정하는 가업상속공제 요건은 무엇인가요? 출판문화산업 진흥법에서 출판사에 대한 지원이 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 35.46,
+      "metrics": {
+        "faithfulness": 0.4545,
+        "answer_relevancy": 0.8758,
+        "context_precision": 0.916,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "question": "화장품을 동남아 시장에 수출하면서 관세 환급과 부가가치세 영세율을 적용받고 있습니다. 화장품법에서 수출 화장품에 대한 별도 규정이 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.01,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "전기공사 하도급을 받아 공사를 진행하고 있습니다. 하도급대금을 발주자로부터 직접 지급받을 수 있나요? 세금계산서는 어떻게 발행하나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.0,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 1.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "자동차정비소에서 정비 서비스와 부품 판매를 합니다. 부가가치세가 모두 적용되나요? 고객과 정비 품질 분쟁이 발생하면 어떻게 해결하나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.01,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "친환경 패키징 제조회사에서 ESG 경영을 추진하고 있습니다. 환경 관련 투자에 대한 세제 혜택이 있나요? 자원재활용촉진법에서 포장재 관련 EPR 제도는 어떻게 적용되나요?",
+      "timeout": false,
+      "elapsed_seconds": 59.33,
+      "metrics": {
+        "faithfulness": 0.7368,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.8783,
+        "context_recall": 0.6667
+      }
+    },
+    {
+      "question": "키즈카페를 창업하면서 실내 놀이기구를 설치하려고 합니다. 어린이놀이시설 안전관리법에 따른 안전검사는 필수인가요? 안전검사 없이 영업이 가능한가요?",
+      "timeout": false,
+      "elapsed_seconds": 40.53,
+      "metrics": {
+        "faithfulness": 0.7059,
+        "answer_relevancy": 0.8418,
+        "context_precision": 0.2758,
+        "context_recall": 0.7143
+      }
+    },
+    {
+      "question": "반려동물 용품 온라인쇼핑몰에서 자체 브랜드를 론칭하려 합니다. 상표 등록 절차와 미등록 시 위험은 무엇인가요?",
+      "timeout": false,
+      "elapsed_seconds": 38.0,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.8351,
+        "context_precision": 0.25,
+        "context_recall": 0.3636
+      }
+    },
+    {
+      "question": "공유오피스 사업을 위해 건물을 임차하려 합니다. 상가건물 임대차보호법이 적용되나요? 확정일자와 사업자등록의 관계는 어떻게 되나요?",
+      "timeout": false,
+      "elapsed_seconds": 22.21,
+      "metrics": {
+        "faithfulness": 0.4,
+        "answer_relevancy": 0.8674,
+        "context_precision": 0.7272,
+        "context_recall": 0.625
+      }
+    },
+    {
+      "question": "AI 기반 적응형 학습 알고리즘을 개발했습니다. 특허로 출원할 수 있나요? 정부 R&D 지원사업 중 에드테크 분야에 적합한 것이 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 13.58,
+      "metrics": {
+        "faithfulness": 0.4737,
+        "answer_relevancy": 0.8012,
+        "context_precision": 0.4978,
+        "context_recall": 0.1538
+      }
+    },
+    {
+      "question": "시니어 케어 플랫폼으로 노인돌봄 서비스를 제공하려면 어떤 법적 요건이 필요한가요? 재가노인복지시설 신고가 필요한가요?",
+      "timeout": false,
+      "elapsed_seconds": 10.36,
+      "metrics": {
+        "faithfulness": 0.8824,
+        "answer_relevancy": 0.8136,
+        "context_precision": 1.0,
+        "context_recall": 0.1818
+      }
+    },
+    {
+      "question": "디저트카페를 1인 창업한 뒤 첫 아르바이트생을 채용하려 합니다. 근로계약, 4대보험, 원천징수 등 인사·세무 기본 사항과, 이 과정에서 활용할 수 있는 창업 지원사업이 있는지 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 54.77,
+      "metrics": {
+        "faithfulness": 0.3478,
+        "answer_relevancy": 0.7426,
+        "context_precision": 1.0,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "question": "공유오피스 운영을 위해 프리랜서 커뮤니티 매니저를 계약하려 합니다. 근로자 vs 프리랜서의 법적 차이, 프리랜서 사업소득 원천징수(3.3%) 처리 방법, 그리고 공유오피스 창업에 활용할 수 있는 지원사업을 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 24.13,
+      "metrics": {
+        "faithfulness": 0.5926,
+        "answer_relevancy": 0.6197,
+        "context_precision": 0.9762,
+        "context_recall": 0.9167
+      }
+    },
+    {
+      "question": "반려동물 용품 온라인몰을 창업하고 직원 2명을 채용하려 합니다. 수습 기간 설정, 창업 초기 세제 혜택(청년창업 세액감면 등), 그리고 온라인 쇼핑몰 창업 시 유용한 지원사업이 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 22.97,
+      "metrics": {
+        "faithfulness": 0.5238,
+        "answer_relevancy": 0.7591,
+        "context_precision": 0.6114,
+        "context_recall": 0.5
+      }
+    },
+    {
+      "question": "시리즈A 투자 유치를 준비하면서 AI 개발자 3명을 추가 채용하려 합니다. 스톡옵션 부여 시 세금 이슈, R&D 인력의 인건비 세액공제, 벤처기업 인재채용 지원사업을 종합적으로 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 26.07,
+      "metrics": {
+        "faithfulness": 0.4545,
+        "answer_relevancy": 0.7192,
+        "context_precision": 0.7032,
+        "context_recall": 0.3333
+      }
+    },
+    {
+      "question": "수출 확대를 위해 생산직 10명을 추가 채용하려 합니다. 고용 증가에 따른 세액공제와 중소기업 고용 관련 지원사업에는 어떤 것들이 있나요?",
+      "timeout": false,
+      "elapsed_seconds": 60.05,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "직원 1명의 임금을 월급제로 지급하고 있는데, 최저임금 계산법과 소상공인이 받을 수 있는 세제 혜택, 소상공인 지원사업을 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 60.01,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 1.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "12년차 직원이 퇴직하는데, 퇴직금 산정 방법과 퇴직소득세 계산, 화장품법상 책임판매업 관련 인력 요건이 궁금합니다.",
+      "timeout": false,
+      "elapsed_seconds": 25.71,
+      "metrics": {
+        "faithfulness": 0.8182,
+        "answer_relevancy": 0.6581,
+        "context_precision": 0.8791,
+        "context_recall": 0.75
+      }
+    },
+    {
+      "question": "직원 55명 규모 전기공사업체에서 안전관리자 선임 의무와 관련 인건비 세무 처리, 산업안전보건법상 의무 사항을 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 52.85,
+      "metrics": {
+        "faithfulness": 0.4444,
+        "answer_relevancy": 0.7348,
+        "context_precision": 0.816,
+        "context_recall": 0.5833
+      }
+    },
+    {
+      "question": "20년차 인쇄업체를 아들에게 가업승계하려 합니다. 가업승계 증여세 특례와 기존 직원 40명의 고용유지 요건, 출판문화산업진흥법상 인쇄업 등록 승계 절차를 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 18.76,
+      "metrics": {
+        "faithfulness": 0.5294,
+        "answer_relevancy": 0.5778,
+        "context_precision": 0.8713,
+        "context_recall": 0.5833
+      }
+    },
+    {
+      "question": "자동차정비소에 직원 3명이 있는데, 연장근로 수당 계산법과 급여 관련 세무 처리, 자동차관리법상 정비업 인력 기준을 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 20.33,
+      "metrics": {
+        "faithfulness": 0.2105,
+        "answer_relevancy": 0.8451,
+        "context_precision": 0.6851,
+        "context_recall": 0.9167
+      }
+    },
+    {
+      "question": "요양보호사를 직접 고용하여 파견하는 모델인데, 요양보호사의 근로자 지위, 4대보험 처리, 그리고 노인장기요양보험법상 장기요양기관 지정 요건이 궁금합니다.",
+      "timeout": false,
+      "elapsed_seconds": 22.17,
+      "metrics": {
+        "faithfulness": 0.55,
+        "answer_relevancy": 0.816,
+        "context_precision": 0.9683,
+        "context_recall": 0.5833
+      }
+    },
+    {
+      "question": "키즈카페를 개업하면서 보육교사 자격이 있는 직원 2명을 채용하려 합니다. 근로계약 유의사항, 원천징수 방법, 어린이놀이시설 안전관리법 상 안전관리자 배치 기준을 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 27.26,
+      "metrics": {
+        "faithfulness": 0.16,
+        "answer_relevancy": 0.8093,
+        "context_precision": 0.7857,
+        "context_recall": 0.6154
+      }
+    },
+    {
+      "question": "온라인몰 직원 2명을 채용하면서 전자상거래법 준수사항과, 통신판매업 신고 후 활용 가능한 소상공인 지원사업을 종합적으로 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 60.02,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "콘텐츠 개발자에게 스톡옵션을 부여하면서, 개발한 교육 콘텐츠의 저작권 귀속 문제와 에드테크 관련 지원사업을 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 19.82,
+      "metrics": {
+        "faithfulness": 0.7917,
+        "answer_relevancy": 0.8637,
+        "context_precision": 1.0,
+        "context_recall": 0.75
+      }
+    },
+    {
+      "question": "하도급 업체 직원이 우리 공장에서 상시 근무하는데, 파견근로 vs 하도급의 법적 차이와, 자원재활용법상 친환경 포장재 인증 요건, 수출 관련 지원사업을 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 31.17,
+      "metrics": {
+        "faithfulness": 0.8462,
+        "answer_relevancy": 0.5175,
+        "context_precision": 0.9468,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "question": "꽃집에서 카페 음료도 함께 판매하려고 합니다. 직원 근로시간 관리, 식품위생법상 카페 영업 요건, 소상공인 지원사업을 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 22.73,
+      "metrics": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.7258,
+        "context_precision": 0.5694,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "question": "화장품 해외 수출을 확대하면서, 수출 관련 세제 혜택, 화장품법상 수출용 화장품 특례, 수출 지원사업을 종합적으로 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 16.78,
+      "metrics": {
+        "faithfulness": 0.625,
+        "answer_relevancy": 0.7482,
+        "context_precision": 0.0769,
+        "context_recall": 0.6667
+      }
+    },
+    {
+      "question": "대규모 건설현장의 전기공사 하도급을 수주했는데, 하도급 대금 세금계산서 처리와 건설산업기본법·하도급법상 의무사항, 정부 건설업 지원사업을 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 20.36,
+      "metrics": {
+        "faithfulness": 0.6522,
+        "answer_relevancy": 0.6402,
+        "context_precision": 0.7545,
+        "context_recall": 0.75
+      }
+    },
+    {
+      "question": "대형 자동차정비 프랜차이즈 가맹을 고려하고 있습니다. 가맹비와 로열티의 세무 처리, 가맹사업법상 정보공개서 확인 사항, 가맹 관련 지원사업을 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 60.02,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "디저트카페를 개업하려면 어떤 순서로 준비해야 하나요? 사업자등록, 세금 신고, 식품위생법상 영업신고 절차를 순서대로 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 60.01,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 1.0,
+        "context_recall": 0.625
+      }
+    },
+    {
+      "question": "공유오피스 사업을 법인으로 설립하려 합니다. 법인 설립 절차와 법인세 기본 사항, 부동산 임대업 관련 법규와 창업 지원사업을 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 59.89,
+      "metrics": {
+        "faithfulness": 0.7778,
+        "answer_relevancy": 0.8154,
+        "context_precision": 0.25,
+        "context_recall": 0.9167
+      }
+    },
+    {
+      "question": "키즈카페(실내놀이터) 창업 시 사업자등록과 세금 기본사항, 어린이놀이시설 안전검사, 소상공인 지원사업을 알려주세요.",
+      "timeout": false,
+      "elapsed_seconds": 50.18,
+      "metrics": {
+        "faithfulness": 0.8929,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.747,
+        "context_recall": 0.7692
+      }
+    },
+    {
+      "question": "디저트카페를 1인 창업에서 직원 2명 고용까지 확장하려 합니다. 근로계약과 4대보험, 세금 신고와 청년창업 세액감면, 카페 창업 절차, 식품위생법 준수사항을 종합적으로 안내해 주세요.",
+      "timeout": false,
+      "elapsed_seconds": 60.03,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "시리즈A 투자를 앞두고 인력 채용(스톡옵션 포함), R&D 세액공제, 벤처기업 지원사업, 저작권 및 개인정보보호법 준수사항을 종합적으로 정리해 주세요.",
+      "timeout": false,
+      "elapsed_seconds": 43.96,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.7001,
+        "context_recall": 0.7778
+      }
+    },
+    {
+      "question": "ESG 경영을 본격화하면서 고용 확대, 환경투자 세제 혜택, 수출 지원사업, 자원재활용법과 산업안전보건법 준수를 종합적으로 안내해 주세요.",
+      "timeout": false,
+      "elapsed_seconds": 43.89,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.7459,
+        "context_recall": 0.9375
+      }
+    },
+    {
+      "question": "20년차 인쇄업체를 디지털 인쇄로 전환하면서 기존 직원 40명의 직무전환 교육, 설비투자 세액공제, 디지털 전환 지원사업, 출판문화산업진흥법 관련 사항을 종합적으로 안내해 주세요.",
+      "timeout": false,
+      "elapsed_seconds": 42.16,
+      "metrics": {
+        "faithfulness": 0.4815,
+        "answer_relevancy": 0.7391,
+        "context_precision": 0.2932,
+        "context_recall": 0.8824
+      }
+    },
+    {
+      "question": "요양보호사 10명을 직접 고용하여 재가서비스를 제공하려 합니다. 요양보호사 근로조건, 장기요양기관 수입의 세무 처리, 사회적기업 지원사업, 노인장기요양보험법과 의료법 경계를 종합적으로 안내해 주세요.",
+      "timeout": false,
+      "elapsed_seconds": 43.17,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.6536,
+        "context_recall": 0.8333
+      }
+    },
+    {
+      "question": "OEM과 자체 브랜드를 병행하면서 해외 수출을 확대하고 있습니다. 직원 30명의 인사관리, 수출 관련 세제 혜택, 수출 지원사업, 화장품법과 상표법 주의사항을 종합적으로 안내해 주세요.",
+      "timeout": false,
+      "elapsed_seconds": 60.01,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "question": "55명 규모 전기공사업체의 안전관리, 하도급 세금 처리, 정부 건설업 지원사업, 전기공사업법과 산업안전보건법 준수사항을 종합적으로 정리해 주세요.",
+      "timeout": false,
+      "elapsed_seconds": 41.3,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.3754,
+        "context_recall": 0.7222
+      }
+    },
+    {
+      "question": "키즈카페(실내놀이터)를 창업하면서 직원 2명 채용, 세금 기본사항, 소상공인 지원사업, 어린이놀이시설 안전관리법과 식품위생법 준수사항을 처음부터 순서대로 안내해 주세요.",
+      "timeout": false,
+      "elapsed_seconds": 45.59,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.4717,
+        "context_recall": 0.8235
+      }
+    }
+  ],
+  "averages": {
+    "faithfulness": 0.2855,
+    "answer_relevancy": 0.3304,
+    "context_precision": 0.4708,
+    "context_recall": 0.4269
+  }
+}
