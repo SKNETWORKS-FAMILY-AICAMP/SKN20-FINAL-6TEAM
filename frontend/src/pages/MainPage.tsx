@@ -16,7 +16,7 @@ import { useNotificationStore } from '../stores/notificationStore';
 import { useChat } from '../hooks/useChat';
 import { useDisplayUserType } from '../hooks/useDisplayUserType';
 import { useNotifications } from '../hooks/useNotifications';
-import { AGENT_NAMES, AGENT_COLORS, type Schedule } from '../types';
+import { AGENT_NAMES, AGENT_COLORS, type Company, type Schedule } from '../types';
 import { USER_QUICK_QUESTIONS } from '../lib/constants';
 import { getSeasonalQuestions } from '../lib/seasonalQuestions';
 import { ResponseProgress } from '../components/chat/ResponseProgress';
@@ -44,6 +44,20 @@ const normalizeNotificationSchedules = (value: unknown): Schedule[] => {
   );
 };
 
+const normalizeNotificationCompanies = (value: unknown): Company[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter(
+    (item): item is Company =>
+      typeof item === 'object' &&
+      item !== null &&
+      typeof (item as Company).company_id === 'number' &&
+      typeof (item as Company).com_name === 'string'
+  );
+};
+
 const MainPage: React.FC = () => {
   const { isAuthenticated, user } = useAuthStore();
   const { notifications, toastQueue, dismissToast } = useNotificationStore();
@@ -52,6 +66,9 @@ const MainPage: React.FC = () => {
   const { sendMessage, isLoading, stopStreaming } = useChat();
   const [inputValue, setInputValue] = useState('');
   const [notificationSchedules, setNotificationSchedules] = useState<Schedule[]>([]);
+  const [notificationCompanyNameById, setNotificationCompanyNameById] = useState<
+    Record<number, string>
+  >({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -62,7 +79,7 @@ const MainPage: React.FC = () => {
     .map((toastId) => notifications.find((notification) => notification.id === toastId) ?? null)
     .filter((notification): notification is NonNullable<typeof notification> => notification !== null);
 
-  useNotifications(notificationSchedules);
+  useNotifications(notificationSchedules, notificationCompanyNameById);
 
   const prevSessionIdRef = useRef<string | null>(null);
   const prevMessagesLengthRef = useRef<number>(0);
@@ -97,6 +114,7 @@ const MainPage: React.FC = () => {
   useEffect(() => {
     if (!isAuthenticated) {
       setNotificationSchedules([]);
+      setNotificationCompanyNameById({});
       return;
     }
 
@@ -104,12 +122,32 @@ const MainPage: React.FC = () => {
 
     const fetchSchedulesForNotifications = async () => {
       try {
-        const response = await api.get('/schedules');
+        const [schedulesResult, companiesResult] = await Promise.allSettled([
+          api.get('/schedules'),
+          api.get('/companies'),
+        ]);
         if (!isMounted) {
           return;
         }
 
-        setNotificationSchedules(normalizeNotificationSchedules(response.data));
+        if (schedulesResult.status === 'fulfilled') {
+          setNotificationSchedules(normalizeNotificationSchedules(schedulesResult.value.data));
+        } else {
+          setNotificationSchedules([]);
+          console.error('Failed to fetch schedules for notifications:', schedulesResult.reason);
+        }
+
+        if (companiesResult.status === 'fulfilled') {
+          const companies = normalizeNotificationCompanies(companiesResult.value.data);
+          const nextCompanyNameById = companies.reduce<Record<number, string>>((acc, company) => {
+            acc[company.company_id] = company.com_name;
+            return acc;
+          }, {});
+          setNotificationCompanyNameById(nextCompanyNameById);
+        } else {
+          setNotificationCompanyNameById({});
+          console.error('Failed to fetch companies for notifications:', companiesResult.reason);
+        }
       } catch (error) {
         console.error('Failed to fetch schedules for notifications:', error);
       }

@@ -26,6 +26,44 @@ const NOTIFICATION_ICON_COLORS: Record<Notification['type'], string> = {
   warning: 'text-orange-500',
 };
 
+interface CompanyBadgeVariant {
+  bgClassName: string;
+  textClassName: string;
+  ringClassName: string;
+}
+
+const COMPANY_BADGE_VARIANTS: CompanyBadgeVariant[] = [
+  { bgClassName: 'bg-blue-50', textClassName: 'text-blue-700', ringClassName: 'ring-blue-200' },
+  { bgClassName: 'bg-sky-50', textClassName: 'text-sky-700', ringClassName: 'ring-sky-200' },
+  { bgClassName: 'bg-cyan-50', textClassName: 'text-cyan-700', ringClassName: 'ring-cyan-200' },
+  { bgClassName: 'bg-teal-50', textClassName: 'text-teal-700', ringClassName: 'ring-teal-200' },
+  { bgClassName: 'bg-indigo-50', textClassName: 'text-indigo-700', ringClassName: 'ring-indigo-200' },
+  { bgClassName: 'bg-slate-100', textClassName: 'text-slate-700', ringClassName: 'ring-slate-300' },
+];
+
+const LEGACY_COMPANY_DELIMITER = ' - ';
+
+const parseLegacyCompanyLabel = (message: string): string | null => {
+  const delimiterIndex = message.indexOf(LEGACY_COMPANY_DELIMITER);
+  if (delimiterIndex <= 0) {
+    return null;
+  }
+
+  const companyLabel = message.slice(0, delimiterIndex).trim();
+  return companyLabel.length > 0 ? companyLabel : null;
+};
+
+const getCompanyBadgeVariant = (companyLabel: string): CompanyBadgeVariant => {
+  let hash = 0;
+  for (let index = 0; index < companyLabel.length; index += 1) {
+    hash = (hash << 5) - hash + companyLabel.charCodeAt(index);
+    hash |= 0;
+  }
+
+  const variantIndex = Math.abs(hash) % COMPANY_BADGE_VARIANTS.length;
+  return COMPANY_BADGE_VARIANTS[variantIndex];
+};
+
 export const NotificationItem: React.FC<NotificationItemProps> = ({
   notification,
   onClick,
@@ -33,6 +71,15 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
 }) => {
   const Icon = NOTIFICATION_ICONS[notification.type] ?? InformationCircleIcon;
   const iconColor = NOTIFICATION_ICON_COLORS[notification.type] ?? 'text-gray-500';
+  const legacyCompanyLabel = parseLegacyCompanyLabel(notification.message);
+  const companyLabel = notification.company_label ?? legacyCompanyLabel ?? undefined;
+  const displayMessage =
+    notification.company_label || !legacyCompanyLabel
+      ? notification.message
+      : notification.message
+          .slice(notification.message.indexOf(LEGACY_COMPANY_DELIMITER) + LEGACY_COMPANY_DELIMITER.length)
+          .trim();
+  const companyBadgeVariant = companyLabel ? getCompanyBadgeVariant(companyLabel) : null;
 
   return (
     <div
@@ -59,11 +106,20 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
           {notification.title}
         </Typography>
         <Typography variant="small" color="gray" className="truncate text-xs !text-gray-700">
-          {notification.message}
+          {displayMessage}
         </Typography>
-        <Typography variant="small" color="gray" className="mt-1 text-xs !text-gray-600">
-          {getTimeAgo(notification.created_at)}
-        </Typography>
+        <div className="mt-1 flex items-center gap-2">
+          {companyLabel && companyBadgeVariant ? (
+            <span
+              className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium leading-none ring-1 ring-inset ${companyBadgeVariant.bgClassName} ${companyBadgeVariant.textClassName} ${companyBadgeVariant.ringClassName}`}
+            >
+              {companyLabel}
+            </span>
+          ) : null}
+          <Typography variant="small" color="gray" className="text-xs !text-gray-600">
+            {getTimeAgo(notification.created_at)}
+          </Typography>
+        </div>
       </div>
       <div className="mt-0.5 flex items-center gap-1">
         {!notification.is_read && (

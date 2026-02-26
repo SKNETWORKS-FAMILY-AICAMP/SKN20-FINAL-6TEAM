@@ -19,6 +19,7 @@ const normalizeNotifications = (value: unknown): Notification[] => {
       id: typeof item.id === 'string' ? item.id : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       title: typeof item.title === 'string' ? item.title : '',
       message: typeof item.message === 'string' ? item.message : '',
+      company_label: typeof item.company_label === 'string' ? item.company_label : undefined,
       type: isNotificationType(item.type) ? item.type : 'info',
       is_read: typeof item.is_read === 'boolean' ? item.is_read : false,
       created_at:

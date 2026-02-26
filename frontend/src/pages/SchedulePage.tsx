@@ -197,7 +197,16 @@ const SchedulePage: React.FC = () => {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('calendar');
 
-  useNotifications(schedules);
+  const notificationCompanyNameById = useMemo(
+    () =>
+      companies.reduce<Record<number, string>>((acc, company) => {
+        acc[company.company_id] = company.com_name;
+        return acc;
+      }, {}),
+    [companies]
+  );
+
+  useNotifications(schedules, notificationCompanyNameById);
 
   const selectedCompany = useMemo(
     () => companies.find((company) => company.company_id === selectedCompanyId) ?? null,
