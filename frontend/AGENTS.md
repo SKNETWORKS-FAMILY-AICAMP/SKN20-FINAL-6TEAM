@@ -1,58 +1,55 @@
-# Frontend - AI Agent Quick Reference
+# Frontend - React Application (Vite)
 
-> 상세 개발 가이드: [CLAUDE.md](./CLAUDE.md)
-
-## Tech Stack
-React 18 / Vite 5 / TypeScript 5 / React Router v6 / TailwindCSS / Zustand / axios / react-markdown + remark-gfm
-
-## Project Structure
-```
-frontend/src/
-├── pages/              # MainPage, LoginPage, CompanyPage, SchedulePage, UsageGuidePage, AdminDashboardPage, AdminLogPage
-├── components/
-│   ├── chat/           # ChatWindow, MessageList, MessageInput, DomainTag, ActionButtons, ContractFormModal, LoginPromptModal, ResponseProgress, SourceReferences
-│   ├── common/         # RegionSelect, ProtectedRoute, ErrorBoundary, Button, Input, Modal
-│   ├── company/        # CompanyForm (준비중/운영중 토글)
-│   ├── profile/        # ProfileDialog (모달 기반)
-│   ├── admin/          # HistoryDetailModal, HistoryFilterBar, HistoryTable
-│   ├── schedule/       # CalendarView, ScheduleDetailDialog
-│   └── layout/         # MainLayout, Sidebar, ChatHistoryPanel, NotificationBell, NotificationItem
-├── hooks/              # useChat, useDisplayUserType, useMediaQuery, useNotifications
-├── stores/             # authStore (persist), chatStore (멀티세션, persist), notificationStore
-├── types/              # index.ts (User, Company, ChatMessage, ChatSession, AgentCode)
-├── lib/                # api.ts (Backend), rag.ts (RAG), constants.ts, documentApi.ts, utils.ts, dateUtils.ts, errorHandler.ts, seasonalQuestions.ts
-├── App.tsx             # React Router (MainLayout 래퍼 패턴)
-└── main.tsx
-```
-
-## Routes
-
-| Path | Component | Description |
-|------|-----------|-------------|
-| `/login` | LoginPage | Google OAuth 로그인 (독립 레이아웃) |
-| `/` | MainPage | 메인 채팅 (멀티세션) |
-| `/company` | CompanyPage | 기업 프로필 관리 |
-| `/schedule` | SchedulePage | 일정 관리 |
-| `/guide` | UsageGuidePage | 사용 설명서 |
-| `/admin` | AdminDashboardPage | 관리자 대시보드 (U0000001만) |
-| `/admin/log` | AdminLogPage | 관리자 상담 로그 (U0000001만) |
-
-**Profile**: 별도 라우트 없음 → Sidebar 톱니바퀴 → `ProfileDialog` 모달
+> General info (tech stack, setup, pages, env vars): [README.md](./README.md)
 
 ## API Clients
 
-| Client | Base URL | Usage |
-|--------|----------|-------|
-| `api` (lib/api.ts) | `VITE_API_URL` (Backend:8000) | 인증, 사용자, 기업, 이력, 일정 |
-| `ragApi` (lib/rag.ts) | `VITE_RAG_URL` (RAG:8001) | 채팅, AI 응답, 문서 생성 |
+- **Backend API**: `src/lib/api.ts` — HttpOnly cookie auth (`withCredentials: true`), auto 401 refresh + retry queue
+- **RAG API**: `src/lib/rag.ts` — Chat/AI responses (`X-API-Key` header)
 
-## Key Constants (lib/constants.ts)
-`INDUSTRY_MAJOR`, `INDUSTRY_MINOR`, `INDUSTRY_ALL`, `REGION_SIDO`, `REGION_SIGUNGU`, `PROVINCES`, `COMPANY_STATUS`, `GUEST_QUICK_QUESTIONS`, `USER_QUICK_QUESTIONS`, `GUEST_MESSAGE_LIMIT`
+## State Management (Zustand)
+
+**authStore** (`src/stores/authStore.ts`):
+- `isAuthenticated`, `isAuthChecking`, `user` — token in HttpOnly cookie, NOT localStorage
+- `login(user)`: login + sync guest messages (`syncGuestMessages`) + reset count
+- `logout()`: server logout (`/auth/logout`) + state reset
+- `checkAuth()`: server auth check (`/auth/me`) — called on page load
+
+**chatStore** (`src/stores/chatStore.ts`):
+- Multi-session: `sessions: ChatSession[]`, `currentSessionId`
+- `addMessage()`: auto-creates session if none, sets title from first message
+- `guestMessageCount`: guest message count (10 limit)
+- `syncGuestMessages()`: bulk-save guest conversations to backend history on login
+
+No TanStack Query — Zustand + axios direct call pattern. Custom hooks: `src/hooks/`
+
+## Routing
+
+`src/App.tsx` — MainLayout wrapper pattern. Route protection via `ProtectedRoute` component:
+- `<Route element={<ProtectedRoute />}>` — auth required
+- `<Route element={<ProtectedRoute requiredTypeCode="U0000001" />}>` — admin only
+- `isAuthChecking` blocks render (prevents redirect flicker)
+
+**No `/profile` route** — profile management is in Sidebar settings (gear icon) → `ProfileDialog` modal.
+
+## Types
+
+All types in `src/types/index.ts` (User, Company, AgentCode, ChatMessage, ChatSession, ApiResponse, etc.)
+
+## Gotchas
+
+- **Env vars**: `VITE_` prefix required, access via `import.meta.env.VITE_*`
+- **CSRF**: `api.ts` auto-includes `X-Requested-With: XMLHttpRequest` header
+- **API base URLs**: Backend (8000), RAG (8001) — separate clients
+- **Admin menu**: visible only to `U0000001` user type
+- **Guest limit**: 10 free messages (`GUEST_MESSAGE_LIMIT`)
+- **Markdown**: assistant responses rendered with `react-markdown` + `remark-gfm`, styled via `src/index.css` `.markdown-body`
+- **Code patterns**: `.claude/skills/code-patterns/SKILL.md`
 
 ## MUST NOT
 
-- **하드코딩 금지**: API URL, 포트 → `import.meta.env.VITE_*` 사용
-- **any 타입 금지**: 명확한 TypeScript 타입 정의 필수
-- **매직 넘버/스트링 금지** → `constants.ts`에 상수 정의
-- **인라인 스타일 남용 금지** → TailwindCSS 클래스 사용
-- **중복 코드 금지** → 커스텀 훅 또는 유틸 함수로 추출
+- No hardcoding: API URL, ports → `import.meta.env.VITE_*`
+- No `any` type: explicit TypeScript type definitions required
+- No magic numbers/strings → define in `constants.ts`
+- No inline style abuse → use TailwindCSS classes
+- No duplicate code → extract to custom hooks or utility functions

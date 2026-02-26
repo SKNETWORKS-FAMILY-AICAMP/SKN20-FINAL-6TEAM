@@ -34,10 +34,10 @@ color: red
 
 **Phase 1 분석 결과를 토대로 구체적인 계획을 세운다. 이 단계를 통과하지 않으면 코드를 작성하지 않는다.**
 
-1. `/everything-claude-code:plan` 스킬을 호출하여 구조화된 계획을 생성한다.
-   - 스킬에 Phase 1에서 파악한 영향 범위, 기존 코드, 의존성 정보를 전달한다.
-   - 스킬이 요구사항 재정리, 리스크 평가, 단계별 구현 계획을 작성한다.
-2. 스킬 결과 + PM의 에이전트 위임 전략을 합쳐 **MD 파일로 작성**, `docs/plans/<feature-name>.md`에 저장한다.
+1. Phase 1 분석 결과를 바탕으로 구조화된 계획을 생성한다.
+   - 요구사항 재정리, 리스크 평가, 단계별 구현 계획을 작성한다.
+   - 복잡한 설계가 필요하면 `Plan` 에이전트에 위임한다.
+2. PM의 에이전트 위임 전략을 합쳐 **MD 파일로 작성**, `docs/plans/<feature-name>.md`에 저장한다.
    - MD 파일 구조:
      ```markdown
      # [기능명] 구현 계획
@@ -98,9 +98,9 @@ color: red
 
 1. 모든 구현 완료 후 `code-reviewer` 에이전트 호출
 2. 서비스별 테스트 실행:
-   - Backend: `.venv\Scripts\pytest backend/tests/`
+   - Backend: `.venv/bin/pytest backend/tests/` (Mac/Linux) / `.venv\Scripts\pytest backend/tests/` (Windows)
    - Frontend: `cd frontend && npm run test`
-   - RAG: `.venv\Scripts\pytest rag/tests/`
+   - RAG: `.venv/bin/pytest rag/tests/` (Mac/Linux) / `.venv\Scripts\pytest rag/tests/` (Windows)
 3. **크로스 서비스 검증**:
    - API 계약 일관성 (요청/응답 스키마 일치)
    - TypeScript 타입과 Pydantic 스키마 정합성
@@ -123,7 +123,7 @@ color: red
 | 코드 리뷰 | code-reviewer | `code-reviewer` | 모든 구현 후 |
 | Docker 빌드/E2E 검증 | docker-tester | `docker-tester` | 전체 E2E 검증 시 |
 | 코드베이스 탐색 (Phase 1) | Explore | `Explore` | 현황 분석 단계 |
-| **계획 수립 (Phase 2)** | `/everything-claude-code:plan` | Skill 호출 | **분석 후 필수 — 승인 전 코드 작성 금지** |
+| **계획 수립 (Phase 2)** | PM 직접 작성 + Plan 에이전트 | `Plan` | **분석 후 필수 — 승인 전 코드 작성 금지** |
 | 설계 보조 | Plan | `Plan` | Phase 1에서 복잡한 설계 판단 필요 시 |
 | 기타 특수 역할 | PM이 프롬프트 직접 작성 | `general-purpose` | 아래 동적 생성 규칙 참조 |
 
@@ -150,10 +150,9 @@ color: red
 | `backend/CLAUDE.md` | 백엔드 개발 가이드, DB 스키마 |
 | `frontend/CLAUDE.md` | 프론트엔드 개발 가이드, 컴포넌트 구조 |
 | `rag/CLAUDE.md` | RAG 개발 가이드, 에이전트 구조 |
-| `.claude/rules/coding-style.md` | 코딩 스타일 규칙 |
 | `.claude/rules/security.md` | 보안 규칙 |
-| `.claude/rules/testing.md` | 테스트 규칙 |
-| `.claude/rules/agents.md` | 에이전트 라우팅 규칙 |
+| `.claude/skills/code-patterns/SKILL.md` | 코딩 패턴 (필요 시 참조) |
+| `.claude/skills/test-guide/SKILL.md` | 테스트 가이드 (필요 시 참조) |
 
 ## PM의 판단 원칙
 

@@ -1,56 +1,70 @@
-# RAG Service - AI Agent Quick Reference
+# RAG Service - Agentic RAG System
 
-> 상세 개발 가이드: [CLAUDE.md](./CLAUDE.md) | 아키텍처: [ARCHITECTURE.md](./ARCHITECTURE.md)
+> General info (tech stack, setup, API endpoints, CLI): [README.md](./README.md)
+> Architecture diagrams: [ARCHITECTURE.md](./ARCHITECTURE.md)
+> Pipeline details (RouterState, 5-step flow, chunking, prompts): `.claude/docs/rag-pipeline.md`
 
-## Tech Stack
-Python 3.10+ / FastAPI / LangChain / LangGraph / OpenAI GPT-4o-mini / ChromaDB / BAAI/bge-m3
+**Important**: RAG service communicates via Backend proxy (`/rag/*`). Backend injects user context and relays to RAG. Direct calls also possible with `X-API-Key` auth.
 
-## Project Structure
+## File Structure
+
+- **Agents**: `agents/*.py` — inherit `BaseAgent`, pattern: `.claude/skills/code-patterns/SKILL.md`
+- **Routes**: `routes/*.py` — register in `routes/__init__.py` `all_routers`
+- **Chains**: `chains/rag_chain.py`
+- **Schemas**: `schemas/request.py`, `schemas/response.py`
+- **Prompts**: `utils/prompts.py` (all prompts centralized here — no hardcoding)
+- **Config**: `utils/config/` package (settings.py, domain_data.py, domain_config.py, llm.py)
+- **VectorDB config**: `vectorstores/config.py` (collection-level chunking/source mapping)
+
+## Adding a New Agent
+
+1. Create `agents/{domain}.py` — inherit `BaseAgent`
+2. Define `ACTION_RULES` class variable with `ActionRule` list (keyword-based action suggestions)
+3. Register in `agents/router.py`
+4. Add prompt in `utils/prompts.py`
+5. Add collection mapping in `vectorstores/config.py`
+6. Add domain keywords → `DOMAIN_KEYWORDS` dict
+
+## Adding a New VectorDB Collection
+
+1. Add config in `vectorstores/config.py`
+2. Prepare data in `data/preprocessed/` as JSONL
+3. Run `python -m scripts.vectordb --domain {name}` (from project root)
+
+## Domain Classification
+
+```python
+# Abbreviated — full keywords (25~35 per domain) in utils/config/domain_data.py
+DOMAIN_KEYWORDS = {
+    'startup_funding': ['창업', '사업자등록', '법인설립', '지원사업', '보조금', ...],
+    'finance_tax': ['세금', '부가세', '법인세', '회계', '세무', ...],
+    'hr_labor': ['근로', '채용', '해고', '급여', '퇴직금', '연차', ...],
+    'law_common': ['법률', '법령', '판례', '상법', '민법', '소송', ...],
+}
 ```
-rag/
-├── main.py                  # FastAPI 진입점
-├── cli.py                   # CLI 테스트 모드
-├── agents/                  # Agentic RAG (router, base, 4 domain, evaluator, executor, retrieval_agent, generator)
-├── chains/                  # LangChain 체인 (rag_chain.py)
-├── routes/                  # FastAPI 라우터 (chat, documents, evaluate, funding, health, monitoring, vectordb)
-├── evaluation/              # RAGAS 정량 평가
-├── vectorstores/            # VectorDB 관리 (config, chroma, embeddings, loader, build)
-├── schemas/                 # Pydantic 스키마 (request, response)
-├── utils/                   # config/ (설정 패키지), prompts, cache, feedback, middleware, query, search, legal_supplement, retrieval_evaluator, token_tracker
-└── tests/                   # pytest 테스트
-```
 
-## API Endpoints
+Classification flow: LLM API (`ENABLE_LLM_DOMAIN_CLASSIFICATION`) → Fallback: keyword matching (kiwipiepy) + vector similarity (`utils/domain_classifier.py`) → Below `DOMAIN_CLASSIFICATION_THRESHOLD` → rejection response.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/chat` | 채팅 메시지 처리 |
-| POST | `/api/chat/stream` | 스트리밍 응답 |
-| POST | `/api/documents/contract` | 근로계약서 생성 |
-| POST | `/api/documents/business-plan` | 사업계획서 생성 |
-| GET | `/api/funding/search` | 지원사업 검색 |
-| POST | `/api/funding/recommend` | 맞춤 지원사업 추천 |
-| POST | `/api/funding/sync` | 공고 데이터 동기화 |
-| POST | `/api/evaluate` | RAGAS 평가 (Backend BackgroundTask 전용, 인증 불필요) |
+## API Schemas (Key Fields)
 
-## Agents (6+1)
+**ChatRequest**: `message`, `history` (max 50), `user_context` (optional), `session_id`
+**ChatResponse**: `content`, `domain`, `domains` (multi-domain), `sources`, `actions`, `evaluation`, `ragas_metrics`, `timing_metrics`, `evaluation_data` (for backend DB)
 
-| Agent | Role | VectorDB |
-|-------|------|----------|
-| Router | 질문 분류, 에이전트 조율, 법률 보충 검색 판단 | - |
-| Startup & Funding | 창업/지원사업/마케팅 | startup_funding_db |
-| Finance & Tax | 세무/회계/재무 | finance_tax_db |
-| HR & Labor | 노무/인사 | hr_labor_db |
-| Legal | 법률/소송/지식재산권 (단독 처리 + 보충 검색) | law_common_db |
-| Evaluator | 답변 품질 평가 (70점 기준) | - |
-| Action Executor | 문서 생성 (PDF/HWP) | - |
+Full schema definitions: `schemas/request.py`, `schemas/response.py`
 
-**법률 보충 검색**: 3개 주 도메인 검색 후 법률 키워드 감지 시 `law_common_db`에서 추가 검색 (`utils/legal_supplement.py`)
+## Environment Variables
+
+Most RAG features are toggle-able via `ENABLE_*` env vars (hybrid search, reranking, domain rejection, LLM evaluation, caching, retry, etc.). Full list with defaults: `.env.example` (project root)
+
+Key behaviors to know:
+- **Retry**: eval FAIL → alt queries generated → return highest LLM score. **1 retry only** (no loop).
+- **Legal supplement**: after main domain search, if legal keywords detected → supplemental search from `law_common_db`. Direct legal questions skip supplement. Logic: `utils/legal_supplement.py` (keyword matching, no LLM).
+- **Embedding**: `EMBEDDING_PROVIDER=local` (HuggingFace BAAI/bge-m3) vs `runpod` (RunPod Serverless — single endpoint handles both embed/rerank via `task` field)
 
 ## MUST NOT
 
-- **하드코딩 금지**: API 키, ChromaDB 연결 정보 → `utils/config/settings.py` 사용
-- **프롬프트 하드코딩 금지** → `utils/prompts.py`에 정의
-- **매직 넘버 금지**: chunk_size, temperature 등 → 설정 파일 사용
-- **API 키 노출 금지**: 코드/로그에 OpenAI 키 노출 금지
-- **중복 코드 금지**: RAG 로직은 chains/ 또는 유틸 함수로 추출
+- No hardcoding: API keys, ChromaDB connections → `utils/config/settings.py`
+- No prompt hardcoding → define in `utils/prompts.py`
+- No magic numbers: chunk_size, temperature, etc. → config files
+- No API key exposure: no OpenAI keys in code/logs
+- No duplicate code: RAG logic → `chains/` or utility functions

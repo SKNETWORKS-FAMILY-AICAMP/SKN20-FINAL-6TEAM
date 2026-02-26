@@ -7,6 +7,7 @@ __pycache__
 .omc
 .claude/settings.json
 .claude/launch.json
+.DS_Store
 
 # =============================================
 # Windows 특수 파일

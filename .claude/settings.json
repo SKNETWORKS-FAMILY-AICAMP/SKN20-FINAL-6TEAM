@@ -1,11 +1,4 @@
 {
-  "enabledPlugins": {
-    "pr-review-toolkit@claude-plugins-official": true,
-    "ralph-loop@claude-plugins-official": true,
-    "hookify@claude-plugins-official": false,
-    "feature-dev@claude-plugins-official": false,
-    "everything-claude-code@everything-claude-code": true
-  },
   "hooks": {
     "PreToolUse": [
       {
@@ -37,6 +30,11 @@
             "type": "command",
             "command": ".claude/hooks/post-bash-check.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/commit-lint.sh",
+            "timeout": 10
           }
         ]
       },
@@ -51,5 +49,11 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "pr-review-toolkit@claude-plugins-official": true,
+    "ralph-loop@claude-plugins-official": true,
+    "hookify@claude-plugins-official": false,
+    "feature-dev@claude-plugins-official": false
   }
 }

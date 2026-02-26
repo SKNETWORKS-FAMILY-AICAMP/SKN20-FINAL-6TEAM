@@ -17,12 +17,7 @@ services:
     depends_on:
       - frontend
       - backend
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
+      
   # SSH Tunnel to AWS RDS (via Bastion EC2)
   ssh-tunnel:
     image: alpine:3.21

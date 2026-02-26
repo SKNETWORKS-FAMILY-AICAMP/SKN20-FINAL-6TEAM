@@ -598,6 +598,7 @@ jq -r '.metadata | keys[]' data/preprocessed/*/*.jsonl 2>/dev/null | sort | uniq
 
 ## 참고 문서
 
+- [LAW_DATA_PIPELINE.md](./LAW_DATA_PIPELINE.md) - 법률 데이터 전처리 파이프라인 (원본 구조, 정제 과정, 도메인 분류)
 - [scripts/CLAUDE.md](../scripts/CLAUDE.md) - 크롤링/전처리 스크립트 개발 가이드
 - [data/CLAUDE.md](../data/CLAUDE.md) - 데이터 폴더 개발 가이드
 - [rag/CLAUDE.md](../rag/CLAUDE.md) - RAG 시스템 개발 가이드

@@ -1,4 +1,28 @@
+---
+name: code-patterns
+description: >
+  SQLAlchemy 2.0 쿼리, FastAPI 라우터/서비스 분리,
+  Zustand 스토어, LangChain 에이전트 구현 패턴을 안내합니다.
+  백엔드 API 코드, 프론트엔드 상태관리, RAG 에이전트 작성 시 사용합니다.
+user-invocable: false
+---
+
 # Code Patterns (Bizi Project)
+
+## Mandatory Rules
+
+### Python
+- Type hints 필수: 모든 함수 매개변수 + 반환 타입 명시 (`def get_user(user_id: int) -> User | None:`)
+- Import 순서: 1) 표준 라이브러리 → 2) 서드파티 → 3) 로컬 모듈
+- `any` 타입 사용 금지 (Python `Any` 포함)
+- 상수 위치: `config/settings.py`
+
+### TypeScript
+- `tsconfig.json`에서 `strict: true` 유지
+- `any` 타입 사용 금지
+- 상수 위치: `src/lib/constants.ts`
+
+---
 
 ## Python / FastAPI Patterns
 

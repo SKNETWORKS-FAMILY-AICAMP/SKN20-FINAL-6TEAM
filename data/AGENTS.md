@@ -1,45 +1,78 @@
-# Data - AI Agent Quick Reference
+# Data - Data Storage
 
-> 상세 개발 가이드: [CLAUDE.md](./CLAUDE.md) | 스키마: [docs/DATA_SCHEMA.md](../docs/DATA_SCHEMA.md)
+> Schema details: [docs/DATA_SCHEMA.md](../docs/DATA_SCHEMA.md)
+> Preprocessing scripts: [scripts/AGENTS.md](../scripts/AGENTS.md)
+
+## Data Flow
+
+External sources → `scripts/crawling/` → `data/origin/` → `scripts/preprocessing/` → `data/preprocessed/` → `rag/vectorstores/` → ChromaDB
 
 ## Project Structure
+
 ```
 data/
-├── origin/                # 원본 데이터 (크롤링/다운로드, git 제외)
-│   ├── law/               # 법령 원본 (304MB)
-│   ├── startup_support/   # 창업 가이드 원본
-│   ├── finance/           # 세무/회계 원본
-│   └── labor/             # 노동/인사 원본
-└── preprocessed/          # 전처리된 JSONL (RAG 입력용)
-    ├── law_common/        # laws_full, laws_etc, interpretations, interpretations_etc
-    ├── hr_labor/          # court_cases_labor, hr_insurance_edu, labor_interpretation
-    ├── finance_tax/       # court_cases_tax, tax_support
-    └── startup_support/   # announcements, industry_startup_guide_filtered, startup_procedures_filtered
+├── origin/                    # Raw data (crawled/downloaded, git-excluded)
+│   ├── law/                   # Laws (304MB), interpretations, court cases
+│   ├── startup_support/       # Startup guides
+│   ├── finance/               # Tax/accounting
+│   └── labor/                 # Labor/HR
+│
+└── preprocessed/              # Preprocessed JSONL (RAG input)
+    ├── law_common/            # laws_full, laws_etc, interpretations, interpretations_etc
+    ├── finance_tax/           # court_cases_tax, tax_support
+    ├── hr_labor/              # court_cases_labor, hr_insurance_edu, labor_interpretation
+    └── startup_support/       # announcements, industry_startup_guide, startup_procedures
 ```
+
+## Unified Schema (Required Fields)
+
+`id`, `type`, `domain`, `title`, `content`, `source`
+
+Key rules:
+- `type` = document format (law, court_case, guide, announce, interpretation, etc.)
+- `domain` = topic classification (4 values: `startup_funding | finance_tax | hr_labor | legal`)
+- `content` is the **only** vector search target — include all searchable info here
+- `related_laws` is `string[]` format (e.g., `["근로기준법 제56조"]`), optional
+- `metadata` contains type-specific minimal fields (ChromaDB-compatible types only)
+
+Full schema definition with examples: [docs/DATA_SCHEMA.md](../docs/DATA_SCHEMA.md)
+
+## Domain → Collection Mapping
+
+| domain | Collection | Agent |
+|--------|-----------|-------|
+| `startup_funding` | startup_funding_db | StartupFundingAgent |
+| `finance_tax` | finance_tax_db | FinanceTaxAgent |
+| `hr_labor` | hr_labor_db | HRLaborAgent |
+| `legal` | law_common_db | All agents (shared) |
 
 ## Output Files
 
-| File | Type | Domain |
-|------|------|--------|
-| `law_common/laws_full.jsonl` | law | law_common |
-| `law_common/laws_etc.jsonl` | law | law_common |
-| `law_common/interpretations.jsonl` | interpretation | law_common |
-| `law_common/interpretations_etc.jsonl` | interpretation | law_common |
-| `hr_labor/court_cases_labor.jsonl` | court_case | hr_labor |
-| `hr_labor/hr_insurance_edu.jsonl` | insurance | hr_labor |
-| `hr_labor/labor_interpretation.jsonl` | interpretation | hr_labor |
-| `finance_tax/court_cases_tax.jsonl` | court_case | finance_tax |
-| `finance_tax/tax_support.jsonl` | support | finance_tax |
-| `startup_support/announcements.jsonl` | announcement | startup |
-| `startup_support/industry_startup_guide_filtered.jsonl` | guide | startup |
-| `startup_support/startup_procedures_filtered.jsonl` | procedure | startup |
+| File | Records | Type | Domain |
+|------|---------|------|--------|
+| `law_common/laws_full.jsonl` | 5,539 | law | legal |
+| `law_common/interpretations.jsonl` | 8,604 | interpretation | legal |
+| `finance_tax/court_cases_tax.jsonl` | 1,949 | court_case | finance_tax |
+| `startup_support/industry_startup_guide_filtered.jsonl` | 1,589 | guide | startup_funding |
+| `hr_labor/court_cases_labor.jsonl` | 981 | court_case | hr_labor |
+| `startup_support/announcements.jsonl` | 510 | announce | startup_funding |
+| `hr_labor/labor_interpretation.jsonl` | 399 | interpretation | hr_labor |
+| `finance_tax/extracted_documents_final.jsonl` | 124 | guide | finance_tax |
+| `startup_support/startup_procedures_filtered.jsonl` | 10 | guide | startup_funding |
+| `hr_labor/hr_major_insurance.jsonl` | 5 | guide | hr_labor |
+| **Total** | **19,710** | | |
 
-## Schema (Required Fields)
-`id`, `type`, `domain`, `title`, `content`, `source`
+## Gotchas
 
-## MUST NOT
+- **Large files git-excluded**: `origin/law/*.json`, `origin/**/*.pdf`, `origin/**/*.csv` in `.gitignore`
+- **Encoding**: All files UTF-8. CSV files may need EUC-KR → UTF-8 conversion
+- **Storage**: origin ~500MB, preprocessed ~300MB
+- **Announcements**: `content` must include region/target/amount for vector search to find them
+- **No chunking**: announcements and startup guides stored as whole documents (configured in `rag/vectorstores/config.py`)
+- **No missing required schema fields**, no duplicate IDs (format: `{TYPE}_{ID}`)
 
-- 스키마 필수 필드 누락 금지
-- ID 중복 금지 (형식: `{TYPE}_{ID}`)
-- UTF-8 이외 인코딩 금지
-- origin/ 대용량 파일 git 커밋 금지
+## References
+
+- [docs/DATA_SCHEMA.md](../docs/DATA_SCHEMA.md) — Unified schema definition
+- [scripts/AGENTS.md](../scripts/AGENTS.md) — Crawling/preprocessing scripts
+- [rag/vectorstores/config.py](../rag/vectorstores/config.py) — VectorDB config (collection mapping, chunking)
