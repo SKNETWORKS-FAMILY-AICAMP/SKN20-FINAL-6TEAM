@@ -1,8 +1,13 @@
-@import url('https://fonts.googleapis.com/css2?family=Chiron+Sung+HK:ital,wght@0,200..900;1,200..900&family=Idiqlat:wght@200;300;400&family=Nanum+Myeongjo&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Chiron+Sung+HK:ital,wght@0,200..900;1,200..900&family=Gothic+A1&family=Idiqlat:wght@200;300;400&family=Nanum+Myeongjo&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+html,
+body {
+  font-family: 'Gothic A1', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
+}
 
 .brand-logo-font {
   font-family: 'Idiqlat', sans-serif;
@@ -21,6 +26,22 @@
 
 .chiron-korean-font {
   font-family: 'Chiron Sung HK', 'Nanum Myeongjo', serif;
+}
+
+.guide-soft-italic {
+  font-style: oblique 6deg;
+}
+
+.usage-guide-black {
+  color: #000000;
+}
+
+.usage-guide-black :is(h1, h2, h3, h4, h5, h6, p, span, li, a, button, label, small, strong, em) {
+  color: #000000 !important;
+}
+
+.usage-guide-black .guide-example-text {
+  color: #5b5b5b !important;
 }
 
 /* FullCalendar style overrides */

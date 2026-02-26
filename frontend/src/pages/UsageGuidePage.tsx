@@ -85,7 +85,7 @@ const UsageGuidePage: React.FC = () => {
   const [openAccordion, setOpenAccordion] = React.useState<number>(-1);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="usage-guide-black flex h-full min-h-0 flex-col">
       <PageHeader
         title={'\uC0AC\uC6A9 \uC124\uBA85\uC11C'}
         description={'Bizi \uCC57\uBD07\uC758 \uC8FC\uC694 \uAE30\uB2A5\uACFC \uC0AC\uC6A9 \uBC29\uBC95\uC744 \uC548\uB0B4\uD569\uB2C8\uB2E4.'}
@@ -162,7 +162,7 @@ const UsageGuidePage: React.FC = () => {
                           <Typography
                             variant="small"
                             color="gray"
-                            className="text-xs leading-relaxed !text-gray-700"
+                            className="guide-example-text guide-soft-italic text-xs leading-relaxed font-normal !text-[#5b5b5b]"
                           >
                             {example}
                           </Typography>
@@ -206,7 +206,7 @@ const UsageGuidePage: React.FC = () => {
                     >
                       {item.question}
                     </AccordionHeader>
-                    <AccordionBody className="pt-0 text-sm leading-relaxed text-gray-600">
+                    <AccordionBody className="guide-example-text pt-3 text-sm leading-relaxed font-normal !text-[#5b5b5b]">
                       {item.answer}
                     </AccordionBody>
                   </Accordion>
