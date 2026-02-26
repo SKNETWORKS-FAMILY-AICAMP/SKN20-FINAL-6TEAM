@@ -123,6 +123,7 @@ export interface Notification {
   id: string;
   title: string;
   message: string;
+  company_label?: string;
   type: 'schedule' | 'info' | 'warning';
   is_read: boolean;
   created_at: string;

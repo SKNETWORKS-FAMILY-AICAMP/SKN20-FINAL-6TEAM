@@ -41,8 +41,8 @@ const toDatePart = (value: unknown): string | null => {
 };
 
 const toExclusiveEndDate = (datePart: string): string => {
-  const endDate = new Date(`${datePart}T00:00:00`);
-  endDate.setDate(endDate.getDate() + 1);
+  const endDate = new Date(`${datePart}T00:00:00Z`);
+  endDate.setUTCDate(endDate.getUTCDate() + 1);
   return endDate.toISOString().split('T')[0];
 };
 
