@@ -83,3 +83,41 @@ def setup_json_file_logging(
     logging.getLogger(__name__).info(
         "JSON 파일 로깅 활성화: %s (service=%s)", log_file, service_name
     )
+
+
+def create_json_file_handler(
+    service_name: str = "rag",
+    log_dir: str = "/var/log/app",
+    level: int = logging.INFO,
+) -> logging.handlers.RotatingFileHandler | None:
+    """JSON RotatingFileHandler를 생성만 하고 반환합니다 (루트 로거에 추가하지 않음).
+
+    QueueListener에서 사용할 핸들러를 생성할 때 호출합니다.
+
+    Args:
+        service_name: 로그 파일명 기반 서비스 이름
+        log_dir: 로그 파일 저장 경로
+        level: 파일 핸들러 로그 레벨
+
+    Returns:
+        생성된 핸들러. 디렉토리/파일 생성 실패 시 None.
+    """
+    try:
+        Path(log_dir).mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return None
+
+    log_file = f"{log_dir}/{service_name}.log"
+    try:
+        file_handler = logging.handlers.RotatingFileHandler(
+            filename=log_file,
+            maxBytes=10 * 1024 * 1024,
+            backupCount=3,
+            encoding="utf-8",
+        )
+    except OSError:
+        return None
+
+    file_handler.setFormatter(_JSONFormatter(service_name=service_name))
+    file_handler.setLevel(level)
+    return file_handler

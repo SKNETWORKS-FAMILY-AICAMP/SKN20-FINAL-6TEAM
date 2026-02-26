@@ -5,6 +5,8 @@
 
 import json
 import logging
+import logging.handlers
+import queue
 from datetime import datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -19,9 +21,11 @@ LOG_DIR = Path(__file__).parent.parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 LOG_FILE_PATH = LOG_DIR / "chat.log"
 
-# 채팅 로그용 별도 핸들러 (로테이션: 10MB, 최대 5개 파일)
+# 채팅 로그용 QueueHandler/QueueListener (propagate=False로 루트 우회)
 chat_logger = logging.getLogger("chat")
 chat_logger.setLevel(logging.INFO)
+chat_logger.propagate = False
+
 _chat_handler = RotatingFileHandler(
     LOG_FILE_PATH,
     maxBytes=10 * 1024 * 1024,  # 10MB
@@ -29,8 +33,13 @@ _chat_handler = RotatingFileHandler(
     encoding="utf-8",
 )
 _chat_handler.setFormatter(logging.Formatter("%(message)s"))
-chat_logger.addHandler(_chat_handler)
-chat_logger.propagate = False
+
+_chat_queue: queue.Queue[logging.LogRecord] = queue.Queue(maxsize=-1)
+chat_logger.addHandler(logging.handlers.QueueHandler(_chat_queue))
+_chat_listener = logging.handlers.QueueListener(
+    _chat_queue, _chat_handler, respect_handler_level=True
+)
+_chat_listener.start()
 
 
 def log_chat_interaction(
@@ -124,11 +133,17 @@ def log_chat_interaction(
     chat_logger.info(log_entry)
 
 
+_ragas_listener: logging.handlers.QueueListener | None = None
+
+
 def _get_ragas_logger() -> logging.Logger:
-    """RAGAS 메트릭 전용 로거를 반환합니다 (지연 초기화)."""
+    """RAGAS 메트릭 전용 로거를 반환합니다 (지연 초기화, QueueListener 사용)."""
+    global _ragas_listener
     ragas_log = logging.getLogger("ragas_metrics")
     if not ragas_log.handlers:
         ragas_log.setLevel(logging.INFO)
+        ragas_log.propagate = False
+
         ragas_handler = RotatingFileHandler(
             LOG_DIR / get_settings().ragas_log_file,
             maxBytes=10 * 1024 * 1024,
@@ -136,9 +151,23 @@ def _get_ragas_logger() -> logging.Logger:
             encoding="utf-8",
         )
         ragas_handler.setFormatter(logging.Formatter("%(message)s"))
-        ragas_log.addHandler(ragas_handler)
-        ragas_log.propagate = False
+
+        ragas_queue: queue.Queue[logging.LogRecord] = queue.Queue(maxsize=-1)
+        ragas_log.addHandler(logging.handlers.QueueHandler(ragas_queue))
+        _ragas_listener = logging.handlers.QueueListener(
+            ragas_queue, ragas_handler, respect_handler_level=True
+        )
+        _ragas_listener.start()
     return ragas_log
+
+
+def stop_chat_loggers() -> None:
+    """채팅/RAGAS 로거의 QueueListener를 정지합니다. lifespan shutdown에서 호출."""
+    global _ragas_listener
+    _chat_listener.stop()
+    if _ragas_listener:
+        _ragas_listener.stop()
+        _ragas_listener = None
 
 
 def log_ragas_metrics(

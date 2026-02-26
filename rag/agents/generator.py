@@ -8,6 +8,7 @@
 
 import asyncio
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator
@@ -183,6 +184,27 @@ class ResponseGeneratorAgent:
             parts.append(f"- {action.label}{desc}")
         return "\n".join(parts)
 
+    @staticmethod
+    def _audit_citations(content: str, doc_count: int) -> str:
+        """생성된 답변에 [번호] 인용이 있는지 감사합니다.
+
+        문서가 제공되었는데 인용이 하나도 없으면 경고 로그를 남기고
+        주의 문구를 답변 끝에 추가합니다.
+
+        Args:
+            content: 생성된 답변 텍스트
+            doc_count: 제공된 문서 수
+
+        Returns:
+            (필요 시 주의 문구가 추가된) 답변 텍스트
+        """
+        if doc_count > 0 and not re.search(r"\[\d+\]", content):
+            logger.warning(
+                "[생성기] 인용 누락: 문서 %d건 제공, [번호] 인용 0건", doc_count
+            )
+            content += "\n\n> 주의: 이 답변은 참고 자료 인용이 누락되었을 수 있습니다."
+        return content
+
     async def agenerate(
         self,
         query: str,
@@ -304,6 +326,13 @@ class ResponseGeneratorAgent:
             logger.error("[생성기] LLM 호출 실패: %s", e, exc_info=True)
             content = FALLBACK_SYSTEM_ERROR
 
+        # 인용 감사: 문서가 제공되었는데 [번호] 인용이 없으면 경고
+        total_docs = sum(
+            len(retrieval_results[d].documents)
+            for d in domains if d in retrieval_results
+        )
+        content = self._audit_citations(content, total_docs)
+
         elapsed = time.time() - start
         logger.info("[생성기] 비동기 완료: %d자 (%.3fs)", len(content), elapsed)
 
@@ -380,6 +409,7 @@ class ResponseGeneratorAgent:
             content_buffer += token
             yield {"type": "token", "content": token}
 
+        content_buffer = self._audit_citations(content_buffer, len(documents))
         yield {"type": "generation_done", "content": content_buffer}
 
     async def astream_generate_multi(
@@ -471,6 +501,7 @@ class ResponseGeneratorAgent:
             content_buffer += token
             yield {"type": "token", "content": token}
 
+        content_buffer = self._audit_citations(content_buffer, len(all_documents))
         yield {"type": "generation_done", "content": content_buffer}
 
     # ── 내부 헬퍼 ──

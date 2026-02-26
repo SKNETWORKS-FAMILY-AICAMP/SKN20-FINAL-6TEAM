@@ -14,7 +14,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from config.settings import settings
 from config.database import Base, SessionLocal, engine
-from config.logging_config import setup_json_file_logging
 from config.logging_utils import SensitiveDataFilter
 
 # 요청 ID 컨텍스트 변수 및 필터
@@ -29,24 +28,39 @@ class RequestIdFilter(logging.Filter):
         return True
 
 
-# 필터를 핸들러 등록(basicConfig) 전에 루트 로거에 추가
-# → %(request_id)s 포맷이 모든 핸들러에서 안전하게 동작
+# 필터를 QueueHandler 진입 전(caller 스레드)에 실행 → ContextVar 정상 동작
 logging.getLogger().addFilter(RequestIdFilter())
 logging.getLogger().addFilter(SensitiveDataFilter())
 
-# stdout 로깅 기본 설정 (force=True: uvicorn 사전 설정 무시)
-logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
-    format="%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] %(message)s",
-    force=True,
-)
-# basicConfig가 생성한 핸들러에도 필터 추가 (안전장치)
-for handler in logging.getLogger().handlers:
-    handler.addFilter(RequestIdFilter())
-    handler.addFilter(SensitiveDataFilter())
+# 비동기 로깅 설정: QueueHandler → QueueListener(백그라운드 스레드)로 파일 I/O 분리
+from config.async_logging import setup_async_logging, stop_async_logging
+from config.logging_config import create_json_file_handler
 
-# JSON 파일 로깅 설정 (/var/log/app/backend.log)
-setup_json_file_logging(service_name="backend")
+_root_level = getattr(logging, settings.LOG_LEVEL, logging.INFO)
+
+
+class _SafeFormatter(logging.Formatter):
+    """request_id 누락 시 기본값을 사용하는 포맷터."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        if not hasattr(record, "request_id"):
+            record.request_id = "-"
+        return super().format(record)
+
+
+_console_handler = logging.StreamHandler()
+_console_handler.setFormatter(
+    _SafeFormatter("%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] %(message)s")
+)
+_console_handler.setLevel(_root_level)
+
+_file_handler = create_json_file_handler(service_name="backend")
+
+_async_handlers: list[logging.Handler] = [_console_handler]
+if _file_handler:
+    _async_handlers.append(_file_handler)
+
+setup_async_logging(handlers=_async_handlers, root_level=_root_level)
 
 from apps.auth.token_blacklist import cleanup_expired
 
@@ -86,6 +100,7 @@ async def lifespan(app: FastAPI):
     task = asyncio.create_task(_cleanup_blacklist_loop())
     yield
     task.cancel()
+    stop_async_logging()
 
 # Import routers
 from apps.auth.router import router as auth_router

@@ -112,12 +112,12 @@ try:
             ]
 
         answer_relevancy.question_generation = KoreanResponseRelevancePrompt()
-        # gpt-4.1-mini 등 n>1 미지원 모델에서 "LLM returned 1 generations
-        # instead of requested 3" 경고 방지 + 채점 속도 3배 향상
-        answer_relevancy.strictness = 1
+        # gpt-4o-mini는 n>1 지원 → RAGAS 기본값 strictness=3 사용
+        # strictness=3: 질문 3개 생성 → cosine 평균 → AR 점수 안정성 향상
+        answer_relevancy.strictness = 3
         faithfulness.statement_generator_prompt = KoreanStatementGeneratorPrompt()
         faithfulness.nli_statements_prompt = KoreanNLIStatementPrompt()
-        logger.info("[RAGAS] 한국어 프롬프트 커스터마이징 적용 완료 (strictness=1)")
+        logger.info("[RAGAS] 한국어 프롬프트 커스터마이징 적용 완료 (strictness=3)")
     except ImportError:
         logger.info("[RAGAS] 한국어 프롬프트 커스터마이징 미지원 (기본 프롬프트 사용)")
 
@@ -161,8 +161,9 @@ def _get_ragas_llm():
     """faithfulness NLI 판정용 max_tokens 확장 LLM을 lazy 생성합니다.
 
     RAGAS InstructorModelArgs의 기본 max_tokens=1024로는 한국어 답변의
-    NLI 진술문 판정 JSON이 잘릴 수 있습니다 (GPT-4o-mini finish_reason='length').
+    NLI 진술문 판정 JSON이 잘릴 수 있습니다 (finish_reason='length').
     max_tokens=8192로 확장하여 긴 답변도 정상 평가되도록 합니다.
+    기본 모델: gpt-4o-mini (비용 효율 + 적절한 엄격도 + n>1 지원)
     """
     if not hasattr(_get_ragas_llm, "_instance"):
         if not _RAGAS_AVAILABLE or _ragas_llm_factory is None:

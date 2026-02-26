@@ -43,27 +43,40 @@ class RequestIdMiddleware:
         await self.app(scope, receive, send)
 
 
-# 로깅 설정
+# 필터를 QueueHandler 진입 전(caller 스레드)에 실행 → ContextVar 정상 동작
 root_logger = logging.getLogger()
-logging.basicConfig(
-    level=getattr(logging, get_settings().log_level, logging.INFO),
-    format="%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] %(message)s",
+root_logger.addFilter(RequestIdFilter())
+root_logger.addFilter(SensitiveDataFilter())
+
+# 비동기 로깅 설정: QueueHandler → QueueListener(백그라운드 스레드)로 파일 I/O 분리
+from utils.async_logging import setup_async_logging, stop_async_logging
+from utils.json_file_logger import create_json_file_handler
+
+_root_level = getattr(logging, get_settings().log_level, logging.INFO)
+
+# request_id 누락 시 안전하게 기본값 사용하는 포맷터
+class _SafeFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        if not hasattr(record, "request_id"):
+            record.request_id = "-"
+        return super().format(record)
+
+# 콘솔 핸들러
+_console_handler = logging.StreamHandler()
+_console_handler.setFormatter(
+    _SafeFormatter("%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] %(message)s")
 )
+_console_handler.setLevel(_root_level)
 
-# 필터를 핸들러에 직접 추가
-# (루트 로거의 filter()는 child logger → root 전파 시 callHandlers()에 의해 우회되므로
-#  루트 로거에만 추가하면 starlette/uvicorn 등 서드파티 로그에는 적용되지 않음)
-for _handler in root_logger.handlers:
-    _handler.addFilter(RequestIdFilter())
-    _handler.addFilter(SensitiveDataFilter())
+# JSON 파일 핸들러 (생성 실패 시 None)
+_file_handler = create_json_file_handler(service_name="rag")
+
+_async_handlers: list[logging.Handler] = [_console_handler]
+if _file_handler:
+    _async_handlers.append(_file_handler)
+
+setup_async_logging(handlers=_async_handlers, root_level=_root_level)
 logger = logging.getLogger(__name__)
-
-# JSON 파일 로깅 추가 (/var/log/app/rag.log)
-try:
-    from utils.json_file_logger import setup_json_file_logging
-    setup_json_file_logging(service_name="rag")
-except Exception as _file_log_err:
-    logger.warning("JSON 파일 로깅 설정 실패: %s", _file_log_err)
 
 from agents import ActionExecutor, MainRouter
 from routes import all_routers
@@ -156,6 +169,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if state.vector_store:
         state.vector_store.close()
     logger.info("RAG 서비스 종료 완료")
+
+    # 비동기 로깅 종료 (남은 로그 flush 후 스레드 정지)
+    from utils.chat_logger import stop_chat_loggers
+    stop_chat_loggers()
+    stop_async_logging()
 
 
 def _log_settings_summary(settings) -> None:

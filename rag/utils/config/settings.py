@@ -289,9 +289,9 @@ class Settings(BaseSettings):
     evaluation_threshold: int = Field(default=70, ge=0, le=100, description="평가 통과 임계값 (100점 만점)")
     evaluation_weights: dict[str, int] = Field(
         default={
-            "accuracy": 25,
+            "accuracy": 30,
             "citation": 25,
-            "completeness": 20,
+            "completeness": 15,
             "retrieval_quality": 15,
             "relevance": 15,
         },
@@ -307,14 +307,35 @@ class Settings(BaseSettings):
         description="도메인별 평가 통과 임계값"
     )
     max_retry_count: int = Field(default=1, ge=0, description="최대 재시도 횟수")
+    post_eval_retry_threshold: int = Field(
+        default=65, ge=0, le=100,
+        description="평가 재시도 점수 임계값 (이 점수 미만이면 재시도)"
+    )
     post_eval_alt_query_count: int = Field(
-        default=1, ge=1, le=5,
+        default=2, ge=1, le=5,
         description="평가 실패 재시도 시 생성할 대체 쿼리 수"
     )
 
     # -- Multi-Query --
     multi_query_count: int = Field(
         default=3, gt=0, description="Multi-Query 생성 개수"
+    )
+
+    # -- Query Rewrite (멀티턴 컨텍스트 반영) --
+    enable_query_rewrite: bool = Field(
+        default=True, description="멀티턴 대화 시 쿼리 재작성 활성화"
+    )
+    query_rewrite_timeout: float = Field(
+        default=5.0, gt=0, description="쿼리 재작성 LLM 호출 타임아웃 (초)"
+    )
+    multiturn_history_turns: int = Field(
+        default=6, gt=0, description="쿼리 재작성 시 참조할 최근 대화 턴 수"
+    )
+    multiturn_history_chars: int = Field(
+        default=350, gt=0, description="쿼리 재작성 시 메시지당 최대 문자수"
+    )
+    enable_active_directive_memory: bool = Field(
+        default=True, description="멀티턴 대화 시 활성 지시사항 기억 활성화"
     )
 
     # -- 통합 생성 에이전트 --
@@ -328,8 +349,8 @@ class Settings(BaseSettings):
         default={
             "law_common": 0.0,
             "finance_tax": 0.0,
-            "hr_labor": 0.05,
-            "startup_funding": 0.15,
+            "hr_labor": 0.0,
+            "startup_funding": 0.05,
         },
         description="도메인별 LLM temperature (정밀도 요구 도메인은 낮게)"
     )
@@ -430,7 +451,7 @@ class Settings(BaseSettings):
 
     llm_timeout: float = Field(default=30.0, gt=0, description="LLM 호출 타임아웃 (초)")
     search_timeout: float = Field(default=10.0, gt=0, description="검색 타임아웃 (초)")
-    total_timeout: float = Field(default=60.0, gt=0, description="전체 요청 타임아웃 (초)")
+    total_timeout: float = Field(default=120.0, gt=0, description="전체 요청 타임아웃 (초)")
     cache_max_size: int = Field(default=500, gt=0, description="캐시 최대 크기")
     cache_ttl: int = Field(default=3600, gt=0, description="캐시 TTL (초)")
     cache_ttl_by_domain: dict[str, int] = Field(
@@ -555,6 +576,9 @@ class Settings(BaseSettings):
         "vector_search_weight",
         "reranker_type",
         "multi_query_count",
+        "enable_query_rewrite",
+        "query_rewrite_timeout",
+        "post_eval_retry_threshold",
         "post_eval_alt_query_count",
         "max_retry_level",
         "primary_domain_budget_ratio",

@@ -248,30 +248,32 @@ class MainRouter:
     def _should_retry_after_evaluate(self, state: RouterState) -> str:
         """평가 결과에 따라 재시도 여부를 결정합니다.
 
-        LLM 평가 실패 시 점수가 50점 미만인 경우에만 멀티쿼리 대체 답변을 생성합니다.
-        50~69점(FAIL이지만 준수)은 재시도 없이 반환하여 불필요한 LLM 호출을 줄입니다.
+        LLM 평가 실패 시 점수가 임계값 미만인 경우에만 멀티쿼리 대체 답변을 생성합니다.
+        임계값 이상(FAIL이지만 준수)은 재시도 없이 반환하여 불필요한 LLM 호출을 줄입니다.
         PASS이거나 최대 재시도 횟수에 도달하면 종료합니다.
 
         Args:
             state: 라우터 상태
 
         Returns:
-            "retry_with_alternatives": 멀티쿼리 재시도 필요 (50점 미만)
+            "retry_with_alternatives": 멀티쿼리 재시도 필요 (임계값 미만)
             "__end__": 종료
         """
         evaluation = state.get("evaluation")
         retry_count = state.get("retry_count", 0)
 
+        retry_threshold = self.settings.post_eval_retry_threshold
         if (
             self.settings.enable_post_eval_retry
             and evaluation
             and not evaluation.passed
             and retry_count < self.settings.max_retry_count
-            and evaluation.total_score < 50
+            and evaluation.total_score < retry_threshold
         ):
             logger.info(
-                "[평가→재시도] FAIL (점수=%d < 50, retry=%d/%d) → 멀티쿼리 대체 답변 생성",
+                "[평가→재시도] FAIL (점수=%d < %d, retry=%d/%d) → 멀티쿼리 대체 답변 생성",
                 evaluation.total_score,
+                retry_threshold,
                 retry_count,
                 self.settings.max_retry_count,
             )
@@ -279,8 +281,9 @@ class MainRouter:
 
         if evaluation and not evaluation.passed:
             logger.info(
-                "[평가→종료] FAIL (점수=%d, 50점 이상이므로 재시도 스킵)",
+                "[평가→종료] FAIL (점수=%d, %d점 이상이므로 재시도 스킵)",
                 evaluation.total_score,
+                retry_threshold,
             )
 
         return "__end__"
