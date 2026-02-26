@@ -1,6 +1,10 @@
 # Release Notes
 
-## [2026-02-25] - 로그인 화면 폰트 수정
+## [2026-02-25] - 페이지 헤더 통일 & 로그인 화면 폰트 수정
+
+### Features
+- **페이지 헤더 통일** (`components/common/PageHeader.tsx`): 공통 `PageHeader` 컴포넌트 신규 추가 — Admin, Company, Main, Schedule 페이지 헤더를 단일 컴포넌트로 통합
+- **사용설명서 페이지 개선** (`pages/UsageGuidePage.tsx`): 레이아웃 및 콘텐츠 전면 수정
 
 ### Bug Fixes
 - **로그인 화면 및 Bizi 폰트 수정** (`pages/LoginPage.tsx`, `components/layout/Sidebar.tsx`, `index.css`): 로그인 페이지 레이아웃 개선, Bizi 브랜드 폰트 CSS 적용

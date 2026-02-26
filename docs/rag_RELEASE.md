@@ -1,5 +1,12 @@
 # Release Notes
 
+## [2026-02-26] - law_common BM25 warmup 실패 수정 — ChromaDB 배치 로딩 도입
+
+### Bug Fixes
+- **`law_common` BM25 warmup 연결 끊김 수정** (`vectorstores/chroma.py`): 55,723건 규모 컬렉션에서 `collection.get()` 단일 호출 시 ChromaDB 서버가 응답 없이 연결을 끊는 문제 수정 — `collection.count()` 선행 조회 후 `chroma_batch_load_size`(기본 5,000) 초과 시 `limit`/`offset` 기반 배치 루프 적용, 실패 시 로드된 부분 결과 반환
+- **`_parse_get_payload()` 헬퍼 추출** (`vectorstores/chroma.py`): 기존 파싱 로직을 별도 메서드로 분리하여 단일 로드·배치 루프 양쪽에서 재사용
+- **`chroma_batch_load_size` 설정 추가** (`utils/config/settings.py`): ChromaDB 전체 문서 로드 시 배치 크기 설정 (기본값 5,000, 환경변수 `CHROMA_BATCH_LOAD_SIZE`로 조정 가능)
+
 ## [2026-02-25] - RAG 로깅 request_id propagation 우회 버그 수정
 
 ### Bug Fixes

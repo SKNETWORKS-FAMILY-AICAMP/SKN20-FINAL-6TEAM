@@ -456,6 +456,10 @@ class Settings(BaseSettings):
         default=30.0, ge=0,
         description="BM25 warmup 실패 시 백그라운드 재시도 지연 (초)"
     )
+    chroma_batch_load_size: int = Field(
+        default=5000, gt=0,
+        description="ChromaDB 전체 문서 로드 시 배치 크기"
+    )
     fallback_message: str = Field(
         default="죄송합니다. 현재 요청을 처리할 수 없습니다. 잠시 후 다시 시도해주세요.",
         description="Fallback 메시지"
