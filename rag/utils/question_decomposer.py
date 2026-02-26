@@ -1,8 +1,6 @@
-"""복합 질문 분해 모듈.
+﻿"""Utilities to decompose cross-domain questions into domain-specific sub-queries."""
 
-여러 도메인에 걸친 복합 질문을 단일 도메인 질문들로 분해합니다.
-대화 이력을 활용하여 대명사/생략된 주어를 해소합니다.
-"""
+from __future__ import annotations
 
 import hashlib
 import json
@@ -15,132 +13,81 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from utils.cache import LRUCache
 from utils.config import create_llm, get_settings
+from utils.multiturn_context import build_active_directives_section
 from utils.prompts import QUESTION_DECOMPOSER_PROMPT
 
 logger = logging.getLogger(__name__)
 
-# 프롬프트에 포함할 최근 대화 턴 수
-MAX_HISTORY_TURNS = 3
-
-# 대명사/지시어 패턴 (단일 도메인 대명사 해소용)
-_PRONOUN_PATTERNS = re.compile(
-    r"그것|이것|저것|그거|이거|저거|거기|여기|저기"
-    r"|그건|이건|저건|그게|이게|저게"
-    r"|그래서|그러면|그렇다면|그런데"
-    r"|위에서|앞에서|아까|방금"
-    r"|해당\s*(사항|내용|부분|절차|제도|방법|조건)"
-)
-
-PRONOUN_RESOLUTION_PROMPT = """이전 대화를 참고하여 다음 질문의 대명사를 구체적 명사로 바꿔주세요.
-원래 의도를 유지하고 질문만 출력하세요. 추가 설명이나 서두 없이 변환된 질문 한 문장만 출력하세요.
-
-## 이전 대화
-{history}
-
-## 현재 질문
-{query}
-
-## 변환된 질문"""
+_DEFAULT_HISTORY_TURNS = 6
+_DEFAULT_HISTORY_CHARS = 350
+_CACHE_HISTORY_MESSAGES = 8
 
 
-def _has_pronoun(query: str) -> bool:
-    """질문에 대명사/지시어가 포함되어 있는지 감지합니다.
-
-    Args:
-        query: 사용자 질문
-
-    Returns:
-        대명사가 감지되면 True
-    """
-    return bool(_PRONOUN_PATTERNS.search(query))
+def _safe_int(value: object, default: int) -> int:
+    if not isinstance(value, (int, float, str)):
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
 
 
 @dataclass
 class SubQuery:
-    """분해된 하위 질문.
-
-    Attributes:
-        domain: 질문이 속하는 도메인
-        query: 분해된 질문 내용
-    """
-
     domain: str
     query: str
 
 
-def _format_history(history: list[dict], max_turns: int = MAX_HISTORY_TURNS) -> str:
-    """대화 이력을 프롬프트용 문자열로 포맷합니다.
-
-    Args:
-        history: 대화 이력 (role, content 딕셔너리 리스트)
-        max_turns: 최대 포함할 턴 수
-
-    Returns:
-        포맷된 이력 문자열
-    """
+def _format_history(
+    history: list[dict],
+    max_turns: int = _DEFAULT_HISTORY_TURNS,
+    max_chars: int = _DEFAULT_HISTORY_CHARS,
+) -> str:
     if not history:
         return ""
 
-    # 최근 N턴만 사용 (user+assistant 쌍 기준)
-    recent = history[-(max_turns * 2):]
-    lines = []
+    recent = history[-(max_turns * 2) :]
+    lines: list[str] = []
     for msg in recent:
         role = msg.get("role", "")
-        content = msg.get("content", "")
+        content = str(msg.get("content", ""))
+        if len(content) > max_chars:
+            content = content[:max_chars] + "..."
         if role == "user":
-            lines.append(f"사용자: {content[:200]}")
+            lines.append(f"user: {content}")
         elif role == "assistant":
-            lines.append(f"AI: {content[:200]}")
+            lines.append(f"assistant: {content}")
 
     return "\n".join(lines)
 
 
 def _build_cache_key(query: str, domains: list[str], history: list[dict] | None) -> str:
-    """캐시 키를 생성합니다.
-
-    Args:
-        query: 원본 질문
-        domains: 감지된 도메인 리스트
-        history: 대화 이력
-
-    Returns:
-        해시된 캐시 키
-    """
     key_parts = [query, ",".join(sorted(domains))]
 
-    # 최근 1턴의 assistant 응답을 키에 포함 (맥락 변화 감지)
     if history:
-        for msg in reversed(history):
-            if msg.get("role") == "assistant":
-                key_parts.append(msg.get("content", "")[:200])
-                break
+        recent = history[-_CACHE_HISTORY_MESSAGES:]
+        snapshot_parts: list[str] = []
+        for msg in recent:
+            role = msg.get("role", "")
+            if role not in ("user", "assistant"):
+                continue
+            content = str(msg.get("content", ""))
+            snapshot_parts.append(f"{role}:{content[:200]}")
+        if snapshot_parts:
+            key_parts.append("|".join(snapshot_parts))
 
     raw_key = "|".join(key_parts)
     return hashlib.md5(raw_key.encode()).hexdigest()
 
 
 class QuestionDecomposer:
-    """복합 질문을 단일 도메인 질문들로 분해하는 클래스.
-
-    여러 도메인이 감지된 복합 질문을 각 도메인에 해당하는
-    독립적인 질문들로 분해합니다. 대화 이력을 활용하여
-    대명사와 생략된 맥락을 해소합니다.
-
-    Example:
-        입력: "창업 절차와 세금 신고 방법 알려주세요" (startup_funding, finance_tax)
-        출력: [
-            SubQuery(domain="startup_funding", query="창업 절차 알려주세요"),
-            SubQuery(domain="finance_tax", query="세금 신고 방법 알려주세요"),
-        ]
-    """
+    """Split a multi-domain user question into domain-specific sub-queries."""
 
     def __init__(self):
-        """QuestionDecomposer를 초기화합니다."""
         self.settings = get_settings()
         self.llm = create_llm("질문분해")
-        self._cache: LRUCache[list[SubQuery]] = LRUCache(
-            max_size=200, default_ttl=3600,
-        )
+        self._cache: LRUCache[list[SubQuery]] = LRUCache(max_size=200, default_ttl=3600)
 
     def _build_prompt_variables(
         self,
@@ -148,29 +95,38 @@ class QuestionDecomposer:
         detected_domains: list[str],
         history: list[dict] | None = None,
     ) -> dict[str, str]:
-        """프롬프트 변수를 구성합니다.
+        max_turns = _safe_int(
+            getattr(self.settings, "multiturn_history_turns", _DEFAULT_HISTORY_TURNS),
+            _DEFAULT_HISTORY_TURNS,
+        )
+        max_chars = _safe_int(
+            getattr(self.settings, "multiturn_history_chars", _DEFAULT_HISTORY_CHARS),
+            _DEFAULT_HISTORY_CHARS,
+        )
 
-        Args:
-            query: 원본 질문
-            detected_domains: 감지된 도메인 리스트
-            history: 대화 이력
-
-        Returns:
-            프롬프트 변수 딕셔너리
-        """
-        history_text = _format_history(history or [])
+        history_text = _format_history(history or [], max_turns=max_turns, max_chars=max_chars)
         if history_text:
             history_section = (
-                f"\n## 이전 대화 (참고용)\n{history_text}\n\n"
-                "위 대화 맥락을 참고하여, 대명사나 생략된 주어를 구체화한 뒤 질문을 분해하세요.\n"
+                "\n## 이전 대화(참고)\n"
+                f"{history_text}\n\n"
+                "이전 대화 맥락을 참고하여, 대명사나 생략된 주어를 구체화한 뒤 질문을 분해하세요.\n"
             )
         else:
             history_section = ""
+
+        active_directives_section = ""
+        if getattr(self.settings, "enable_active_directive_memory", True):
+            active_directives_section = build_active_directives_section(
+                history or [],
+                max_turns=max_turns,
+                max_chars=max_chars,
+            )
 
         return {
             "query": query,
             "domains": ", ".join(detected_domains),
             "history_section": history_section,
+            "active_directives_section": active_directives_section,
         }
 
     def _parse_response(
@@ -179,22 +135,6 @@ class QuestionDecomposer:
         detected_domains: list[str],
         original_query: str = "",
     ) -> list[SubQuery]:
-        """LLM 응답을 파싱하여 SubQuery 리스트를 반환합니다.
-
-        누락된 도메인이 있으면 원본 쿼리로 fallback SubQuery를 추가합니다.
-
-        Args:
-            response: LLM 응답 문자열
-            detected_domains: 감지된 도메인 리스트
-            original_query: 원본 질문 (누락 도메인 fallback용)
-
-        Returns:
-            파싱된 SubQuery 리스트
-
-        Raises:
-            json.JSONDecodeError: JSON 파싱 실패 시
-        """
-        # JSON 블록 추출
         json_match = re.search(r"```json\s*(.*?)\s*```", response, re.DOTALL)
         if json_match:
             result = json.loads(json_match.group(1))
@@ -202,28 +142,22 @@ class QuestionDecomposer:
             result = json.loads(response)
 
         sub_queries_data = result.get("sub_queries", [])
-        sub_queries = []
+        sub_queries: list[SubQuery] = []
 
         for sq in sub_queries_data:
             domain = sq.get("domain", "")
             sub_query = sq.get("query", "")
 
-            # 유효한 도메인인지 확인
             if domain in detected_domains and sub_query:
                 sub_queries.append(SubQuery(domain=domain, query=sub_query))
-                logger.debug(
-                    "[질문 분해] %s: '%s'",
-                    domain,
-                    sub_query[:50],
-                )
+                logger.debug("[질문 분해] %s: '%s'", domain, sub_query[:50])
 
-        # 누락 도메인 감지 및 fallback SubQuery 추가
         if sub_queries and original_query:
             covered_domains = {sq.domain for sq in sub_queries}
             missing_domains = [d for d in detected_domains if d not in covered_domains]
             if missing_domains:
                 logger.warning(
-                    "[질문 분해] 도메인 누락 감지: %s — 원본 질문으로 fallback SubQuery 추가",
+                    "[질문 분해] 누락 도메인 감지: %s -> 원본 질문으로 fallback SubQuery 추가",
                     missing_domains,
                 )
                 for domain in missing_domains:
@@ -231,120 +165,26 @@ class QuestionDecomposer:
 
         return sub_queries
 
-    def _resolve_pronouns_sync(
-        self,
-        query: str,
-        history: list[dict] | None = None,
-    ) -> str:
-        """대명사가 포함된 질문을 동기적으로 해소합니다.
-
-        history가 없거나 대명사가 감지되지 않으면 원본 쿼리를 그대로 반환합니다.
-
-        Args:
-            query: 원본 질문
-            history: 대화 이력
-
-        Returns:
-            대명사가 해소된 질문 (또는 원본)
-        """
-        if not history or not _has_pronoun(query):
-            return query
-
-        try:
-            history_text = _format_history(history)
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", PRONOUN_RESOLUTION_PROMPT),
-            ])
-            chain = prompt | self.llm | StrOutputParser()
-            resolved = chain.invoke({"history": history_text, "query": query})
-            resolved = resolved.strip()
-            if resolved:
-                return resolved
-        except Exception as e:
-            logger.warning("[대명사 해소] 실패 (동기): %s — 원본 사용", e)
-
-        return query
-
-    async def _aresolve_pronouns(
-        self,
-        query: str,
-        history: list[dict] | None = None,
-    ) -> str:
-        """대명사가 포함된 질문을 비동기적으로 해소합니다.
-
-        history가 없거나 대명사가 감지되지 않으면 원본 쿼리를 그대로 반환합니다.
-
-        Args:
-            query: 원본 질문
-            history: 대화 이력
-
-        Returns:
-            대명사가 해소된 질문 (또는 원본)
-        """
-        if not history or not _has_pronoun(query):
-            return query
-
-        try:
-            history_text = _format_history(history)
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", PRONOUN_RESOLUTION_PROMPT),
-            ])
-            chain = prompt | self.llm | StrOutputParser()
-            resolved = await chain.ainvoke({"history": history_text, "query": query})
-            resolved = resolved.strip()
-            if resolved:
-                return resolved
-        except Exception as e:
-            logger.warning("[대명사 해소] 실패 (비동기): %s — 원본 사용", e)
-
-        return query
-
     def decompose(
         self,
         query: str,
         detected_domains: list[str],
         history: list[dict] | None = None,
     ) -> list[SubQuery]:
-        """복합 질문을 단일 도메인 질문들로 분해합니다.
-
-        Args:
-            query: 원본 질문
-            detected_domains: 감지된 도메인 리스트
-            history: 대화 이력 (최근 N턴 활용)
-
-        Returns:
-            분해된 하위 질문 리스트
-        """
-        # 단일 도메인이면 분해 불필요 (대명사 해소만 수행)
         if len(detected_domains) <= 1:
             domain = detected_domains[0] if detected_domains else "startup_funding"
-            resolved_query = self._resolve_pronouns_sync(query, history)
-            if resolved_query != query:
-                logger.info(
-                    "[질문 분해] 단일 도메인 (%s) 대명사 해소: '%s' → '%s'",
-                    domain, query[:30], resolved_query[:30],
-                )
-            else:
-                logger.info("[질문 분해] 단일 도메인 (%s) - 분해 불필요", domain)
-            return [SubQuery(domain=domain, query=resolved_query)]
+            logger.info("[질문 분해] 단일 도메인(%s) - 분해 스킵", domain)
+            return [SubQuery(domain=domain, query=query)]
 
-        # 캐시 확인
         cache_key = _build_cache_key(query, detected_domains, history)
         cached = self._cache.get(cache_key)
         if cached is not None:
             logger.info("[질문 분해] 캐시 히트 - '%s...'", query[:30])
             return cached
 
-        logger.info(
-            "[질문 분해] 복합 질문 분해 시작: '%s' → %s",
-            query[:30],
-            detected_domains,
-        )
+        logger.info("[질문 분해] 복합 질문 분해 시작: '%s' -> %s", query[:30], detected_domains)
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", QUESTION_DECOMPOSER_PROMPT),
-        ])
-
+        prompt = ChatPromptTemplate.from_messages([("system", QUESTION_DECOMPOSER_PROMPT)])
         chain = prompt | self.llm | StrOutputParser()
 
         try:
@@ -352,41 +192,24 @@ class QuestionDecomposer:
             response = chain.invoke(variables)
 
             sub_queries = self._parse_response(response, detected_domains, query)
-
-            # 분해 결과가 비어있으면 원본 사용
             if not sub_queries:
                 logger.warning(
-                    "[질문 분해] 분해 실패, 모든 도메인(%s)에 원본 질문 전달 "
-                    "(도메인 간 노이즈 증가 가능)",
+                    "[질문 분해] 분해 실패, 모든 도메인(%s)에 원본 질문 전달",
                     detected_domains,
                 )
-                return [
-                    SubQuery(domain=domain, query=query)
-                    for domain in detected_domains
-                ]
+                return [SubQuery(domain=domain, query=query) for domain in detected_domains]
 
-            logger.info(
-                "[질문 분해] 완료: %d개 하위 질문 생성",
-                len(sub_queries),
-            )
-
-            # 캐시 저장
+            logger.info("[질문 분해] 완료: %d개 하위 질문 생성", len(sub_queries))
             self._cache.set(cache_key, sub_queries)
-
             return sub_queries
 
         except (json.JSONDecodeError, Exception) as e:
             logger.warning(
-                "[질문 분해] 파싱 실패: %s — 모든 도메인(%s)에 원본 질문 전달 "
-                "(도메인 간 노이즈 증가 가능)",
+                "[질문 분해] 파싱 실패: %s -> 모든 도메인(%s)에 원본 질문 전달",
                 e,
                 detected_domains,
             )
-            # 실패 시 각 도메인에 원본 질문 전달
-            return [
-                SubQuery(domain=domain, query=query)
-                for domain in detected_domains
-            ]
+            return [SubQuery(domain=domain, query=query) for domain in detected_domains]
 
     async def adecompose(
         self,
@@ -394,48 +217,20 @@ class QuestionDecomposer:
         detected_domains: list[str],
         history: list[dict] | None = None,
     ) -> list[SubQuery]:
-        """복합 질문을 비동기로 분해합니다.
-
-        chain.ainvoke()를 직접 사용하여 진정한 비동기 처리를 합니다.
-
-        Args:
-            query: 원본 질문
-            detected_domains: 감지된 도메인 리스트
-            history: 대화 이력 (최근 N턴 활용)
-
-        Returns:
-            분해된 하위 질문 리스트
-        """
-        # 단일 도메인이면 분해 불필요 (대명사 해소만 수행)
         if len(detected_domains) <= 1:
             domain = detected_domains[0] if detected_domains else "startup_funding"
-            resolved_query = await self._aresolve_pronouns(query, history)
-            if resolved_query != query:
-                logger.info(
-                    "[질문 분해] 단일 도메인 (%s) 대명사 해소: '%s' → '%s'",
-                    domain, query[:30], resolved_query[:30],
-                )
-            else:
-                logger.info("[질문 분해] 단일 도메인 (%s) - 분해 불필요", domain)
-            return [SubQuery(domain=domain, query=resolved_query)]
+            logger.info("[질문 분해] 단일 도메인(%s) - 분해 스킵", domain)
+            return [SubQuery(domain=domain, query=query)]
 
-        # 캐시 확인
         cache_key = _build_cache_key(query, detected_domains, history)
         cached = self._cache.get(cache_key)
         if cached is not None:
             logger.info("[질문 분해] 캐시 히트 - '%s...'", query[:30])
             return cached
 
-        logger.info(
-            "[질문 분해] 복합 질문 비동기 분해 시작: '%s' → %s",
-            query[:30],
-            detected_domains,
-        )
+        logger.info("[질문 분해] 복합 질문 비동기 분해 시작: '%s' -> %s", query[:30], detected_domains)
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", QUESTION_DECOMPOSER_PROMPT),
-        ])
-
+        prompt = ChatPromptTemplate.from_messages([("system", QUESTION_DECOMPOSER_PROMPT)])
         chain = prompt | self.llm | StrOutputParser()
 
         try:
@@ -443,51 +238,30 @@ class QuestionDecomposer:
             response = await chain.ainvoke(variables)
 
             sub_queries = self._parse_response(response, detected_domains, query)
-
-            # 분해 결과가 비어있으면 원본 사용
             if not sub_queries:
                 logger.warning(
-                    "[질문 분해] 분해 실패, 모든 도메인(%s)에 원본 질문 전달 "
-                    "(도메인 간 노이즈 증가 가능)",
+                    "[질문 분해] 분해 실패, 모든 도메인(%s)에 원본 질문 전달",
                     detected_domains,
                 )
-                return [
-                    SubQuery(domain=domain, query=query)
-                    for domain in detected_domains
-                ]
+                return [SubQuery(domain=domain, query=query) for domain in detected_domains]
 
-            logger.info(
-                "[질문 분해] 완료: %d개 하위 질문 생성",
-                len(sub_queries),
-            )
-
-            # 캐시 저장
+            logger.info("[질문 분해] 완료: %d개 하위 질문 생성", len(sub_queries))
             self._cache.set(cache_key, sub_queries)
-
             return sub_queries
 
         except (json.JSONDecodeError, Exception) as e:
             logger.warning(
-                "[질문 분해] 파싱 실패: %s — 모든 도메인(%s)에 원본 질문 전달 "
-                "(도메인 간 노이즈 증가 가능)",
+                "[질문 분해] 파싱 실패: %s -> 모든 도메인(%s)에 원본 질문 전달",
                 e,
                 detected_domains,
             )
-            return [
-                SubQuery(domain=domain, query=query)
-                for domain in detected_domains
-            ]
+            return [SubQuery(domain=domain, query=query) for domain in detected_domains]
 
 
 _question_decomposer: QuestionDecomposer | None = None
 
 
 def get_question_decomposer() -> QuestionDecomposer:
-    """QuestionDecomposer 싱글톤 인스턴스를 반환합니다.
-
-    Returns:
-        QuestionDecomposer 인스턴스
-    """
     global _question_decomposer
     if _question_decomposer is None:
         _question_decomposer = QuestionDecomposer()
@@ -495,6 +269,5 @@ def get_question_decomposer() -> QuestionDecomposer:
 
 
 def reset_question_decomposer() -> None:
-    """QuestionDecomposer 싱글톤을 리셋합니다 (테스트용)."""
     global _question_decomposer
     _question_decomposer = None

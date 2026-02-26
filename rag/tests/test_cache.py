@@ -123,8 +123,21 @@ class TestResponseCache:
         # 공백/대소문자 다른 쿼리로도 조회 가능
         assert cache.get("창업 절차 알려주세요") is not None
 
-    def test_same_query_overwrites(self):
-        """동일 쿼리는 도메인과 무관하게 동일 캐시 키 사용 (get 시 도메인 미확정)."""
+    def test_same_query_same_domain_overwrites(self):
+        """동일 쿼리+동일 도메인은 마지막 set 값으로 덮어쓰기."""
+        cache = ResponseCache(max_size=10, ttl=3600)
+
+        response1 = {"content": "첫 번째 답변"}
+        response2 = {"content": "두 번째 답변"}
+
+        cache.set("질문", response1, domain="startup_funding")
+        cache.set("질문", response2, domain="startup_funding")
+
+        # 동일 쿼리+도메인 → 마지막 set 값 반환
+        assert cache.get("질문", domain="startup_funding")["content"] == "두 번째 답변"
+
+    def test_same_query_different_domain_separate_keys(self):
+        """동일 쿼리라도 도메인이 다르면 별도 캐시 키 사용."""
         cache = ResponseCache(max_size=10, ttl=3600)
 
         response1 = {"content": "창업 답변"}
@@ -133,8 +146,9 @@ class TestResponseCache:
         cache.set("질문", response1, domain="startup_funding")
         cache.set("질문", response2, domain="finance_tax")
 
-        # 동일 쿼리 → 마지막 set 값 반환
-        assert cache.get("질문")["content"] == "세무 답변"
+        # 도메인별로 별도 저장
+        assert cache.get("질문", domain="startup_funding")["content"] == "창업 답변"
+        assert cache.get("질문", domain="finance_tax")["content"] == "세무 답변"
 
     def test_invalidate(self):
         """캐시 무효화 테스트."""

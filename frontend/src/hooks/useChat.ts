@@ -12,7 +12,7 @@ const ERROR_MESSAGE = '죄송합니다. 응답을 생성하는 중 오류가 발
 const GUEST_LIMIT_MESSAGE = '무료 체험 메시지를 모두 사용했습니다. 로그인하시면 무제한으로 상담을 이용할 수 있습니다.';
 
 export const useChat = () => {
-  const { addMessage, setLoading, setStreaming, isLoading, setLastHistoryId, updateMessageInSession, setLastHistoryIdForSession, guestMessageCount, incrementGuestCount } = useChatStore();
+  const { addMessage, setLoading, setStreaming, isLoading, updateMessageInSession, setLastHistoryIdForSession, guestMessageCount, incrementGuestCount } = useChatStore();
   const { isAuthenticated } = useAuthStore();
   const streamingContentRef = useRef<string>('');
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -172,7 +172,7 @@ export const useChat = () => {
                 });
                 console.error('Streaming error:', error);
               },
-            }, abortController.signal, history);
+            }, abortController.signal, history, targetSessionId);
 
             response = streamingContentRef.current;
             agentCode = domainToAgentCode(finalDomain);
@@ -182,6 +182,7 @@ export const useChat = () => {
             const ragResponse = await ragApi.post<RagChatResponse>('/rag/chat', {
               message,
               ...(history.length ? { history } : {}),
+              session_id: targetSessionId,
             });
             response = ragResponse.data.content;
             agentCode = domainToAgentCode(ragResponse.data.domain);
@@ -285,7 +286,7 @@ export const useChat = () => {
         abortControllerRef.current = null;
       }
     },
-    [addMessage, setLoading, setStreaming, isLoading, isAuthenticated, setLastHistoryId, updateMessageInSession, setLastHistoryIdForSession, guestMessageCount, incrementGuestCount]
+    [addMessage, setLoading, setStreaming, isLoading, isAuthenticated, updateMessageInSession, setLastHistoryIdForSession, guestMessageCount, incrementGuestCount]
   );
 
   const stopStreaming = useCallback(() => {

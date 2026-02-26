@@ -64,9 +64,9 @@ class TestEvaluatorAgent:
         response = "이것은 JSON이 아닙니다."
         result, success = evaluator._parse_evaluation_response(response)
 
-        # 파싱 실패 시 기본값 반환
+        # 파싱 실패 시 기본값 반환 (FALLBACK_TOTAL_SCORE=25)
         assert success is False
-        assert result["total_score"] == 50
+        assert result["total_score"] == 25
         assert result["passed"] is False
 
     def test_parse_evaluation_missing_fields(self, evaluator):

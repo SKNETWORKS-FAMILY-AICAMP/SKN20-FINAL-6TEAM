@@ -1,16 +1,9 @@
-"""RAGAS 배치 평가 실행 모듈.
+﻿"""Batch RAG evaluation runner.
 
-테스트 데이터셋을 사용하여 RAG 시스템의 RAGAS 메트릭을 배치로 평가합니다.
-
-사용법:
-    python -m evaluation --dataset tests/test_dataset.jsonl
-    python -m evaluation --dataset tests/test_dataset.jsonl --output results.json
-    python -m evaluation --dataset tests/test_dataset.jsonl --timeout 300
-
-테스트 데이터셋 형식 (JSONL):
-    {"question": "퇴직금 계산은 어떻게 하나요?", "ground_truth": "퇴직금은..."}
-    {"question": "사업자등록 절차는?"}
-    (ground_truth는 선택사항)
+Usage:
+    python -m evaluation --dataset evaluation/ragas_dataset_v4.jsonl
+    python -m evaluation --dataset evaluation/ragas_dataset_v4.jsonl --output evaluation/results/run.json
+    python -m evaluation --dataset evaluation/ragas_dataset_v4.jsonl --timeout 300
 """
 
 import argparse
@@ -20,40 +13,27 @@ import logging
 import os
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from agents.router import MainRouter
+from evaluation.contextual_metrics import evaluate_contextual_case
 from evaluation.ragas_evaluator import RagasEvaluator
 from vectorstores.chroma import ChromaVectorStore
 
 logger = logging.getLogger(__name__)
 
-# 출력 구분선 길이
 SEPARATOR_LENGTH = 80
-# 질문 미리보기 최대 길이
 QUESTION_PREVIEW_LENGTH = 60
-# 질문별 기본 타임아웃 (초)
 DEFAULT_QUESTION_TIMEOUT = 300
 
 
-def load_test_dataset(path: str) -> list[dict[str, str]]:
-    """테스트 데이터셋을 로드합니다.
-
-    Args:
-        path: JSONL 파일 경로
-
-    Returns:
-        질문/정답 딕셔너리 리스트
-
-    Raises:
-        FileNotFoundError: 파일이 존재하지 않을 때
-        json.JSONDecodeError: JSON 파싱 실패 시
-    """
-    dataset: list[dict[str, str]] = []
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
+def load_test_dataset(path: str) -> list[dict[str, object]]:
+    dataset: list[dict[str, object]] = []
+    with open(path, "r", encoding="utf-8") as file:
+        for line in file:
             line = line.strip()
             if line:
                 dataset.append(json.loads(line))
@@ -61,7 +41,6 @@ def load_test_dataset(path: str) -> list[dict[str, str]]:
 
 
 def _warmup_runpod() -> None:
-    """RunPod 워커를 사전 예열합니다 (cold start 방지)."""
     import requests
 
     api_key = os.getenv("RUNPOD_API_KEY")
@@ -71,19 +50,32 @@ def _warmup_runpod() -> None:
 
     url = f"https://api.runpod.ai/v2/{endpoint_id}/runsync"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-
-    for task_name, payload in [
+    payloads = [
         ("embed", {"input": {"task": "embed", "texts": ["warmup"]}}),
         ("rerank", {"input": {"task": "rerank", "query": "warmup", "documents": ["test"]}}),
-    ]:
-        start = time.time()
+    ]
+
+    for task_name, payload in payloads:
+        started_at = time.time()
         try:
-            resp = requests.post(url, json=payload, headers=headers, timeout=60)
-            elapsed = time.time() - start
-            status = resp.json().get("status", "unknown")
+            response = requests.post(url, json=payload, headers=headers, timeout=60)
+            elapsed = time.time() - started_at
+            status = response.json().get("status", "unknown")
             print(f"  RunPod {task_name} warmup: {elapsed:.1f}s ({status})")
-        except Exception as e:
-            print(f"  RunPod {task_name} warmup failed: {e}")
+        except Exception as exc:
+            print(f"  RunPod {task_name} warmup failed: {exc}")
+
+
+def _avg(values: list[float]) -> float | None:
+    if not values:
+        return None
+    return round(sum(values) / len(values), 4)
+
+
+def _preview(text: str) -> str:
+    if len(text) <= QUESTION_PREVIEW_LENGTH:
+        return text
+    return text[:QUESTION_PREVIEW_LENGTH] + "..."
 
 
 async def run_batch_evaluation(
@@ -91,154 +83,146 @@ async def run_batch_evaluation(
     output_path: str | None = None,
     question_timeout: int = DEFAULT_QUESTION_TIMEOUT,
 ) -> None:
-    """배치 평가를 실행합니다.
-
-    Args:
-        dataset_path: 테스트 데이터셋 파일 경로
-        output_path: 결과 저장 경로 (선택)
-        question_timeout: 질문별 타임아웃 초 (기본 300초)
-    """
-    # 초기화
     embedding_provider = os.getenv("EMBEDDING_PROVIDER", "local")
-    print(f"RAG 서비스 초기화 중... (embedding: {embedding_provider})")
+    print(f"RAG service init (embedding={embedding_provider})")
 
-    # Settings 수정 — 파이프라인 내부 평가 비활성화 (Router 생성 전에 적용)
     from utils.config import get_settings
 
     settings = get_settings()
     original_ragas_flag = settings.enable_ragas_evaluation
     original_llm_eval_flag = settings.enable_llm_evaluation
+    original_legal_supp_flag = settings.enable_legal_supplement
+    original_post_eval_flag = settings.enable_post_eval_retry
+    original_graduated_retry_flag = settings.enable_graduated_retry
 
-    # RAGAS 평가기를 먼저 생성 (enable_ragas_evaluation=True 필요)
     settings.enable_ragas_evaluation = True
     ragas_eval = RagasEvaluator()
-
     if not ragas_eval.is_available:
-        print(
-            "RAGAS 라이브러리가 설치되지 않았습니다.\n"
-            "설치: pip install ragas datasets"
-        )
+        print("RAGAS is not available. Install with: pip install ragas datasets")
         settings.enable_ragas_evaluation = original_ragas_flag
         return
 
-    # 파이프라인 내부 평가/보충검색/재시도 비활성화 (배치 속도 최적화)
     settings.enable_ragas_evaluation = False
     settings.enable_llm_evaluation = False
-    original_legal_supp_flag = settings.enable_legal_supplement
     settings.enable_legal_supplement = False
-    original_post_eval_flag = settings.enable_post_eval_retry
     settings.enable_post_eval_retry = False
-    original_graduated_retry_flag = settings.enable_graduated_retry
     settings.enable_graduated_retry = False
-    print("배치 모드: 내부평가/법률보충/재시도/단계적재시도 비활성화")
+    print("Batch mode: disabled in-pipeline eval/legal supplement/retry")
 
-    # RunPod 워커 사전 예열
     if embedding_provider == "runpod":
-        print("RunPod 워커 예열 중...")
+        print("RunPod warmup...")
         _warmup_runpod()
 
-    # ChromaDB + Router 초기화
     vector_store = ChromaVectorStore()
-
-    # ChromaDB 연결 pre-warm — 모든 컬렉션에 더미 검색으로 BM25 인덱스 초기화
-    print("ChromaDB 연결 예열 중...")
-    warmup_start = time.time()
+    print("Chroma warmup...")
+    warmup_started_at = time.time()
     try:
         collections = vector_store.list_collections()
-        for coll in collections:
-            coll_start = time.time()
-            vector_store.similarity_search("테스트", coll, k=1)
-            print(f"  {coll}: {time.time() - coll_start:.1f}s")
-        print(f"  ChromaDB 예열 완료: {time.time() - warmup_start:.1f}s ({len(collections)} 컬렉션)")
-    except Exception as e:
-        print(f"  ChromaDB 예열 실패 (계속 진행): {e}")
+        for collection in collections:
+            collection_start = time.time()
+            vector_store.similarity_search("warmup", collection, k=1)
+            print(f"  {collection}: {time.time() - collection_start:.1f}s")
+        print(f"  Chroma warmup done: {time.time() - warmup_started_at:.1f}s ({len(collections)} collections)")
+    except Exception as exc:
+        print(f"  Chroma warmup skipped (non-blocking): {exc}")
 
     router = MainRouter(vector_store=vector_store)
 
-    # 데이터셋 로드
     dataset = load_test_dataset(dataset_path)
     total_count = len(dataset)
-    print(f"테스트 데이터: {total_count}개 질문")
-    print(f"질문별 타임아웃: {question_timeout}초\n")
+    has_ground_truth = all("ground_truth" in item for item in dataset)
 
-    # 모든 질문에 대해 RAG 실행
+    print(f"Dataset questions: {total_count}")
+    print(f"Per-question timeout: {question_timeout}s\n")
+
     questions: list[str] = []
     answers: list[str] = []
     contexts_list: list[list[str]] = []
     ground_truths: list[str] = []
     timeout_flags: list[bool] = []
     elapsed_times: list[float] = []
-    has_ground_truth = all("ground_truth" in item for item in dataset)
+    timeout_causes: list[str | None] = []
+    contextual_metrics_list: list[dict[str, float | None] | None] = []
 
-    for i, item in enumerate(dataset):
-        question = item["question"]
-        preview = question[:QUESTION_PREVIEW_LENGTH]
-        if len(question) > QUESTION_PREVIEW_LENGTH:
-            preview += "..."
-
-        start_time = time.time()
+    for index, item in enumerate(dataset):
+        question = str(item["question"])
+        preview = _preview(question)
+        started_at = time.time()
         timed_out = False
 
         try:
+            history = item.get("history")
+            if not isinstance(history, list):
+                history = None
+
             response = await asyncio.wait_for(
-                router.aprocess(query=question),
+                router.aprocess(query=question, history=history),
                 timeout=question_timeout,
             )
-            elapsed = time.time() - start_time
+            elapsed = time.time() - started_at
 
             questions.append(question)
             answers.append(response.content)
-            contexts = [
-                s.content
-                for s in response.sources
-                if s.content and s.content.strip()
-            ]
-            contexts_list.append(contexts if contexts else ["컨텍스트 없음"])
-            print(f"[{i + 1}/{total_count}] ({elapsed:.1f}s) {preview}")
+            contexts = [src.content for src in response.sources if src.content and src.content.strip()]
+            contexts_list.append(contexts if contexts else ["NO_CONTEXT"])
+            timeout_causes.append(getattr(response.evaluation_data, "timeout_cause", None))
+
+            case_metrics = evaluate_contextual_case(
+                answer=response.content,
+                required_directives=item.get("required_directives"),
+                required_context_terms=item.get("required_context_terms"),
+                forbidden_terms=item.get("forbidden_terms"),
+            ).to_dict()
+            contextual_metrics_list.append(case_metrics if any(v is not None for v in case_metrics.values()) else None)
+
+            print(f"[{index + 1}/{total_count}] ({elapsed:.1f}s) {preview}")
 
         except asyncio.TimeoutError:
-            elapsed = time.time() - start_time
+            elapsed = time.time() - started_at
             timed_out = True
             questions.append(question)
             answers.append("[TIMEOUT]")
-            contexts_list.append(["타임아웃으로 컨텍스트 없음"])
-            print(f"[{i + 1}/{total_count}] TIMEOUT ({elapsed:.0f}s) {preview}")
+            contexts_list.append(["TIMEOUT_NO_CONTEXT"])
+            timeout_causes.append("question_timeout")
+            contextual_metrics_list.append(None)
+            print(f"[{index + 1}/{total_count}] TIMEOUT ({elapsed:.0f}s) {preview}")
 
-        except Exception as e:
-            elapsed = time.time() - start_time
+        except Exception as exc:
+            elapsed = time.time() - started_at
             questions.append(question)
-            answers.append(f"[ERROR] {e}")
-            contexts_list.append(["오류로 컨텍스트 없음"])
-            print(f"[{i + 1}/{total_count}] ERROR ({elapsed:.1f}s) {preview}: {e}")
+            answers.append(f"[ERROR] {exc}")
+            contexts_list.append(["ERROR_NO_CONTEXT"])
+            timeout_causes.append("runtime_error")
+            contextual_metrics_list.append(None)
+            print(f"[{index + 1}/{total_count}] ERROR ({elapsed:.1f}s) {preview}: {exc}")
 
         timeout_flags.append(timed_out)
         elapsed_times.append(round(elapsed, 2))
-
         if has_ground_truth:
-            ground_truths.append(item["ground_truth"])
+            ground_truths.append(str(item["ground_truth"]))
 
-    # 타임아웃 통계
     timeout_count = sum(timeout_flags)
     valid_count = total_count - timeout_count
-    print(f"\n완료: {valid_count}/{total_count} 성공, {timeout_count} 타임아웃")
+    valid_indices = [i for i, is_timeout in enumerate(timeout_flags) if not is_timeout]
 
-    # RAGAS 배치 평가 — 타임아웃 제외한 유효 질문만
-    valid_indices = [i for i, t in enumerate(timeout_flags) if not t]
+    print(f"\nDone: success={valid_count}/{total_count}, timeout={timeout_count}")
 
     if not valid_indices:
-        print("유효한 응답이 없어 RAGAS 평가를 건너뜁니다.")
+        print("No valid responses. Skip RAGAS evaluation.")
         settings.enable_ragas_evaluation = original_ragas_flag
+        settings.enable_llm_evaluation = original_llm_eval_flag
+        settings.enable_legal_supplement = original_legal_supp_flag
+        settings.enable_post_eval_retry = original_post_eval_flag
+        settings.enable_graduated_retry = original_graduated_retry_flag
         vector_store.close()
         return
 
     valid_questions = [questions[i] for i in valid_indices]
     valid_answers = [answers[i] for i in valid_indices]
     valid_contexts = [contexts_list[i] for i in valid_indices]
-    valid_ground_truths = (
-        [ground_truths[i] for i in valid_indices] if has_ground_truth else None
-    )
+    valid_ground_truths = [ground_truths[i] for i in valid_indices] if has_ground_truth else None
 
-    print(f"\nRAGAS 배치 평가 실행 중... ({len(valid_indices)}건)")
+    print(f"\nRun RAGAS batch ({len(valid_indices)} cases)")
     ragas_results = ragas_eval.evaluate_batch(
         questions=valid_questions,
         answers=valid_answers,
@@ -246,61 +230,81 @@ async def run_batch_evaluation(
         ground_truths=valid_ground_truths,
     )
 
-    # 유효 결과를 전체 인덱스에 매핑
     from evaluation.ragas_evaluator import RagasMetrics
 
     all_results: list[RagasMetrics] = []
-    ragas_idx = 0
+    ragas_index = 0
     for i in range(total_count):
         if timeout_flags[i]:
             all_results.append(RagasMetrics(error="TIMEOUT"))
         else:
-            all_results.append(ragas_results[ragas_idx])
-            ragas_idx += 1
+            all_results.append(ragas_results[ragas_index])
+            ragas_index += 1
 
-    # 결과 출력
     print("\n" + "=" * SEPARATOR_LENGTH)
-    print("RAGAS 배치 평가 결과")
+    print("RAGAS Result")
     print("=" * SEPARATOR_LENGTH)
 
     metric_keys = ["faithfulness", "answer_relevancy", "context_precision"]
     if has_ground_truth:
         metric_keys.append("context_recall")
 
-    total_metrics: dict[str, list[float]] = {key: [] for key in metric_keys}
+    metric_values: dict[str, list[float]] = {key: [] for key in metric_keys}
+    contextual_values: dict[str, list[float]] = {
+        "directive_coverage": [],
+        "context_adherence": [],
+        "conflict_free": [],
+        "score": [],
+    }
 
-    for i, (q, metrics) in enumerate(zip(questions, all_results)):
-        preview = q[:QUESTION_PREVIEW_LENGTH]
-        if len(q) > QUESTION_PREVIEW_LENGTH:
-            preview += "..."
+    for i, (question, metrics) in enumerate(zip(questions, all_results)):
         elapsed_str = f" ({elapsed_times[i]:.1f}s)"
+        print(f"\n[{i + 1}]{elapsed_str} {_preview(question)}")
+
         if timeout_flags[i]:
-            print(f"\n[{i + 1}] TIMEOUT{elapsed_str} {preview}")
+            print(f"  timeout_cause: {timeout_causes[i] or 'unknown'}")
             continue
-        print(f"\n[{i + 1}]{elapsed_str} {preview}")
+
         if metrics.available:
             for key in metric_keys:
-                val = getattr(metrics, key)
-                if val is not None:
-                    total_metrics[key].append(val)
-                    print(f"  {key}: {val:.4f}")
+                value = getattr(metrics, key)
+                if value is not None:
+                    metric_values[key].append(value)
+                    print(f"  {key}: {value:.4f}")
         elif metrics.error:
-            print(f"  오류: {metrics.error}")
+            print(f"  error: {metrics.error}")
 
-    # 전체 평균 출력
+        case_contextual = contextual_metrics_list[i]
+        if case_contextual:
+            for key in contextual_values.keys():
+                value = case_contextual.get(key)
+                if value is not None:
+                    contextual_values[key].append(value)
+                    print(f"  {key}: {value:.4f}")
+
+        if timeout_causes[i]:
+            print(f"  timeout_cause: {timeout_causes[i]}")
+
+    averages = {key: _avg(values) for key, values in metric_values.items()}
+    contextual_averages = {key: _avg(values) for key, values in contextual_values.items()}
+
     print("\n" + "-" * SEPARATOR_LENGTH)
-    print(f"평균 메트릭 (유효 {valid_count}건, 타임아웃 {timeout_count}건 제외):")
-    averages: dict[str, float | None] = {}
-    for key, values in total_metrics.items():
-        if values:
-            avg = sum(values) / len(values)
-            averages[key] = round(avg, 4)
-            print(f"  {key}: {avg:.4f} (n={len(values)})")
-        else:
-            averages[key] = None
-            print(f"  {key}: (데이터 없음)")
+    print(f"Averages (valid={valid_count}, timeout={timeout_count} excluded)")
+    for key, value in averages.items():
+        print(f"  {key}: {value if value is not None else '-'}")
 
-    # 결과 저장
+    has_contextual = any(value is not None for value in contextual_averages.values())
+    if has_contextual:
+        print("\nContextual averages")
+        for key, value in contextual_averages.items():
+            print(f"  {key}: {value if value is not None else '-'}")
+
+    timeout_cause_counts = Counter(cause for cause in timeout_causes if cause)
+    if timeout_cause_counts:
+        print("\nTimeout cause summary")
+        for cause, count in timeout_cause_counts.items():
+            print(f"  {cause}: {count}")
+
     if output_path:
         output_data = {
             "dataset": dataset_path,
@@ -310,22 +314,25 @@ async def run_batch_evaluation(
             "question_timeout": question_timeout,
             "timeout_count": timeout_count,
             "valid_count": valid_count,
+            "timeout_causes": dict(timeout_cause_counts),
             "results": [
                 {
-                    "question": q,
+                    "question": question,
                     "timeout": timeout_flags[i],
+                    "timeout_cause": timeout_causes[i],
                     "elapsed_seconds": elapsed_times[i],
                     "metrics": all_results[i].to_dict(),
+                    "contextual_metrics": contextual_metrics_list[i],
                 }
-                for i, q in enumerate(questions)
+                for i, question in enumerate(questions)
             ],
             "averages": averages,
+            "averages_contextual": contextual_averages,
         }
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(output_data, f, ensure_ascii=False, indent=2)
-        print(f"\n결과 저장됨: {output_path}")
+        with open(output_path, "w", encoding="utf-8") as file:
+            json.dump(output_data, file, ensure_ascii=False, indent=2)
+        print(f"\nSaved: {output_path}")
 
-    # 정리
     settings.enable_ragas_evaluation = original_ragas_flag
     settings.enable_llm_evaluation = original_llm_eval_flag
     settings.enable_legal_supplement = original_legal_supp_flag
@@ -335,28 +342,15 @@ async def run_batch_evaluation(
 
 
 def main() -> None:
-    """배치 평가 CLI 진입점."""
-    parser = argparse.ArgumentParser(
-        description="RAGAS 배치 평가 - 테스트 데이터셋 기반 RAG 정량 평가"
-    )
-    parser.add_argument(
-        "--dataset",
-        "-d",
-        required=True,
-        help="테스트 데이터셋 경로 (JSONL 형식)",
-    )
-    parser.add_argument(
-        "--output",
-        "-o",
-        default=None,
-        help="결과 저장 경로 (JSON 형식)",
-    )
+    parser = argparse.ArgumentParser(description="Batch RAGAS evaluator")
+    parser.add_argument("--dataset", "-d", required=True, help="JSONL dataset path")
+    parser.add_argument("--output", "-o", default=None, help="Output JSON path")
     parser.add_argument(
         "--timeout",
         "-t",
         type=int,
         default=DEFAULT_QUESTION_TIMEOUT,
-        help=f"질문별 타임아웃 초 (기본: {DEFAULT_QUESTION_TIMEOUT})",
+        help=f"Per-question timeout in seconds (default: {DEFAULT_QUESTION_TIMEOUT})",
     )
     args = parser.parse_args()
 

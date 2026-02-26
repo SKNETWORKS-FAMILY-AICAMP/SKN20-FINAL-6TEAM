@@ -46,6 +46,7 @@ from utils.middleware import get_metrics_collector
 from utils.domain_classifier import DomainClassificationResult, get_domain_classifier
 from utils.legal_supplement import needs_legal_supplement
 from utils.prompts import LLM_CLASSIFICATION_FAILURE_RESPONSE, REJECTION_RESPONSE
+from utils.query_rewriter import get_query_rewriter
 from utils.question_decomposer import SubQuery, get_question_decomposer
 from utils.sanitizer import sanitize_query
 from vectorstores.chroma import ChromaVectorStore
@@ -58,6 +59,7 @@ class RouterState(TypedDict):
     """라우터 상태 타입."""
 
     query: str
+    original_query: str
     history: list[dict]
     user_context: UserContext | None
     domains: list[str]
@@ -126,6 +128,9 @@ class MainRouter:
         # 질문 분해기
         self._question_decomposer = None
 
+        # 쿼리 재작성기
+        self._query_rewriter = None
+
         # RAGAS 평가기
         self._ragas_evaluator = None
 
@@ -152,6 +157,15 @@ class MainRouter:
                 if self._question_decomposer is None:
                     self._question_decomposer = get_question_decomposer()
         return self._question_decomposer
+
+    @property
+    def query_rewriter(self):
+        """쿼리 재작성기 (지연 로딩, double-check locking)."""
+        if self._query_rewriter is None:
+            with self._init_lock:
+                if self._query_rewriter is None:
+                    self._query_rewriter = get_query_rewriter()
+        return self._query_rewriter
 
     @property
     def ragas_evaluator(self):
@@ -258,34 +272,6 @@ class MainRouter:
 
         return "__end__"
 
-    def _augment_query_with_history(self, query: str, history: list[dict]) -> str:
-        """대명사/지시어 질문을 history로 보강합니다.
-
-        짧은 후속 질문("그럼 세금은요?")에 이전 사용자 메시지를 접두사로 붙여
-        분류·검색·생성·평가 전체 파이프라인의 정확도를 높입니다.
-        LLM 호출 없이 휴리스틱으로 동작합니다.
-
-        Args:
-            query: 현재 사용자 질문
-            history: 대화 이력 (role/content dict 리스트)
-
-        Returns:
-            보강된 쿼리 (조건 불충족 시 원본 그대로 반환)
-        """
-        if not history or len(query) > 30:
-            return query
-
-        pronouns = ["그럼", "그거", "그건", "그러면", "이거", "저거", "거기", "이건"]
-        if not any(p in query for p in pronouns):
-            return query
-
-        for msg in reversed(history):
-            if msg.get("role") == "user":
-                logger.info("[쿼리 보강] '%s' → '%s %s'", query, msg["content"][:30], query)
-                return f"{msg['content']} {query}"
-
-        return query
-
     async def _aclassify_node(self, state: RouterState) -> RouterState:
         """비동기 분류 노드: 벡터 유사도 기반으로 도메인을 식별합니다."""
         start = time.time()
@@ -302,14 +288,23 @@ class MainRouter:
             query = sanitize_result.sanitized_query
             state["query"] = query
 
-        # 대명사/지시어 질문 보강 (분류·검색·생성·평가 전체 적용)
-        augmented_query = self._augment_query_with_history(query, history)
-        if augmented_query != query:
-            state["query"] = augmented_query
+        # 원본 쿼리 보존 (생성/평가에서 사용)
+        state["original_query"] = query
+
+        # LLM 기반 쿼리 재작성 (history 있을 때만 동작)
+        rewrite_meta = await self.query_rewriter.arewrite_with_meta(query, history)
+        rewritten_query = rewrite_meta.query
+        was_rewritten = rewrite_meta.rewritten
+        if was_rewritten:
+            state["query"] = rewritten_query
+        state["timing_metrics"]["query_rewrite_time"] = rewrite_meta.elapsed
+        state["timing_metrics"]["query_rewrite_reason"] = rewrite_meta.reason
+        state["timing_metrics"]["query_rewrite_applied"] = was_rewritten
 
         # 벡터 유사도 기반 도메인 분류 (CPU-bound → 스레드 위임)
+        classify_query = rewritten_query if was_rewritten else query
         classification = await asyncio.to_thread(
-            self.domain_classifier.classify, augmented_query
+            self.domain_classifier.classify, classify_query
         )
         state["classification_result"] = classification
         state["domains"] = classification.domains
@@ -379,11 +374,12 @@ class MainRouter:
         start = time.time()
 
         result = await self.generator.agenerate(
-            query=state["query"],
+            query=state.get("original_query", state["query"]),
             sub_queries=state["sub_queries"],
             retrieval_results=state["retrieval_results"],
             user_context=state.get("user_context"),
             domains=state["domains"],
+            history=state.get("history"),
         )
         state["final_response"] = result.content
         state["actions"] = result.actions
@@ -415,11 +411,11 @@ class MainRouter:
             )
             context = f"[관련 도메인: {domain_labels}]\n\n{context}"
 
-        # LLM 평가 수행 (주 도메인 기반 임계값 적용)
+        # LLM 평가 수행 (주 도메인 기반 임계값 적용, 원본 쿼리 사용)
         primary_domain = domains[0] if domains else None
         if self.settings.enable_llm_evaluation:
             evaluation = await self.evaluator.aevaluate(
-                question=state["query"],
+                question=state.get("original_query", state["query"]),
                 answer=state["final_response"],
                 context=context,
                 domain=primary_domain,
@@ -467,7 +463,7 @@ class MainRouter:
         start = time.time()
         state["retry_count"] = state.get("retry_count", 0) + 1
 
-        query = state["query"]
+        query = state.get("original_query", state["query"])
         domains = state["domains"]
         user_context = state.get("user_context")
 
@@ -593,6 +589,7 @@ class MainRouter:
                     retrieval_results=retrieval_results,
                     user_context=user_context,
                     domains=domains,
+                    history=state.get("history"),
                 )
 
                 # 평가 (원본 쿼리 기준으로 평가, 주 도메인 임계값 적용)
@@ -673,6 +670,7 @@ class MainRouter:
         """초기 상태를 생성합니다."""
         return {
             "query": query,
+            "original_query": query,
             "history": history or [],
             "user_context": user_context,
             "domains": [],
@@ -754,6 +752,7 @@ class MainRouter:
         # 검색 평가 결과 집계
         retrieval_results = final_state.get("retrieval_results", {})
         retrieval_evaluation = None
+        timing_data = final_state.get("timing_metrics", {})
 
         if retrieval_results:
             # 전체 도메인 검색 결과 집계
@@ -793,6 +792,10 @@ class MainRouter:
             contexts=contexts,
             domains=final_state.get("domains", []),
             retrieval_evaluation=retrieval_evaluation,
+            query_rewrite_applied=timing_data.get("query_rewrite_applied"),
+            query_rewrite_reason=timing_data.get("query_rewrite_reason"),
+            query_rewrite_time=timing_data.get("query_rewrite_time"),
+            timeout_cause=timing_data.get("timeout_cause"),
             response_time=total_time,
         )
 
@@ -832,6 +835,7 @@ class MainRouter:
             final_state["final_response"] = self.settings.fallback_message
             final_state["sources"] = []
             final_state["actions"] = []
+            final_state["timing_metrics"]["timeout_cause"] = "pipeline_total_timeout"
             final_state["evaluation"] = EvaluationResult(
                 scores={},
                 total_score=0,
@@ -884,13 +888,18 @@ class MainRouter:
             )
             query = sanitize_result.sanitized_query
 
-        # 대명사/지시어 질문 보강 (분류·검색·생성 전체 적용)
-        augmented_query = self._augment_query_with_history(query, history or [])
-        if augmented_query != query:
-            query = augmented_query
+        # 원본 쿼리 보존 (생성/평가에서 사용)
+        original_query = query
+
+        # LLM 기반 쿼리 재작성 (history 있을 때만 동작)
+        rewrite_meta = await self.query_rewriter.arewrite_with_meta(query, history or [])
+        rewritten_query = rewrite_meta.query
+        was_rewritten = rewrite_meta.rewritten
+        if was_rewritten:
+            query = rewritten_query
 
         # 도메인 분류
-        classification = self.domain_classifier.classify(augmented_query)
+        classification = self.domain_classifier.classify(query)
 
         # 도메인 외 질문 거부 (LLM 토큰 스트리밍과 동일한 방식)
         if not classification.is_relevant:
@@ -979,11 +988,12 @@ class MainRouter:
             )
 
             async for chunk in self.generator.astream_generate(
-                query=query,
+                query=original_query,
                 documents=documents,
                 user_context=user_context,
                 domain=domain,
                 actions=pre_actions,
+                history=history,
             ):
                 if chunk["type"] == "token":
                     yield {"type": "token", "content": chunk["content"]}
@@ -999,7 +1009,7 @@ class MainRouter:
                 try:
                     eval_context = "\n".join([s.content for s in all_sources[:5]])
                     single_evaluation = await self.evaluator.aevaluate(
-                        question=query,
+                        question=original_query,
                         answer=content,
                         context=eval_context,
                         domain=domain,
@@ -1028,8 +1038,9 @@ class MainRouter:
             }
         else:
             # 복수 도메인: 통합 생성 에이전트로 LLM 토큰 스트리밍
-            # 분해 + 검색 수행
+            # 분해 + 검색 수행 (augmented query로 검색)
             initial_state = self._create_initial_state(query, user_context, history)
+            initial_state["original_query"] = original_query
             initial_state["domains"] = domains
             initial_state["classification_result"] = classification
 
@@ -1057,12 +1068,13 @@ class MainRouter:
 
             content = ""
             async for chunk in self.generator.astream_generate_multi(
-                query=query,
+                query=original_query,
                 sub_queries=sub_queries,
                 retrieval_results=retrieval_results,
                 user_context=user_context,
                 domains=domains,
                 actions=pre_actions,
+                history=history,
             ):
                 if chunk["type"] == "token":
                     yield {"type": "token", "content": chunk["content"]}
@@ -1083,7 +1095,7 @@ class MainRouter:
 
                     multi_primary_domain = domains[0] if domains else None
                     evaluation = await self.evaluator.aevaluate(
-                        question=query,
+                        question=original_query,
                         answer=content,
                         context=eval_context,
                         domain=multi_primary_domain,

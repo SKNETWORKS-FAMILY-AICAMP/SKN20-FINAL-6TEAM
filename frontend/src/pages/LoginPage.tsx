@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, type Location } from 'react-router-dom';
 import { Card, CardBody, Typography } from '@material-tailwind/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
@@ -14,12 +14,12 @@ interface LoginRouteState {
 const FEATURE_ITEMS = [
   '.',
   '.',
-  '창업 절차, 지원사업, 세무/회계 상담',
+  '창업 인허가, 지원사업, 재무/회계 상담',
   '인사/노무, 법률 리스크 기본 가이드',
   '기업 프로필 기반 맞춤형 상담 지원',
   '대화 히스토리 기반 연속 상담',
   '.',
-  '.'
+  '.',
 ];
 
 const LoginPage: React.FC = () => {
@@ -70,7 +70,7 @@ const LoginPage: React.FC = () => {
       });
       const { user } = response.data;
 
-      login(user);
+      await login(user);
       closeModal();
     } catch (err: unknown) {
       console.error('Login error:', err);
@@ -98,7 +98,7 @@ const LoginPage: React.FC = () => {
         >
           <button
             type="button"
-            aria-label="로그인 모달 닫기"
+            aria-label="濡쒓렇??紐⑤떖 ?リ린"
             className="absolute right-5 top-5 z-20 rounded-full border border-gray-200 bg-white p-1.5 text-gray-400 transition-colors hover:text-gray-700"
             onClick={closeModal}
           >
@@ -121,9 +121,9 @@ const LoginPage: React.FC = () => {
               </div>
 
               <Typography variant="paragraph" className="login-welcome-font -mt-6 !text-gray-600">
-                통합 창업/경영 상담 챗봇에
+                ?듯빀 李쎌뾽/寃쎌쁺 ?곷떞 梨쀫큸??
                 <br />
-                오신 것을 환영합니다.
+                ?ㅼ떊 寃껋쓣 ?섏쁺?⑸땲??
               </Typography>
 
               <ul className="ml-auto mt-10 w-full max-w-[19rem] space-y-2 text-right text-[10pt] font-normal leading-[1.4] text-[#6BB3F2]">
@@ -133,7 +133,7 @@ const LoginPage: React.FC = () => {
               </ul>
 
               <Typography variant="paragraph" className="mt-10 text-center !text-gray-600">
-                무제한으로 최적화된 상담 기능을 이용해보세요
+                臾댁젣?쒖쑝濡?理쒖쟻?붾맂 ?곷떞 湲곕뒫???댁슜?대낫?몄슂
               </Typography>
 
               {error && (
@@ -161,3 +161,4 @@ const LoginPage: React.FC = () => {
 };
 
 export default LoginPage;
+

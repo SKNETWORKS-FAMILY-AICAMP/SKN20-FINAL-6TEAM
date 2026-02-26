@@ -1,4 +1,4 @@
-"""상담 이력 API 라우터."""
+"""상담 이력 API 라우터"""
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status, Query
 from slowapi import Limiter
@@ -9,9 +9,14 @@ from typing import List
 from config.database import get_db
 from apps.common.models import User
 from apps.common.deps import get_current_user
-from apps.histories.service import HistoryService
+from apps.histories.service import HistoryService, InvalidParentHistoryError
 from apps.histories.background import run_ragas_background
-from .schemas import HistoryCreate, HistoryResponse
+from .schemas import (
+    HistoryCreate,
+    HistoryResponse,
+    HistoryThreadDetailResponse,
+    HistoryThreadSummaryResponse,
+)
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/histories", tags=["histories"])
@@ -39,6 +44,40 @@ async def get_histories(
     )
 
 
+@router.get("/threads", response_model=List[HistoryThreadSummaryResponse])
+async def get_history_threads(
+    limit: int = Query(20, ge=1, le=100, description="조회 개수"),
+    offset: int = Query(0, ge=0, description="오프셋"),
+    service: HistoryService = Depends(get_history_service),
+    current_user: User = Depends(get_current_user),
+):
+    """상담 이력을 thread 단위로 조회"""
+    return service.get_history_threads(
+        user_id=current_user.user_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/threads/{root_history_id}", response_model=HistoryThreadDetailResponse)
+async def get_history_thread_detail(
+    root_history_id: int,
+    service: HistoryService = Depends(get_history_service),
+    current_user: User = Depends(get_current_user),
+):
+    """특정 thread의 전체 상담 이력 조회"""
+    thread_detail = service.get_history_thread_detail(
+        user_id=current_user.user_id,
+        root_history_id=root_history_id,
+    )
+    if thread_detail is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="History thread not found",
+        )
+    return thread_detail
+
+
 @router.post("", response_model=HistoryResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("30/minute")
 async def create_history(
@@ -49,7 +88,13 @@ async def create_history(
     current_user: User = Depends(get_current_user),
 ) -> HistoryResponse:
     """상담 이력 저장"""
-    history = service.create_history(history_data, current_user.user_id)
+    try:
+        history = service.create_history(history_data, current_user.user_id)
+    except InvalidParentHistoryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
     if history_data.evaluation_data and history_data.evaluation_data.contexts:
         background_tasks.add_task(
             run_ragas_background,

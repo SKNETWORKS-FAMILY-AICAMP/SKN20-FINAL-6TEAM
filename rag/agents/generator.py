@@ -24,6 +24,7 @@ from utils.config import DOMAIN_LABELS, create_llm, get_settings
 from utils.prompts import (
     ACTION_HINT_TEMPLATE,
     MULTI_DOMAIN_SYNTHESIS_PROMPT,
+    format_history_for_prompt,
 )
 from utils.question_decomposer import SubQuery
 
@@ -196,6 +197,7 @@ class ResponseGeneratorAgent:
         retrieval_results: dict[str, RetrievalResult],
         user_context: UserContext | None,
         domains: list[str],
+        history: list[dict] | None = None,
     ) -> GenerationResult:
         """검색 결과 기반으로 답변을 비동기 생성합니다.
 
@@ -205,6 +207,7 @@ class ResponseGeneratorAgent:
             retrieval_results: 도메인별 검색 결과
             user_context: 사용자 컨텍스트
             domains: 분류된 도메인 리스트
+            history: 대화 이력 (반복 방지용, None이면 무시)
 
         Returns:
             GenerationResult
@@ -272,6 +275,7 @@ class ResponseGeneratorAgent:
                     user_type=user_type,
                     company_context=company_context,
                     actions_context=actions_context,
+                    history=history,
                 )
             elif len(effective_domains) <= 1 and len(active_domains) > 1:
                 # 원래 복수 도메인이었으나 실질적으로 단일 도메인만 문서 보유
@@ -285,6 +289,7 @@ class ResponseGeneratorAgent:
                     user_type=user_type,
                     company_context=company_context,
                     actions_context=actions_context,
+                    history=history,
                 )
             else:
                 # 복수 도메인: effective_domains로 생성
@@ -296,7 +301,8 @@ class ResponseGeneratorAgent:
                     domains=effective_domains,
                     user_type=user_type,
                     company_context=company_context,
-                actions_context=actions_context,
+                    actions_context=actions_context,
+                    history=history,
             )
         except asyncio.TimeoutError:
             logger.error("[생성기] LLM 호출 타임아웃", exc_info=True)
@@ -322,6 +328,7 @@ class ResponseGeneratorAgent:
         user_context: UserContext | None,
         domain: str,
         actions: list[ActionSuggestion] | None = None,
+        history: list[dict] | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """단일 도메인 답변을 토큰 스트리밍으로 생성합니다.
 
@@ -331,6 +338,7 @@ class ResponseGeneratorAgent:
             user_context: 사용자 컨텍스트
             domain: 도메인
             actions: 사전 수집된 액션 (None이면 수집 스킵)
+            history: 대화 이력 (반복 방지용, None이면 무시)
 
         Yields:
             스트리밍 토큰 딕셔너리
@@ -353,6 +361,11 @@ class ResponseGeneratorAgent:
         if actions and self.settings.enable_action_aware_generation:
             actions_context = self._format_actions_context(actions)
             system_prompt += "\n" + ACTION_HINT_TEMPLATE.format(actions_context=actions_context)
+
+        # 대화 이력 주입 (반복 방지)
+        history_section = format_history_for_prompt(history)
+        if history_section:
+            system_prompt += history_section
 
         # 도메인 에이전트의 시스템 프롬프트 사용
         prompt = ChatPromptTemplate.from_messages([
@@ -383,6 +396,7 @@ class ResponseGeneratorAgent:
         user_context: UserContext | None,
         domains: list[str],
         actions: list[ActionSuggestion] | None = None,
+        history: list[dict] | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """복수 도메인 답변을 LLM 토큰 스트리밍으로 통합 생성합니다.
 
@@ -396,6 +410,7 @@ class ResponseGeneratorAgent:
             user_context: 사용자 컨텍스트
             domains: 관련 도메인 리스트
             actions: 사전 수집된 액션
+            history: 대화 이력 (반복 방지용, None이면 무시)
 
         Yields:
             스트리밍 토큰 딕셔너리
@@ -434,8 +449,14 @@ class ResponseGeneratorAgent:
             for sq in sub_queries
         ) if sub_queries else "없음"
 
+        # 대화 이력 주입 (반복 방지)
+        multi_system_prompt = MULTI_DOMAIN_SYNTHESIS_PROMPT
+        history_section = format_history_for_prompt(history)
+        if history_section:
+            multi_system_prompt += history_section
+
         prompt = ChatPromptTemplate.from_messages([
-            ("system", MULTI_DOMAIN_SYNTHESIS_PROMPT),
+            ("system", multi_system_prompt),
             ("human", "{query}"),
         ])
 
@@ -468,6 +489,7 @@ class ResponseGeneratorAgent:
         user_type: str,
         company_context: str,
         actions_context: str,
+        history: list[dict] | None = None,
     ) -> str:
         """단일 도메인 답변을 비동기 생성합니다.
 
@@ -479,6 +501,7 @@ class ResponseGeneratorAgent:
             user_type: 사용자 유형
             company_context: 기업 컨텍스트
             actions_context: 액션 컨텍스트 문자열
+            history: 대화 이력 (반복 방지용, None이면 무시)
 
         Returns:
             생성된 답변 문자열
@@ -498,6 +521,11 @@ class ResponseGeneratorAgent:
         system_prompt = agent.get_system_prompt()
         if actions_context != "없음" and self.settings.enable_action_aware_generation:
             system_prompt += "\n" + ACTION_HINT_TEMPLATE.format(actions_context=actions_context)
+
+        # 대화 이력 주입 (반복 방지)
+        history_section = format_history_for_prompt(history)
+        if history_section:
+            system_prompt += history_section
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
@@ -538,6 +566,7 @@ class ResponseGeneratorAgent:
         user_type: str,
         company_context: str,
         actions_context: str,
+        history: list[dict] | None = None,
     ) -> str:
         """복수 도메인 답변을 비동기 통합 생성합니다.
 
@@ -550,6 +579,7 @@ class ResponseGeneratorAgent:
             user_type: 사용자 유형
             company_context: 기업 컨텍스트
             actions_context: 액션 컨텍스트 문자열
+            history: 대화 이력 (반복 방지용, None이면 무시)
 
         Returns:
             통합 생성된 답변 문자열
@@ -573,8 +603,14 @@ class ResponseGeneratorAgent:
             for sq in sub_queries
         ) if sub_queries else "없음"
 
+        # 대화 이력 주입 (반복 방지)
+        multi_system_prompt = MULTI_DOMAIN_SYNTHESIS_PROMPT
+        history_section = format_history_for_prompt(history)
+        if history_section:
+            multi_system_prompt += history_section
+
         prompt = ChatPromptTemplate.from_messages([
-            ("system", MULTI_DOMAIN_SYNTHESIS_PROMPT),
+            ("system", multi_system_prompt),
             ("human", "{query}"),
         ])
 

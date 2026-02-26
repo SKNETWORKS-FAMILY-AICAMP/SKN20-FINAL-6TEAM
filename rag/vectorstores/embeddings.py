@@ -1,12 +1,12 @@
-"""임베딩 설정 모듈.
+﻿"""?꾨쿋???ㅼ젙 紐⑤뱢.
 
-이 모듈은 VectorDB에서 사용할 임베딩을 설정합니다.
-EMBEDDING_PROVIDER 환경변수에 따라 로컬(HuggingFace) 또는 RunPod GPU를 사용합니다.
+??紐⑤뱢? VectorDB?먯꽌 ?ъ슜???꾨쿋?⑹쓣 ?ㅼ젙?⑸땲??
+EMBEDDING_PROVIDER ?섍꼍蹂?섏뿉 ?곕씪 濡쒖뺄(HuggingFace) ?먮뒗 RunPod GPU瑜??ъ슜?⑸땲??
 
 Example:
     >>> from vectorstores.embeddings import get_embeddings
     >>> embeddings = get_embeddings()
-    >>> vector = embeddings.embed_query("창업 지원금")
+    >>> vector = embeddings.embed_query("李쎌뾽 吏?먭툑")
 """
 
 import logging
@@ -20,134 +20,184 @@ logger = logging.getLogger(__name__)
 
 
 class RunPodEmbeddings(Embeddings):
-    """RunPod Serverless를 통한 임베딩.
+    """RunPod Serverless瑜??듯븳 ?꾨쿋??
 
-    RunPod GPU 엔드포인트에 HTTP 요청을 보내 임베딩 벡터를 생성합니다.
-    LangChain Embeddings 인터페이스를 구현하여 기존 코드와 호환됩니다.
+    RunPod GPU ?붾뱶?ъ씤?몄뿉 HTTP ?붿껌??蹂대궡 ?꾨쿋??踰≫꽣瑜??앹꽦?⑸땲??
+    LangChain Embeddings ?명꽣?섏씠?ㅻ? 援ы쁽?섏뿬 湲곗〈 肄붾뱶? ?명솚?⑸땲??
 
     Attributes:
         api_url: RunPod runsync API URL
-        headers: HTTP 요청 헤더 (인증 포함)
+        headers: HTTP ?붿껌 ?ㅻ뜑 (?몄쬆 ?ы븿)
     """
 
     def __init__(self, api_key: str, endpoint_id: str) -> None:
-        """RunPodEmbeddings를 초기화합니다.
+        """RunPodEmbeddings瑜?珥덇린?뷀빀?덈떎.
 
         Args:
-            api_key: RunPod API 키
+            api_key: RunPod API ??
             endpoint_id: RunPod Serverless Endpoint ID
         """
-        self.api_url = f"https://api.runpod.ai/v2/{endpoint_id}/runsync"
+        self.base_url = f"https://api.runpod.ai/v2/{endpoint_id}"
+        self.run_url = f"{self.base_url}/run"
         self.headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
 
     def _call_runpod(self, texts: list[str]) -> list[list[float]]:
-        """RunPod API를 동기 호출하여 임베딩 벡터를 반환합니다.
+        """RunPod API瑜??숆린 ?몄텧?섏뿬 ?꾨쿋??踰≫꽣瑜?諛섑솚?⑸땲??
 
         Args:
-            texts: 임베딩할 텍스트 리스트
+            texts: ?꾨쿋?⑺븷 ?띿뒪??由ъ뒪??
 
         Returns:
-            임베딩 벡터 리스트
+            ?꾨쿋??踰≫꽣 由ъ뒪??
 
         Raises:
-            RuntimeError: RunPod API 호출 실패 시
+            RuntimeError: RunPod API ?몄텧 ?ㅽ뙣 ??
         """
         import httpx
+        import time
 
         payload = {"input": {"task": "embed", "texts": texts}}
+        max_poll = 120
+        poll_interval_sec = 1.5
 
         with httpx.Client(timeout=120.0) as client:
-            response = client.post(self.api_url, json=payload, headers=self.headers)
-            response.raise_for_status()
-            result = response.json()
+            submit = client.post(self.run_url, json=payload, headers=self.headers)
+            submit.raise_for_status()
+            run = submit.json()
+            job_id = run.get("id")
+            if not job_id:
+                raise RuntimeError("RunPod 임베딩 실패: missing job id")
 
-        if result.get("status") != "COMPLETED":
-            raise RuntimeError(f"RunPod 임베딩 실패: status={result.get('status')}")
+            status_url = f"{self.base_url}/status/{job_id}"
+            for attempt in range(1, max_poll + 1):
+                status_resp = client.get(status_url, headers=self.headers)
+                status_resp.raise_for_status()
+                result = status_resp.json()
+                status = result.get("status")
 
-        return result["output"]["vectors"]
+                if status == "COMPLETED":
+                    return result["output"]["vectors"]
+                if status in {"IN_QUEUE", "IN_PROGRESS"}:
+                    if attempt % 10 == 0:
+                        logger.warning(
+                            "[RunPod] polling job=%s status=%s (%d/%d)",
+                            job_id,
+                            status,
+                            attempt,
+                            max_poll,
+                        )
+                    time.sleep(poll_interval_sec)
+                    continue
+                raise RuntimeError(f"RunPod 임베딩 실패: status={status}")
 
+        raise RuntimeError("RunPod 임베딩 실패: polling timeout")
     async def _acall_runpod(self, texts: list[str]) -> list[list[float]]:
-        """RunPod API를 비동기 호출하여 임베딩 벡터를 반환합니다.
+        """RunPod API瑜?鍮꾨룞湲??몄텧?섏뿬 ?꾨쿋??踰≫꽣瑜?諛섑솚?⑸땲??
 
         Args:
-            texts: 임베딩할 텍스트 리스트
+            texts: ?꾨쿋?⑺븷 ?띿뒪??由ъ뒪??
 
         Returns:
-            임베딩 벡터 리스트
+            ?꾨쿋??踰≫꽣 由ъ뒪??
 
         Raises:
-            RuntimeError: RunPod API 호출 실패 시
+            RuntimeError: RunPod API ?몄텧 ?ㅽ뙣 ??
         """
+        import asyncio
         import httpx
 
         payload = {"input": {"task": "embed", "texts": texts}}
+        max_poll = 120
+        poll_interval_sec = 1.5
 
         async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(self.api_url, json=payload, headers=self.headers)
-            response.raise_for_status()
-            result = response.json()
+            submit = await client.post(self.run_url, json=payload, headers=self.headers)
+            submit.raise_for_status()
+            run = submit.json()
+            job_id = run.get("id")
+            if not job_id:
+                raise RuntimeError("RunPod 임베딩 실패: missing job id")
 
-        if result.get("status") != "COMPLETED":
-            raise RuntimeError(f"RunPod 임베딩 실패: status={result.get('status')}")
+            status_url = f"{self.base_url}/status/{job_id}"
+            for attempt in range(1, max_poll + 1):
+                status_resp = await client.get(status_url, headers=self.headers)
+                status_resp.raise_for_status()
+                result = status_resp.json()
+                status = result.get("status")
 
-        return result["output"]["vectors"]
+                if status == "COMPLETED":
+                    return result["output"]["vectors"]
+                if status in {"IN_QUEUE", "IN_PROGRESS"}:
+                    if attempt % 10 == 0:
+                        logger.warning(
+                            "[RunPod] async polling job=%s status=%s (%d/%d)",
+                            job_id,
+                            status,
+                            attempt,
+                            max_poll,
+                        )
+                    await asyncio.sleep(poll_interval_sec)
+                    continue
+                raise RuntimeError(f"RunPod 임베딩 실패: status={status}")
+
+        raise RuntimeError("RunPod 임베딩 실패: polling timeout")
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        """문서 리스트를 동기 임베딩합니다.
+        """臾몄꽌 由ъ뒪?몃? ?숆린 ?꾨쿋?⑺빀?덈떎.
 
         Args:
-            texts: 임베딩할 텍스트 리스트
+            texts: ?꾨쿋?⑺븷 ?띿뒪??由ъ뒪??
 
         Returns:
-            임베딩 벡터 리스트
+            ?꾨쿋??踰≫꽣 由ъ뒪??
         """
         if not texts:
             return []
-        logger.debug("[RunPod] embed_documents: %d건 요청", len(texts))
+        logger.debug("[RunPod] embed_documents: %d嫄??붿껌", len(texts))
         return self._call_runpod(texts)
 
     def embed_query(self, text: str) -> list[float]:
-        """단일 쿼리를 동기 임베딩합니다.
+        """?⑥씪 荑쇰━瑜??숆린 ?꾨쿋?⑺빀?덈떎.
 
         Args:
-            text: 임베딩할 텍스트
+            text: ?꾨쿋?⑺븷 ?띿뒪??
 
         Returns:
-            임베딩 벡터
+            ?꾨쿋??踰≫꽣
         """
         return self.embed_documents([text])[0]
 
     async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
-        """문서 리스트를 비동기 임베딩합니다.
+        """臾몄꽌 由ъ뒪?몃? 鍮꾨룞湲??꾨쿋?⑺빀?덈떎.
 
         Args:
-            texts: 임베딩할 텍스트 리스트
+            texts: ?꾨쿋?⑺븷 ?띿뒪??由ъ뒪??
 
         Returns:
-            임베딩 벡터 리스트
+            ?꾨쿋??踰≫꽣 由ъ뒪??
         """
         if not texts:
             return []
-        logger.debug("[RunPod] aembed_documents: %d건 요청", len(texts))
+        logger.debug("[RunPod] aembed_documents: %d嫄??붿껌", len(texts))
         return await self._acall_runpod(texts)
 
     async def aembed_query(self, text: str) -> list[float]:
-        """단일 쿼리를 비동기 임베딩합니다.
+        """?⑥씪 荑쇰━瑜?鍮꾨룞湲??꾨쿋?⑺빀?덈떎.
 
         Args:
-            text: 임베딩할 텍스트
+            text: ?꾨쿋?⑺븷 ?띿뒪??
 
         Returns:
-            임베딩 벡터
+            ?꾨쿋??踰≫꽣
         """
         return (await self.aembed_documents([text]))[0]
 
 
 def _get_local_device() -> str:
-    """CUDA > MPS > CPU 우선순위로 디바이스 반환."""
+    """CUDA > MPS > CPU ?곗꽑?쒖쐞濡??붾컮?댁뒪 諛섑솚."""
     import torch
 
     if torch.cuda.is_available():
@@ -159,15 +209,15 @@ def _get_local_device() -> str:
 
 @lru_cache(maxsize=1)
 def get_embeddings(model: str | None = None) -> Embeddings:
-    """임베딩 인스턴스를 가져옵니다 (싱글톤).
+    """?꾨쿋???몄뒪?댁뒪瑜?媛?몄샃?덈떎 (?깃???.
 
-    EMBEDDING_PROVIDER 설정에 따라 로컬(HuggingFace) 또는 RunPod을 사용합니다.
+    EMBEDDING_PROVIDER ?ㅼ젙???곕씪 濡쒖뺄(HuggingFace) ?먮뒗 RunPod???ъ슜?⑸땲??
 
     Args:
-        model: 임베딩 모델 이름. None이면 설정값 사용 (기본: BAAI/bge-m3)
+        model: ?꾨쿋??紐⑤뜽 ?대쫫. None?대㈃ ?ㅼ젙媛??ъ슜 (湲곕낯: BAAI/bge-m3)
 
     Returns:
-        Embeddings 인스턴스 (HuggingFaceEmbeddings 또는 RunPodEmbeddings)
+        Embeddings ?몄뒪?댁뒪 (HuggingFaceEmbeddings ?먮뒗 RunPodEmbeddings)
     """
     from utils.config import get_settings
 
@@ -175,7 +225,7 @@ def get_embeddings(model: str | None = None) -> Embeddings:
 
     if settings.embedding_provider == "runpod":
         logger.info(
-            "[임베딩] RunPod 모드 (endpoint: %s)",
+            "[?꾨쿋?? RunPod 紐⑤뱶 (endpoint: %s)",
             settings.runpod_endpoint_id,
         )
         return RunPodEmbeddings(
@@ -183,14 +233,14 @@ def get_embeddings(model: str | None = None) -> Embeddings:
             endpoint_id=settings.runpod_endpoint_id,
         )
 
-    # 로컬 모드 (기존 동작)
+    # 濡쒖뺄 紐⑤뱶 (湲곗〈 ?숈옉)
     from langchain_huggingface import HuggingFaceEmbeddings
 
     config = VectorDBConfig()
     model_name = model or config.embedding_model
     device = _get_local_device()
 
-    logger.info("[임베딩] 로컬 모드: %s (디바이스: %s)", model_name, device)
+    logger.info("[?꾨쿋?? 濡쒖뺄 紐⑤뱶: %s (?붾컮?댁뒪: %s)", model_name, device)
 
     return HuggingFaceEmbeddings(
         model_name=model_name,

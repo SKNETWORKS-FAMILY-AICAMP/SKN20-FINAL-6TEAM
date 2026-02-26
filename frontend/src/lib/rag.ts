@@ -44,6 +44,7 @@ export const streamChat = async (
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
   history?: Array<{ role: string; content: string }>,
+  sessionId?: string,
 ): Promise<void> => {
   const response = await fetch(`${API_URL}/rag/chat/stream`, {
     method: 'POST',
@@ -55,6 +56,7 @@ export const streamChat = async (
     body: JSON.stringify({
       message,
       ...(history?.length ? { history } : {}),
+      ...(sessionId ? { session_id: sessionId } : {}),
     }),
     signal,
   });

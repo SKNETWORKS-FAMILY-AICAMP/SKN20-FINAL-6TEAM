@@ -1,0 +1,54 @@
+# 로컬 MySQL Override (SSH 터널 대신 로컬 DB 사용)
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: bizi-mysql-local
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-bizi_db}
+      MYSQL_USER: ${MYSQL_USER:-bizi}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-bizipassword}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_local_data:/var/lib/mysql
+      - ./backend/database.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  ssh-tunnel:
+    image: alpine:3.21
+    container_name: bizi-ssh-tunnel-dummy
+    entrypoint: ["sh", "-c", "sleep infinity"]
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 5s
+      timeout: 2s
+      retries: 1
+      start_period: 1s
+
+  backend:
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  rag:
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+    depends_on:
+      mysql:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+
+volumes:
+  mysql_local_data:

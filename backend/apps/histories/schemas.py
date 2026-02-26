@@ -1,33 +1,38 @@
-from pydantic import BaseModel, ConfigDict, Field
-from datetime import datetime
+﻿from datetime import datetime
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RetrievalEvaluationData(BaseModel):
-    """규칙 기반 검색 평가 결과."""
+    """Rule-based retrieval evaluation result."""
 
     status: str | None = Field(default=None, description="PASS/RETRY/FAIL")
-    doc_count: int | None = Field(default=None, description="검색된 문서 수")
-    keyword_match_ratio: float | None = Field(default=None, description="키워드 매칭 비율")
-    avg_similarity: float | None = Field(default=None, description="평균 유사도 점수")
-    used_multi_query: bool = Field(default=False, description="Multi-Query 사용 여부")
+    doc_count: int | None = Field(default=None, description="retrieved document count")
+    keyword_match_ratio: float | None = Field(default=None, description="keyword match ratio")
+    avg_similarity: float | None = Field(default=None, description="average similarity score")
+    used_multi_query: bool = Field(default=False, description="whether multi-query was used")
 
 
 class EvaluationData(BaseModel):
-    """RAGAS 및 평가 결과."""
+    """Evaluation payload stored in history.evaluation_data."""
 
-    faithfulness: float | None = Field(default=None, description="Faithfulness 점수 (0-1)")
-    answer_relevancy: float | None = Field(default=None, description="Answer Relevancy 점수 (0-1)")
-    context_precision: float | None = Field(default=None, description="Context Precision 점수 (0-1)")
-    context_recall: float | None = Field(default=None, description="Context Recall 점수 (0-1)")
-    llm_score: int | None = Field(default=None, description="LLM 평가 점수 (0-100)")
-    llm_passed: bool | None = Field(default=None, description="LLM 평가 통과 여부")
-    contexts: list[str] = Field(default_factory=list, description="검색된 문서 내용 (발췌)")
-    domains: list[str] = Field(default_factory=list, description="질문 도메인")
+    faithfulness: float | None = Field(default=None, description="Faithfulness score (0-1)")
+    answer_relevancy: float | None = Field(default=None, description="Answer Relevancy score (0-1)")
+    context_precision: float | None = Field(default=None, description="Context Precision score (0-1)")
+    context_recall: float | None = Field(default=None, description="Context Recall score (0-1)")
+    llm_score: int | None = Field(default=None, description="LLM score (0-100)")
+    llm_passed: bool | None = Field(default=None, description="LLM pass/fail")
+    contexts: list[str] = Field(default_factory=list, description="retrieved context snippets")
+    domains: list[str] = Field(default_factory=list, description="detected domains")
     retrieval_evaluation: RetrievalEvaluationData | None = Field(
-        default=None, description="규칙 기반 검색 평가 결과"
+        default=None, description="rule-based retrieval evaluation"
     )
-    response_time: float | None = Field(default=None, description="응답 시간 (초)")
+    response_time: float | None = Field(default=None, description="response time in seconds")
+    query_rewrite_applied: bool | None = Field(default=None, description="query rewrite applied")
+    query_rewrite_reason: str | None = Field(default=None, description="query rewrite reason")
+    query_rewrite_time: float | None = Field(default=None, description="query rewrite elapsed (sec)")
+    timeout_cause: str | None = Field(default=None, description="timeout cause")
 
 
 class HistoryCreate(BaseModel):
@@ -52,14 +57,14 @@ class HistoryResponse(BaseModel):
 
 
 class HistoryDetailResponse(BaseModel):
-    """관리자용 상세 응답 (evaluation_data 포함)."""
+    """Admin detail response with evaluation data."""
 
     model_config = ConfigDict(from_attributes=True)
 
     history_id: int
     user_id: int
     agent_code: str | None = None
-    agent_name: str | None = Field(default=None, description="에이전트 이름 (Code 테이블 JOIN)")
+    agent_name: str | None = Field(default=None, description="agent display name")
     question: str | None = None
     answer: str | None = None
     parent_history_id: int | None = None
@@ -67,6 +72,24 @@ class HistoryDetailResponse(BaseModel):
     create_date: datetime | None = None
     update_date: datetime | None = None
 
-    # 사용자 정보 (조인)
     user_email: str | None = None
     username: str | None = None
+
+
+class HistoryThreadSummaryResponse(BaseModel):
+    root_history_id: int
+    last_history_id: int
+    title: str
+    message_count: int
+    first_create_date: datetime | None = None
+    last_create_date: datetime | None = None
+
+
+class HistoryThreadDetailResponse(BaseModel):
+    root_history_id: int
+    last_history_id: int
+    title: str
+    message_count: int
+    first_create_date: datetime | None = None
+    last_create_date: datetime | None = None
+    histories: list[HistoryResponse]

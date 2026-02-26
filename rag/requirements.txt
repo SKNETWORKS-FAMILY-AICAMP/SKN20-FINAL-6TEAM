@@ -39,6 +39,7 @@ httpx>=0.28.0,<1.0.0
 # Utilities
 python-dotenv>=1.0.0,<2.0.0
 tqdm>=4.66.0,<5.0.0
+redis>=5.0.0,<6.0.0
 
 # RAGAS Evaluation
 ragas>=0.1.0,<0.2.0

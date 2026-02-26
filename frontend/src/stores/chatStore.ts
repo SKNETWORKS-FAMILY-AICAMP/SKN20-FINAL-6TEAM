@@ -1,13 +1,36 @@
-import { create } from 'zustand';
+﻿import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { ChatMessage, ChatSession } from '../types';
+import type { AgentCode, ChatMessage, ChatSession } from '../types';
 import api from '../lib/api';
 import { generateId } from '../lib/utils';
 
 const MAX_SESSIONS = 50;
+const MAX_SERVER_HISTORY_LOAD = 100;
 
-// syncGuestMessages 동시 호출 방지 가드
+// syncGuestMessages ??덈뻻 ?紐꾪뀱 獄쎻뫗? 揶쎛??
 let isSyncing = false;
+let isBootstrapping = false;
+
+interface HistoryItem {
+  history_id: number;
+  agent_code: string;
+  question: string;
+  answer: string;
+  create_date?: string;
+}
+
+interface HistoryThreadSummary {
+  root_history_id: number;
+  last_history_id: number;
+  title: string;
+  message_count: number;
+  first_create_date?: string;
+  last_create_date?: string;
+}
+
+interface HistoryThreadDetail extends HistoryThreadSummary {
+  histories: HistoryItem[];
+}
 
 interface ChatState {
   sessions: ChatSession[];
@@ -29,20 +52,21 @@ interface ChatState {
   setStreaming: (streaming: boolean) => void;
   clearMessages: () => void;
 
-  // History linking (세션별)
+  // History linking (?紐꾨↑퉪?
   setLastHistoryId: (id: number | null) => void;
   setLastHistoryIdForSession: (sessionId: string, id: number | null) => void;
   getLastHistoryId: () => number | null;
 
-  // Session-aware message update (비동기 중 세션 전환 대응)
+  // Session-aware message update (??쑬猷욄묾?餓??紐꾨??袁れ넎 ????
   updateMessageInSession: (sessionId: string, messageId: string, updates: Partial<ChatMessage>) => void;
 
   // Guest message limit
   incrementGuestCount: () => void;
   resetGuestCount: () => void;
 
-  // Guest → Login sync
+  // Guest ??Login sync
   syncGuestMessages: () => Promise<void>;
+  bootstrapFromServerHistories: () => Promise<void>;
 
   // Logout cleanup
   resetOnLogout: () => void;
@@ -54,7 +78,7 @@ interface ChatState {
 
 const createNewSession = (title?: string): ChatSession => ({
   id: generateId(),
-  title: title || '새 채팅',
+  title: title || '새 상담',
   messages: [],
   lastHistoryId: null,
   created_at: new Date().toISOString(),
@@ -73,7 +97,7 @@ export const useChatStore = create<ChatState>()(
       createSession: (title?: string) => {
         const session = createNewSession(title);
         set((state) => {
-          // 오래된 세션 자동 정리 (MAX_SESSIONS 초과 시)
+          // ??살삋???紐꾨??癒?짗 ?類ｂ봺 (MAX_SESSIONS ?λ뜃????
           const updated = [session, ...state.sessions];
           const trimmed = updated.length > MAX_SESSIONS
             ? updated.slice(0, MAX_SESSIONS)
@@ -223,75 +247,165 @@ export const useChatStore = create<ChatState>()(
       resetGuestCount: () => set({ guestMessageCount: 0 }),
 
       syncGuestMessages: async () => {
-        // 동시 호출 방지 (login이 빠르게 2번 호출되는 경우 대응)
         if (isSyncing) return;
         isSyncing = true;
 
         try {
           const state = get();
-          const session = state.sessions.find((s) => s.id === state.currentSessionId);
-          if (!session || session.messages.length === 0) return;
+          const candidateSessions = state.sessions.filter((s) => s.messages.length > 0);
+          if (!candidateSessions.length) return;
 
-          const messages = session.messages;
-          const sessionId = session.id; // 세션 ID 고정
-          // 기존 lastHistoryId를 시작점으로 사용 (parent chain 유지)
-          let lastSyncedHistoryId: number | null = session.lastHistoryId ?? null;
-          let anySynced = false;
+          for (const session of candidateSessions) {
+            const messages = session.messages;
+            const sessionId = session.id;
+            let lastSyncedHistoryId: number | null = session.lastHistoryId ?? null;
 
-          for (let i = 0; i < messages.length; i++) {
-            const msg = messages[i];
-            if (msg.type !== 'user') continue;
-            if (msg.synced) continue;
+            for (let i = 0; i < messages.length; i++) {
+              const msg = messages[i];
+              if (msg.type !== 'user' || msg.synced) continue;
 
-            const assistantMsg = messages[i + 1];
-            if (!assistantMsg || assistantMsg.type !== 'assistant') continue;
+              const assistantMsg = messages[i + 1];
+              if (!assistantMsg || assistantMsg.type !== 'assistant') continue;
 
-            try {
-              const res: { data: { history_id: number } } = await api.post('/histories', {
-                agent_code: assistantMsg.agent_code || 'A0000001',
-                question: msg.content,
-                answer: assistantMsg.content,
-                parent_history_id: lastSyncedHistoryId,
-              });
-              lastSyncedHistoryId = res.data.history_id;
-              anySynced = true;
+              try {
+                const res: { data: { history_id: number } } = await api.post('/histories', {
+                  agent_code: assistantMsg.agent_code || 'A0000001',
+                  question: msg.content,
+                  answer: assistantMsg.content,
+                  parent_history_id: lastSyncedHistoryId,
+                });
+                lastSyncedHistoryId = res.data.history_id;
 
-              // 메시지별 즉시 synced 마킹 (부분 실패 시에도 성공분은 보존)
-              set((prev) => ({
-                sessions: prev.sessions.map((s) =>
-                  s.id === sessionId
-                    ? {
-                        ...s,
-                        lastHistoryId: lastSyncedHistoryId,
-                        messages: s.messages.map((m) =>
-                          m.id === msg.id || m.id === assistantMsg.id
-                            ? { ...m, synced: true }
-                            : m
-                        ),
-                        updated_at: new Date().toISOString(),
-                      }
-                    : s
-                ),
-              }));
-            } catch {
-              // 개별 실패는 건너뜀 — 이미 성공한 것은 마킹됨
+                set((prev) => ({
+                  sessions: prev.sessions.map((s) =>
+                    s.id === sessionId
+                      ? {
+                          ...s,
+                          lastHistoryId: lastSyncedHistoryId,
+                          messages: s.messages.map((m) =>
+                            m.id === msg.id || m.id === assistantMsg.id
+                              ? { ...m, synced: true }
+                              : m
+                          ),
+                          updated_at: new Date().toISOString(),
+                        }
+                      : s
+                  ),
+                }));
+              } catch {
+                // Keep unsynced messages for retry.
+              }
             }
           }
-
-          // 기존 세션의 모든 메시지를 synced로 마킹 (재로그인 시 중복 방지)
-          // 새 세션을 생성하지 않고 현재 세션 유지 → 채팅 내역 그대로 표시
-          set((prev) => ({
-            sessions: prev.sessions.map((s) =>
-              s.id === sessionId
-                ? { ...s, messages: s.messages.map((m) => ({ ...m, synced: true })) }
-                : s
-            ),
-          }));
         } finally {
           isSyncing = false;
         }
       },
+      bootstrapFromServerHistories: async () => {
+        if (isBootstrapping) return;
+        isBootstrapping = true;
 
+        try {
+          const state = get();
+          const response = await api.get<HistoryThreadSummary[]>('/histories/threads', {
+            params: { limit: MAX_SERVER_HISTORY_LOAD, offset: 0 },
+          });
+          const threads = response.data ?? [];
+          if (threads.length === 0) return;
+
+          const details = await Promise.all(
+            threads.map(async (thread) => {
+              try {
+                const detailResponse = await api.get<HistoryThreadDetail>(
+                  `/histories/threads/${thread.root_history_id}`
+                );
+                return detailResponse.data;
+              } catch {
+                return null;
+              }
+            })
+          );
+
+          const fetchedSessions: ChatSession[] = [];
+          for (const detail of details) {
+            if (!detail || !detail.histories.length) continue;
+
+            const sorted = [...detail.histories].sort((a, b) => {
+              const aTime = a.create_date ? new Date(a.create_date).getTime() : 0;
+              const bTime = b.create_date ? new Date(b.create_date).getTime() : 0;
+              return aTime - bTime;
+            });
+
+            const messages: ChatMessage[] = [];
+            for (const item of sorted) {
+              if (!item.question || !item.answer) continue;
+
+              const timestamp = item.create_date ? new Date(item.create_date) : new Date();
+              const safeAgentCode: AgentCode = /^A\d{7}$/.test(item.agent_code)
+                ? (item.agent_code as AgentCode)
+                : 'A0000001';
+
+              messages.push({
+                id: generateId(),
+                type: 'user',
+                content: item.question,
+                timestamp,
+                synced: true,
+              });
+              messages.push({
+                id: generateId(),
+                type: 'assistant',
+                content: item.answer,
+                agent_code: safeAgentCode,
+                timestamp,
+                synced: true,
+              });
+            }
+
+            if (!messages.length) continue;
+
+            const createdAt = detail.first_create_date ?? new Date().toISOString();
+            const updatedAt = detail.last_create_date ?? createdAt;
+            fetchedSessions.push({
+              id: generateId(),
+              title: detail.title || '기존 상담 내역',
+              messages,
+              lastHistoryId: detail.last_history_id,
+              created_at: createdAt,
+              updated_at: updatedAt,
+            });
+          }
+
+          if (!fetchedSessions.length) return;
+
+          const existingSessions = state.sessions;
+          const existingHistoryIds = new Set(
+            existingSessions
+              .map((s) => s.lastHistoryId)
+              .filter((id): id is number => typeof id === 'number')
+          );
+
+          const mergedSessions = [
+            ...existingSessions,
+            ...fetchedSessions.filter((s) => {
+              if (!s.lastHistoryId) return true;
+              return !existingHistoryIds.has(s.lastHistoryId);
+            }),
+          ];
+
+          mergedSessions.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+          const currentExists = mergedSessions.some((s) => s.id === state.currentSessionId);
+
+          set({
+            sessions: mergedSessions.slice(0, MAX_SESSIONS),
+            currentSessionId: currentExists ? state.currentSessionId : (mergedSessions[0]?.id ?? null),
+          });
+        } catch {
+          // History bootstrap failure is non-critical
+        } finally {
+          isBootstrapping = false;
+        }
+      },
       resetOnLogout: () => {
         const newSession = createNewSession();
         set({
@@ -322,3 +436,6 @@ export const useChatStore = create<ChatState>()(
     }
   )
 );
+
+
+

@@ -12,7 +12,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isAuthChecking: boolean;
   user: User | null;
-  login: (user: User) => void;
+  login: (user: User) => Promise<void>;
   logout: () => Promise<void>;
   clearAuth: () => void;
   updateUser: (user: Partial<User>) => void;
@@ -25,10 +25,11 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isAuthChecking: true,
       user: null,
-      login: (user) => {
+      login: async (user) => {
         set({ isAuthenticated: true, user });
-        useChatStore.getState().syncGuestMessages();
+        await useChatStore.getState().syncGuestMessages();
         useChatStore.getState().resetGuestCount();
+        await useChatStore.getState().bootstrapFromServerHistories();
       },
       logout: async () => {
         try {
@@ -65,6 +66,7 @@ export const useAuthStore = create<AuthState>()(
             const response = await api.get('/auth/me');
             const { user } = response.data;
             set({ isAuthenticated: true, user });
+            useChatStore.getState().bootstrapFromServerHistories();
           } catch {
             set({ isAuthenticated: false, user: null });
           } finally {

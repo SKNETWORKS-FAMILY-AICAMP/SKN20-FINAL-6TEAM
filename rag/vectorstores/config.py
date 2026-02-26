@@ -112,7 +112,7 @@ class VectorDBConfig:
     })
 
     # 임베딩 배치 크기
-    batch_size: int = 100
+    batch_size: int = int(os.getenv("VECTORDB_BATCH_SIZE", "100"))
 
     @property
     def openai_api_key(self) -> str:

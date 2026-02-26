@@ -202,6 +202,10 @@ export interface EvaluationData {
   contexts: string[];
   domains: string[];
   retrieval_evaluation: RetrievalEvaluationData | null;
+  query_rewrite_applied?: boolean | null;
+  query_rewrite_reason?: string | null;
+  query_rewrite_time?: number | null;
+  timeout_cause?: string | null;
   response_time: number | null;
 }
 

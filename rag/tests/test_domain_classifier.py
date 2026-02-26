@@ -597,6 +597,60 @@ class TestVectorDomainClassifier:
             assert result.is_relevant is False
 
 
+    def test_classify_llm_rejection_overridden_by_keyword(self, mock_embeddings):
+        """In LLM-only mode, keyword hit should override false out-of-scope."""
+        mock_settings = Mock()
+        mock_settings.enable_vector_domain_classification = False
+        mock_settings.enable_llm_domain_classification = True
+
+        with patch("utils.domain_classifier.get_settings") as mock_get_settings:
+            mock_get_settings.return_value = mock_settings
+            classifier = VectorDomainClassifier(mock_embeddings)
+
+        with patch.object(
+            classifier,
+            "_llm_classify",
+            return_value=DomainClassificationResult(
+                domains=[],
+                confidence=0.9,
+                is_relevant=False,
+                method="llm",
+            ),
+        ):
+            result = classifier.classify("창업 사업자등록 절차 알려줘")
+
+        assert result.is_relevant is True
+        assert "startup_funding" in result.domains
+        assert result.method == "llm+keyword_override"
+
+    def test_classify_llm_rejection_overridden_by_heuristic(self, mock_embeddings):
+        """If keyword classifier misses, heuristic fallback should still recover domain."""
+        mock_settings = Mock()
+        mock_settings.enable_vector_domain_classification = False
+        mock_settings.enable_llm_domain_classification = True
+
+        with patch("utils.domain_classifier.get_settings") as mock_get_settings:
+            mock_get_settings.return_value = mock_settings
+            classifier = VectorDomainClassifier(mock_embeddings)
+
+        with patch.object(
+            classifier,
+            "_llm_classify",
+            return_value=DomainClassificationResult(
+                domains=[],
+                confidence=0.8,
+                is_relevant=False,
+                method="llm",
+            ),
+        ), patch.object(classifier, "_keyword_classify", return_value=None):
+            result = classifier.classify("사업자등록 순서와 부가세 신고 주기 알려줘")
+
+        assert result.is_relevant is True
+        assert "startup_funding" in result.domains
+        assert "finance_tax" in result.domains
+        assert result.method == "llm+heuristic_override"
+
+
 class TestGetDomainClassifier:
     """get_domain_classifier 싱글톤 함수 테스트."""
 
