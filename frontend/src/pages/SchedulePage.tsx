@@ -599,66 +599,67 @@ const SchedulePage: React.FC = () => {
     </Card>
   );
 
+  const scheduleHeaderControls = (
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="min-w-[220px]">
+        <select
+          value={selectedCompanyId?.toString() ?? ''}
+          onChange={(event) => {
+            const nextValue = event.target.value;
+            setSelectedCompanyId(nextValue ? Number(nextValue) : null);
+          }}
+          disabled={companies.length === 0}
+          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-gray-100"
+        >
+          {companies.length === 0 ? (
+            <option value="">{'\uAE30\uC5C5 \uC120\uD0DD \uD544\uC694'}</option>
+          ) : null}
+          {companies.map((company) => (
+            <option key={company.company_id} value={company.company_id}>
+              {company.com_name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <ButtonGroup variant="outlined" size="sm">
+        <Button
+          className={`flex items-center gap-1 ${viewMode === 'calendar' ? 'bg-blue-50' : ''}`}
+          onClick={() => setViewMode('calendar')}
+        >
+          <CalendarIcon className="h-4 w-4" />
+          {'\uCE98\uB9B0\uB354'}
+        </Button>
+        <Button
+          className={`flex items-center gap-1 ${viewMode === 'list' ? 'bg-blue-50' : ''}`}
+          onClick={() => setViewMode('list')}
+        >
+          <ListBulletIcon className="h-4 w-4" />
+          {'\uB9AC\uC2A4\uD2B8'}
+        </Button>
+      </ButtonGroup>
+
+      <Button
+        size="sm"
+        className="flex items-center gap-1"
+        onClick={() => openCreateDialog()}
+        disabled={companies.length === 0}
+      >
+        <PlusIcon className="h-4 w-4" />
+        {'\uC77C\uC815 \uCD94\uAC00'}
+      </Button>
+    </div>
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <PageHeader
         title={'\uC77C\uC815 \uAD00\uB9AC'}
+        contentClassName="flex-wrap"
+        rightSlot={scheduleHeaderControls}
       />
 
       <div className="min-h-0 flex-1 flex flex-col p-3 lg:p-4">
-        <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
-
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="min-w-[220px]">
-            <select
-              value={selectedCompanyId?.toString() ?? ''}
-              onChange={(event) => {
-                const nextValue = event.target.value;
-                setSelectedCompanyId(nextValue ? Number(nextValue) : null);
-              }}
-              disabled={companies.length === 0}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-gray-100"
-            >
-              {companies.length === 0 ? (
-                <option value="">등록된 기업 없음</option>
-              ) : null}
-              {companies.map((company) => (
-                <option key={company.company_id} value={company.company_id}>
-                  {company.com_name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <ButtonGroup variant="outlined" size="sm">
-            <Button
-              className={`flex items-center gap-1 ${viewMode === 'calendar' ? 'bg-blue-50' : ''}`}
-              onClick={() => setViewMode('calendar')}
-            >
-              <CalendarIcon className="h-4 w-4" />
-              캘린더
-            </Button>
-            <Button
-              className={`flex items-center gap-1 ${viewMode === 'list' ? 'bg-blue-50' : ''}`}
-              onClick={() => setViewMode('list')}
-            >
-              <ListBulletIcon className="h-4 w-4" />
-              리스트
-            </Button>
-          </ButtonGroup>
-
-          <Button
-            size="sm"
-            className="flex items-center gap-1"
-            onClick={() => openCreateDialog()}
-            disabled={companies.length === 0}
-          >
-            <PlusIcon className="h-4 w-4" />
-            일정 추가
-          </Button>
-        </div>
-      </div>
-
       {message && (
         <Alert
           color={message.type === 'success' ? 'green' : 'red'}
