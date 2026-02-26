@@ -118,3 +118,5 @@ rag/evaluation/results/*.txt
 rag/reports/
 
 .claude/settings.json
+
+rag/data/preprocessed/law_common/laws_full.jsonl
