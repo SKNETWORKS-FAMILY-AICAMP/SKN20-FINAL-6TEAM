@@ -34,11 +34,16 @@ class RequestIdFilter(logging.Filter):
 logging.getLogger().addFilter(RequestIdFilter())
 logging.getLogger().addFilter(SensitiveDataFilter())
 
-# stdout 로깅 기본 설정
+# stdout 로깅 기본 설정 (force=True: uvicorn 사전 설정 무시)
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
     format="%(asctime)s - %(name)s - %(levelname)s - [%(request_id)s] %(message)s",
+    force=True,
 )
+# basicConfig가 생성한 핸들러에도 필터 추가 (안전장치)
+for handler in logging.getLogger().handlers:
+    handler.addFilter(RequestIdFilter())
+    handler.addFilter(SensitiveDataFilter())
 
 # JSON 파일 로깅 설정 (/var/log/app/backend.log)
 setup_json_file_logging(service_name="backend")
