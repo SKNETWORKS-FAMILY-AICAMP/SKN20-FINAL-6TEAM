@@ -130,8 +130,8 @@ function groupSessionsByDate(sessions: ChatSession[]): GroupedSessions[] {
   const result: GroupedSessions[] = [];
   // Do not show "오늘" header.
   if (groups.today.length > 0) result.push({ label: '', sessions: groups.today });
-  if (groups.yesterday.length > 0) result.push({ label: '어제', sessions: groups.yesterday });
-  if (groups.older.length > 0) result.push({ label: '이전', sessions: groups.older });
+  if (groups.yesterday.length > 0) result.push({ label: '', sessions: groups.yesterday });
+  if (groups.older.length > 0) result.push({ label: '', sessions: groups.older });
 
   return result;
 }
