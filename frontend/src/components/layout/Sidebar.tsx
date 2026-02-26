@@ -255,29 +255,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {/* Navigation Menu */}
           <div className="space-y-1 px-2 py-1">
-            {visibleMenuItems.map((item) => (
-              <Link
-                to={item.path}
-                key={item.path}
-                onClick={(event) => handleMenuClick(event, item.path)}
-                title={effectiveCollapsed ? item.label : undefined}
-                className={`flex h-10 items-center rounded-lg transition-colors duration-150 ${
-                  location.pathname === item.path ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
-                } w-full justify-start px-2`}
-              >
-                <span className="flex h-10 w-10 items-center justify-center">
-                  <item.icon className="h-5 w-5" />
-                </span>
-                <Typography
-                  variant="small"
-                  className={`overflow-hidden whitespace-nowrap !text-gray-800 ${LABEL_TRANSITION_CLASS} ${
-                    effectiveCollapsed ? 'max-w-0 opacity-0' : 'max-w-[9rem] opacity-100'
-                  }`}
+            {visibleMenuItems.map((item) => {
+              const isActive = location.pathname === item.path;
+
+              return (
+                <Link
+                  to={item.path}
+                  key={item.path}
+                  onClick={(event) => handleMenuClick(event, item.path)}
+                  title={effectiveCollapsed ? item.label : undefined}
+                  className={`flex h-10 items-center rounded-lg transition-colors duration-150 ${
+                    isActive ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+                  } w-full justify-start px-2`}
                 >
-                  {item.label}
-                </Typography>
-              </Link>
-            ))}
+                  <span className="flex h-10 w-10 items-center justify-center">
+                    <item.icon className="h-5 w-5" />
+                  </span>
+                  <Typography
+                    variant="small"
+                    className={`overflow-hidden whitespace-nowrap ${
+                      isActive ? '!text-blue-700' : '!text-gray-800'
+                    } ${LABEL_TRANSITION_CLASS} ${
+                      effectiveCollapsed ? 'max-w-0 opacity-0' : 'max-w-[9rem] opacity-100'
+                    }`}
+                  >
+                    {item.label}
+                  </Typography>
+                </Link>
+              );
+            })}
           </div>
 
           {/* Divider */}
