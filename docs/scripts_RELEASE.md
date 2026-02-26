@@ -1,5 +1,18 @@
 # Release Notes
 
+## [2026-02-26] - .claude 설정 정리 및 docs/ 구조 재정비
+
+### Chores
+- **.claude/ 설정 파일 정리**: 에이전트(agent) 파일 간소화, 규칙(rules) 파일 경량화, 스킬(skills) 구조 재편 (`code-patterns/`, `test-guide/` 추가, `feature-planner/` 제거), `.claude/docs/` 불필요 문서 삭제
+- **커밋 린트 훅 추가** (`.claude/hooks/commit-lint.sh`): 커밋 메시지 형식 검증 훅 신규 추가
+- **tasks/ 디렉토리 추가**: `tasks/lessons.md` (실수/교훈 기록), `tasks/claude-improvement.md` (개선 추적) 신규 추가
+
+### Documentation
+- **docs/ 구조 재정비**: 보고서 파일들을 `docs/reports/`로 이동, 구버전 가이드를 `docs/archive/`로 이동, `docs/plans/` 신규 추가 (기능 계획 문서용)
+- **루트 및 서비스별 CLAUDE.md·AGENTS.md 간소화**: 코드에서 파악 가능한 중복 내용 제거 — 프로젝트 고유 컨텍스트만 유지 (backend, frontend, rag, scripts, data 전 서비스 적용)
+- **RULE.md 제거**: 규칙 파일은 `.claude/rules/` 경로로 통합
+- **docker-compose.yaml nginx 로깅 설정 제거**: nginx 서비스에서 `json-file` 로그 드라이버 설정 제거 (로컬 dev 환경에서 불필요)
+
 ## [2026-02-25] - migrate_chroma_volume.sh 볼륨명 수정
 
 ### Bug Fixes

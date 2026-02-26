@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-02-26] - 프로젝트 문서 간소화
+
+### Documentation
+- **rag/CLAUDE.md·AGENTS.md 간소화**: 코드에서 파악 가능한 모듈별 상세 설명 제거, 프로젝트 고유 컨텍스트(EMBEDDING_PROVIDER 주의사항, 환경변수, warmup 설정)만 유지
+
 ## [2026-02-26] - law_common BM25 warmup 실패 수정 — ChromaDB 배치 로딩 도입
 
 ### Bug Fixes

@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-02-26] - 프로젝트 문서 간소화
+
+### Documentation
+- **frontend/CLAUDE.md·AGENTS.md 간소화**: 코드에서 파악 가능한 컴포넌트·훅·스토어 목록 제거, 프로젝트 고유 컨텍스트(Gotchas, 환경변수, 빌드 명령어)만 유지
+
 ## [2026-02-25] - 페이지 헤더 통일 & 로그인 화면 폰트 수정
 
 ### Features
