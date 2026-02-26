@@ -1,5 +1,13 @@
 # Release Notes
 
+## [2026-02-26] - 문서 생성 에이전트 API + 멀티턴 히스토리 안정화
+
+### Features
+- **문서 자동 생성 에이전트 프록시 엔드포인트** (`apps/rag/router.py`, `apps/rag/schemas.py`): RAG 문서 생성 에이전트 호출을 위한 백엔드 프록시 라우터 및 Pydantic 스키마 추가
+
+### Bug Fixes
+- **멀티턴 히스토리 구현 안정화** (`apps/histories/router.py`, `apps/histories/service.py`, `apps/histories/schemas.py`, `apps/rag/router.py`, `config/settings.py`): 히스토리 서비스 로직 전면 재검증 — 세션 생성·조회·삭제 안정화, RAG 프록시 멀티턴 컨텍스트 전달 보완
+
 ## [2026-02-26] - PRD 요구사항 현황 갱신 + 프로젝트 문서 간소화
 
 ### Documentation

@@ -1,5 +1,17 @@
 # Release Notes
 
+## [2026-02-26] - 문서 생성 에이전트 + 멀티턴 세션 메모리 + 쿼리 재작성
+
+### Features
+- **문서 자동 생성 에이전트** (`agents/document_registry.py` 신규, `agents/executor.py`, `agents/router.py`): 계약서·사업계획서 등 문서 생성 에이전트 추가, executor/router에 문서 도메인 라우팅 연동
+- **멀티턴 세션 메모리** (`routes/_session_memory.py` 신규, `routes/chat.py`): 세션별 대화 컨텍스트 저장·조회 모듈 추가, 채팅 라우트에 세션 메모리 연동
+- **쿼리 재작성 모듈** (`utils/query_rewriter.py` 신규): 멀티턴 대화 맥락 기반 쿼리 재작성 유틸리티 추가
+- **멀티턴 컨텍스트 유틸** (`utils/multiturn_context.py` 신규): 이전 대화 요약·압축 로직 분리
+
+### Bug Fixes
+- **멀티턴 구현 안정화** (`agents/generator.py`, `agents/router.py`, `evaluation/__main__.py`, `evaluation/ci_check.py`): 멀티턴 생성·라우팅 로직 재검증, 평가 파이프라인 안정화
+- **법률 에이전트 신규** (`agents/legal.py` 신규), **창업지원 에이전트 신규** (`agents/startup_funding.py` 신규): 법률·창업지원 도메인 에이전트 모듈 분리 추가
+
 ## [2026-02-26] - 프로젝트 문서 간소화
 
 ### Documentation

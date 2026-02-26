@@ -1,5 +1,15 @@
 # Release Notes
 
+## [2026-02-26] - 회사 알림 toast 전환 + 문서 생성 에이전트 UI + 멀티턴 안정화
+
+### Features
+- **문서 자동 생성 에이전트 UI** (`components/chat/DocumentFormModal.tsx` 신규, `components/chat/ActionButtons.tsx`, `components/chat/ContractFormModal.tsx`, `pages/MainPage.tsx`): 문서 생성 에이전트 전용 폼 모달 추가, ActionButtons에 문서 생성 버튼 연동, MainPage 전반 UI 개선
+- **documentApi 신규** (`lib/documentApi.ts`): 문서 생성 API 클라이언트 모듈 추가
+
+### Bug Fixes
+- **회사 페이지 알림 toast 전환** (`components/company/CompanyForm.tsx`, `components/common/ToastContainer.tsx` 신규, `stores/toastStore.ts` 신규, `components/layout/MainLayout.tsx`): 인라인 Alert를 우상단 고정 toast로 교체 — 4초 자동 사라짐, X 버튼 수동 닫기, slide-down 애니메이션
+- **멀티턴 구현 안정화** (`stores/chatStore.ts`, `hooks/useChat.ts`, `lib/rag.ts`, `types/index.ts`, `stores/authStore.ts`): 채팅 세션 상태 관리 및 멀티턴 컨텍스트 전달 안정화, 로그인 페이지 UI 개선
+
 ## [2026-02-26] - UI 다수 버그 수정 + 일정관리 헤더 개선 + 프로젝트 문서 간소화
 
 ### Features
