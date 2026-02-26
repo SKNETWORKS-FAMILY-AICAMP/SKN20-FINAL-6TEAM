@@ -1,8 +1,9 @@
 # Release Notes
 
-## [2026-02-26] - 프로젝트 문서 간소화
+## [2026-02-26] - PRD 요구사항 현황 갱신 + 프로젝트 문서 간소화
 
 ### Documentation
+- **PRD.md 요구사항 현황 갱신** (`PRD.md`, `backend/main.py`): 요구사항 상태(✅/🔧/❌) 갱신
 - **backend/CLAUDE.md·AGENTS.md 간소화**: 코드에서 파악 가능한 디렉토리 구조·패턴 설명 제거, 프로젝트 고유 컨텍스트(Gotchas, 환경변수, 워크플로우)만 유지
 
 ## [2026-02-25] - 로깅 시스템 전면 개선 — 보안 마스킹 · 로그 제한 · LOG_LEVEL · X-Request-ID 추적

@@ -1,6 +1,18 @@
 # Release Notes
 
-## [2026-02-26] - 프로젝트 문서 간소화
+## [2026-02-26] - UI 다수 버그 수정 + 일정관리 헤더 개선 + 프로젝트 문서 간소화
+
+### Features
+- **일정관리 페이지 헤더 수정** (`pages/SchedulePage.tsx`): 일정관리 페이지 헤더 일부 수정
+- **header 알림창 통일** (`components/common/PageHeader.tsx`, `pages/CompanyPage.tsx`, `pages/MainPage.tsx`, `pages/UsageGuidePage.tsx`): 페이지 헤더 알림창 UI 통일
+
+### Bug Fixes
+- **일정 및 캘린더 버그 수정** (`components/layout/NotificationItem.tsx`, `components/schedule/CalendarView.tsx`, `hooks/useNotifications.ts`, `pages/SchedulePage.tsx`, `stores/notificationStore.ts`, `types/index.ts`): 일정·캘린더 관련 다수 버그 수정
+- **일정관리 데스크탑 알림버튼 위치 롤백** (`components/common/PageHeader.tsx`, `pages/SchedulePage.tsx`): 데스크탑 환경 알림버튼 위치 롤백
+- **모바일 텍스트 가림현상 해소** (`components/common/PageHeader.tsx`, `pages/SchedulePage.tsx`): 모바일에서 텍스트가 가려지는 현상 수정
+- **전역 폰트 설정 및 사용설명서 폰트 색상 변경** (`index.css`, `pages/UsageGuidePage.tsx`): 전역 폰트 설정 추가, 사용설명서 폰트 색상 개선
+- **사이드바/사용 설명서 미세 수정** (`components/layout/Sidebar.tsx`, `pages/UsageGuidePage.tsx`): 사이드바 및 사용설명서 미세 UI 수정
+- **히스토리 '이전' '어제' 문구 제거** (`components/layout/ChatHistoryPanel.tsx`): 채팅 히스토리 패널에서 불필요한 시간 문구 제거
 
 ### Documentation
 - **frontend/CLAUDE.md·AGENTS.md 간소화**: 코드에서 파악 가능한 컴포넌트·훅·스토어 목록 제거, 프로젝트 고유 컨텍스트(Gotchas, 환경변수, 빌드 명령어)만 유지
