@@ -30,6 +30,7 @@ import { CalendarView } from '../components/schedule/CalendarView';
 import { CalendarErrorBoundary } from '../components/schedule/CalendarErrorBoundary';
 import { ScheduleDetailDialog } from '../components/schedule/ScheduleDetailDialog';
 import type { ScheduleFormData } from '../components/schedule/ScheduleDetailDialog';
+import { useAuthStore } from '../stores/authStore';
 import { useNotifications } from '../hooks/useNotifications';
 import { PageHeader } from '../components/common/PageHeader';
 import type { Announce, Company, Schedule } from '../types';
@@ -181,6 +182,7 @@ const buildAnnounceSchedulePayload = (announce: Announce, companyId: number, mem
 };
 
 const SchedulePage: React.FC = () => {
+  const { notificationSettings, notificationSettingsLoaded } = useAuthStore();
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [relatedAnnounces, setRelatedAnnounces] = useState<Announce[]>([]);
@@ -206,7 +208,11 @@ const SchedulePage: React.FC = () => {
     [companies]
   );
 
-  useNotifications(schedules, notificationCompanyNameById);
+  useNotifications(
+    notificationSettingsLoaded ? schedules : [],
+    notificationSettingsLoaded ? notificationCompanyNameById : {},
+    notificationSettings
+  );
 
   const selectedCompany = useMemo(
     () => companies.find((company) => company.company_id === selectedCompanyId) ?? null,

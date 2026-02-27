@@ -595,10 +595,12 @@ CREATE TABLE IF NOT EXISTS `user` (
     `google_email` VARCHAR(255) NOT NULL UNIQUE,
     `username` VARCHAR(100) NOT NULL,
     `birth` DATETIME DEFAULT NULL,
+    `age` INT DEFAULT NULL COMMENT '사용자 나이',
     `type_code` VARCHAR(8) NOT NULL DEFAULT 'U0000002' COMMENT 'U0000001:관리자, U0000002:예비창업자, U0000003:사업자',
     `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `last_announce_checked_at` DATETIME DEFAULT NULL COMMENT '신규 공고 알림 커서',
+    `notification_settings` TINYINT UNSIGNED DEFAULT NULL COMMENT '사용자별 알림 설정 비트마스크(1:D-7,2:D-3,4:신규공고,8:답변완료)',
     `use_yn` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0: 미사용, 1: 사용',
     
     FOREIGN KEY (`type_code`) REFERENCES `code`(`code`) ON UPDATE CASCADE,
@@ -615,7 +617,11 @@ CREATE TABLE IF NOT EXISTS `user` (
 
 -- 운영 DB 확장 시 적용
 -- ALTER TABLE `user`
+--   ADD COLUMN `age` INT NULL COMMENT '사용자 나이' AFTER `birth`;
+-- ALTER TABLE `user`
 --   ADD COLUMN `last_announce_checked_at` DATETIME NULL COMMENT '신규 공고 알림 커서' AFTER `update_date`;
+-- ALTER TABLE `user`
+--   ADD COLUMN `notification_settings` TINYINT UNSIGNED NULL COMMENT '사용자별 알림 설정 비트마스크(1:D-7,2:D-3,4:신규공고,8:답변완료)' AFTER `last_announce_checked_at`;
 
 
 -- ============================================

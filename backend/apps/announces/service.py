@@ -11,6 +11,10 @@ from apps.announces.schemas import (
     AnnounceSyncTrigger,
 )
 from apps.common.models import Announce, Company, User
+from apps.common.notification_settings import (
+    NOTIFICATION_KEY_NEW_ANNOUNCE,
+    is_notification_enabled,
+)
 
 SYNC_ITEM_LINK = "/company"
 SYNC_ITEM_TITLE = "신규 공고"
@@ -54,6 +58,7 @@ class AnnounceService:
 
         cursor_from = user.last_announce_checked_at
         cursor_to = datetime.now()
+        new_announce_enabled = self._is_new_announce_enabled(user)
 
         # 신규/기존 사용자의 첫 동기화는 커서만 초기화합니다.
         if cursor_from is None:
@@ -67,17 +72,17 @@ class AnnounceService:
                 items=[],
             )
 
-        companies = self._get_active_companies(user.user_id)
         items: list[AnnounceSyncItem] = []
-
-        for company in companies:
-            item = self._build_company_sync_item(
-                company=company,
-                cursor_from=cursor_from,
-                cursor_to=cursor_to,
-            )
-            if item is not None:
-                items.append(item)
+        if new_announce_enabled:
+            companies = self._get_active_companies(user.user_id)
+            for company in companies:
+                item = self._build_company_sync_item(
+                    company=company,
+                    cursor_from=cursor_from,
+                    cursor_to=cursor_to,
+                )
+                if item is not None:
+                    items.append(item)
 
         self._update_cursor_safely(user_id=user.user_id, cursor_to=cursor_to)
         self.db.commit()
@@ -109,6 +114,24 @@ class AnnounceService:
         inspector = inspect(bind)
         user_columns = inspector.get_columns("user")
         return any(column.get("name") == "last_announce_checked_at" for column in user_columns)
+
+    def _has_notification_settings_column(self) -> bool:
+        bind = self.db.get_bind()
+        if bind is None:
+            return False
+
+        inspector = inspect(bind)
+        user_columns = inspector.get_columns("user")
+        return any(column.get("name") == "notification_settings" for column in user_columns)
+
+    def _is_new_announce_enabled(self, user: User) -> bool:
+        if not self._has_notification_settings_column():
+            return True
+
+        return is_notification_enabled(
+            user.notification_settings,
+            NOTIFICATION_KEY_NEW_ANNOUNCE,
+        )
 
     def _update_cursor_safely(self, user_id: int, cursor_to: datetime) -> None:
         stmt = (

@@ -9,7 +9,13 @@ from config.database import get_db
 from apps.common.models import User
 from apps.common.deps import get_current_user
 from apps.users.service import UserService
-from .schemas import UserResponse, UserUpdate, UserTypeUpdate
+from .schemas import (
+    NotificationSettingsResponse,
+    NotificationSettingsUpdate,
+    UserResponse,
+    UserUpdate,
+    UserTypeUpdate,
+)
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/users", tags=["users"])
@@ -21,9 +27,12 @@ def get_user_service(db: Session = Depends(get_db)) -> UserService:
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(current_user: User = Depends(get_current_user)):
+async def get_me(
+    service: UserService = Depends(get_user_service),
+    current_user: User = Depends(get_current_user),
+):
     """현재 로그인한 사용자 정보 조회"""
-    return current_user
+    return service.to_user_response(current_user)
 
 
 @router.put("/me", response_model=UserResponse)
@@ -35,7 +44,29 @@ async def update_me(
     current_user: User = Depends(get_current_user),
 ):
     """현재 사용자 정보 수정"""
-    return service.update_user(current_user, user_update)
+    updated = service.update_user(current_user, user_update)
+    return service.to_user_response(updated)
+
+
+@router.get("/me/notification-settings", response_model=NotificationSettingsResponse)
+async def get_notification_settings(
+    service: UserService = Depends(get_user_service),
+    current_user: User = Depends(get_current_user),
+):
+    """현재 사용자 알림 설정 조회"""
+    return service.get_notification_settings(current_user)
+
+
+@router.put("/me/notification-settings", response_model=NotificationSettingsResponse)
+@limiter.limit("20/minute")
+async def update_notification_settings(
+    request: Request,
+    settings_update: NotificationSettingsUpdate,
+    service: UserService = Depends(get_user_service),
+    current_user: User = Depends(get_current_user),
+):
+    """현재 사용자 알림 설정 수정"""
+    return service.update_notification_settings(current_user, settings_update)
 
 
 @router.put("/me/type", response_model=UserResponse)
@@ -48,7 +79,8 @@ async def update_user_type(
 ):
     """사용자 유형 변경 (예비창업자/사업자)"""
     try:
-        return service.update_user_type(current_user, type_update)
+        updated = service.update_user_type(current_user, type_update)
+        return service.to_user_response(updated)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -1,4 +1,4 @@
-import type { AgentCode } from '../types';
+import type { AgentCode, NotificationSettings } from '../types';
 
 // RAG domain → AgentCode mapping
 export const DOMAIN_TO_AGENT_CODE: Record<string, AgentCode> = {
@@ -675,6 +675,13 @@ export const USER_QUICK_QUESTIONS: Record<string, Array<{ label: string; questio
 
 // Max guest messages before login prompt
 export const GUEST_MESSAGE_LIMIT = 10;
+
+export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+  schedule_d7: true,
+  schedule_d3: true,
+  new_announce: true,
+  answer_complete: true,
+};
 
 // Company status for unified company form
 export const COMPANY_STATUS = {

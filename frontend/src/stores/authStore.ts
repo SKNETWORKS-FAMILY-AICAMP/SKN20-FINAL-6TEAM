@@ -2,7 +2,9 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { syncAnnounceNotifications } from '../lib/announceApi';
 import api from '../lib/api';
-import type { AnnounceSyncTrigger, User } from '../types';
+import { DEFAULT_NOTIFICATION_SETTINGS } from '../lib/constants';
+import { getNotificationSettings } from '../lib/userApi';
+import type { AnnounceSyncTrigger, NotificationSettings, User } from '../types';
 import { useChatStore } from './chatStore';
 import { useNotificationStore } from './notificationStore';
 
@@ -15,10 +17,13 @@ interface AuthState {
   isAuthenticated: boolean;
   isAuthChecking: boolean;
   user: User | null;
+  notificationSettings: NotificationSettings;
+  notificationSettingsLoaded: boolean;
   login: (user: User) => Promise<void>;
   logout: () => Promise<void>;
   clearAuth: () => void;
   updateUser: (user: Partial<User>) => void;
+  setNotificationSettings: (settings: NotificationSettings) => void;
   checkAuth: () => Promise<void>;
 }
 
@@ -50,15 +55,35 @@ const syncAnnounceNotificationsToStore = async (
   }
 };
 
+const fetchNotificationSettingsSafely = async (): Promise<NotificationSettings> => {
+  try {
+    return await getNotificationSettings();
+  } catch (error) {
+    console.error('Failed to fetch notification settings:', error);
+    return { ...DEFAULT_NOTIFICATION_SETTINGS };
+  }
+};
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       isAuthenticated: false,
       isAuthChecking: true,
       user: null,
+      notificationSettings: { ...DEFAULT_NOTIFICATION_SETTINGS },
+      notificationSettingsLoaded: false,
       login: async (user) => {
-        set({ isAuthenticated: true, user });
+        set({
+          isAuthenticated: true,
+          user,
+          notificationSettingsLoaded: false,
+        });
         useNotificationStore.getState().bindOwner(user.user_id);
+        const settings = await fetchNotificationSettingsSafely();
+        set({
+          notificationSettings: settings,
+          notificationSettingsLoaded: true,
+        });
         void syncAnnounceNotificationsToStore('login');
         await useChatStore.getState().syncGuestMessages();
         useChatStore.getState().resetGuestCount();
@@ -79,7 +104,12 @@ export const useAuthStore = create<AuthState>()(
         get().clearAuth();
       },
       clearAuth: () => {
-        set({ isAuthenticated: false, user: null });
+        set({
+          isAuthenticated: false,
+          user: null,
+          notificationSettings: { ...DEFAULT_NOTIFICATION_SETTINGS },
+          notificationSettingsLoaded: false,
+        });
         // 로그아웃 시 chatStore 세션 초기화 (재로그인 시 중복 저장 방지)
         useChatStore.getState().resetOnLogout();
       },
@@ -87,6 +117,11 @@ export const useAuthStore = create<AuthState>()(
         set((state) => ({
           user: state.user ? { ...state.user, ...userData } : null,
         })),
+      setNotificationSettings: (settings) =>
+        set({
+          notificationSettings: settings,
+          notificationSettingsLoaded: true,
+        }),
       checkAuth: async () => {
         if (authCheckInFlight) {
           await authCheckInFlight;
@@ -104,11 +139,22 @@ export const useAuthStore = create<AuthState>()(
           try {
             const response = await api.get('/auth/me');
             const { user } = response.data;
-            set({ isAuthenticated: true, user });
+            const settings = await fetchNotificationSettingsSafely();
+            set({
+              isAuthenticated: true,
+              user,
+              notificationSettings: settings,
+              notificationSettingsLoaded: true,
+            });
             useNotificationStore.getState().bindOwner(user.user_id);
             useChatStore.getState().bootstrapFromServerHistories();
           } catch {
-            set({ isAuthenticated: false, user: null });
+            set({
+              isAuthenticated: false,
+              user: null,
+              notificationSettings: { ...DEFAULT_NOTIFICATION_SETTINGS },
+              notificationSettingsLoaded: false,
+            });
           } finally {
             set({ isAuthChecking: false });
             lastAuthCheckAt = Date.now();
