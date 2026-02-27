@@ -194,7 +194,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-      command: uvicorn main:app --host 0.0.0.0 --port 8001
+    command: uvicorn main:app --host 0.0.0.0 --port 8001
 
   # ChromaDB (벡터 데이터베이스 서버)
   chromadb:
