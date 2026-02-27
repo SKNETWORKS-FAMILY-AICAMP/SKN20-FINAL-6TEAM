@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-02-27] - 어드민 대시보드 스피너 개선 및 스케줄러 limit 축소
+
+### Bug Fixes
+- **어드민 대시보드 스피너 깜빡임 개선** (`pages/AdminDashboardPage.tsx`, `hooks/useSchedulerStatus.ts`): 데이터 있을 때 로딩 스피너 재표시 방지(`statsLoading && !stats`), 스케줄러 조회 limit 50→10 축소
+
 ## [2026-02-26] - 회사 알림 toast 전환 + 문서 생성 에이전트 UI + 멀티턴 안정화
 
 ### Features
