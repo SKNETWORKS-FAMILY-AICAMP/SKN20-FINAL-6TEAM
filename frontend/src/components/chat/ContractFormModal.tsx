@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { XMarkIcon, ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
+import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
 import { generateContract, downloadDocumentResponse } from '../../lib/documentApi';
 import type { ContractFormData } from '../../lib/documentApi';
 import { useCompanyStore } from '../../stores/companyStore';
 import { useAuthStore } from '../../stores/authStore';
+import { Modal } from '../common/Modal';
+import { useToastStore } from '../../stores/toastStore';
 
 interface ContractFormModalProps {
   onClose: () => void;
@@ -15,9 +17,9 @@ const inputClass =
 
 export const ContractFormModal: React.FC<ContractFormModalProps> = ({ onClose }) => {
   const today = new Date().toISOString().split('T')[0];
+  const addToast = useToastStore((s) => s.addToast);
   const [showDetail, setShowDetail] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const { isAuthenticated } = useAuthStore();
   const { companies, fetchCompanies } = useCompanyStore();
@@ -81,7 +83,6 @@ export const ContractFormModal: React.FC<ContractFormModalProps> = ({ onClose })
   const handleSubmit = async (format: 'pdf' | 'docx') => {
     if (!isValid) return;
     setLoading(true);
-    setError(null);
     try {
       const data: ContractFormData = {
         employee_name: form.employee_name.trim(),
@@ -116,36 +117,50 @@ export const ContractFormModal: React.FC<ContractFormModalProps> = ({ onClose })
       downloadDocumentResponse(response);
       onClose();
     } catch (err) {
-      if (axios.isAxiosError(err)) {
-        setError(err.response?.data?.detail || err.response?.data?.message || '문서 생성에 실패했습니다.');
-      } else {
-        setError(err instanceof Error ? err.message : '문서 생성에 실패했습니다.');
-      }
+      const message = axios.isAxiosError(err)
+        ? err.response?.data?.detail || err.response?.data?.message || '문서 생성에 실패했습니다.'
+        : err instanceof Error ? err.message : '문서 생성에 실패했습니다.';
+      addToast({ type: 'error', message });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="sticky top-0 bg-white border-b px-6 py-4 rounded-t-lg flex items-start justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">근로계약서 생성</h3>
-            <p className="text-xs text-gray-500 mt-1">필수 항목을 입력하면 근로계약서를 자동 생성합니다.</p>
-          </div>
+    <Modal
+      open
+      onClose={onClose}
+      title="근로계약서 생성"
+      subtitle="필수 항목을 입력하면 근로계약서를 자동 생성합니다."
+      footer={
+        <div className="flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="rounded p-1 transition-colors hover:bg-gray-100 -mr-1 -mt-1"
-            title="닫기"
+            disabled={loading}
+            className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
-            <XMarkIcon className="h-5 w-5 text-gray-500" />
+            취소
+          </button>
+          <button
+            onClick={() => handleSubmit('docx')}
+            disabled={!isValid || loading}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
+          >
+            {loading && <LoadingSpinner />}
+            {loading ? '생성중...' : 'DOCX 다운로드'}
+          </button>
+          <button
+            onClick={() => handleSubmit('pdf')}
+            disabled={!isValid || loading}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+          >
+            {loading && <LoadingSpinner />}
+            {loading ? '생성중...' : 'PDF 다운로드'}
           </button>
         </div>
-
-        <div className="px-6 py-4 space-y-4">
+      }
+    >
+      <div className="space-y-4">
           {/* 사업주(회사명) 표시 */}
           <Field label="사업주(갑)">
             <div className={`${inputClass} bg-gray-50 text-gray-600 cursor-not-allowed`}>
@@ -365,37 +380,8 @@ export const ContractFormModal: React.FC<ContractFormModalProps> = ({ onClose })
             </div>
           )}
 
-          {error && <p className="text-sm text-red-500">{error}</p>}
-        </div>
-
-        {/* Footer */}
-        <div className="sticky bottom-0 bg-white border-t px-6 py-4 rounded-b-lg flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            disabled={loading}
-            className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-          >
-            취소
-          </button>
-          <button
-            onClick={() => handleSubmit('docx')}
-            disabled={!isValid || loading}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
-          >
-            {loading && <LoadingSpinner />}
-            {loading ? '생성중...' : 'DOCX 다운로드'}
-          </button>
-          <button
-            onClick={() => handleSubmit('pdf')}
-            disabled={!isValid || loading}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
-          >
-            {loading && <LoadingSpinner />}
-            {loading ? '생성중...' : 'PDF 다운로드'}
-          </button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { XMarkIcon } from '@heroicons/react/24/outline';
 import {
   fetchDocumentTypes,
   generateDocument,
   downloadDocumentResponse,
 } from '../../lib/documentApi';
 import type { DocumentTypeInfo, DocumentTypeField } from '../../lib/documentApi';
+import { Modal } from '../common/Modal';
+import { useToastStore } from '../../stores/toastStore';
 
 interface DocumentFormModalProps {
   documentType: string;
@@ -20,11 +21,11 @@ export const DocumentFormModal: React.FC<DocumentFormModalProps> = ({
   documentType,
   onClose,
 }) => {
+  const addToast = useToastStore((s) => s.addToast);
   const [typeDef, setTypeDef] = useState<DocumentTypeInfo | null>(null);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,10 +43,10 @@ export const DocumentFormModal: React.FC<DocumentFormModalProps> = ({
           }
           setFormValues(initial);
         } else {
-          setError(`알 수 없는 문서 유형: ${documentType}`);
+          addToast({ type: 'error', message: `알 수 없는 문서 유형: ${documentType}` });
         }
       } catch {
-        if (!cancelled) setError('문서 유형 정보를 불러올 수 없습니다.');
+        if (!cancelled) addToast({ type: 'error', message: '문서 유형 정보를 불러올 수 없습니다.' });
       } finally {
         if (!cancelled) setFetching(false);
       }
@@ -76,7 +77,6 @@ export const DocumentFormModal: React.FC<DocumentFormModalProps> = ({
   const handleSubmit = async (format: 'pdf' | 'docx') => {
     if (!isValid() || !typeDef) return;
     setLoading(true);
-    setError(null);
     try {
       // number 필드는 숫자로 변환
       const params: Record<string, unknown> = {};
@@ -89,15 +89,10 @@ export const DocumentFormModal: React.FC<DocumentFormModalProps> = ({
       downloadDocumentResponse(response);
       onClose();
     } catch (err) {
-      if (axios.isAxiosError(err)) {
-        setError(
-          err.response?.data?.detail ||
-            err.response?.data?.message ||
-            '문서 생성에 실패했습니다.',
-        );
-      } else {
-        setError(err instanceof Error ? err.message : '문서 생성에 실패했습니다.');
-      }
+      const message = axios.isAxiosError(err)
+        ? err.response?.data?.detail || err.response?.data?.message || '문서 생성에 실패했습니다.'
+        : err instanceof Error ? err.message : '문서 생성에 실패했습니다.';
+      addToast({ type: 'error', message });
     } finally {
       setLoading(false);
     }
@@ -148,53 +143,14 @@ export const DocumentFormModal: React.FC<DocumentFormModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="sticky top-0 bg-white border-b px-6 py-4 rounded-t-lg flex items-start justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">
-              {typeDef?.label || '문서 생성'}
-            </h3>
-            <p className="text-xs text-gray-500 mt-1">
-              {typeDef?.description || '필드를 입력하면 문서를 자동 생성합니다.'}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="rounded p-1 transition-colors hover:bg-gray-100 -mr-1 -mt-1"
-            title="닫기"
-          >
-            <XMarkIcon className="h-5 w-5 text-gray-500" />
-          </button>
-        </div>
-
-        <div className="px-6 py-4 space-y-4">
-          {fetching && (
-            <p className="text-sm text-gray-500 text-center py-8">문서 유형 정보를 불러오는 중...</p>
-          )}
-
-          {!fetching && typeDef && typeDef.fields.length > 0 && (
-            <>
-              {typeDef.fields.map((field) => (
-                <div key={field.name}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {field.label}
-                    {field.required && <span className="text-red-400 ml-0.5">*</span>}
-                  </label>
-                  {renderField(field)}
-                </div>
-              ))}
-            </>
-          )}
-
-          {error && <p className="text-sm text-red-500">{error}</p>}
-        </div>
-
-        {/* Footer */}
-        {!fetching && typeDef && (
-          <div className="sticky bottom-0 bg-white border-t px-6 py-4 rounded-b-lg flex justify-end gap-2">
+    <Modal
+      open
+      onClose={onClose}
+      title={typeDef?.label || '문서 생성'}
+      subtitle={typeDef?.description || '필드를 입력하면 문서를 자동 생성합니다.'}
+      footer={
+        !fetching && typeDef ? (
+          <div className="flex justify-end gap-2">
             <button
               onClick={onClose}
               disabled={loading}
@@ -219,9 +175,29 @@ export const DocumentFormModal: React.FC<DocumentFormModalProps> = ({
               {loading ? '생성중...' : 'PDF 다운로드'}
             </button>
           </div>
+        ) : undefined
+      }
+    >
+      <div className="space-y-4">
+        {fetching && (
+          <p className="text-sm text-gray-500 text-center py-8">문서 유형 정보를 불러오는 중...</p>
+        )}
+
+        {!fetching && typeDef && typeDef.fields.length > 0 && (
+          <>
+            {typeDef.fields.map((field) => (
+              <div key={field.name}>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {field.label}
+                  {field.required && <span className="text-red-400 ml-0.5">*</span>}
+                </label>
+                {renderField(field)}
+              </div>
+            ))}
+          </>
         )}
       </div>
-    </div>
+    </Modal>
   );
 };
 

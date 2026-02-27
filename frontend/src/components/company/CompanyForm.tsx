@@ -5,15 +5,11 @@ import {
   Typography,
   Input,
   Button,
-  Dialog,
-  DialogHeader,
-  DialogBody,
-  DialogFooter,
   Select,
   Option,
   IconButton,
-  Alert,
 } from '@material-tailwind/react';
+import { Modal } from '../common/Modal';
 import { useToastStore } from '../../stores/toastStore';
 import { PlusIcon, PencilIcon, TrashIcon, StarIcon as StarIconOutline } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
@@ -127,7 +123,6 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [dialogError, setDialogError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<CompanyFormData>(INITIAL_FORM_DATA);
 
@@ -168,7 +163,6 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
 
   const openCreateDialog = () => {
     setEditingCompany(null);
-    setDialogError(null);
     setFormData({
       ...INITIAL_FORM_DATA,
       open_date: new Date().toISOString().split('T')[0],
@@ -183,7 +177,6 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
   const openEditDialog = (company: Company) => {
     onSelectCompany?.(company);
     setEditingCompany(company);
-    setDialogError(null);
     const isOperating = Boolean(company.biz_num);
     const existingAddr = company.addr || '';
     setFormData({
@@ -209,7 +202,6 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
 
   const handleSave = async () => {
     setIsSaving(true);
-    setDialogError(null);
 
     try {
       const data = {
@@ -247,9 +239,9 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
       fetchCompanies();
     } catch (err: unknown) {
       if (isAdmin && axios.isAxiosError(err) && err.response?.data) {
-        setDialogError(JSON.stringify(err.response.data, null, 2));
+        addToast({ type: 'error', message: JSON.stringify(err.response.data, null, 2) });
       } else {
-        setDialogError(extractErrorMessage(err, '저장에 실패했습니다.'));
+        addToast({ type: 'error', message: extractErrorMessage(err, '저장에 실패했습니다.') });
       }
     } finally {
       setIsSaving(false);
@@ -458,20 +450,22 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
       )}
 
       {/* Create/Edit Dialog */}
-      <Dialog open={isDialogOpen} handler={() => setIsDialogOpen(false)} size="md">
-        <DialogHeader>{editingCompany ? '기업 정보 수정' : '기업 등록'}</DialogHeader>
-        <DialogBody className="space-y-4">
-          {/* Dialog-level error message */}
-          {dialogError && (
-            <Alert color="red" onClose={() => setDialogError(null)}>
-              {isAdmin ? (
-                <pre className="text-xs whitespace-pre-wrap break-all">{dialogError}</pre>
-              ) : (
-                dialogError
-              )}
-            </Alert>
-          )}
-
+      <Modal
+        open={isDialogOpen}
+        onClose={() => setIsDialogOpen(false)}
+        title={editingCompany ? '기업 정보 수정' : '기업 등록'}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="text" onClick={() => setIsDialogOpen(false)}>
+              취소
+            </Button>
+            <Button onClick={handleSave} disabled={!formData.com_name.trim() || isSaving}>
+              {isSaving ? '저장 중...' : '저장'}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
           {/* Company Status */}
           <div>
             <Typography variant="small" color="gray" className="mb-1 !text-gray-700">
@@ -617,16 +611,8 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
               labelProps={{ className: 'hidden' }}
             />
           </div>
-        </DialogBody>
-        <DialogFooter>
-          <Button variant="text" onClick={() => setIsDialogOpen(false)}>
-            취소
-          </Button>
-          <Button onClick={handleSave} disabled={!formData.com_name.trim() || isSaving}>
-            {isSaving ? '저장 중...' : '저장'}
-          </Button>
-        </DialogFooter>
-      </Dialog>
+        </div>
+      </Modal>
     </>
   );
 });
