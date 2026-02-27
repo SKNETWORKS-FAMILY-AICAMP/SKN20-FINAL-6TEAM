@@ -10,8 +10,13 @@ class RagChatMessage(BaseModel):
 
 class RagChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=MAX_MESSAGE_LENGTH)
-    history: list[RagChatMessage] = Field(default_factory=list, max_length=50)
-    session_id: str | None = Field(default=None, min_length=1, max_length=100)
+    history: list[RagChatMessage] = Field(default_factory=list, max_length=20)
+    session_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        pattern=r"^[a-zA-Z0-9_-]+$",
+    )
 
 
 class ContractGenerateRequest(BaseModel):

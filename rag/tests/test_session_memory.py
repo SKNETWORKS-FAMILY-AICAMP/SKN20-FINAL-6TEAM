@@ -132,7 +132,9 @@ async def test_invalid_roles_filtered(monkeypatch):
 
 
 def _make_mock_redis():
-    """Redis 클라이언트 목을 생성합니다."""
+    """Redis 클라이언트 목을 생성합니다 (Lua 스크립트 호환)."""
+    import json as _json
+
     store: dict[str, str] = {}
     mock_client = AsyncMock()
 
@@ -148,6 +150,25 @@ def _make_mock_redis():
     mock_client.get = AsyncMock(side_effect=mock_get)
     mock_client.set = AsyncMock(side_effect=mock_set)
     mock_client.expire = AsyncMock(side_effect=mock_expire)
+
+    # Lua 스크립트 mock: register_script가 반환하는 callable을 시뮬레이션
+    async def mock_lua_call(keys=None, args=None):
+        key = keys[0]
+        new_msgs = _json.loads(args[0])
+        max_msg = int(args[1])
+        ttl = int(args[2])
+        raw = store.get(key)
+        data = _json.loads(raw) if raw else []
+        if not isinstance(data, list):
+            data = []
+        data.extend(new_msgs)
+        if len(data) > max_msg:
+            data = data[-max_msg:]
+        encoded = _json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        store[key] = encoded
+        return encoded
+
+    mock_client.register_script = MagicMock(return_value=mock_lua_call)
 
     return mock_client, store
 
@@ -247,3 +268,43 @@ async def test_upsert_overwrites_existing(monkeypatch):
     h = await sm.get_session_history("user:1", "s1")
     assert len(h) == 2
     assert h[0]["content"] == "new_q"
+
+
+@pytest.mark.asyncio
+async def test_delete_session_memory(monkeypatch):
+    """Memory backend: 세션 삭제."""
+    monkeypatch.setattr(sm, "_settings", lambda: _Settings())
+    sm._reset_for_test()
+
+    await sm.append_session_turn("user:1", "s1", "q1", "a1")
+    assert len(await sm.get_session_history("user:1", "s1")) == 2
+
+    deleted = await sm.delete_session("user:1", "s1")
+    assert deleted is True
+    assert await sm.get_session_history("user:1", "s1") == []
+
+    # 이미 삭제된 세션 재삭제
+    deleted = await sm.delete_session("user:1", "s1")
+    assert deleted is False
+
+
+@pytest.mark.asyncio
+async def test_delete_session_redis(monkeypatch):
+    """Redis backend: 세션 삭제."""
+    monkeypatch.setattr(sm, "_settings", lambda: _RedisSettings())
+    sm._reset_for_test()
+
+    mock_client, store = _make_mock_redis()
+
+    async def mock_delete(key):
+        return 1 if store.pop(key, None) is not None else 0
+
+    mock_client.delete = AsyncMock(side_effect=mock_delete)
+    monkeypatch.setattr(sm, "_get_redis_client", AsyncMock(return_value=mock_client))
+
+    await sm.append_session_turn("user:1", "s1", "q1", "a1")
+    assert len(await sm.get_session_history("user:1", "s1")) == 2
+
+    deleted = await sm.delete_session("user:1", "s1")
+    assert deleted is True
+    assert await sm.get_session_history("user:1", "s1") == []

@@ -7,6 +7,7 @@ Supports:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 _memory_store: dict[str, tuple[float, list[dict[str, str]]]] = {}
 _memory_lock = Lock()
 _redis_client = None
+_redis_client_lock: asyncio.Lock | None = None
 
 
 def _settings():
@@ -26,19 +28,19 @@ def _settings():
 
 
 def _session_max_messages() -> int:
-    return int(getattr(_settings(), "session_memory_max_messages", 20))
+    return _settings().session_memory_max_messages
 
 
 def _session_ttl() -> int:
-    return int(getattr(_settings(), "session_memory_ttl_seconds", 3600))
+    return _settings().session_memory_ttl_seconds
 
 
 def _session_backend() -> str:
-    return str(getattr(_settings(), "session_memory_backend", "memory"))
+    return _settings().session_memory_backend
 
 
 def _redis_url() -> str:
-    return str(getattr(_settings(), "redis_url", ""))
+    return _settings().redis_url
 
 
 def _make_key(owner_key: str, session_id: str) -> str:
@@ -67,24 +69,31 @@ def _prune_expired(now: float) -> None:
 
 
 async def _get_redis_client():
-    global _redis_client
-    if _redis_client is None:
-        from redis import asyncio as redis  # Lazy import (optional dependency)
+    global _redis_client, _redis_client_lock
+    if _redis_client is not None:
+        return _redis_client
+    if _redis_client_lock is None:
+        _redis_client_lock = asyncio.Lock()
+    async with _redis_client_lock:
+        if _redis_client is None:
+            from redis import asyncio as redis  # Lazy import (optional dependency)
 
-        _redis_client = redis.from_url(
-            _redis_url(),
-            encoding="utf-8",
-            decode_responses=True,
-        )
+            _redis_client = redis.from_url(
+                _redis_url(),
+                encoding="utf-8",
+                decode_responses=True,
+            )
     return _redis_client
 
 
 def _use_redis() -> bool:
-    backend = _session_backend()
-    if backend == "redis" and not _redis_url():
+    if _session_backend() != "redis":
+        return False
+    url = _redis_url()
+    if not url:
         logger.warning("SESSION_MEMORY_BACKEND=redis but REDIS_URL is empty — falling back to in-memory store")
         return False
-    return backend == "redis" and bool(_redis_url())
+    return True
 
 
 async def get_session_history(owner_key: str, session_id: str | None) -> list[dict[str, str]]:
@@ -143,12 +152,39 @@ async def upsert_session_history(owner_key: str, session_id: str | None, history
         _memory_store[key] = (now, sanitized)
 
 
+_APPEND_LUA = """
+local raw = redis.call('GET', KEYS[1])
+local data = {}
+if raw then
+    data = cjson.decode(raw)
+    if type(data) ~= 'table' then data = {} end
+end
+local new_msgs = cjson.decode(ARGV[1])
+for _, m in ipairs(new_msgs) do
+    table.insert(data, m)
+end
+local max_msg = tonumber(ARGV[2])
+if #data > max_msg then
+    local trimmed = {}
+    for i = #data - max_msg + 1, #data do
+        table.insert(trimmed, data[i])
+    end
+    data = trimmed
+end
+local encoded = cjson.encode(data)
+redis.call('SET', KEYS[1], encoded, 'EX', tonumber(ARGV[3]))
+return encoded
+"""
+_append_script = None
+
+
 async def append_session_turn(
     owner_key: str,
     session_id: str | None,
     user_message: str,
     assistant_message: str,
 ) -> None:
+    global _append_script
     if not session_id:
         return
 
@@ -164,22 +200,19 @@ async def append_session_turn(
     if _use_redis():
         try:
             client = await _get_redis_client()
-            raw = await client.get(key)
-            existing: list[dict[str, str]] = []
-            if raw:
-                parsed = json.loads(raw)
-                if isinstance(parsed, list):
-                    existing = _sanitize_history(parsed)
-
-            combined = existing + [
+            new_msgs = [
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": assistant_message},
             ]
-            combined = combined[-max_messages:]
-            await client.set(
-                key,
-                json.dumps(combined, ensure_ascii=False, separators=(",", ":")),
-                ex=ttl,
+            if _append_script is None:
+                _append_script = client.register_script(_APPEND_LUA)
+            await _append_script(
+                keys=[key],
+                args=[
+                    json.dumps(new_msgs, ensure_ascii=False, separators=(",", ":")),
+                    str(max_messages),
+                    str(ttl),
+                ],
             )
             return
         except Exception as exc:
@@ -196,7 +229,39 @@ async def append_session_turn(
         _memory_store[key] = (now, combined[-max_messages:])
 
 
+async def delete_session(owner_key: str, session_id: str | None) -> bool:
+    """Delete a session from the store. Returns True if deleted."""
+    if not session_id:
+        return False
+
+    key = _make_key(owner_key, session_id)
+    if _use_redis():
+        try:
+            client = await _get_redis_client()
+            deleted = await client.delete(key)
+            return deleted > 0
+        except Exception as exc:
+            logger.warning("Redis session delete failed, fallback to memory: %s", exc)
+
+    with _memory_lock:
+        return _memory_store.pop(key, None) is not None
+
+
+async def close_redis_client() -> None:
+    """Gracefully close the Redis client connection pool."""
+    global _redis_client
+    if _redis_client is not None:
+        try:
+            await _redis_client.aclose()
+        except Exception as exc:
+            logger.warning("Redis client close failed: %s", exc)
+        _redis_client = None
+
+
 def _reset_for_test() -> None:
     """Test helper: clear in-memory state."""
+    global _redis_client, _append_script
     with _memory_lock:
         _memory_store.clear()
+    _redis_client = None
+    _append_script = None

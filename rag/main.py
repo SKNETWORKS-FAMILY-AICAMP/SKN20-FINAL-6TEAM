@@ -166,6 +166,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await warmup_task
         except asyncio.CancelledError:
             pass
+    # Redis 세션 클라이언트 정리
+    from routes._session_memory import close_redis_client
+    await close_redis_client()
     if state.vector_store:
         state.vector_store.close()
     logger.info("RAG 서비스 종료 완료")
