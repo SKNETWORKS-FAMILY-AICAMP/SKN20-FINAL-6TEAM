@@ -123,6 +123,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
 
   const [formData, setFormData] = useState<CompanyFormData>(INITIAL_FORM_DATA);
 
@@ -257,8 +258,14 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
     }
   };
 
-  const handleDelete = async (companyId: number) => {
-    if (!window.confirm('정말 삭제하시겠습니까?')) return;
+  const handleDelete = (companyId: number) => {
+    setDeleteTargetId(companyId);
+  };
+
+  const confirmDelete = async () => {
+    if (deleteTargetId === null) return;
+    const companyId = deleteTargetId;
+    setDeleteTargetId(null);
 
     try {
       await api.delete(`/companies/${companyId}`);
@@ -448,6 +455,26 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
           </CardBody>
         </Card>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        open={deleteTargetId !== null}
+        onClose={() => setDeleteTargetId(null)}
+        title="기업 삭제"
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="text" onClick={() => setDeleteTargetId(null)}>
+              취소
+            </Button>
+            <Button color="red" onClick={confirmDelete}>
+              삭제
+            </Button>
+          </div>
+        }
+      >
+        <p>정말 삭제하시겠습니까?</p>
+      </Modal>
 
       {/* Create/Edit Dialog */}
       <Modal

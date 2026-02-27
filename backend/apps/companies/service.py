@@ -65,6 +65,9 @@ class CompanyService:
         Returns:
             생성된 기업 객체
         """
+        existing = self.get_companies_by_user(user_id)
+        is_first = len(existing) == 0
+
         company = Company(
             user_id=user_id,
             com_name=data.com_name,
@@ -72,6 +75,7 @@ class CompanyService:
             addr=data.addr,
             open_date=data.open_date,
             biz_code=data.biz_code,
+            main_yn=is_first,
         )
         self.db.add(company)
         self.db.commit()
