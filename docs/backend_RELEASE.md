@@ -1,11 +1,12 @@
 # Release Notes
 
-## [2026-02-27] - 알림 설정 관리 + 생년월일 CRUD + 신규 공고 알림
+## [2026-02-27] - 알림 설정 관리 + 생년월일 CRUD + 신규 공고 알림 + 첫 기업 main_yn 자동 설정
 
 ### Features
 - **신규 공고 알림 기능** (`apps/auth/router.py`, `apps/auth/schemas.py`, `apps/common/models.py`, `database.sql`): 신규 지원사업 공고 알림 설정 및 조회 API 추가
 
 ### Bug Fixes
+- **첫 기업 등록 시 main_yn 자동 설정** (`apps/companies/service.py`): 사용자의 첫 번째 기업 생성 시 `main_yn=True` 자동 부여 — 기존에는 수동 설정 필요
 - **알림 설정 관리 + 생년월일 CRUD 안정화** (`apps/auth/router.py`, `apps/auth/schemas.py`, `apps/common/models.py`): 알림 설정 저장·조회 버그 수정, 생년월일 CRUD 엔드포인트 안정화
 
 ## [2026-02-27] - 비동기 로깅 전환 + nginx rewrite

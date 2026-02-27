@@ -1,6 +1,9 @@
 # Release Notes
 
-## [2026-02-27] - Dialog → 공통 Modal 컴포넌트 전환 + 에러 toast 일원화
+## [2026-02-27] - Dialog → 공통 Modal 컴포넌트 전환 + 에러 toast 일원화 + 기업 삭제 confirm 제거
+
+### Bug Fixes
+- **기업 삭제 confirm → Modal 컴포넌트로 교체** (`components/company/CompanyForm.tsx`): `window.confirm()` 제거 → `deleteTargetId` state + 공통 Modal로 삭제 확인 UI 전환
 
 ### Refactoring
 - **Dialog → 공통 Modal 컴포넌트 전환** (`components/admin/HistoryDetailModal.tsx`, `components/chat/ContractFormModal.tsx`, `components/chat/DocumentFormModal.tsx`, `components/company/CompanyForm.tsx`): material-tailwind Dialog 및 인라인 모달 구현 → 공통 Modal 컴포넌트로 일원화
