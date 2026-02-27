@@ -3,7 +3,6 @@ import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import ragApi, { isRagEnabled, isStreamingEnabled, checkRagHealth, streamChat } from '../lib/rag';
-import api from '../lib/api';
 import type { ChatMessage, AgentCode, RagChatResponse, EvaluationData, SourceReference, RagActionSuggestion } from '../types';
 import { GUEST_MESSAGE_LIMIT, domainToAgentCode } from '../lib/constants';
 import { generateId } from '../lib/utils';
@@ -36,7 +35,7 @@ const addAnswerCompleteNotification = (): void => {
 };
 
 export const useChat = () => {
-  const { addMessage, setLoading, setStreaming, isLoading, updateMessageInSession, setLastHistoryIdForSession, guestMessageCount, incrementGuestCount } = useChatStore();
+  const { addMessage, setLoading, setStreaming, isLoading, updateMessageInSession, guestMessageCount, incrementGuestCount } = useChatStore();
   const { isAuthenticated } = useAuthStore();
   const streamingContentRef = useRef<string>('');
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -104,7 +103,6 @@ export const useChat = () => {
         let response: string;
         let agentCode: AgentCode;
         let evaluationData: EvaluationData | null = null;
-        let savedAssistantMsgId: string | null = null;
 
         // Check if RAG service is available
         const ragAvailable = isRagEnabled() && await checkRagHealth();
@@ -202,7 +200,6 @@ export const useChat = () => {
 
             response = streamingContentRef.current;
             agentCode = domainToAgentCode(finalDomain);
-            savedAssistantMsgId = assistantMessageId;
           } else {
             // Non-streaming mode
             const ragResponse = await ragApi.post<RagChatResponse>('/rag/chat', {
@@ -243,7 +240,6 @@ export const useChat = () => {
               timestamp: new Date(),
             };
             addMessage(assistantMessage);
-            savedAssistantMsgId = assistantMessage.id;
           }
         } else {
           // Mock response (fallback when RAG is disabled or unavailable)
@@ -259,38 +255,15 @@ export const useChat = () => {
             timestamp: new Date(),
           };
           addMessage(assistantMessage);
-          savedAssistantMsgId = assistantMessage.id;
         }
 
         if (shouldShowAnswerCompleteNotification()) {
           addAnswerCompleteNotification();
         }
 
-        // Save to backend history if authenticated
-        if (isAuthenticated) {
-          try {
-            // 고정된 세션의 lastHistoryId를 parent로 사용
-            const targetSession = useChatStore.getState().sessions.find(s => s.id === targetSessionId);
-            const parentHistoryId = targetSession?.lastHistoryId ?? null;
-
-            const historyResponse = await api.post('/histories', {
-              agent_code: agentCode,
-              question: message,
-              answer: response,
-              parent_history_id: parentHistoryId,
-              evaluation_data: evaluationData,
-            });
-            // 고정된 세션에 lastHistoryId 설정 (세션 전환 중에도 안전)
-            setLastHistoryIdForSession(targetSessionId, historyResponse.data.history_id);
-            // 고정된 세션의 메시지에 synced 마킹 (중복 저장 방지)
-            updateMessageInSession(targetSessionId, userMessage.id, { synced: true });
-            if (savedAssistantMsgId) {
-              updateMessageInSession(targetSessionId, savedAssistantMsgId, { synced: true });
-            }
-          } catch {
-            // History save failure is non-critical
-          }
-        } else {
+        // Redis-first: 인증 사용자는 RAG 세션 메모리(Redis)에 자동 저장됨
+        // DB 이관은 RAG 배치 마이그레이션이 처리
+        if (!isAuthenticated) {
           incrementGuestCount();
         }
       } catch (err) {
@@ -316,7 +289,7 @@ export const useChat = () => {
         abortControllerRef.current = null;
       }
     },
-    [addMessage, setLoading, setStreaming, isLoading, isAuthenticated, updateMessageInSession, setLastHistoryIdForSession, guestMessageCount, incrementGuestCount]
+    [addMessage, setLoading, setStreaming, isLoading, isAuthenticated, updateMessageInSession, guestMessageCount, incrementGuestCount]
   );
 
   const stopStreaming = useCallback(() => {

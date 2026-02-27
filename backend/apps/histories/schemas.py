@@ -83,6 +83,8 @@ class HistoryThreadSummaryResponse(BaseModel):
     message_count: int
     first_create_date: datetime | None = None
     last_create_date: datetime | None = None
+    source: str = "db"  # "db" or "redis"
+    session_id: str | None = None  # Redis session ID (source="redis" 일 때)
 
 
 class HistoryThreadDetailResponse(BaseModel):

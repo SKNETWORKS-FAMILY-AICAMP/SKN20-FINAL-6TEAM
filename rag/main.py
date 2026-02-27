@@ -153,6 +153,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as e:
             logger.warning("도메인 벡터 사전 계산 실패 (서비스는 정상 시작): %s", e)
 
+    # 세션 마이그레이션 백그라운드 태스크
+    migration_task: asyncio.Task | None = None
+    if settings.enable_session_migration and settings.session_memory_backend == "redis":
+        from jobs.session_migrator import session_migration_loop
+        migration_task = asyncio.create_task(session_migration_loop())
+        logger.info("세션 마이그레이션 루프 시작 (interval=%ds, threshold=%ds)",
+                     settings.session_migrate_interval, settings.session_migrate_ttl_threshold)
+
     _log_settings_summary(settings)
     logger.info("RAG 서비스 초기화 완료")
 
@@ -160,6 +168,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # 종료 시 정리
     logger.info("RAG 서비스 종료 중...")
+    if migration_task:
+        migration_task.cancel()
+        try:
+            await migration_task
+        except asyncio.CancelledError:
+            pass
     if warmup_task:
         warmup_task.cancel()
         try:
@@ -259,7 +273,7 @@ app.add_middleware(
 class APIKeyMiddleware:
     """RAG API Key 인증 미들웨어 (순수 ASGI)."""
 
-    PROTECTED_PREFIXES = ("/api/chat", "/api/documents", "/api/funding")
+    PROTECTED_PREFIXES = ("/api/chat", "/api/documents", "/api/funding", "/api/sessions")
 
     def __init__(self, app: _ASGIApp):
         self.app = app

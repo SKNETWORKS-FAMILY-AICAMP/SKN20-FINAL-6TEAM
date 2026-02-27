@@ -26,6 +26,8 @@ interface HistoryThreadSummary {
   message_count: number;
   first_create_date?: string;
   last_create_date?: string;
+  source?: string;      // "db" | "redis"
+  session_id?: string;  // Redis session ID
 }
 
 interface HistoryThreadDetail extends HistoryThreadSummary {
@@ -324,8 +326,13 @@ export const useChatStore = create<ChatState>()(
           const threads = response.data ?? [];
           if (threads.length === 0) return;
 
+          // Redis 세션과 DB 세션을 분리
+          const dbThreads = threads.filter(t => t.source !== 'redis');
+          const redisThreads = threads.filter(t => t.source === 'redis');
+
+          // DB 세션: 기존 방식으로 상세 조회
           const details = await Promise.all(
-            threads.map(async (thread) => {
+            dbThreads.map(async (thread) => {
               try {
                 const detailResponse = await api.get<HistoryThreadDetail>(
                   `/histories/threads/${thread.root_history_id}`
@@ -338,6 +345,8 @@ export const useChatStore = create<ChatState>()(
           );
 
           const fetchedSessions: ChatSession[] = [];
+
+          // DB 세션 변환
           for (const detail of details) {
             if (!detail || !detail.histories.length) continue;
 
@@ -385,6 +394,60 @@ export const useChatStore = create<ChatState>()(
               created_at: createdAt,
               updated_at: updatedAt,
             });
+          }
+
+          // Redis 활성 세션 변환 (상세 조회 + session_id를 프론트엔드 세션 ID로 매핑)
+          for (const redisThread of redisThreads) {
+            try {
+              const detailResp = await api.get<HistoryThreadDetail>(
+                `/histories/threads/${redisThread.root_history_id}`,
+                { params: { session_id: redisThread.session_id } }
+              );
+              const detail = detailResp.data;
+              if (!detail || !detail.histories.length) continue;
+
+              const messages: ChatMessage[] = [];
+              for (const item of detail.histories) {
+                if (!item.question || !item.answer) continue;
+                const timestamp = item.create_date ? new Date(item.create_date) : new Date();
+                const safeAgentCode: AgentCode = /^A\d{7}$/.test(item.agent_code)
+                  ? (item.agent_code as AgentCode)
+                  : 'A0000001';
+
+                messages.push({
+                  id: generateId(),
+                  type: 'user',
+                  content: item.question,
+                  timestamp,
+                  synced: true,
+                });
+                messages.push({
+                  id: generateId(),
+                  type: 'assistant',
+                  content: item.answer,
+                  agent_code: safeAgentCode,
+                  timestamp,
+                  synced: true,
+                });
+              }
+
+              if (!messages.length) continue;
+
+              // Redis 세션: session_id를 프론트엔드 세션 ID로 사용하여 채팅 연결
+              const sessionId = redisThread.session_id || generateId();
+              const createdAt = detail.first_create_date ?? new Date().toISOString();
+              const updatedAt = detail.last_create_date ?? createdAt;
+              fetchedSessions.push({
+                id: sessionId,
+                title: detail.title || '활성 상담',
+                messages,
+                lastHistoryId: null,  // Redis 세션은 아직 DB에 없음
+                created_at: createdAt,
+                updated_at: updatedAt,
+              });
+            } catch {
+              // Redis session detail fetch failure is non-critical
+            }
           }
 
           if (!fetchedSessions.length) return;

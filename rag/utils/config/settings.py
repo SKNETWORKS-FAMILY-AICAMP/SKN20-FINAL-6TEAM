@@ -503,8 +503,26 @@ class Settings(BaseSettings):
         description="세션당 최대 저장 메시지 수 (user+assistant 합산)"
     )
     session_memory_ttl_seconds: int = Field(
+        default=86400, gt=0,
+        description="세션 메모리 TTL (초). 기본 24시간"
+    )
+
+    # -- 세션 마이그레이션 (Redis → DB 배치 이관) --
+    enable_session_migration: bool = Field(
+        default=True,
+        description="세션 마이그레이션 활성화 (Redis → DB 배치 이관)"
+    )
+    session_migrate_interval: int = Field(
         default=3600, gt=0,
-        description="세션 메모리 TTL (초). 기본 1시간"
+        description="마이그레이션 배치 체크 간격 (초)"
+    )
+    session_migrate_ttl_threshold: int = Field(
+        default=21600, gt=0,
+        description="마이그레이션 대상 TTL 임계값 (초). 이 값 이하인 세션을 이관 (기본 6시간)"
+    )
+    backend_internal_url: str = Field(
+        default="http://backend:8000",
+        description="Backend 내부 통신 URL (배치 마이그레이션 → Backend API)"
     )
 
     @field_validator("session_memory_backend")

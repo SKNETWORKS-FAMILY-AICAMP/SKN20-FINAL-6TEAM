@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from apps.common.models import History
+from apps.histories.batch_schemas import BatchHistoryCreate
 from apps.histories.schemas import (
     HistoryCreate,
     HistoryResponse,
@@ -281,6 +282,61 @@ class HistoryService:
         history.evaluation_data = {**existing, **ragas_data}
         self.db.commit()
         return True
+
+    def create_history_batch(
+        self, data: BatchHistoryCreate,
+    ) -> tuple[int, int, list[int]]:
+        """배치로 히스토리를 저장합니다 (RAG 마이그레이션용).
+
+        Args:
+            data: 배치 저장 요청 (user_id, session_id, turns)
+
+        Returns:
+            (saved_count, skipped_count, history_ids) 튜플
+        """
+        saved_count = 0
+        skipped_count = 0
+        history_ids: list[int] = []
+        # 새 세션은 독립 스레드로 시작 (기존 스레드에 잘못 연결 방지)
+        parent_id: int | None = None
+
+        for turn in data.turns:
+            # 멱등성: question + answer 앞 200자로 중복 체크
+            answer_prefix = turn.answer[:200]
+            dup_stmt = (
+                select(History)
+                .where(
+                    History.user_id == data.user_id,
+                    History.question == turn.question,
+                    History.answer.startswith(answer_prefix),
+                    History.use_yn == True,
+                )
+                .limit(1)
+            )
+            existing = self.db.execute(dup_stmt).scalar_one_or_none()
+            if existing:
+                # 중복 발견 — skip하되 parent_id는 변경하지 않음
+                # (다른 세션의 레코드와 교차 연결 방지)
+                history_ids.append(existing.history_id)
+                skipped_count += 1
+                continue
+
+            history = History(
+                user_id=data.user_id,
+                agent_code=turn.agent_code,
+                question=turn.question,
+                answer=turn.answer,
+                parent_history_id=parent_id,
+                evaluation_data=turn.evaluation_data,
+            )
+            self.db.add(history)
+            self.db.flush()  # history_id 할당
+            parent_id = history.history_id
+            history_ids.append(history.history_id)
+            saved_count += 1
+
+        self.db.commit()
+        return saved_count, skipped_count, history_ids
 
     def delete_history(self, history_id: int, user_id: int) -> bool:
         """상담 이력을 소프트 삭제합니다.

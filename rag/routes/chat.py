@@ -21,7 +21,7 @@ from schemas import ChatRequest, ChatResponse
 from schemas.response import StreamResponse
 from utils.cache import get_response_cache
 from utils.chat_logger import log_chat_interaction
-from utils.config import get_settings
+from utils.config import DOMAIN_TO_AGENT_CODE, get_settings
 from utils.sanitizer import sanitize_query
 from utils.token_tracker import RequestTokenTracker
 
@@ -41,11 +41,18 @@ def _build_owner_key(request: ChatRequest) -> str:
     user_id = request.user_context.user_id if request.user_context else None
     if user_id:
         return f"user:{user_id}"
-    # 익명 사용자: session_id 해시를 owner_key에 포함하여 세션 격리
-    if request.session_id:
-        sid_hash = hashlib.sha256(request.session_id.encode()).hexdigest()[:12]
-        return f"anon:{sid_hash}"
+    # 익명: session_id가 Redis key에 포함되어 세션 격리 보장
     return "anon"
+
+
+def _extract_user_id(request: ChatRequest) -> int | None:
+    """Extract user_id as int from request user_context."""
+    if request.user_context and request.user_context.user_id:
+        try:
+            return int(request.user_context.user_id)
+        except (ValueError, TypeError):
+            return None
+    return None
 
 
 def _build_cache_query(query: str, history: list[dict[str, str]]) -> str:
@@ -101,11 +108,17 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 logger.info("[chat] 캐시 히트: '%s...'", query[:30])
                 cached_response = ChatResponse(**cached)
                 cached_response.session_id = request.session_id
+                cached_domains = cached_response.domains or []
+                cached_sources = cached_response.sources or []
                 await append_session_turn(
                     owner_key,
                     request.session_id,
                     request.message,
                     cached_response.content,
+                    user_id=_extract_user_id(request),
+                    agent_code=DOMAIN_TO_AGENT_CODE.get(cached_domains[0], "A0000001") if cached_domains else "A0000001",
+                    domains=cached_domains,
+                    sources=[{"title": s.title, "source": s.source, "url": s.url} for s in cached_sources[:5]],
                 )
                 return cached_response
 
@@ -120,13 +133,6 @@ async def chat(request: ChatRequest) -> ChatResponse:
             response.session_id = request.session_id
             token_usage = tracker.get_usage()
 
-        await append_session_turn(
-            owner_key,
-            request.session_id,
-            request.message,
-            response.content,
-        )
-
         response_time = time.time() - start_time
 
         log_chat_interaction(
@@ -139,7 +145,8 @@ async def chat(request: ChatRequest) -> ChatResponse:
             token_usage=token_usage,
         )
 
-        # evaluation_data 생성
+        # evaluation_data 생성 (append_session_turn 이전에 계산)
+        eval_data_dict: dict | None = None
         try:
             from schemas.response import EvaluationDataForDB
 
@@ -184,8 +191,21 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 response_time=response_time,
             )
             response.evaluation_data = eval_data
+            eval_data_dict = eval_data.model_dump()
         except Exception as e:
             logger.warning("일반 응답 evaluation_data 생성 실패: %s", e)
+
+        await append_session_turn(
+            owner_key,
+            request.session_id,
+            request.message,
+            response.content,
+            user_id=_extract_user_id(request),
+            agent_code=DOMAIN_TO_AGENT_CODE.get(response.domains[0], "A0000001") if response.domains else "A0000001",
+            domains=response.domains,
+            sources=[{"title": s.title, "source": s.source, "url": s.url} for s in (response.sources or [])[:5]],
+            evaluation_data=eval_data_dict,
+        )
 
         # 캐시 저장
         if cache and response.content != settings.fallback_message:
@@ -286,11 +306,19 @@ async def chat_stream(request: ChatRequest):
                         },
                     )
                     yield f"data: {done_chunk.model_dump_json()}\n\n"
+                    cached_src_list = cached.get("sources", [])
                     await append_session_turn(
                         owner_key,
                         request.session_id,
                         request.message,
                         cached_content,
+                        user_id=_extract_user_id(request),
+                        agent_code=DOMAIN_TO_AGENT_CODE.get(cached_domains[0], "A0000001") if cached_domains else "A0000001",
+                        domains=cached_domains,
+                        sources=[
+                            {"title": s.get("title", ""), "source": s.get("source", ""), "url": s.get("url", "")}
+                            for s in cached_src_list[:5]
+                        ],
                     )
                     return
 
@@ -447,57 +475,8 @@ async def chat_stream(request: ChatRequest):
                 evaluation=done_evaluation,
                 token_usage=token_usage,
             )
-            await append_session_turn(
-                owner_key,
-                request.session_id,
-                request.message,
-                final_content,
-            )
 
-            # 출처 정보
-            for source in final_sources:
-                source_chunk = StreamResponse(
-                    type="source",
-                    content=source.content[:100] if hasattr(source, 'content') else "",
-                    metadata={
-                        "title": source.title if hasattr(source, 'title') else "",
-                        "source": source.source if hasattr(source, 'source') else "",
-                        "url": source.url if hasattr(source, 'url') else "",
-                    },
-                )
-                yield f"data: {source_chunk.model_dump_json()}\n\n"
-
-            # 액션 정보
-            for action in final_actions:
-                action_chunk = StreamResponse(
-                    type="action",
-                    content=action.label if hasattr(action, 'label') else "",
-                    metadata={
-                        "type": action.type if hasattr(action, 'type') else "",
-                        "params": action.params if hasattr(action, 'params') else {},
-                    },
-                )
-                yield f"data: {action_chunk.model_dump_json()}\n\n"
-
-            # 캐시 저장
-            if cache and final_content and final_content != settings.fallback_message:
-                cache_domain = final_domains[0] if final_domains else None
-                cache_data = {
-                    "content": final_content,
-                    "domains": final_domains,
-                    "sources": [
-                        {
-                            "content": s.content if hasattr(s, 'content') else "",
-                            "title": s.title if hasattr(s, 'title') else "",
-                            "source": s.source if hasattr(s, 'source') else "",
-                            "url": s.url if hasattr(s, 'url') else "",
-                        }
-                        for s in final_sources
-                    ],
-                }
-                cache.set(cache_query, cache_data, cache_domain, user_context_hash=stream_uc_hash)
-
-            # evaluation_data 생성
+            # evaluation_data 생성 (append_session_turn 이전에 계산)
             eval_data_dict = None
             try:
                 from schemas.response import EvaluationDataForDB, RetrievalEvaluationData
@@ -555,6 +534,64 @@ async def chat_stream(request: ChatRequest):
             except Exception as e:
                 logger.warning("스트리밍 evaluation_data 생성 실패: %s", e)
 
+            await append_session_turn(
+                owner_key,
+                request.session_id,
+                request.message,
+                final_content,
+                user_id=_extract_user_id(request),
+                agent_code=DOMAIN_TO_AGENT_CODE.get(final_domains[0], "A0000001") if final_domains else "A0000001",
+                domains=final_domains,
+                sources=[
+                    {"title": s.title if hasattr(s, 'title') else "", "source": s.source if hasattr(s, 'source') else "", "url": s.url if hasattr(s, 'url') else ""}
+                    for s in (final_sources or [])[:5]
+                ],
+                evaluation_data=eval_data_dict,
+            )
+
+            # 출처 정보
+            for source in final_sources:
+                source_chunk = StreamResponse(
+                    type="source",
+                    content=source.content[:100] if hasattr(source, 'content') else "",
+                    metadata={
+                        "title": source.title if hasattr(source, 'title') else "",
+                        "source": source.source if hasattr(source, 'source') else "",
+                        "url": source.url if hasattr(source, 'url') else "",
+                    },
+                )
+                yield f"data: {source_chunk.model_dump_json()}\n\n"
+
+            # 액션 정보
+            for action in final_actions:
+                action_chunk = StreamResponse(
+                    type="action",
+                    content=action.label if hasattr(action, 'label') else "",
+                    metadata={
+                        "type": action.type if hasattr(action, 'type') else "",
+                        "params": action.params if hasattr(action, 'params') else {},
+                    },
+                )
+                yield f"data: {action_chunk.model_dump_json()}\n\n"
+
+            # 캐시 저장
+            if cache and final_content and final_content != settings.fallback_message:
+                cache_domain = final_domains[0] if final_domains else None
+                cache_data = {
+                    "content": final_content,
+                    "domains": final_domains,
+                    "sources": [
+                        {
+                            "content": s.content if hasattr(s, 'content') else "",
+                            "title": s.title if hasattr(s, 'title') else "",
+                            "source": s.source if hasattr(s, 'source') else "",
+                            "url": s.url if hasattr(s, 'url') else "",
+                        }
+                        for s in final_sources
+                    ],
+                }
+                cache.set(cache_query, cache_data, cache_domain, user_context_hash=stream_uc_hash)
+
             done_chunk = StreamResponse(
                 type="done",
                 metadata={
@@ -586,9 +623,18 @@ async def chat_stream(request: ChatRequest):
 
 
 @router.delete("/chat/sessions/{session_id}")
-async def delete_chat_session(session_id: str):
-    """세션 삭제 (대화 초기화)."""
-    # owner_key 없이 anon으로 처리 — 인증 사용자는 backend 프록시에서 user_id 주입
-    deleted = await delete_session("anon", session_id)
+async def delete_chat_session(
+    session_id: str,
+    user_id: int | None = None,
+):
+    """세션 삭제 (대화 초기화).
+
+    user_id가 제공되면 인증 사용자 세션을, 없으면 익명 세션을 삭제합니다.
+    """
+    if user_id:
+        owner_key = f"user:{user_id}"
+    else:
+        owner_key = "anon"
+    deleted = await delete_session(owner_key, session_id)
     return {"deleted": deleted}
 
