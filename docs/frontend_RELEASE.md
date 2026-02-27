@@ -1,5 +1,12 @@
 # Release Notes
 
+## [2026-02-27] - Dialog → 공통 Modal 컴포넌트 전환 + 에러 toast 일원화
+
+### Refactoring
+- **Dialog → 공통 Modal 컴포넌트 전환** (`components/admin/HistoryDetailModal.tsx`, `components/chat/ContractFormModal.tsx`, `components/chat/DocumentFormModal.tsx`, `components/company/CompanyForm.tsx`): material-tailwind Dialog 및 인라인 모달 구현 → 공통 Modal 컴포넌트로 일원화
+- **에러 표시 toast 일원화** (`components/chat/ContractFormModal.tsx`, `components/chat/DocumentFormModal.tsx`, `components/company/CompanyForm.tsx`): `error` state + `Alert` 제거 → `useToastStore().addToast()`로 통합
+- **api.ts refresh 실패 시 `/login` 리다이렉트 제거** (`lib/api.ts`): `window.location.href = '/login'` 제거 — 로그인 모달 state 전환 작업과 연동
+
 ## [2026-02-27] - 로그인 모달 state 기반 전환 + 알림/멀티턴 연동
 
 ### Features
