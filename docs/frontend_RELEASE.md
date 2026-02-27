@@ -1,5 +1,19 @@
 # Release Notes
 
+## [2026-02-27] - 로그인 모달 state 기반 전환 + 알림/멀티턴 연동
+
+### Features
+- **신규 공고 알림 설정 UI** (`types/index.ts`): 알림 설정 타입 추가
+- **Redis 기반 멀티턴 세션 메모리 연동** (`stores/chatStore.ts`, `lib/api.ts` 등): 채팅 세션 멀티턴 메모리 프론트엔드 연동
+
+### Bug Fixes
+- **모지바케(문자 깨짐) 수정** (`components/chat/`, `lib/api.ts` 등): 한글 인코딩 깨짐 현상 수정
+- **알림 설정 관리 + 생년월일 CRUD** (`lib/api.ts`, `types/index.ts`): 알림 설정·생년월일 API 연동 버그 수정
+- **chatStore placeholder 주석 정리** (`stores/chatStore.ts`): 불필요한 placeholder 주석 제거
+
+### Refactoring
+- **로그인 모달 URL 라우트 → Zustand state 기반 전환** (`stores/authStore.ts`, `App.tsx`, `pages/LoginPage.tsx`, `components/common/ProtectedRoute.tsx`, `components/layout/Sidebar.tsx`, `components/chat/LoginPromptModal.tsx`, `components/profile/ProfileDialog.tsx`, `components/common/Modal.tsx` 신규): `/login` URL 네비게이션 제거 — `authStore.isLoginModalOpen`으로 모달 open/close 제어. 새로고침 시 backgroundLocation 유실·히스토리 스택 오염 문제 해결
+
 ## [2026-02-27] - 어드민 대시보드 스피너 개선 및 스케줄러 limit 축소
 
 ### Bug Fixes
