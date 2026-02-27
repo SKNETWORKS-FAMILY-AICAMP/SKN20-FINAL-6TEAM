@@ -1,9 +1,12 @@
 # Release Notes
 
-## [2026-02-27] - clean_jsonl.py 전처리 스크립트 추가
+## [2026-02-27] - clean_jsonl.py 추가 + 로컬 nginx 서비스명 수정
 
 ### Features
 - **JSONL 정제 스크립트 추가** (`preprocessing/clean_jsonl.py`): RAG 학습 데이터 전처리용 JSONL 정제 유틸리티 추가 (294줄)
+
+### Bug Fixes
+- **로컬 nginx 서비스명 불일치 수정** (`nginx.local.conf` 신규, `docker-compose.local.yaml`): `nginx.conf`의 `rag:8001` 참조가 로컬 환경 서비스명 `mock-rag:8001`과 불일치하여 `/rag/*` 경로 502 발생 — `nginx.local.conf` 분리로 로컬/프로덕션 nginx 설정 독립화
 
 ## [2026-02-26] - .claude 설정 정리 및 docs/ 구조 재정비
 
