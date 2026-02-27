@@ -1,12 +1,13 @@
 # Release Notes
 
-## [2026-02-27] - Redis 멀티턴 세션 메모리 + 모지바케 수정
+## [2026-02-27] - Redis 멀티턴 세션 메모리 보안/안정성 강화 + 모지바케 수정
 
 ### Features
 - **Redis 기반 멀티턴 세션 메모리 완성**: 세션별 대화 컨텍스트 Redis 저장·조회 안정화
 
 ### Bug Fixes
-- **모지바케(문자 깨짐) 수정**: RAG 응답 한글 인코딩 깨짐 현상 수정
+- **Redis 멀티턴 보안/안정성 강화** (`routes/chat.py`, `utils/session.py` 등): asyncio.Lock DCL로 레이스 컨디션 수정, Lua 스크립트로 append 원자성 보장, session_id 입력 검증(패턴+길이 제한), SHA256 해시 익명 세션 격리, 세션 삭제 API(`DELETE /api/chat/sessions/{session_id}`) 추가
+- **모지바케(문자 깨짐) 수정** (`routes/chat.py`, `utils/domain_classifier.py`): RAG 응답 한글 인코딩 깨짐 현상 수정
 
 ### Documentation
 - **문서 대명사/지시어 보강**: RAG 관련 문서 내 대명사·지시어 표현 개선
