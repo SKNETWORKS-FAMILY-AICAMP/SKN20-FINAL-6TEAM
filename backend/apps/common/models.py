@@ -33,11 +33,15 @@ class User(Base):
     google_email = Column(String(255), unique=True, nullable=False)
     username = Column(String(100), nullable=False)
     birth = Column(DateTime, nullable=True)
+    # 기존 DB에 컬럼 미반영인 환경에서도 기본 조회가 깨지지 않도록 지연 로딩합니다.
+    age = deferred(Column(Integer, nullable=True))
     type_code = Column(String(8), ForeignKey("code.code"), default="U0000002", comment="U0000001:관리자, U0000002:예비창업자, U0000003:사업자")
     create_date = Column(DateTime, default=datetime.now)
     update_date = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     # 기존 DB에 컬럼 미반영인 환경에서도 기본 조회가 깨지지 않도록 지연 로딩합니다.
     last_announce_checked_at = deferred(Column(DateTime, nullable=True))
+    # 사용자별 알림 설정 비트마스크(1:D-7, 2:D-3, 4:신규 공고, 8:답변 완료)
+    notification_settings = deferred(Column(Integer, nullable=True))
     use_yn = Column(Boolean, nullable=False, default=True, comment="0: 미사용, 1: 사용")
 
     # Relationships

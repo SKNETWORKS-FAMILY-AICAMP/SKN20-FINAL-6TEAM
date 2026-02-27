@@ -127,8 +127,8 @@ const LoginPage: React.FC = () => {
               </Typography>
 
               <ul className="ml-auto mt-10 w-full max-w-[19rem] space-y-2 text-right text-[10pt] font-normal leading-[1.4] text-[#6BB3F2]">
-                {FEATURE_ITEMS.map((item) => (
-                  <li key={item}>{item}</li>
+                {FEATURE_ITEMS.map((item, index) => (
+                  <li key={`${index}-${item}`}>{item}</li>
                 ))}
               </ul>
 

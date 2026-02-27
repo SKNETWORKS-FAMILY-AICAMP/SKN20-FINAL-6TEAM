@@ -57,7 +57,7 @@ const normalizeNotificationCompanies = (value: unknown): Company[] => {
 };
 
 const MainPage: React.FC = () => {
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user, notificationSettings, notificationSettingsLoaded } = useAuthStore();
   const displayUserType = useDisplayUserType();
   const { sessions, currentSessionId, createSession, isStreaming, addMessage } = useChatStore();
   const { sendMessage, isLoading, stopStreaming } = useChat();
@@ -76,7 +76,11 @@ const MainPage: React.FC = () => {
   const currentSession = sessions.find((s) => s.id === currentSessionId);
   const messages = currentSession?.messages || [];
 
-  useNotifications(notificationSchedules, notificationCompanyNameById);
+  useNotifications(
+    !isAuthenticated || notificationSettingsLoaded ? notificationSchedules : [],
+    !isAuthenticated || notificationSettingsLoaded ? notificationCompanyNameById : {},
+    notificationSettings
+  );
 
   const prevSessionIdRef = useRef<string | null>(null);
   const prevMessagesLengthRef = useRef<number>(0);

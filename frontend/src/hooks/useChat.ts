@@ -1,6 +1,7 @@
 import { useCallback, useRef, useEffect } from 'react';
 import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
+import { useNotificationStore } from '../stores/notificationStore';
 import ragApi, { isRagEnabled, isStreamingEnabled, checkRagHealth, streamChat } from '../lib/rag';
 import api from '../lib/api';
 import type { ChatMessage, AgentCode, RagChatResponse, EvaluationData, SourceReference, RagActionSuggestion } from '../types';
@@ -10,6 +11,29 @@ import { getMockResponse } from '../lib/mockResponses';
 
 const ERROR_MESSAGE = '죄송합니다. 응답을 생성하는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
 const GUEST_LIMIT_MESSAGE = '무료 체험 메시지를 모두 사용했습니다. 로그인하시면 무제한으로 상담을 이용할 수 있습니다.';
+const ANSWER_COMPLETE_NOTIFICATION_TITLE = '답변 완료';
+const ANSWER_COMPLETE_NOTIFICATION_MESSAGE = '요청하신 답변 생성이 완료되었습니다.';
+const ANSWER_COMPLETE_NOTIFICATION_LINK = '/';
+
+const shouldShowAnswerCompleteNotification = (): boolean => {
+  if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
+    return false;
+  }
+
+  const { isAuthenticated, notificationSettings, notificationSettingsLoaded } = useAuthStore.getState();
+  return isAuthenticated && notificationSettingsLoaded && notificationSettings.answer_complete;
+};
+
+const addAnswerCompleteNotification = (): void => {
+  const addNotification = useNotificationStore.getState().addNotification;
+  addNotification({
+    id: `answer-complete-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    title: ANSWER_COMPLETE_NOTIFICATION_TITLE,
+    message: ANSWER_COMPLETE_NOTIFICATION_MESSAGE,
+    type: 'info',
+    link: ANSWER_COMPLETE_NOTIFICATION_LINK,
+  });
+};
 
 export const useChat = () => {
   const { addMessage, setLoading, setStreaming, isLoading, updateMessageInSession, setLastHistoryIdForSession, guestMessageCount, incrementGuestCount } = useChatStore();
@@ -235,6 +259,10 @@ export const useChat = () => {
           };
           addMessage(assistantMessage);
           savedAssistantMsgId = assistantMessage.id;
+        }
+
+        if (shouldShowAnswerCompleteNotification()) {
+          addAnswerCompleteNotification();
         }
 
         // Save to backend history if authenticated

@@ -5,7 +5,15 @@ export interface User {
   username: string;
   type_code: 'U0000001' | 'U0000002' | 'U0000003'; // U0000001: 관리자, U0000002: 예비창업자, U0000003: 사업자
   birth?: string;
+  age?: number;
   create_date?: string;
+}
+
+export interface NotificationSettings {
+  schedule_d7: boolean;
+  schedule_d3: boolean;
+  new_announce: boolean;
+  answer_complete: boolean;
 }
 
 // Company types
