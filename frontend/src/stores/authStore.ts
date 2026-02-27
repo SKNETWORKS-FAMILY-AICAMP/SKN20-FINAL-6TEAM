@@ -16,6 +16,7 @@ let lastAuthCheckAt = 0;
 interface AuthState {
   isAuthenticated: boolean;
   isAuthChecking: boolean;
+  isLoginModalOpen: boolean;
   user: User | null;
   notificationSettings: NotificationSettings;
   notificationSettingsLoaded: boolean;
@@ -25,6 +26,8 @@ interface AuthState {
   updateUser: (user: Partial<User>) => void;
   setNotificationSettings: (settings: NotificationSettings) => void;
   checkAuth: () => Promise<void>;
+  openLoginModal: () => void;
+  closeLoginModal: () => void;
 }
 
 const waitFor = (ms: number): Promise<void> =>
@@ -69,12 +72,16 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       isAuthenticated: false,
       isAuthChecking: true,
+      isLoginModalOpen: false,
       user: null,
       notificationSettings: { ...DEFAULT_NOTIFICATION_SETTINGS },
       notificationSettingsLoaded: false,
+      openLoginModal: () => set({ isLoginModalOpen: true }),
+      closeLoginModal: () => set({ isLoginModalOpen: false }),
       login: async (user) => {
         set({
           isAuthenticated: true,
+          isLoginModalOpen: false,
           user,
           notificationSettingsLoaded: false,
         });

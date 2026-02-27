@@ -91,6 +91,7 @@ def _build_user_info(user: User) -> UserInfo:
         google_email=user.google_email,
         username=user.username,
         type_code=user.type_code,
+        profile_image=user.profile_image,
     )
 
 
@@ -110,6 +111,8 @@ async def login_google(
     id_info = verify_google_token(body.id_token)
     email = id_info.get("email")
     name = id_info.get("name", "Google User")
+    sub = id_info.get("sub")
+    picture = id_info.get("picture")
 
     if not email:
         raise HTTPException(
@@ -132,6 +135,8 @@ async def login_google(
                 User.username,
                 User.type_code,
                 User.use_yn,
+                User.google_sub,
+                User.profile_image,
             )
         )
         .where(User.google_email == email)
@@ -150,6 +155,8 @@ async def login_google(
                 username=name,
                 type_code="U0000002",
                 birth=None,
+                google_sub=sub,
+                profile_image=picture,
             )
         )
         db.commit()
@@ -162,9 +169,24 @@ async def login_google(
         user = User(
             user_id=inserted_user_id,
             google_email=email,
+            google_sub=sub,
+            profile_image=picture,
             username=name,
             type_code="U0000002",
         )
+    else:
+        updated = False
+        if user.google_sub is None and sub:
+            user.google_sub = sub
+            updated = True
+        if name:
+            user.username = name
+            updated = True
+        if picture is not None:
+            user.profile_image = picture
+            updated = True
+        if updated:
+            db.commit()
 
     access_token = create_access_token(data={"sub": user.google_email})
     refresh_token = create_refresh_token(data={"sub": user.google_email})

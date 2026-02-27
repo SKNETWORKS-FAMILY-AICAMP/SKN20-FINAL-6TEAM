@@ -7,6 +7,7 @@ export interface User {
   birth?: string;
   age?: number;
   create_date?: string;
+  profile_image?: string | null;
 }
 
 export interface NotificationSettings {

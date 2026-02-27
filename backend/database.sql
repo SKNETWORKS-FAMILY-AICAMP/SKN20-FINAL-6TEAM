@@ -593,6 +593,8 @@ WHERE NOT EXISTS (SELECT 1 FROM `code` LIMIT 1);
 CREATE TABLE IF NOT EXISTS `user` (
     `user_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `google_email` VARCHAR(255) NOT NULL UNIQUE,
+    `google_sub` VARCHAR(255) DEFAULT NULL COMMENT 'Google 고유 사용자 ID (불변)',
+    `profile_image` VARCHAR(500) DEFAULT NULL COMMENT 'Google 프로필 이미지 URL',
     `username` VARCHAR(100) NOT NULL,
     `birth` DATETIME DEFAULT NULL,
     `age` INT DEFAULT NULL COMMENT '사용자 나이',
@@ -602,8 +604,9 @@ CREATE TABLE IF NOT EXISTS `user` (
     `last_announce_checked_at` DATETIME DEFAULT NULL COMMENT '신규 공고 알림 커서',
     `notification_settings` TINYINT UNSIGNED DEFAULT NULL COMMENT '사용자별 알림 설정 비트마스크(1:D-7,2:D-3,4:신규공고,8:답변완료)',
     `use_yn` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0: 미사용, 1: 사용',
-    
+
     FOREIGN KEY (`type_code`) REFERENCES `code`(`code`) ON UPDATE CASCADE,
+    UNIQUE INDEX `idx_user_google_sub` (`google_sub`),
     INDEX `idx_user_type_code` (`type_code`),
     INDEX `idx_user_use_yn` (`use_yn`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -63,7 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isAuthenticated, logout, user } = useAuthStore();
+  const { isAuthenticated, logout, user, openLoginModal } = useAuthStore();
   const { createSession } = useChatStore();
   const displayUserType = useDisplayUserType();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -116,7 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const handleMenuClick = (event: React.MouseEvent<HTMLAnchorElement>, path: string) => {
     if (!isAuthenticated && AUTH_REQUIRED_PATHS.has(path)) {
       event.preventDefault();
-      navigate('/login', { state: { backgroundLocation: location } });
+      openLoginModal();
     }
 
     closeSidebar();
@@ -315,7 +315,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <>
                   <div className="mb-1 flex items-center rounded-lg px-2">
                     <span className="flex h-10 w-10 items-center justify-center">
-                      <UserCircleIcon className="h-5 w-5 text-gray-500" />
+                      {user.profile_image ? (
+                        <img
+                          src={user.profile_image}
+                          alt={user.username}
+                          className="h-7 w-7 rounded-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <UserCircleIcon className="h-5 w-5 text-gray-500" />
+                      )}
                     </span>
                     <div className="min-w-0 flex-1">
                       <Typography
@@ -357,7 +366,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  navigate('/login', { state: { backgroundLocation: location } });
+                  openLoginModal();
                   closeSidebar();
                 }}
                 title={effectiveCollapsed ? '로그인' : undefined}
