@@ -1,4 +1,4 @@
-﻿"""梨꾪똿 ?붾뱶?ъ씤??(?쇰컲 + ?ㅽ듃由щ컢)."""
+"""채팅 엔드포인트 (일반 + 스트리밍)."""
 
 import asyncio
 import hashlib
@@ -26,7 +26,7 @@ from utils.token_tracker import RequestTokenTracker
 
 logger = logging.getLogger(__name__)
 
-# ?ш컖 ?⑦꽩 ???꾧퀎媛? ???댁긽 ?먯??섎㈃ HTTP 400 諛섑솚
+# 감지 패턴 수가 임계값 이상이면 HTTP 400 반환
 _SEVERE_INJECTION_THRESHOLD = 3
 
 router = APIRouter(prefix="/api", tags=["Chat"])
@@ -61,14 +61,14 @@ def _build_cache_query(query: str, history: list[dict[str, str]]) -> str:
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
-    """?ъ슜??硫붿떆吏瑜?泥섎━?섍퀬 AI ?묐떟??諛섑솚?⑸땲??"""
+    """사용자 메시지를 처리하고 AI 응답을 반환합니다."""
     if not _state.router_agent:
         raise HTTPException(status_code=503, detail="Service not initialized.")
 
-    # ?꾨＼?꾪듃 ?몄젥??諛⑹뼱
+    # 프롬프트 인젝션 방어
     sanitize_result = sanitize_query(request.message)
     if len(sanitize_result.detected_patterns) >= _SEVERE_INJECTION_THRESHOLD:
-        raise HTTPException(status_code=400, detail="?붿껌??蹂댁븞 ?뺤콉???섑빐 李⑤떒?섏뿀?듬땲??")
+        raise HTTPException(status_code=400, detail="요청이 보안 정책에 의해 차단되었습니다.")
     query = sanitize_result.sanitized_query
     owner_key = _build_owner_key(request)
     if not request.session_id:
@@ -83,14 +83,14 @@ async def chat(request: ChatRequest) -> ChatResponse:
     cache_query = _build_cache_query(query, effective_history)
 
     try:
-        # 罹먯떆 議고쉶 (user_context ?댁떆 ?ы븿)
+        # 캐시 조회 (user_context 해시 포함)
         settings = get_settings()
         cache = get_response_cache() if settings.enable_response_cache else None
         uc_hash = request.user_context.get_filter_hash() if request.user_context else None
         if cache:
             cached = cache.get(cache_query, user_context_hash=uc_hash)
             if cached:
-                logger.info("[chat] 罹먯떆 ?덊듃: '%s...'", query[:30])
+                logger.info("[chat] 캐시 히트: '%s...'", query[:30])
                 cached_response = ChatResponse(**cached)
                 cached_response.session_id = request.session_id
                 await append_session_turn(
@@ -131,7 +131,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             token_usage=token_usage,
         )
 
-        # evaluation_data ?앹꽦
+        # evaluation_data 생성
         try:
             from schemas.response import EvaluationDataForDB
 
@@ -177,32 +177,32 @@ async def chat(request: ChatRequest) -> ChatResponse:
             )
             response.evaluation_data = eval_data
         except Exception as e:
-            logger.warning("鍮꾩뒪?몃━諛?evaluation_data ?앹꽦 ?ㅽ뙣: %s", e)
+            logger.warning("일반 응답 evaluation_data 생성 실패: %s", e)
 
-        # 罹먯떆 ???
+        # 캐시 저장
         if cache and response.content != settings.fallback_message:
             domain = response.domains[0] if response.domains else None
             cache.set(cache_query, response.model_dump(mode="json"), domain, user_context_hash=uc_hash)
 
         return response
     except Exception as e:
-        logger.error("梨꾪똿 泥섎━ ?ㅽ뙣: %s", e, exc_info=True)
+        logger.error("채팅 처리 실패: %s", e, exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail="梨꾪똿 泥섎━ 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎. ?좎떆 ???ㅼ떆 ?쒕룄?댁＜?몄슂."
+            detail="채팅 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
         )
 
 
 @router.post("/chat/stream")
 async def chat_stream(request: ChatRequest):
-    """SSE ?ㅽ듃由щ컢 梨꾪똿 ?붾뱶?ъ씤??"""
+    """SSE 스트리밍 채팅 엔드포인트."""
     if not _state.router_agent:
         raise HTTPException(status_code=503, detail="Service not initialized.")
 
-    # ?꾨＼?꾪듃 ?몄젥??諛⑹뼱
+    # 프롬프트 인젝션 방어
     sanitize_result = sanitize_query(request.message)
     if len(sanitize_result.detected_patterns) >= _SEVERE_INJECTION_THRESHOLD:
-        raise HTTPException(status_code=400, detail="?붿껌??蹂댁븞 ?뺤콉???섑빐 李⑤떒?섏뿀?듬땲??")
+        raise HTTPException(status_code=400, detail="요청이 보안 정책에 의해 차단되었습니다.")
     stream_query = sanitize_result.sanitized_query
     owner_key = _build_owner_key(request)
     if not request.session_id:
@@ -218,14 +218,14 @@ async def chat_stream(request: ChatRequest):
 
     async def generate():
         try:
-            # 罹먯떆 議고쉶 (user_context ?댁떆 ?ы븿)
+            # 캐시 조회 (user_context 해시 포함)
             settings = get_settings()
             cache = get_response_cache() if settings.enable_response_cache else None
             stream_uc_hash = request.user_context.get_filter_hash() if request.user_context else None
             if cache:
                 cached = cache.get(cache_query, user_context_hash=stream_uc_hash)
                 if cached:
-                    logger.info("[stream] 罹먯떆 ?덊듃: '%s...'", stream_query[:30])
+                    logger.info("[stream] 캐시 히트: '%s...'", stream_query[:30])
                     cached_content = cached.get("content", "")
                     chunk_size = 4
                     token_index = 0
@@ -358,7 +358,7 @@ async def chat_stream(request: ChatRequest):
                     remaining = hard_deadline - time.time()
                     if remaining <= 0:
                         logger.warning(
-                            "[stream] hard timeout 珥덇낵 (%.1fs)", hard_timeout,
+                            "[stream] hard timeout 초과 (%.1fs)", hard_timeout,
                         )
                         timeout_msg = "응답 생성 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."
                         if pre_collected_actions:
@@ -379,7 +379,7 @@ async def chat_stream(request: ChatRequest):
                         break
                     except asyncio.TimeoutError:
                         logger.warning(
-                            "[stream] hard timeout 珥덇낵 (%.1fs)", hard_timeout,
+                            "[stream] hard timeout 초과 (%.1fs)", hard_timeout,
                         )
                         timeout_msg = "응답 생성 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."
                         if pre_collected_actions:
@@ -393,7 +393,7 @@ async def chat_stream(request: ChatRequest):
 
                         return
 
-                    # ?뚰봽????꾩븘??泥댄겕 (湲곗〈 ?명솚)
+                    # 소프트 타임아웃 체크 (기존 호환)
                     if time.time() - start_time > stream_timeout:
                         timeout_msg = "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."
                         if pre_collected_actions:
@@ -445,7 +445,7 @@ async def chat_stream(request: ChatRequest):
                 final_content,
             )
 
-            # 異쒖쿂 ?뺣낫
+            # 출처 정보
             for source in final_sources:
                 source_chunk = StreamResponse(
                     type="source",
@@ -458,7 +458,7 @@ async def chat_stream(request: ChatRequest):
                 )
                 yield f"data: {source_chunk.model_dump_json()}\n\n"
 
-            # ?≪뀡 ?뺣낫
+            # 액션 정보
             for action in final_actions:
                 action_chunk = StreamResponse(
                     type="action",
@@ -470,7 +470,7 @@ async def chat_stream(request: ChatRequest):
                 )
                 yield f"data: {action_chunk.model_dump_json()}\n\n"
 
-            # 罹먯떆 ???
+            # 캐시 저장
             if cache and final_content and final_content != settings.fallback_message:
                 cache_domain = final_domains[0] if final_domains else None
                 cache_data = {
@@ -488,7 +488,7 @@ async def chat_stream(request: ChatRequest):
                 }
                 cache.set(cache_query, cache_data, cache_domain, user_context_hash=stream_uc_hash)
 
-            # evaluation_data ?앹꽦
+            # evaluation_data 생성
             eval_data_dict = None
             try:
                 from schemas.response import EvaluationDataForDB, RetrievalEvaluationData
@@ -544,7 +544,7 @@ async def chat_stream(request: ChatRequest):
                 )
                 eval_data_dict = eval_data.model_dump()
             except Exception as e:
-                logger.warning("?ㅽ듃由щ컢 evaluation_data ?앹꽦 ?ㅽ뙣: %s", e)
+                logger.warning("스트리밍 evaluation_data 생성 실패: %s", e)
 
             done_chunk = StreamResponse(
                 type="done",
@@ -558,10 +558,10 @@ async def chat_stream(request: ChatRequest):
             yield f"data: {done_chunk.model_dump_json()}\n\n"
 
         except Exception as e:
-            logger.error("?ㅽ듃由щ컢 梨꾪똿 ?ㅻ쪟: %s", e, exc_info=True)
+            logger.error("스트리밍 채팅 오류: %s", e, exc_info=True)
             error_chunk = StreamResponse(
                 type="error",
-                content="二꾩넚?⑸땲?? ?붿껌 泥섎━ 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎. ?좎떆 ???ㅼ떆 ?쒕룄?댁＜?몄슂.",
+                content="죄송합니다. 요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
             )
             yield f"data: {error_chunk.model_dump_json()}\n\n"
 
