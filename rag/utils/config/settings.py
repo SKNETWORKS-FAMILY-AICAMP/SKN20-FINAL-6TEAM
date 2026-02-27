@@ -487,6 +487,36 @@ class Settings(BaseSettings):
     )
 
     # ================================================================
+    # [4.5] Session Memory (멀티턴 대화)
+    # ================================================================
+
+    session_memory_backend: str = Field(
+        default="memory",
+        description="세션 메모리 백엔드 ('memory' 또는 'redis')"
+    )
+    redis_url: str = Field(
+        default="",
+        description="Redis 접속 URL (예: redis://localhost:6379). session_memory_backend=redis 시 필수"
+    )
+    session_memory_max_messages: int = Field(
+        default=20, gt=0,
+        description="세션당 최대 저장 메시지 수 (user+assistant 합산)"
+    )
+    session_memory_ttl_seconds: int = Field(
+        default=3600, gt=0,
+        description="세션 메모리 TTL (초). 기본 1시간"
+    )
+
+    @field_validator("session_memory_backend")
+    @classmethod
+    def validate_session_memory_backend(cls, v: str) -> str:
+        """세션 메모리 백엔드 검증."""
+        allowed = {"memory", "redis"}
+        if v not in allowed:
+            raise ValueError(f"session_memory_backend는 {allowed} 중 하나여야 합니다 (입력: {v})")
+        return v
+
+    # ================================================================
     # [5] Server & Logging
     # ================================================================
 

@@ -1,15 +1,10 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate, type Location } from 'react-router-dom';
+﻿import React, { useEffect, useState } from 'react';
 import { Card, CardBody, Typography } from '@material-tailwind/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { GoogleLogin, CredentialResponse } from '@react-oauth/google';
 import { useAuthStore } from '../stores/authStore';
 import api from '../lib/api';
 import { extractErrorMessage } from '../lib/errorHandler';
-
-interface LoginRouteState {
-  backgroundLocation?: Location;
-}
 
 const FEATURE_ITEMS = [
   '.',
@@ -23,43 +18,23 @@ const FEATURE_ITEMS = [
 ];
 
 const LoginPage: React.FC = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { login } = useAuthStore();
+  const { login, closeLoginModal } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
 
-  const hasBackgroundLocation = useMemo(() => {
-    const state = location.state as LoginRouteState | null;
-    return Boolean(state?.backgroundLocation);
-  }, [location.state]);
-
-  const closeModal = () => {
-    if (hasBackgroundLocation) {
-      navigate(-1);
-      return;
-    }
-    navigate('/', { replace: true });
-  };
+  const closeModal = () => closeLoginModal();
 
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') {
-        return;
+      if (event.key === 'Escape') {
+        closeLoginModal();
       }
-
-      if (hasBackgroundLocation) {
-        navigate(-1);
-        return;
-      }
-
-      navigate('/', { replace: true });
     };
 
     window.addEventListener('keydown', handleKeydown);
     return () => {
       window.removeEventListener('keydown', handleKeydown);
     };
-  }, [hasBackgroundLocation, navigate]);
+  }, [closeLoginModal]);
 
   const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
     setError(null);
@@ -71,7 +46,6 @@ const LoginPage: React.FC = () => {
       const { user } = response.data;
 
       await login(user);
-      closeModal();
     } catch (err: unknown) {
       console.error('Login error:', err);
       setError(extractErrorMessage(err, '로그인에 실패했습니다.'));

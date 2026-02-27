@@ -31,6 +31,8 @@ class User(Base):
 
     user_id = Column(Integer, primary_key=True, autoincrement=True)
     google_email = Column(String(255), unique=True, nullable=False)
+    google_sub = Column(String(255), unique=True, nullable=True, comment="Google 고유 사용자 ID")
+    profile_image = Column(String(500), nullable=True, comment="Google 프로필 이미지 URL")
     username = Column(String(100), nullable=False)
     birth = Column(DateTime, nullable=True)
     # 기존 DB에 컬럼 미반영인 환경에서도 기본 조회가 깨지지 않도록 지연 로딩합니다.

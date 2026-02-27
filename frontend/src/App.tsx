@@ -5,7 +5,6 @@ import {
   Route,
   Navigate,
   useLocation,
-  type Location,
 } from 'react-router-dom';
 import { ThemeProvider } from '@material-tailwind/react';
 import { GoogleOAuthProvider } from '@react-oauth/google';
@@ -24,28 +23,21 @@ import {
 import { useAuthStore } from './stores/authStore';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-const LOGIN_MODAL_BACKGROUND_LOCATION: Location = {
-  pathname: '/',
-  search: '',
-  hash: '',
-  state: null,
-  key: 'login-modal-background',
-};
 
-interface LoginRouteState {
-  backgroundLocation?: Location;
-}
+const LoginRedirect: React.FC = () => {
+  useEffect(() => {
+    useAuthStore.getState().openLoginModal();
+  }, []);
+  return <Navigate to="/" replace />;
+};
 
 const AppRoutes: React.FC = () => {
   const location = useLocation();
-  const state = location.state as LoginRouteState | null;
-  const isLoginModalRoute = location.pathname === '/login';
-  const backgroundLocation =
-    state?.backgroundLocation ?? (isLoginModalRoute ? LOGIN_MODAL_BACKGROUND_LOCATION : undefined);
+  const isLoginModalOpen = useAuthStore((s) => s.isLoginModalOpen);
 
   return (
     <>
-      <Routes location={backgroundLocation ?? location}>
+      <Routes location={location}>
         <Route element={<MainLayout />}>
           <Route path="/" element={<MainPage />} />
           <Route path="/guide" element={<UsageGuidePage />} />
@@ -61,14 +53,11 @@ const AppRoutes: React.FC = () => {
           </Route>
         </Route>
 
+        <Route path="/login" element={<LoginRedirect />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
-      {isLoginModalRoute && (
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-        </Routes>
-      )}
+      {isLoginModalOpen && <LoginPage />}
     </>
   );
 };

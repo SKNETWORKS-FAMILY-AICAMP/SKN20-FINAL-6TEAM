@@ -174,9 +174,15 @@ class ChatRequest(BaseModel):
     """
 
     message: str = Field(description="사용자 메시지", min_length=1, max_length=2000)
-    history: list[ChatMessage] = Field(default_factory=list, description="대화 이력", max_length=50)
+    history: list[ChatMessage] = Field(default_factory=list, description="대화 이력", max_length=20)
     user_context: UserContext | None = Field(default=None, description="사용자 컨텍스트")
-    session_id: str | None = Field(default=None, description="세션 ID")
+    session_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        pattern=r"^[a-zA-Z0-9_-]+$",
+        description="세션 ID (영숫자, 하이픈, 언더스코어만 허용)",
+    )
 
 
 class DocumentRequest(BaseModel):

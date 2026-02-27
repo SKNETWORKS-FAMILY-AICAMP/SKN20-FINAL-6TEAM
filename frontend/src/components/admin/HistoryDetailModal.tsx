@@ -4,14 +4,10 @@ import {
   Typography,
   Button,
   Chip,
-  Dialog,
-  DialogHeader,
-  DialogBody,
-  DialogFooter,
   Spinner,
 } from '@material-tailwind/react';
-import { XMarkIcon } from '@heroicons/react/24/outline';
 import ReactMarkdown from 'react-markdown';
+import { Modal } from '../common/Modal';
 import remarkGfm from 'remark-gfm';
 import type { AdminHistoryDetail } from '../../types';
 import { DOMAIN_NAMES } from '../../types';
@@ -48,14 +44,20 @@ export const HistoryDetailModal: React.FC<HistoryDetailModalProps> = ({
   onClose,
 }) => {
   return (
-    <Dialog open={history !== null} handler={onClose} size="xl">
-      <DialogHeader className="flex justify-between">
-        <Typography variant="h5" className="!text-gray-900">
-          상담 상세 #{history?.history_id}
-        </Typography>
-        <XMarkIcon className="h-6 w-6 cursor-pointer" onClick={onClose} />
-      </DialogHeader>
-      <DialogBody divider className="max-h-[70vh] overflow-y-auto text-gray-900">
+    <Modal
+      open={history !== null}
+      onClose={onClose}
+      title={`상담 상세 #${history?.history_id ?? ''}`}
+      size="xl"
+      footer={
+        <div className="flex justify-end">
+          <Button variant="text" color="red" onClick={onClose}>
+            닫기
+          </Button>
+        </div>
+      }
+    >
+      <div className="text-gray-900">
         {loading ? (
           <div className="flex justify-center py-10">
             <Spinner className="h-8 w-8" />
@@ -245,12 +247,7 @@ export const HistoryDetailModal: React.FC<HistoryDetailModalProps> = ({
             )}
           </div>
         ) : null}
-      </DialogBody>
-      <DialogFooter>
-        <Button variant="text" color="red" onClick={onClose}>
-          닫기
-        </Button>
-      </DialogFooter>
-    </Dialog>
+      </div>
+    </Modal>
   );
 };

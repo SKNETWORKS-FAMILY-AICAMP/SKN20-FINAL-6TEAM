@@ -1,17 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  Dialog,
-  DialogHeader,
-  DialogBody,
-  DialogFooter,
   Typography,
   Input,
   Button,
   Select,
   Option,
-  Alert,
 } from '@material-tailwind/react';
+import { Modal } from '../common/Modal';
+import { useToastStore } from '../../stores/toastStore';
 import { useAuthStore } from '../../stores/authStore';
 import { DEFAULT_NOTIFICATION_SETTINGS } from '../../lib/constants';
 import { updateNotificationSettings } from '../../lib/userApi';
@@ -28,7 +24,6 @@ interface ProfileDialogProps {
 
 type ProfileTab = 'profile' | 'notifications';
 type BirthPartKey = 'birthYear' | 'birthMonth' | 'birthDay';
-const ALERT_AUTO_DISMISS_MS = 3000;
 
 interface BirthParts {
   birthYear: string;
@@ -125,24 +120,18 @@ const buildBirthInputValue = (parts: BirthParts): string => {
 };
 
 export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) => {
-  const navigate = useNavigate();
   const {
     user,
     updateUser,
     logout,
+    openLoginModal,
     notificationSettings: authNotificationSettings,
     setNotificationSettings: setAuthNotificationSettings,
   } = useAuthStore();
+  const addToast = useToastStore((s) => s.addToast);
   const [activeTab, setActiveTab] = useState<ProfileTab>('profile');
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(
-    null
-  );
-  const [notificationMessage, setNotificationMessage] = useState<{
-    type: 'success' | 'error';
-    text: string;
-  } | null>(null);
   const [isNotificationSaving, setIsNotificationSaving] = useState(false);
 
   const birthYearOptions = useMemo(() => {
@@ -185,8 +174,6 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
     });
     setActiveTab('profile');
     setIsEditing(false);
-    setMessage(null);
-    setNotificationMessage(null);
 
     let isMounted = true;
     const syncProfile = async () => {
@@ -219,37 +206,8 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
     };
   }, [open, user?.user_id, updateUser]);
 
-  useEffect(() => {
-    if (!message) {
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      setMessage(null);
-    }, ALERT_AUTO_DISMISS_MS);
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [message]);
-
-  useEffect(() => {
-    if (!notificationMessage) {
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      setNotificationMessage(null);
-    }, ALERT_AUTO_DISMISS_MS);
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [notificationMessage]);
-
   const handleSave = async () => {
     setIsSaving(true);
-    setMessage(null);
 
     try {
       const currentUsername = user?.username || '';
@@ -289,13 +247,10 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
         });
       }
 
-      setMessage({ type: 'success', text: '프로필이 저장되었습니다.' });
+      addToast({ type: 'success', message: '프로필이 저장되었습니다.' });
       setIsEditing(false);
     } catch (err: unknown) {
-      setMessage({
-        type: 'error',
-        text: extractErrorMessage(err, '저장에 실패했습니다.'),
-      });
+      addToast({ type: 'error', message: extractErrorMessage(err, '저장에 실패했습니다.') });
     } finally {
       setIsSaving(false);
     }
@@ -308,7 +263,6 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
       type_code: user?.type_code || 'U0000001',
     });
     setIsEditing(false);
-    setMessage(null);
   };
 
   const birthDayOptions = useMemo(() => {
@@ -348,23 +302,18 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
         [key]: value,
       };
     });
-    setNotificationMessage(null);
   };
 
   const handleNotificationSave = async () => {
     setIsNotificationSaving(true);
-    setNotificationMessage(null);
 
     try {
       const saved = await updateNotificationSettings(notificationForm);
       setAuthNotificationSettings(saved);
       setNotificationForm(saved);
-      setNotificationMessage({ type: 'success', text: '알림 설정이 저장되었습니다.' });
+      addToast({ type: 'success', message: '알림 설정이 저장되었습니다.' });
     } catch (err: unknown) {
-      setNotificationMessage({
-        type: 'error',
-        text: extractErrorMessage(err, '알림 설정 저장에 실패했습니다.'),
-      });
+      addToast({ type: 'error', message: extractErrorMessage(err, '알림 설정 저장에 실패했습니다.') });
     } finally {
       setIsNotificationSaving(false);
     }
@@ -377,25 +326,59 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
       await api.delete('/users/me');
       await logout();
       onClose();
-      navigate('/login');
+      openLoginModal();
     } catch (err: unknown) {
-      setMessage({
-        type: 'error',
-        text: extractErrorMessage(err, '회원탈퇴에 실패했습니다.'),
-      });
+      addToast({ type: 'error', message: extractErrorMessage(err, '회원탈퇴에 실패했습니다.') });
     }
   };
 
   return (
-    <Dialog open={open} handler={onClose} size="md">
-      <DialogHeader>
-        <div className="flex items-center justify-between w-full">
-          <Typography variant="h5" color="blue-gray" className="!text-gray-900">
-            {activeTab === 'profile' ? '프로필' : '알림 설정'}
-          </Typography>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={activeTab === 'profile' ? '프로필' : '알림 설정'}
+      footer={
+        <div className="flex justify-between">
+          {activeTab === 'profile' ? (
+            <Button variant="text" color="red" onClick={handleWithdraw}>
+              회원탈퇴
+            </Button>
+          ) : (
+            <Button variant="text" onClick={onClose}>
+              닫기
+            </Button>
+          )}
+          {activeTab === 'profile' ? (
+            isEditing ? (
+              <div className="flex gap-2">
+                <Button variant="outlined" onClick={handleCancel}>
+                  취소
+                </Button>
+                <Button onClick={handleSave} disabled={isSaving}>
+                  {isSaving ? '저장 중...' : '저장'}
+                </Button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Button variant="outlined" onClick={() => setIsEditing(true)}>
+                  수정
+                </Button>
+                <Button variant="text" onClick={onClose}>
+                  닫기
+                </Button>
+              </div>
+            )
+          ) : (
+            <div className="flex gap-2">
+              <Button onClick={handleNotificationSave} disabled={isNotificationSaving}>
+                {isNotificationSaving ? '저장 중...' : '저장'}
+              </Button>
+            </div>
+          )}
         </div>
-      </DialogHeader>
-      <DialogBody className="space-y-6">
+      }
+    >
+      <div className="space-y-6">
         <div className="rounded-lg border border-gray-200 p-1">
           <div className="grid grid-cols-2 gap-1">
             <button
@@ -425,15 +408,6 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
 
         {activeTab === 'profile' ? (
           <>
-            {message && (
-              <Alert
-                color={message.type === 'success' ? 'green' : 'red'}
-                onClose={() => setMessage(null)}
-              >
-                {message.text}
-              </Alert>
-            )}
-
             {/* Email (read-only) */}
             <div>
               <Typography variant="small" color="gray" className="mb-1 !text-gray-700">
@@ -573,14 +547,6 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
           </>
         ) : (
           <>
-            {notificationMessage && (
-              <Alert
-                color={notificationMessage.type === 'success' ? 'green' : 'red'}
-                onClose={() => setNotificationMessage(null)}
-              >
-                {notificationMessage.text}
-              </Alert>
-            )}
             <div className="space-y-3">
               {NOTIFICATION_TOGGLE_ITEMS.map((item) => (
                 <div
@@ -626,45 +592,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
             </div>
           </>
         )}
-      </DialogBody>
-      <DialogFooter className="flex justify-between">
-        {activeTab === 'profile' ? (
-          <Button variant="text" color="red" onClick={handleWithdraw}>
-            회원탈퇴
-          </Button>
-        ) : (
-          <Button variant="text" onClick={onClose}>
-            닫기
-          </Button>
-        )}
-        {activeTab === 'profile' ? (
-          isEditing ? (
-            <div className="flex gap-2">
-              <Button variant="outlined" onClick={handleCancel}>
-                취소
-              </Button>
-              <Button onClick={handleSave} disabled={isSaving}>
-                {isSaving ? '저장 중...' : '저장'}
-              </Button>
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              <Button variant="outlined" onClick={() => setIsEditing(true)}>
-                수정
-              </Button>
-              <Button variant="text" onClick={onClose}>
-                닫기
-              </Button>
-            </div>
-          )
-        ) : (
-          <div className="flex gap-2">
-            <Button onClick={handleNotificationSave} disabled={isNotificationSaving}>
-              {isNotificationSaving ? '저장 중...' : '저장'}
-            </Button>
-          </div>
-        )}
-      </DialogFooter>
-    </Dialog>
+      </div>
+    </Modal>
   );
 };

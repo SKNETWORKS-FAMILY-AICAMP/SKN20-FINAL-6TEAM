@@ -7,7 +7,7 @@ import { generateId } from '../lib/utils';
 const MAX_SESSIONS = 50;
 const MAX_SERVER_HISTORY_LOAD = 100;
 
-// syncGuestMessages ?? ?? ?? ???
+// syncGuestMessages 중복 실행 방지 플래그
 let isSyncing = false;
 let isBootstrapping = false;
 
@@ -52,19 +52,19 @@ interface ChatState {
   setStreaming: (streaming: boolean) => void;
   clearMessages: () => void;
 
-  // History linking (?? history_id ??)
+  // History linking (마지막 history_id 추적)
   setLastHistoryId: (id: number | null) => void;
   setLastHistoryIdForSession: (sessionId: string, id: number | null) => void;
   getLastHistoryId: () => number | null;
 
-  // Session-aware message update (?? ?? ??? ????)
+  // Session-aware message update (세션 기준 메시지 업데이트)
   updateMessageInSession: (sessionId: string, messageId: string, updates: Partial<ChatMessage>) => void;
 
   // Guest message limit
   incrementGuestCount: () => void;
   resetGuestCount: () => void;
 
-  // Guest ??Login sync
+  // Guest -> Login sync
   syncGuestMessages: () => Promise<void>;
   bootstrapFromServerHistories: () => Promise<void>;
 
@@ -97,7 +97,7 @@ export const useChatStore = create<ChatState>()(
       createSession: (title?: string) => {
         const session = createNewSession(title);
         set((state) => {
-          // ?? ??? ?? ??? ???? ?? ??? ??
+          // 세션은 최신순으로 앞에 추가하고 최대 개수만 유지
           const updated = [session, ...state.sessions];
           const trimmed = updated.length > MAX_SESSIONS
             ? updated.slice(0, MAX_SESSIONS)
@@ -273,6 +273,7 @@ export const useChatStore = create<ChatState>()(
                   question: msg.content,
                   answer: assistantMsg.content,
                   parent_history_id: lastSyncedHistoryId,
+                  ...(assistantMsg.evaluation_data ? { evaluation_data: assistantMsg.evaluation_data } : {}),
                 });
                 lastSyncedHistoryId = res.data.history_id;
 

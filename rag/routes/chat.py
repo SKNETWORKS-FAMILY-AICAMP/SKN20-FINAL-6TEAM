@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from routes import _state
 from routes._session_memory import (
     append_session_turn,
+    delete_session,
     get_session_history,
     upsert_session_history,
 )
@@ -40,6 +41,10 @@ def _build_owner_key(request: ChatRequest) -> str:
     user_id = request.user_context.user_id if request.user_context else None
     if user_id:
         return f"user:{user_id}"
+    # 익명 사용자: session_id 해시를 owner_key에 포함하여 세션 격리
+    if request.session_id:
+        sid_hash = hashlib.sha256(request.session_id.encode()).hexdigest()[:12]
+        return f"anon:{sid_hash}"
     return "anon"
 
 
@@ -71,13 +76,18 @@ async def chat(request: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=400, detail="요청이 보안 정책에 의해 차단되었습니다.")
     query = sanitize_result.sanitized_query
     owner_key = _build_owner_key(request)
+    if not request.session_id:
+        logger.debug("No session_id — session memory disabled for this request")
     request_history = _build_effective_history(request)
     effective_history = request_history
     if request.session_id:
-        if request_history:
+        # 세션 메모리가 truth의 소유자: 세션에서 먼저 로드
+        session_history = await get_session_history(owner_key, request.session_id)
+        if session_history:
+            effective_history = session_history
+        elif request_history:
+            # 세션이 비어있고 프론트엔드가 히스토리를 보낸 경우 → 초기 seed
             await upsert_session_history(owner_key, request.session_id, request_history)
-        else:
-            effective_history = await get_session_history(owner_key, request.session_id)
     cache_query = _build_cache_query(query, effective_history)
 
     try:
@@ -203,13 +213,16 @@ async def chat_stream(request: ChatRequest):
         raise HTTPException(status_code=400, detail="요청이 보안 정책에 의해 차단되었습니다.")
     stream_query = sanitize_result.sanitized_query
     owner_key = _build_owner_key(request)
+    if not request.session_id:
+        logger.debug("No session_id — session memory disabled for this request")
     request_history = _build_effective_history(request)
     effective_history = request_history
     if request.session_id:
-        if request_history:
+        session_history = await get_session_history(owner_key, request.session_id)
+        if session_history:
+            effective_history = session_history
+        elif request_history:
             await upsert_session_history(owner_key, request.session_id, request_history)
-        else:
-            effective_history = await get_session_history(owner_key, request.session_id)
     cache_query = _build_cache_query(stream_query, effective_history)
 
     async def generate():
@@ -570,4 +583,12 @@ async def chat_stream(request: ChatRequest):
             "Connection": "keep-alive",
         },
     )
+
+
+@router.delete("/chat/sessions/{session_id}")
+async def delete_chat_session(session_id: str):
+    """세션 삭제 (대화 초기화)."""
+    # owner_key 없이 anon으로 처리 — 인증 사용자는 backend 프록시에서 user_id 주입
+    deleted = await delete_session("anon", session_id)
+    return {"deleted": deleted}
 

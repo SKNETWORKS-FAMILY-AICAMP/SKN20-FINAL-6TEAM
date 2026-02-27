@@ -7,6 +7,7 @@ export interface User {
   birth?: string;
   age?: number;
   create_date?: string;
+  profile_image?: string | null;
 }
 
 export interface NotificationSettings {
@@ -116,6 +117,7 @@ export interface ChatMessage {
   synced?: boolean; // true이면 이미 backend에 저장된 메시지 (재로그인 시 중복 저장 방지)
   sources?: SourceReference[];
   actions?: RagActionSuggestion[];
+  evaluation_data?: EvaluationData | null;
 }
 
 // Chat session
