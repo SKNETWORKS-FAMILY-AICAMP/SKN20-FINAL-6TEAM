@@ -372,6 +372,11 @@ class MainRouter:
         state["timing_metrics"]["query_rewrite_reason"] = rewrite_meta.reason
         state["timing_metrics"]["query_rewrite_applied"] = was_rewritten
 
+        # 대명사/지시어 보강 (history 기반)
+        augmented_query = self._augment_query_with_history(
+            rewritten_query if was_rewritten else query, history
+        )
+
         # 벡터 유사도 기반 도메인 분류 (CPU-bound → 스레드 위임)
         classify_query = rewritten_query if was_rewritten else query
         classification = await asyncio.to_thread(
@@ -991,6 +996,9 @@ class MainRouter:
         was_rewritten = rewrite_meta.rewritten
         if was_rewritten:
             query = rewritten_query
+
+        # 대명사/지시어 보강 (history 기반)
+        augmented_query = self._augment_query_with_history(query, history or [])
 
         # 도메인 분류
         classification = self.domain_classifier.classify(query)
