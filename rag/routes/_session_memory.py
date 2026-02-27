@@ -21,7 +21,7 @@ from utils.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-_memory_store: dict[str, tuple[float, list[dict[str, str]]]] = {}
+_memory_store: dict[str, tuple[float, list[dict[str, str]] | dict]] = {}
 _memory_lock = Lock()
 _redis_client = None
 _redis_client_lock: asyncio.Lock | None = None
@@ -139,8 +139,12 @@ async def get_session_history(owner_key: str, session_id: str | None) -> list[di
         entry = _memory_store.get(key)
         if not entry:
             return []
-        _, history = entry
-        return list(history)
+        _, data = entry
+        # v2 dict format (from append_session_turn fallback)
+        if isinstance(data, dict):
+            messages = data.get("messages", [])
+            return _sanitize_history(messages) if isinstance(messages, list) else []
+        return list(data)
 
 
 async def get_session_full(owner_key: str, session_id: str) -> dict | None:
@@ -173,6 +177,7 @@ async def get_active_sessions_for_user(user_id: int) -> list[dict]:
     """Scan Redis for all active sessions of a specific user.
 
     Returns list of v2 session dicts with their Redis keys.
+    Uses pipeline for batch GET to reduce round-trips.
     """
     if not _use_redis():
         return []
@@ -180,9 +185,22 @@ async def get_active_sessions_for_user(user_id: int) -> list[dict]:
     try:
         client = await _get_redis_client()
         pattern = f"rag:session:user:{user_id}:*"
-        sessions = []
+
+        # 1단계: SCAN으로 키 수집
+        keys = []
         async for key in client.scan_iter(match=pattern, count=100):
-            raw = await client.get(key)
+            keys.append(key)
+        if not keys:
+            return []
+
+        # 2단계: pipeline으로 일괄 GET
+        pipe = client.pipeline(transaction=False)
+        for key in keys:
+            pipe.get(key)
+        values = await pipe.execute()
+
+        sessions = []
+        for key, raw in zip(keys, values):
             if not raw:
                 continue
             data = json.loads(raw)
@@ -192,11 +210,8 @@ async def get_active_sessions_for_user(user_id: int) -> list[dict]:
                     data["_redis_key"] = key
                     sessions.append(data)
             elif isinstance(data, list) and data:
-                # v1 sessions — include with minimal info
                 sessions.append({
-                    "v": 1,
-                    "messages": data,
-                    "turns": [],
+                    "v": 1, "messages": data, "turns": [],
                     "_redis_key": key,
                 })
         return sessions
@@ -209,6 +224,7 @@ async def scan_expiring_sessions(max_ttl_remaining: int) -> list[tuple[str, dict
     """Scan Redis for sessions with TTL below threshold (migration candidates).
 
     Returns list of (redis_key, session_data) tuples.
+    Uses pipeline for batch TTL+GET to reduce round-trips.
     """
     if not _use_redis():
         return []
@@ -216,20 +232,41 @@ async def scan_expiring_sessions(max_ttl_remaining: int) -> list[tuple[str, dict
     try:
         client = await _get_redis_client()
         pattern = "rag:session:*"
-        results = []
+
+        # 1단계: SCAN으로 키 수집
+        keys = []
         async for key in client.scan_iter(match=pattern, count=200):
-            ttl = await client.ttl(key)
-            # ttl == -1 means no expiry, -2 means key doesn't exist
-            if ttl < 0 or ttl > max_ttl_remaining:
-                continue
-            raw = await client.get(key)
+            keys.append(key)
+        if not keys:
+            return []
+
+        # 2단계: pipeline으로 일괄 TTL 조회
+        pipe = client.pipeline(transaction=False)
+        for key in keys:
+            pipe.ttl(key)
+        ttls = await pipe.execute()
+
+        # 3단계: TTL 필터링 후 대상 키만 일괄 GET
+        candidate_keys = []
+        for key, ttl in zip(keys, ttls):
+            if isinstance(ttl, int) and 0 <= ttl <= max_ttl_remaining:
+                candidate_keys.append(key)
+        if not candidate_keys:
+            return []
+
+        pipe = client.pipeline(transaction=False)
+        for key in candidate_keys:
+            pipe.get(key)
+        values = await pipe.execute()
+
+        results = []
+        for key, raw in zip(candidate_keys, values):
             if not raw:
                 continue
             try:
                 data = json.loads(raw)
             except (json.JSONDecodeError, TypeError):
                 continue
-            # Only v2 sessions with user_id and turns are migration candidates
             if isinstance(data, dict) and data.get("v") == 2 and data.get("user_id") and data.get("turns"):
                 results.append((key, data))
         return results
@@ -442,12 +479,50 @@ async def append_session_turn(
     with _memory_lock:
         now = time.time()
         _prune_expired(now)
-        _, existing = _memory_store.get(key, (now, []))
-        combined = existing + [
+        now_iso = _now_iso()
+        _, existing_data = _memory_store.get(key, (now, {
+            "v": 2, "messages": [], "turns": [],
+            "created_at": now_iso, "updated_at": now_iso,
+        }))
+        # v1(list) → v2(dict) 업그레이드
+        if isinstance(existing_data, list):
+            existing_data = {"v": 2, "messages": existing_data, "turns": [],
+                             "created_at": now_iso, "updated_at": now_iso}
+
+        msgs = existing_data.get("messages", [])
+        msgs.extend([
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": assistant_message},
-        ]
-        _memory_store[key] = (now, combined[-max_messages:])
+        ])
+        existing_data["messages"] = msgs[-max_messages:]
+        existing_data["updated_at"] = now_iso
+
+        # 턴 메타데이터도 메모리에 저장 (flush 시 Redis로 동기화)
+        turn_entry: dict[str, Any] = {
+            "question": user_message, "answer": assistant_message,
+            "timestamp": now_iso,
+        }
+        if agent_code:
+            turn_entry["agent_code"] = agent_code
+        if domains:
+            turn_entry["domains"] = domains
+        if sources:
+            turn_entry["sources"] = sources[:5]
+        if evaluation_data:
+            turn_entry["evaluation_data"] = evaluation_data
+        turns = existing_data.get("turns", [])
+        turns.append(turn_entry)
+        max_t = _session_max_turns()
+        if len(turns) > max_t:
+            turns = turns[-max_t:]
+        existing_data["turns"] = turns
+
+        if user_id is not None:
+            existing_data["user_id"] = user_id
+        if session_id:
+            existing_data["session_id"] = session_id
+
+        _memory_store[key] = (now, existing_data)
 
 
 async def delete_session(owner_key: str, session_id: str | None) -> bool:

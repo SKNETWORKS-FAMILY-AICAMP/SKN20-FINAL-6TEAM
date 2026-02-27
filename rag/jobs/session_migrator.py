@@ -97,9 +97,24 @@ async def migrate_expiring_sessions() -> int:
                 # Keep session in Redis for next retry
 
     # Delete successfully migrated sessions from Redis
+    # 삭제 전 TTL 재확인: 마이그레이션 중 사용자가 세션을 재개했으면 TTL이 갱신됨
     if migrated_keys:
-        deleted = await delete_sessions_batch(migrated_keys)
-        logger.info("Session migration cleanup: deleted %d/%d keys", deleted, len(migrated_keys))
+        keys_to_delete = []
+        try:
+            from routes._session_memory import _get_redis_client
+            client = await _get_redis_client()
+            for key in migrated_keys:
+                ttl = await client.ttl(key)
+                if ttl <= threshold:
+                    keys_to_delete.append(key)
+                else:
+                    logger.info("Session resumed during migration, skipping delete: key=%s, ttl=%d", key, ttl)
+        except Exception:
+            keys_to_delete = migrated_keys  # Redis 오류 시 원래 동작 유지
+
+        if keys_to_delete:
+            deleted = await delete_sessions_batch(keys_to_delete)
+            logger.info("Session migration cleanup: deleted %d/%d keys", deleted, len(keys_to_delete))
 
     return len(migrated_keys)
 

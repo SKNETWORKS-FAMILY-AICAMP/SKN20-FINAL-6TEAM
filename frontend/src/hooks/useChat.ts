@@ -35,7 +35,7 @@ const addAnswerCompleteNotification = (): void => {
 };
 
 export const useChat = () => {
-  const { addMessage, setLoading, setStreaming, isLoading, updateMessageInSession, guestMessageCount, incrementGuestCount } = useChatStore();
+  const { addMessage, setLoading, setStreaming, isLoading, isSyncing, updateMessageInSession, guestMessageCount, incrementGuestCount } = useChatStore();
   const { isAuthenticated } = useAuthStore();
   const streamingContentRef = useRef<string>('');
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -53,7 +53,7 @@ export const useChat = () => {
 
   const sendMessage = useCallback(
     async (message: string) => {
-      if (!message.trim() || isLoading) return;
+      if (!message.trim() || isLoading || isSyncing) return;
 
       // Guest message limit check
       if (!isAuthenticated && guestMessageCount >= GUEST_MESSAGE_LIMIT) {
@@ -289,7 +289,7 @@ export const useChat = () => {
         abortControllerRef.current = null;
       }
     },
-    [addMessage, setLoading, setStreaming, isLoading, isAuthenticated, updateMessageInSession, guestMessageCount, incrementGuestCount]
+    [addMessage, setLoading, setStreaming, isLoading, isSyncing, isAuthenticated, updateMessageInSession, guestMessageCount, incrementGuestCount]
   );
 
   const stopStreaming = useCallback(() => {

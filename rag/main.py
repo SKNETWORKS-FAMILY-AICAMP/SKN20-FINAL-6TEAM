@@ -110,6 +110,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     state.router_agent = MainRouter(vector_store=state.vector_store)
     state.executor = ActionExecutor()
 
+    # Redis 연결 확인 (session_memory_backend=redis인 경우)
+    if settings.session_memory_backend == "redis" and settings.redis_url:
+        try:
+            from routes._session_memory import _get_redis_client
+            redis_client = await _get_redis_client()
+            await redis_client.ping()
+            logger.info("Redis 연결 성공 (%s)", settings.redis_url.split("@")[-1] if "@" in settings.redis_url else settings.redis_url)
+        except Exception as exc:
+            logger.error("Redis 연결 실패: %s (세션 메모리가 in-memory 폴백으로 동작합니다)", exc)
+
     # CrossEncoder 모델 사전 로딩 / RunPod warmup / ChromaDB warmup
     settings = get_settings()
     warmup_task: asyncio.Task | None = None

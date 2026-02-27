@@ -77,6 +77,7 @@ async def test_ttl_expiry_memory(monkeypatch):
         session_memory_backend = "memory"
         session_memory_ttl_seconds = 1
         session_memory_max_messages = 20
+        session_memory_max_turns = 50
         redis_url = ""
 
     monkeypatch.setattr(sm, "_settings", lambda: _ShortTTL())
@@ -286,6 +287,7 @@ async def test_redis_url_empty_warns_and_uses_memory(monkeypatch):
         session_memory_backend = "redis"
         session_memory_ttl_seconds = 3600
         session_memory_max_messages = 20
+        session_memory_max_turns = 50
         redis_url = ""
 
     monkeypatch.setattr(sm, "_settings", lambda: _BrokenRedisSettings())

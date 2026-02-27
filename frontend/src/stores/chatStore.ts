@@ -7,8 +7,7 @@ import { generateId } from '../lib/utils';
 const MAX_SESSIONS = 50;
 const MAX_SERVER_HISTORY_LOAD = 100;
 
-// syncGuestMessages 중복 실행 방지 플래그
-let isSyncing = false;
+// bootstrapFromServerHistories 중복 실행 방지 플래그
 let isBootstrapping = false;
 
 interface HistoryItem {
@@ -39,6 +38,7 @@ interface ChatState {
   currentSessionId: string | null;
   isLoading: boolean;
   isStreaming: boolean;
+  isSyncing: boolean;
   guestMessageCount: number;
 
   // Session management
@@ -94,6 +94,7 @@ export const useChatStore = create<ChatState>()(
       currentSessionId: null,
       isLoading: false,
       isStreaming: false,
+      isSyncing: false,
       guestMessageCount: 0,
 
       createSession: (title?: string) => {
@@ -249,8 +250,8 @@ export const useChatStore = create<ChatState>()(
       resetGuestCount: () => set({ guestMessageCount: 0 }),
 
       syncGuestMessages: async () => {
-        if (isSyncing) return;
-        isSyncing = true;
+        if (get().isSyncing) return;
+        set({ isSyncing: true });
 
         try {
           const state = get();
@@ -301,17 +302,10 @@ export const useChatStore = create<ChatState>()(
             }
           }
 
-          // 기존 세션의 모든 메시지를 synced로 마킹 (재로그인 시 중복 방지)
-          // 새 세션을 생성하지 않고 현재 세션 유지 → 채팅 내역 그대로 표시
-          set((prev) => ({
-            sessions: prev.sessions.map((s) => ({
-              ...s,
-              messages: s.messages.map((m) => ({ ...m, synced: true })),
-              updated_at: new Date().toISOString(),
-            }))
-          }));
+          // 개별 메시지별 synced 마킹은 위 try 블록에서 성공 시에만 처리됨
+          // 실패한 메시지는 synced=false 유지 → 다음 로그인 시 재시도
         } finally {
-          isSyncing = false;
+          set({ isSyncing: false });
         }
       },
       bootstrapFromServerHistories: async () => {

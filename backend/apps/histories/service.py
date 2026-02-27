@@ -85,13 +85,26 @@ class HistoryService:
             title_source = (first.question or "").strip() or "상담 세션"
         return title_source[:30] + ("..." if len(title_source) > 30 else "")
 
+    def _get_parent_map(self, user_id: int) -> dict[int, int | None]:
+        """사용자의 전체 이력(삭제 포함)에서 parent chain map을 빌드합니다.
+
+        soft-delete된 중간 노드를 포함하여 스레드 분열을 방지합니다.
+        """
+        stmt = (
+            select(History.history_id, History.parent_history_id)
+            .where(History.user_id == user_id)
+        )
+        rows = self.db.execute(stmt).all()
+        return {row.history_id: row.parent_history_id for row in rows}
+
     def _build_thread_summaries(self, user_id: int) -> list[_ThreadSummary]:
         """사용자 이력을 root chain 기준으로 thread summary로 그룹핑합니다."""
         histories = self._get_all_user_histories(user_id)
         if not histories:
             return []
 
-        parent_map = {h.history_id: h.parent_history_id for h in histories}
+        # 삭제된 레코드 포함 parent map → 스레드 분열 방지
+        parent_map = self._get_parent_map(user_id)
         cache: dict[int, int] = {}
         groups: dict[int, list[History]] = {}
 
@@ -189,7 +202,7 @@ class HistoryService:
             return None
 
         histories = self._get_all_user_histories(user_id)
-        parent_map = {h.history_id: h.parent_history_id for h in histories}
+        parent_map = self._get_parent_map(user_id)
         cache: dict[int, int] = {}
         thread_histories = [
             h
