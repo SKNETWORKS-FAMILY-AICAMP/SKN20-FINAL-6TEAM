@@ -194,11 +194,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+      command: uvicorn main:app --host 0.0.0.0 --port 8001
 
   # ChromaDB (벡터 데이터베이스 서버)
   chromadb:
-    image: bizi-chromadb:latest
+    image: chromadb/chroma:1.5.0
     container_name: bizi-chromadb
     restart: unless-stopped
     expose:
