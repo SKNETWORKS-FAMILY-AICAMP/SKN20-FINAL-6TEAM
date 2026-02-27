@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-02-27] - clean_jsonl.py 전처리 스크립트 추가
+
+### Features
+- **JSONL 정제 스크립트 추가** (`preprocessing/clean_jsonl.py`): RAG 학습 데이터 전처리용 JSONL 정제 유틸리티 추가 (294줄)
+
 ## [2026-02-26] - .claude 설정 정리 및 docs/ 구조 재정비
 
 ### Chores

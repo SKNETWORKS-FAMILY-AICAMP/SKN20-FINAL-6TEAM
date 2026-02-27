@@ -1,5 +1,18 @@
 # Release Notes
 
+## [2026-02-27] - 비동기 로깅 + 프롬프트 강화 + RAG 평가 보고서
+
+### Features
+- **QueueHandler/QueueListener 기반 비동기 로깅 전환** (`utils/async_logging.py` 신규, `utils/json_file_logger.py` 신규, `main.py`): 로깅 I/O 비동기 처리로 요청 처리 성능 향상
+- **프롬프트 품질 강화** (`utils/prompts.py`): 인코딩 깨짐(mojibake) 수정, 참고 자료 기반 답변 원칙·자체 검증·금지 사항 추가
+- **인용 감사 추가** (`agents/generator.py`): `_audit_citations()` — 생성된 답변의 인용 정확성 검증 로직 추가
+- **평가 재시도 임계값 설정 가능** (`agents/router.py`): `post_eval_retry_threshold` 환경변수로 동적 조정
+- **RAG 설정 확장** (`utils/config/settings.py`): `query_rewrite`, `active_directive_memory` 설정 추가, 평가 가중치(accuracy 30, completeness 15) 및 temperature/timeout 조정
+- **RAGAS strictness=3 복원** (`evaluation/ragas_evaluator.py`): gpt-4o-mini n>1 지원 복원
+
+### Documentation
+- **RAG 평가 보고서 추가** (`docs/reports/`): RAG 시스템 평가 결과 보고서 및 관련 문서 추가
+
 ## [2026-02-26] - 문서 생성 에이전트 + 멀티턴 세션 메모리 + 쿼리 재작성
 
 ### Features

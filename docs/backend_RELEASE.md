@@ -1,5 +1,11 @@
 # Release Notes
 
+## [2026-02-27] - 비동기 로깅 전환 + nginx rewrite
+
+### Features
+- **QueueHandler/QueueListener 기반 비동기 로깅 전환** (`config/async_logging.py` 신규, `config/logging_config.py`, `main.py`): 로깅 I/O가 요청 처리 쓰레드를 블로킹하지 않도록 비동기 큐 기반으로 전환
+- **nginx `/rag/` 경로 rewrite 추가** (`nginx.conf`): RAG 서비스 라우팅 rewrite 규칙 적용
+
 ## [2026-02-26] - 문서 생성 에이전트 API + 멀티턴 히스토리 안정화
 
 ### Features
