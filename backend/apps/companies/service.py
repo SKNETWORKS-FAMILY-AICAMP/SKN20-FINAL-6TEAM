@@ -3,7 +3,7 @@
 import os
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from apps.common.models import Company
@@ -116,8 +116,12 @@ class CompanyService:
         Returns:
             생성된 기업 객체
         """
-        existing = self.get_companies_by_user(user_id)
-        is_first = len(existing) == 0
+        existing_count = self.db.execute(
+            select(func.count()).select_from(Company).where(
+                Company.user_id == user_id,
+                Company.use_yn == True,
+            )
+        ).scalar_one()
 
         company = Company(
             user_id=user_id,
@@ -126,7 +130,7 @@ class CompanyService:
             addr=data.addr,
             open_date=data.open_date,
             biz_code=data.biz_code,
-            main_yn=is_first,
+            main_yn=existing_count == 0,
         )
         self.db.add(company)
         self.db.commit()
