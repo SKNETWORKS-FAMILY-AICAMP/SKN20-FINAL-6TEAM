@@ -10,6 +10,7 @@ class _Settings:
     session_memory_backend = "memory"
     session_memory_ttl_seconds = 3600
     session_memory_max_messages = 6
+    session_memory_max_turns = 50
     redis_url = ""
 
 
@@ -17,6 +18,7 @@ class _RedisSettings:
     session_memory_backend = "redis"
     session_memory_ttl_seconds = 3600
     session_memory_max_messages = 6
+    session_memory_max_turns = 50
     redis_url = "redis://localhost:6379"
 
 
@@ -162,6 +164,7 @@ def _make_mock_redis():
         user_id_val = args[4]
         session_id_val = args[5]
         now_iso = args[6]
+        max_turns = int(args[7]) if len(args) > 7 else 0
 
         raw = store.get(key)
         data = None
@@ -200,11 +203,13 @@ def _make_mock_redis():
             msgs = msgs[-max_msg:]
         data["messages"] = msgs
 
-        # Append turn metadata
+        # Append turn metadata and trim
         if turn_json:
             turn = _json.loads(turn_json)
             turns = data.get("turns", [])
             turns.append(turn)
+            if max_turns and len(turns) > max_turns:
+                turns = turns[-max_turns:]
             data["turns"] = turns
 
         encoded = _json.dumps(data, ensure_ascii=False, separators=(",", ":"))
@@ -476,3 +481,67 @@ async def test_flush_memory_to_redis(monkeypatch):
     assert flushed == 1
     assert len(sm._memory_store) == 0
     assert len(redis_store) == 1
+
+
+@pytest.mark.asyncio
+async def test_flush_race_condition_preserves_new_data(monkeypatch):
+    """flush I/O 중 새 데이터가 추가되면 pop하지 않아야 함."""
+    monkeypatch.setattr(sm, "_settings", lambda: _RedisSettings())
+    sm._reset_for_test()
+
+    key = sm._make_key("user:1", "race")
+
+    # 메모리에 초기 데이터 삽입
+    original_ts = time.time()
+    with sm._memory_lock:
+        sm._memory_store[key] = (original_ts, [{"role": "user", "content": "old"}])
+
+    redis_store: dict[str, str] = {}
+
+    async def mock_set_with_race(k, value, ex=None):
+        """Redis set 중 새 데이터가 추가되는 시나리오 시뮬레이션."""
+        redis_store[k] = value
+        # set 완료 후, pop 전에 새 데이터가 추가됨
+        with sm._memory_lock:
+            sm._memory_store[key] = (time.time() + 1, [{"role": "user", "content": "new"}])
+
+    mock_ok = AsyncMock()
+    mock_ok.ping = AsyncMock(return_value=True)
+    mock_ok.set = AsyncMock(side_effect=mock_set_with_race)
+    monkeypatch.setattr(sm, "_get_redis_client", AsyncMock(return_value=mock_ok))
+
+    flushed = await sm.flush_memory_to_redis()
+    assert flushed == 1
+    # 핵심: 새 데이터가 memory_store에 보존되어야 함
+    assert key in sm._memory_store
+    assert sm._memory_store[key][1][0]["content"] == "new"
+
+
+# ================================================================
+# turns trim tests (Lua max_turns)
+# ================================================================
+
+
+@pytest.mark.asyncio
+async def test_lua_turns_trim(monkeypatch):
+    """max_turns 초과 시 오래된 turns가 잘려야 함."""
+    import json as _json
+
+    settings = _RedisSettings()
+    settings.session_memory_max_turns = 3
+    monkeypatch.setattr(sm, "_settings", lambda: settings)
+    sm._reset_for_test()
+
+    mock_client, store = _make_mock_redis()
+    monkeypatch.setattr(sm, "_get_redis_client", AsyncMock(return_value=mock_client))
+
+    # max_turns=3 초과하는 4턴 추가
+    for i in range(4):
+        await sm.append_session_turn("user:1", "s1", f"q{i}", f"a{i}")
+
+    key = sm._make_key("user:1", "s1")
+    data = _json.loads(store[key])
+    # turns가 3개로 trim (q0 제거, q1~q3 유지)
+    assert len(data["turns"]) == 3
+    assert data["turns"][0]["question"] == "q1"
+    assert data["turns"][-1]["question"] == "q3"

@@ -502,6 +502,10 @@ class Settings(BaseSettings):
         default=20, gt=0,
         description="세션당 최대 저장 메시지 수 (user+assistant 합산)"
     )
+    session_memory_max_turns: int = Field(
+        default=50, gt=0,
+        description="세션당 최대 턴 메타데이터 수 (evaluation_data 포함, ~5KB/턴)"
+    )
     session_memory_ttl_seconds: int = Field(
         default=90000, gt=0,
         description="세션 메모리 TTL (초). 기본 25시간 (24시간 후 마이그레이션 + 1시간 버퍼)"

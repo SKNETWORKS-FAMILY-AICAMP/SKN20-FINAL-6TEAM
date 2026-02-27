@@ -74,7 +74,8 @@ Redis 또는 in-memory 기반 세션 메모리로 멀티턴 대화를 지원합�
 | `SESSION_MEMORY_BACKEND` | `memory` | `memory` (단일 워커) / `redis` (다중 워커) |
 | `REDIS_URL` | (empty) | Redis URL. backend=redis 시 필수 |
 | `SESSION_MEMORY_MAX_MESSAGES` | `20` | 세션당 최대 메시지 수 |
-| `SESSION_MEMORY_TTL_SECONDS` | `86400` | 세션 TTL (24시간) |
+| `SESSION_MEMORY_MAX_TURNS` | `50` | 세션당 최대 턴 메타데이터 수 (~5KB/턴) |
+| `SESSION_MEMORY_TTL_SECONDS` | `90000` | 세션 TTL (25시간 = 24시간 + 1시간 마이그레이션 버퍼) |
 
 - **Tests**: `tests/test_session_memory.py` (memory + Redis mock + fallback)
 

@@ -35,6 +35,10 @@ def _session_max_messages() -> int:
     return _settings().session_memory_max_messages
 
 
+def _session_max_turns() -> int:
+    return _settings().session_memory_max_turns
+
+
 def _session_ttl() -> int:
     return _settings().session_memory_ttl_seconds
 
@@ -296,6 +300,7 @@ local turn_json = ARGV[4]
 local user_id_val = ARGV[5]
 local session_id_val = ARGV[6]
 local now_iso = ARGV[7]
+local max_turns = tonumber(ARGV[8])
 
 -- Upgrade v1 (plain array) to v2
 if data and data['v'] == nil then
@@ -342,12 +347,19 @@ if #msgs > max_msg then
 end
 data['messages'] = msgs
 
--- Append turn metadata (no trim)
+-- Append turn metadata and trim to max_turns
 if turn_json ~= '' then
     local ok_turn, turn = pcall(cjson.decode, turn_json)
     if ok_turn then
         local turns = data['turns'] or {}
         table.insert(turns, turn)
+        if max_turns and #turns > max_turns then
+            local trimmed = {}
+            for i = #turns - max_turns + 1, #turns do
+                table.insert(trimmed, turns[i])
+            end
+            turns = trimmed
+        end
         data['turns'] = turns
     end
 end
@@ -420,6 +432,7 @@ async def append_session_turn(
                     str(user_id) if user_id is not None else "",
                     session_id,
                     now_iso,
+                    str(_session_max_turns()),
                 ],
             )
             return
@@ -490,10 +503,13 @@ async def flush_memory_to_redis() -> int:
                 ex=remaining_ttl,
             )
             with _memory_lock:
-                _memory_store.pop(key, None)
+                # 경쟁조건 방지: I/O 중 새 데이터가 추가됐으면 pop하지 않음
+                current = _memory_store.get(key)
+                if current is None or current[0] <= ts:
+                    _memory_store.pop(key, None)
             flushed += 1
         except Exception as exc:
-            logger.debug("flush_memory_to_redis: key=%s failed: %s", key, exc)
+            logger.warning("flush_memory_to_redis: key=%s failed: %s", key, exc)
             break  # Redis still down, stop trying
     if flushed:
         logger.info("Flushed %d/%d memory-fallback sessions to Redis", flushed, len(keys_to_flush))
