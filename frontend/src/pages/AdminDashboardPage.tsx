@@ -105,7 +105,7 @@ const AdminDashboardPage: React.FC = () => {
 
       <div className="min-h-0 flex-1 overflow-auto space-y-6 p-4 sm:p-6">
         {/* 통계 카드 */}
-        {statsLoading ? (
+        {(statsLoading && !stats) ? (
           <div className="flex justify-center py-10">
             <Spinner className="h-8 w-8" />
           </div>
@@ -232,7 +232,7 @@ const AdminDashboardPage: React.FC = () => {
           <CardHeader floated={false} shadow={false} className="rounded-none">
             <Typography variant="h6" color="blue-gray" className="!text-gray-900">
               스케줄러 실행 이력
-              <span className="ml-2 text-xs font-normal text-gray-400">최근 50건 · 10초 자동 갱신</span>
+              <span className="ml-2 text-xs font-normal text-gray-400">최근 10건 · 10초 자동 갱신</span>
             </Typography>
           </CardHeader>
           <CardBody>
@@ -289,7 +289,7 @@ const AdminDashboardPage: React.FC = () => {
             </div>
           </CardHeader>
           <CardBody>
-            {statusLoading ? (
+            {(statusLoading && !serverStatus) ? (
               <div className="flex justify-center py-10">
                 <Spinner className="h-8 w-8" />
               </div>
