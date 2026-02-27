@@ -273,6 +273,7 @@ export const useChatStore = create<ChatState>()(
                   question: msg.content,
                   answer: assistantMsg.content,
                   parent_history_id: lastSyncedHistoryId,
+                  ...(assistantMsg.evaluation_data ? { evaluation_data: assistantMsg.evaluation_data } : {}),
                 });
                 lastSyncedHistoryId = res.data.history_id;
 

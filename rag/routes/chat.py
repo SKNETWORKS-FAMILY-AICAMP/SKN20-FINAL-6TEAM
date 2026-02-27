@@ -71,6 +71,8 @@ async def chat(request: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=400, detail="?붿껌??蹂댁븞 ?뺤콉???섑빐 李⑤떒?섏뿀?듬땲??")
     query = sanitize_result.sanitized_query
     owner_key = _build_owner_key(request)
+    if not request.session_id:
+        logger.debug("No session_id — session memory disabled for this request")
     request_history = _build_effective_history(request)
     effective_history = request_history
     if request.session_id:
@@ -203,6 +205,8 @@ async def chat_stream(request: ChatRequest):
         raise HTTPException(status_code=400, detail="?붿껌??蹂댁븞 ?뺤콉???섑빐 李⑤떒?섏뿀?듬땲??")
     stream_query = sanitize_result.sanitized_query
     owner_key = _build_owner_key(request)
+    if not request.session_id:
+        logger.debug("No session_id — session memory disabled for this request")
     request_history = _build_effective_history(request)
     effective_history = request_history
     if request.session_id:

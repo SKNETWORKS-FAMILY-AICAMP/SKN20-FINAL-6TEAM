@@ -80,7 +80,11 @@ async def _get_redis_client():
 
 
 def _use_redis() -> bool:
-    return _session_backend() == "redis" and bool(_redis_url())
+    backend = _session_backend()
+    if backend == "redis" and not _redis_url():
+        logger.warning("SESSION_MEMORY_BACKEND=redis but REDIS_URL is empty — falling back to in-memory store")
+        return False
+    return backend == "redis" and bool(_redis_url())
 
 
 async def get_session_history(owner_key: str, session_id: str | None) -> list[dict[str, str]]:

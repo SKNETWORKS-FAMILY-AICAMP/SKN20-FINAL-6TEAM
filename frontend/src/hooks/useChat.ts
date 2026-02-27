@@ -183,6 +183,7 @@ export const useChat = () => {
                   ...(agentCodes ? { agent_codes: agentCodes } : {}),
                   ...(collectedSources.length > 0 ? { sources: collectedSources } : {}),
                   ...(collectedActions.length > 0 ? { actions: collectedActions } : {}),
+                  ...(evaluationData ? { evaluation_data: evaluationData } : {}),
                 });
               },
               onError: (error) => {
