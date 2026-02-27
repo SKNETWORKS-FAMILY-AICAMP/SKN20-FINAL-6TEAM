@@ -1,6 +1,6 @@
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 import jwt
 from jwt.exceptions import InvalidTokenError
 from config.database import get_db
@@ -51,7 +51,19 @@ def get_current_user(
             detail="Invalid authentication credentials",
         )
 
-    stmt = select(User).where(User.google_email == user_email, User.use_yn == True)
+    stmt = (
+        select(User)
+        .options(
+            load_only(
+                User.user_id,
+                User.google_email,
+                User.username,
+                User.type_code,
+                User.use_yn,
+            )
+        )
+        .where(User.google_email == user_email, User.use_yn == True)
+    )
     user = db.execute(stmt).scalar_one_or_none()
     if user is None:
         raise HTTPException(
@@ -83,7 +95,19 @@ def get_optional_user(
         user_email = payload.get("sub")
         if not user_email:
             return None
-        stmt = select(User).where(User.google_email == user_email, User.use_yn == True)
+        stmt = (
+            select(User)
+            .options(
+                load_only(
+                    User.user_id,
+                    User.google_email,
+                    User.username,
+                    User.type_code,
+                    User.use_yn,
+                )
+            )
+            .where(User.google_email == user_email, User.use_yn == True)
+        )
         return db.execute(stmt).scalar_one_or_none()
     except InvalidTokenError:
         return None

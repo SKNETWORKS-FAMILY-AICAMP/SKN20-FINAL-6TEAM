@@ -1,5 +1,5 @@
 from sqlalchemy import BigInteger, Column, Date, Integer, String, DateTime, ForeignKey, Text, Boolean, JSON
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import deferred, relationship
 from datetime import datetime
 from config.database import Base
 
@@ -36,6 +36,8 @@ class User(Base):
     type_code = Column(String(8), ForeignKey("code.code"), default="U0000002", comment="U0000001:관리자, U0000002:예비창업자, U0000003:사업자")
     create_date = Column(DateTime, default=datetime.now)
     update_date = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    # 기존 DB에 컬럼 미반영인 환경에서도 기본 조회가 깨지지 않도록 지연 로딩합니다.
+    last_announce_checked_at = deferred(Column(DateTime, nullable=True))
     use_yn = Column(Boolean, nullable=False, default=True, comment="0: 미사용, 1: 사용")
 
     # Relationships

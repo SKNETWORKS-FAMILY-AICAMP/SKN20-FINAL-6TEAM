@@ -598,6 +598,7 @@ CREATE TABLE IF NOT EXISTS `user` (
     `type_code` VARCHAR(8) NOT NULL DEFAULT 'U0000002' COMMENT 'U0000001:관리자, U0000002:예비창업자, U0000003:사업자',
     `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `last_announce_checked_at` DATETIME DEFAULT NULL COMMENT '신규 공고 알림 커서',
     `use_yn` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0: 미사용, 1: 사용',
     
     FOREIGN KEY (`type_code`) REFERENCES `code`(`code`) ON UPDATE CASCADE,
@@ -611,6 +612,10 @@ CREATE TABLE IF NOT EXISTS `user` (
 -- INSERT INTO `user` (`google_email`, `username`, `birth`, `type_code`)
 -- SELECT 'test@bizi.com', '테스트 사용자', '1990-01-01', 'U0000002'
 -- WHERE NOT EXISTS (SELECT 1 FROM `user` LIMIT 1);	
+
+-- 운영 DB 확장 시 적용
+-- ALTER TABLE `user`
+--   ADD COLUMN `last_announce_checked_at` DATETIME NULL COMMENT '신규 공고 알림 커서' AFTER `update_date`;
 
 
 -- ============================================

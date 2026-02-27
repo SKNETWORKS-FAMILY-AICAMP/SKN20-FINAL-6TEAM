@@ -91,7 +91,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
 
     try {
       await api.delete('/users/me');
-      logout();
+      await logout();
       onClose();
       navigate('/login');
     } catch (err: unknown) {

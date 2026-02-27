@@ -132,6 +132,26 @@ export interface Notification {
   link?: string;
 }
 
+export type AnnounceSyncTrigger = 'login' | 'logout';
+
+export interface AnnounceSyncItem {
+  id: string;
+  title: string;
+  message: string;
+  company_label: string;
+  type: 'info';
+  created_at: string;
+  link: string;
+}
+
+export interface AnnounceSyncResponse {
+  trigger: AnnounceSyncTrigger;
+  cursor_from: string | null;
+  cursor_to: string;
+  synced_at: string;
+  items: AnnounceSyncItem[];
+}
+
 // RAG Chat Response (matches rag/schemas/response.py ChatResponse)
 export interface RagChatResponse {
   content: string;

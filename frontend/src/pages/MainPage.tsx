@@ -13,7 +13,6 @@ import { PaperClipIcon, XMarkIcon, DocumentArrowDownIcon } from '@heroicons/reac
 import api from '../lib/api';
 import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
-import { useNotificationStore } from '../stores/notificationStore';
 import { useChat } from '../hooks/useChat';
 import { useDisplayUserType } from '../hooks/useDisplayUserType';
 import { useNotifications } from '../hooks/useNotifications';
@@ -23,12 +22,9 @@ import { getSeasonalQuestions } from '../lib/seasonalQuestions';
 import { ResponseProgress } from '../components/chat/ResponseProgress';
 import { SourceReferences } from '../components/chat/SourceReferences';
 import { ActionButtons } from '../components/chat/ActionButtons';
-import { NotificationToast } from '../components/layout/NotificationToast';
 import { PageHeader } from '../components/common/PageHeader';
 import { stripSourcesSection, generateId } from '../lib/utils';
 import { modifyDocument, fileToBase64, downloadDocumentResponse } from '../lib/documentApi';
-
-const MAX_VISIBLE_TOASTS = 5;
 
 const normalizeNotificationSchedules = (value: unknown): Schedule[] => {
   if (!Array.isArray(value)) {
@@ -62,7 +58,6 @@ const normalizeNotificationCompanies = (value: unknown): Company[] => {
 
 const MainPage: React.FC = () => {
   const { isAuthenticated, user } = useAuthStore();
-  const { notifications, toastQueue, dismissToast } = useNotificationStore();
   const displayUserType = useDisplayUserType();
   const { sessions, currentSessionId, createSession, isStreaming, addMessage } = useChatStore();
   const { sendMessage, isLoading, stopStreaming } = useChat();
@@ -80,10 +75,6 @@ const MainPage: React.FC = () => {
 
   const currentSession = sessions.find((s) => s.id === currentSessionId);
   const messages = currentSession?.messages || [];
-  const visibleToastNotifications = toastQueue
-    .slice(0, MAX_VISIBLE_TOASTS)
-    .map((toastId) => notifications.find((notification) => notification.id === toastId) ?? null)
-    .filter((notification): notification is NonNullable<typeof notification> => notification !== null);
 
   useNotifications(notificationSchedules, notificationCompanyNameById);
 
@@ -273,16 +264,6 @@ const MainPage: React.FC = () => {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {isAuthenticated &&
-        visibleToastNotifications.map((notification, index) => (
-          <NotificationToast
-            key={notification.id}
-            notification={notification}
-            onClose={() => dismissToast(notification.id)}
-            placement="bell-side"
-            stackIndex={index}
-          />
-        ))}
       {/* Header */}
       <PageHeader
         title={'\u0041\u0049 \uC0C1\uB2F4'}

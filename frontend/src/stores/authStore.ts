@@ -1,10 +1,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { User } from '../types';
-import { useChatStore } from './chatStore';
+import { syncAnnounceNotifications } from '../lib/announceApi';
 import api from '../lib/api';
+import type { AnnounceSyncTrigger, User } from '../types';
+import { useChatStore } from './chatStore';
+import { useNotificationStore } from './notificationStore';
 
 const AUTH_CHECK_DEDUP_MS = 3000;
+const ANNOUNCE_SYNC_LOGOUT_MAX_WAIT_MS = 1500;
 let authCheckInFlight: Promise<void> | null = null;
 let lastAuthCheckAt = 0;
 
@@ -19,6 +22,34 @@ interface AuthState {
   checkAuth: () => Promise<void>;
 }
 
+const waitFor = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+const syncAnnounceNotificationsToStore = async (
+  trigger: AnnounceSyncTrigger
+): Promise<void> => {
+  try {
+    const response = await syncAnnounceNotifications(trigger);
+    const addNotification = useNotificationStore.getState().addNotification;
+
+    response.items.forEach((item) => {
+      addNotification({
+        id: item.id,
+        title: item.title,
+        message: item.message,
+        company_label: item.company_label,
+        type: item.type,
+        created_at: item.created_at,
+        link: item.link,
+      });
+    });
+  } catch (error) {
+    console.error(`Failed to sync announce notifications (${trigger}):`, error);
+  }
+};
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -27,15 +58,23 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       login: async (user) => {
         set({ isAuthenticated: true, user });
+        useNotificationStore.getState().bindOwner(user.user_id);
+        void syncAnnounceNotificationsToStore('login');
         await useChatStore.getState().syncGuestMessages();
         useChatStore.getState().resetGuestCount();
         await useChatStore.getState().bootstrapFromServerHistories();
       },
       logout: async () => {
+        const logoutSyncPromise = syncAnnounceNotificationsToStore('logout');
+        await Promise.race([
+          logoutSyncPromise,
+          waitFor(ANNOUNCE_SYNC_LOGOUT_MAX_WAIT_MS),
+        ]);
+
         try {
           await api.post('/auth/logout');
         } catch {
-          // 서버 로그아웃 실패해도 클라이언트 상태는 초기화
+          // 서버 로그아웃 실패여도 클라이언트 상태는 초기화합니다.
         }
         get().clearAuth();
       },
@@ -66,6 +105,7 @@ export const useAuthStore = create<AuthState>()(
             const response = await api.get('/auth/me');
             const { user } = response.data;
             set({ isAuthenticated: true, user });
+            useNotificationStore.getState().bindOwner(user.user_id);
             useChatStore.getState().bootstrapFromServerHistories();
           } catch {
             set({ isAuthenticated: false, user: null });

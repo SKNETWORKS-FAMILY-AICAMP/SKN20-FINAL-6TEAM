@@ -3,11 +3,15 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { IconButton } from '@material-tailwind/react';
 import { Bars3Icon } from '@heroicons/react/24/outline';
 import { Sidebar } from './Sidebar';
+import { NotificationToast } from './NotificationToast';
 import { ToastContainer } from '../common/ToastContainer';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { useAuthStore } from '../../stores/authStore';
+import { useNotificationStore } from '../../stores/notificationStore';
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'bizi.sidebar.collapsed.desktop';
 const MOBILE_BREAKPOINT_QUERY = '(max-width: 1023px)';
+const MAX_VISIBLE_TOASTS = 5;
 
 const getInitialDesktopCollapseState = (): boolean => {
   if (typeof window === 'undefined') {
@@ -20,10 +24,16 @@ const getInitialDesktopCollapseState = (): boolean => {
 export const MainLayout: React.FC = () => {
   const location = useLocation();
   const isMobile = useMediaQuery(MOBILE_BREAKPOINT_QUERY);
+  const { isAuthenticated } = useAuthStore();
+  const { notifications, toastQueue, dismissToast } = useNotificationStore();
   const [isSidebarCollapsedDesktop, setIsSidebarCollapsedDesktop] = useState<boolean>(
     getInitialDesktopCollapseState
   );
   const [isSidebarOpenMobile, setIsSidebarOpenMobile] = useState(false);
+  const visibleToastNotifications = toastQueue
+    .slice(0, MAX_VISIBLE_TOASTS)
+    .map((toastId) => notifications.find((notification) => notification.id === toastId) ?? null)
+    .filter((notification): notification is NonNullable<typeof notification> => notification !== null);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -63,6 +73,16 @@ export const MainLayout: React.FC = () => {
         onClose={() => setIsSidebarOpenMobile(false)}
       />
       <main className="relative flex-1 min-h-0 min-w-0 overflow-auto">
+        {isAuthenticated &&
+          visibleToastNotifications.map((notification, index) => (
+            <NotificationToast
+              key={notification.id}
+              notification={notification}
+              onClose={() => dismissToast(notification.id)}
+              placement="bell-side"
+              stackIndex={index}
+            />
+          ))}
         {isMobile && !isSidebarOpenMobile && (
           <div className="pointer-events-none fixed left-3 top-3 z-30 lg:hidden">
             <div className="pointer-events-auto rounded-xl border border-gray-200 bg-white/95 p-1 shadow-lg backdrop-blur">
