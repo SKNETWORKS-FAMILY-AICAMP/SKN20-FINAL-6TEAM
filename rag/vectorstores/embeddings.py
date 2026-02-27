@@ -1,12 +1,12 @@
-﻿"""?꾨쿋???ㅼ젙 紐⑤뱢.
+"""임베딩 설정 모듈.
 
-??紐⑤뱢? VectorDB?먯꽌 ?ъ슜???꾨쿋?⑹쓣 ?ㅼ젙?⑸땲??
-EMBEDDING_PROVIDER ?섍꼍蹂?섏뿉 ?곕씪 濡쒖뺄(HuggingFace) ?먮뒗 RunPod GPU瑜??ъ슜?⑸땲??
+이 모듈은 VectorDB에서 사용할 임베딩을 설정합니다.
+EMBEDDING_PROVIDER 환경변수에 따라 로컬(HuggingFace) 또는 RunPod GPU를 사용합니다.
 
 Example:
     >>> from vectorstores.embeddings import get_embeddings
     >>> embeddings = get_embeddings()
-    >>> vector = embeddings.embed_query("李쎌뾽 吏?먭툑")
+    >>> vector = embeddings.embed_query("창업 지원금")
 """
 
 import logging
@@ -20,21 +20,22 @@ logger = logging.getLogger(__name__)
 
 
 class RunPodEmbeddings(Embeddings):
-    """RunPod Serverless瑜??듯븳 ?꾨쿋??
+    """RunPod Serverless를 통한 임베딩.
 
-    RunPod GPU ?붾뱶?ъ씤?몄뿉 HTTP ?붿껌??蹂대궡 ?꾨쿋??踰≫꽣瑜??앹꽦?⑸땲??
-    LangChain Embeddings ?명꽣?섏씠?ㅻ? 援ы쁽?섏뿬 湲곗〈 肄붾뱶? ?명솚?⑸땲??
+    RunPod GPU 엔드포인트에 HTTP 요청을 보내 임베딩 벡터를 생성합니다.
+    LangChain Embeddings 인터페이스를 구현하여 기존 코드와 호환됩니다.
 
     Attributes:
-        api_url: RunPod runsync API URL
-        headers: HTTP ?붿껌 ?ㅻ뜑 (?몄쬆 ?ы븿)
+        base_url: RunPod base API URL
+        run_url: RunPod run API URL
+        headers: HTTP 요청 헤더 (인증 포함)
     """
 
     def __init__(self, api_key: str, endpoint_id: str) -> None:
-        """RunPodEmbeddings瑜?珥덇린?뷀빀?덈떎.
+        """RunPodEmbeddings를 초기화합니다.
 
         Args:
-            api_key: RunPod API ??
+            api_key: RunPod API 키
             endpoint_id: RunPod Serverless Endpoint ID
         """
         self.base_url = f"https://api.runpod.ai/v2/{endpoint_id}"
@@ -45,16 +46,16 @@ class RunPodEmbeddings(Embeddings):
         }
 
     def _call_runpod(self, texts: list[str]) -> list[list[float]]:
-        """RunPod API瑜??숆린 ?몄텧?섏뿬 ?꾨쿋??踰≫꽣瑜?諛섑솚?⑸땲??
+        """RunPod API를 동기 호출하여 임베딩 벡터를 반환합니다.
 
         Args:
-            texts: ?꾨쿋?⑺븷 ?띿뒪??由ъ뒪??
+            texts: 임베딩할 텍스트 리스트
 
         Returns:
-            ?꾨쿋??踰≫꽣 由ъ뒪??
+            임베딩 벡터 리스트
 
         Raises:
-            RuntimeError: RunPod API ?몄텧 ?ㅽ뙣 ??
+            RuntimeError: RunPod API 호출 실패 시
         """
         import httpx
         import time
@@ -95,16 +96,16 @@ class RunPodEmbeddings(Embeddings):
 
         raise RuntimeError("RunPod 임베딩 실패: polling timeout")
     async def _acall_runpod(self, texts: list[str]) -> list[list[float]]:
-        """RunPod API瑜?鍮꾨룞湲??몄텧?섏뿬 ?꾨쿋??踰≫꽣瑜?諛섑솚?⑸땲??
+        """RunPod API를 비동기 호출하여 임베딩 벡터를 반환합니다.
 
         Args:
-            texts: ?꾨쿋?⑺븷 ?띿뒪??由ъ뒪??
+            texts: 임베딩할 텍스트 리스트
 
         Returns:
-            ?꾨쿋??踰≫꽣 由ъ뒪??
+            임베딩 벡터 리스트
 
         Raises:
-            RuntimeError: RunPod API ?몄텧 ?ㅽ뙣 ??
+            RuntimeError: RunPod API 호출 실패 시
         """
         import asyncio
         import httpx
@@ -146,58 +147,58 @@ class RunPodEmbeddings(Embeddings):
         raise RuntimeError("RunPod 임베딩 실패: polling timeout")
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        """臾몄꽌 由ъ뒪?몃? ?숆린 ?꾨쿋?⑺빀?덈떎.
+        """문서 리스트를 동기 임베딩합니다.
 
         Args:
-            texts: ?꾨쿋?⑺븷 ?띿뒪??由ъ뒪??
+            texts: 임베딩할 텍스트 리스트
 
         Returns:
-            ?꾨쿋??踰≫꽣 由ъ뒪??
+            임베딩 벡터 리스트
         """
         if not texts:
             return []
-        logger.debug("[RunPod] embed_documents: %d嫄??붿껌", len(texts))
+        logger.debug("[RunPod] embed_documents: %d건 요청", len(texts))
         return self._call_runpod(texts)
 
     def embed_query(self, text: str) -> list[float]:
-        """?⑥씪 荑쇰━瑜??숆린 ?꾨쿋?⑺빀?덈떎.
+        """단일 쿼리를 동기 임베딩합니다.
 
         Args:
-            text: ?꾨쿋?⑺븷 ?띿뒪??
+            text: 임베딩할 텍스트
 
         Returns:
-            ?꾨쿋??踰≫꽣
+            임베딩 벡터
         """
         return self.embed_documents([text])[0]
 
     async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
-        """臾몄꽌 由ъ뒪?몃? 鍮꾨룞湲??꾨쿋?⑺빀?덈떎.
+        """문서 리스트를 비동기 임베딩합니다.
 
         Args:
-            texts: ?꾨쿋?⑺븷 ?띿뒪??由ъ뒪??
+            texts: 임베딩할 텍스트 리스트
 
         Returns:
-            ?꾨쿋??踰≫꽣 由ъ뒪??
+            임베딩 벡터 리스트
         """
         if not texts:
             return []
-        logger.debug("[RunPod] aembed_documents: %d嫄??붿껌", len(texts))
+        logger.debug("[RunPod] aembed_documents: %d건 요청", len(texts))
         return await self._acall_runpod(texts)
 
     async def aembed_query(self, text: str) -> list[float]:
-        """?⑥씪 荑쇰━瑜?鍮꾨룞湲??꾨쿋?⑺빀?덈떎.
+        """단일 쿼리를 비동기 임베딩합니다.
 
         Args:
-            text: ?꾨쿋?⑺븷 ?띿뒪??
+            text: 임베딩할 텍스트
 
         Returns:
-            ?꾨쿋??踰≫꽣
+            임베딩 벡터
         """
         return (await self.aembed_documents([text]))[0]
 
 
 def _get_local_device() -> str:
-    """CUDA > MPS > CPU ?곗꽑?쒖쐞濡??붾컮?댁뒪 諛섑솚."""
+    """CUDA > MPS > CPU 우선순위로 디바이스를 반환."""
     import torch
 
     if torch.cuda.is_available():
@@ -209,15 +210,15 @@ def _get_local_device() -> str:
 
 @lru_cache(maxsize=1)
 def get_embeddings(model: str | None = None) -> Embeddings:
-    """?꾨쿋???몄뒪?댁뒪瑜?媛?몄샃?덈떎 (?깃???.
+    """임베딩 인스턴스를 가져옵니다 (싱글톤).
 
-    EMBEDDING_PROVIDER ?ㅼ젙???곕씪 濡쒖뺄(HuggingFace) ?먮뒗 RunPod???ъ슜?⑸땲??
+    EMBEDDING_PROVIDER 설정에 따라 로컬(HuggingFace) 또는 RunPod를 사용합니다.
 
     Args:
-        model: ?꾨쿋??紐⑤뜽 ?대쫫. None?대㈃ ?ㅼ젙媛??ъ슜 (湲곕낯: BAAI/bge-m3)
+        model: 임베딩 모델 이름. None이면 설정값 사용 (기본: BAAI/bge-m3)
 
     Returns:
-        Embeddings ?몄뒪?댁뒪 (HuggingFaceEmbeddings ?먮뒗 RunPodEmbeddings)
+        Embeddings 인스턴스 (HuggingFaceEmbeddings 또는 RunPodEmbeddings)
     """
     from utils.config import get_settings
 
@@ -225,7 +226,7 @@ def get_embeddings(model: str | None = None) -> Embeddings:
 
     if settings.embedding_provider == "runpod":
         logger.info(
-            "[?꾨쿋?? RunPod 紐⑤뱶 (endpoint: %s)",
+            "[임베딩] RunPod 모드 (endpoint: %s)",
             settings.runpod_endpoint_id,
         )
         return RunPodEmbeddings(
@@ -233,14 +234,14 @@ def get_embeddings(model: str | None = None) -> Embeddings:
             endpoint_id=settings.runpod_endpoint_id,
         )
 
-    # 濡쒖뺄 紐⑤뱶 (湲곗〈 ?숈옉)
+    # 로컬 모드 (기존 동작)
     from langchain_huggingface import HuggingFaceEmbeddings
 
     config = VectorDBConfig()
     model_name = model or config.embedding_model
     device = _get_local_device()
 
-    logger.info("[?꾨쿋?? 濡쒖뺄 紐⑤뱶: %s (?붾컮?댁뒪: %s)", model_name, device)
+    logger.info("[임베딩] 로컬 모드: %s (디바이스: %s)", model_name, device)
 
     return HuggingFaceEmbeddings(
         model_name=model_name,

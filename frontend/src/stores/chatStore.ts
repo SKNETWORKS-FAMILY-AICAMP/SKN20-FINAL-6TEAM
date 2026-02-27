@@ -7,7 +7,7 @@ import { generateId } from '../lib/utils';
 const MAX_SESSIONS = 50;
 const MAX_SERVER_HISTORY_LOAD = 100;
 
-// syncGuestMessages ??덈뻻 ?紐꾪뀱 獄쎻뫗? 揶쎛??
+// syncGuestMessages ?? ?? ?? ???
 let isSyncing = false;
 let isBootstrapping = false;
 
@@ -52,12 +52,12 @@ interface ChatState {
   setStreaming: (streaming: boolean) => void;
   clearMessages: () => void;
 
-  // History linking (?紐꾨↑퉪?
+  // History linking (?? history_id ??)
   setLastHistoryId: (id: number | null) => void;
   setLastHistoryIdForSession: (sessionId: string, id: number | null) => void;
   getLastHistoryId: () => number | null;
 
-  // Session-aware message update (??쑬猷욄묾?餓??紐꾨??袁れ넎 ????
+  // Session-aware message update (?? ?? ??? ????)
   updateMessageInSession: (sessionId: string, messageId: string, updates: Partial<ChatMessage>) => void;
 
   // Guest message limit
@@ -97,7 +97,7 @@ export const useChatStore = create<ChatState>()(
       createSession: (title?: string) => {
         const session = createNewSession(title);
         set((state) => {
-          // ??살삋???紐꾨??癒?짗 ?類ｂ봺 (MAX_SESSIONS ?λ뜃????
+          // ?? ??? ?? ??? ???? ?? ??? ??
           const updated = [session, ...state.sessions];
           const trimmed = updated.length > MAX_SESSIONS
             ? updated.slice(0, MAX_SESSIONS)
