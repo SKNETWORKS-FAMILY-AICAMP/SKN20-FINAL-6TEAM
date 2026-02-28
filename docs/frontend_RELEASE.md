@@ -1,5 +1,11 @@
 # Release Notes
 
+## [2026-02-28] - parent_history_id 플랫 루트 참조 구조 전환 + 멀티턴 안정성 개선 + chatStore 리팩토링
+
+### Refactoring
+- **historyItemToMessages 헬퍼 추출** (`stores/chatStore.ts`): DB/Redis 세션 메시지 변환 중복 로직 → 단일 헬퍼 함수로 통합
+- **Redis 세션 상세 조회 병렬화** (`stores/chatStore.ts`): `for...of` 순차 조회 → `Promise.all` 병렬 처리
+
 ## [2026-02-28] - parent_history_id 플랫 루트 참조 구조 전환 + 멀티턴 안정성 개선
 
 ### Features
