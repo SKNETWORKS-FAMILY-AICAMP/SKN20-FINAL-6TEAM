@@ -128,6 +128,7 @@ export interface ChatSession {
   created_at: string;
   updated_at: string;
   lastHistoryId?: number | null;
+  rootHistoryId?: number | null;  // 스레드 root history ID
 }
 
 // Notification

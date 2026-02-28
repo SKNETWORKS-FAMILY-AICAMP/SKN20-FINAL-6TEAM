@@ -113,8 +113,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Redis 연결 확인 (session_memory_backend=redis인 경우)
     if settings.session_memory_backend == "redis" and settings.redis_url:
         try:
-            from routes._session_memory import _get_redis_client
-            redis_client = await _get_redis_client()
+            from routes._session_memory import get_session_redis_client
+            redis_client = await get_session_redis_client()
             await redis_client.ping()
             logger.info("Redis 연결 성공 (%s)", settings.redis_url.split("@")[-1] if "@" in settings.redis_url else settings.redis_url)
         except Exception as exc:

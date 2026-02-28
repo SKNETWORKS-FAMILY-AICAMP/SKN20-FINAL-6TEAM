@@ -101,15 +101,19 @@ async def migrate_expiring_sessions() -> int:
     if migrated_keys:
         keys_to_delete = []
         try:
-            from routes._session_memory import _get_redis_client
-            client = await _get_redis_client()
+            from routes._session_memory import get_session_redis_client
+            client = await get_session_redis_client()
+            pipe = client.pipeline(transaction=False)
             for key in migrated_keys:
-                ttl = await client.ttl(key)
-                if ttl <= threshold:
+                pipe.ttl(key)
+            ttls = await pipe.execute()
+            for key, ttl in zip(migrated_keys, ttls):
+                if isinstance(ttl, int) and ttl <= threshold:
                     keys_to_delete.append(key)
                 else:
-                    logger.info("Session resumed during migration, skipping delete: key=%s, ttl=%d", key, ttl)
-        except Exception:
+                    logger.info("Session resumed during migration, skipping delete: key=%s, ttl=%s", key, ttl)
+        except Exception as exc:
+            logger.warning("Redis TTL recheck failed, deleting all migrated keys: %s", exc)
             keys_to_delete = migrated_keys  # Redis 오류 시 원래 동작 유지
 
         if keys_to_delete:

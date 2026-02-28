@@ -92,6 +92,7 @@ export const useChat = () => {
         type: 'user',
         content: message,
         timestamp: new Date(),
+        synced: isAuthenticated,
       };
       addMessage(userMessage);
       setLoading(true);
@@ -127,6 +128,7 @@ export const useChat = () => {
               type: 'assistant',
               content: '',
               timestamp: new Date(),
+              synced: isAuthenticated,
             };
             addMessage(initialMessage);
 
@@ -182,6 +184,7 @@ export const useChat = () => {
                   ...(collectedSources.length > 0 ? { sources: collectedSources } : {}),
                   ...(collectedActions.length > 0 ? { actions: collectedActions } : {}),
                   ...(evaluationData ? { evaluation_data: evaluationData } : {}),
+                  synced: isAuthenticated,
                 });
               },
               onError: (error) => {
@@ -238,6 +241,7 @@ export const useChat = () => {
               ...(ragSources.length > 0 ? { sources: ragSources } : {}),
               ...(ragActions.length > 0 ? { actions: ragActions } : {}),
               timestamp: new Date(),
+              synced: isAuthenticated,
             };
             addMessage(assistantMessage);
           }

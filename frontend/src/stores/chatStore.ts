@@ -7,9 +7,6 @@ import { generateId } from '../lib/utils';
 const MAX_SESSIONS = 50;
 const MAX_SERVER_HISTORY_LOAD = 100;
 
-// bootstrapFromServerHistories 중복 실행 방지 플래그
-let isBootstrapping = false;
-
 interface HistoryItem {
   history_id: number;
   agent_code: string;
@@ -39,6 +36,7 @@ interface ChatState {
   isLoading: boolean;
   isStreaming: boolean;
   isSyncing: boolean;
+  isBootstrapping: boolean;
   guestMessageCount: number;
 
   // Session management
@@ -83,6 +81,7 @@ const createNewSession = (title?: string): ChatSession => ({
   title: title || '새 상담',
   messages: [],
   lastHistoryId: null,
+  rootHistoryId: null,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
 });
@@ -95,6 +94,7 @@ export const useChatStore = create<ChatState>()(
       isLoading: false,
       isStreaming: false,
       isSyncing: false,
+      isBootstrapping: false,
       guestMessageCount: 0,
 
       createSession: (title?: string) => {
@@ -261,7 +261,8 @@ export const useChatStore = create<ChatState>()(
           for (const session of candidateSessions) {
             const messages = session.messages;
             const sessionId = session.id;
-            let lastSyncedHistoryId: number | null = session.lastHistoryId ?? null;
+            // rootHistoryId: 이 세션의 첫 번째 메시지 history_id (모든 후속 메시지가 참조)
+            let rootHistoryId: number | null = session.rootHistoryId ?? null;
 
             for (let i = 0; i < messages.length; i++) {
               const msg = messages[i];
@@ -275,17 +276,22 @@ export const useChatStore = create<ChatState>()(
                   agent_code: assistantMsg.agent_code || 'A0000001',
                   question: msg.content,
                   answer: assistantMsg.content,
-                  parent_history_id: lastSyncedHistoryId,
+                  parent_history_id: rootHistoryId,
                   ...(assistantMsg.evaluation_data ? { evaluation_data: assistantMsg.evaluation_data } : {}),
                 });
-                lastSyncedHistoryId = res.data.history_id;
+                const newHistoryId = res.data.history_id;
+                // 첫 번째 저장된 메시지의 history_id가 이 세션의 root
+                if (rootHistoryId === null) {
+                  rootHistoryId = newHistoryId;
+                }
 
                 set((prev) => ({
                   sessions: prev.sessions.map((s) =>
                     s.id === sessionId
                       ? {
                           ...s,
-                          lastHistoryId: lastSyncedHistoryId,
+                          lastHistoryId: newHistoryId,
+                          rootHistoryId,
                           messages: s.messages.map((m) =>
                             m.id === msg.id || m.id === assistantMsg.id
                               ? { ...m, synced: true }
@@ -309,8 +315,8 @@ export const useChatStore = create<ChatState>()(
         }
       },
       bootstrapFromServerHistories: async () => {
-        if (isBootstrapping) return;
-        isBootstrapping = true;
+        if (get().isBootstrapping) return;
+        set({ isBootstrapping: true });
 
         try {
           const state = get();
@@ -385,6 +391,7 @@ export const useChatStore = create<ChatState>()(
               title: detail.title || '기존 상담 내역',
               messages,
               lastHistoryId: detail.last_history_id,
+              rootHistoryId: detail.root_history_id,
               created_at: createdAt,
               updated_at: updatedAt,
             });
@@ -436,6 +443,7 @@ export const useChatStore = create<ChatState>()(
                 title: detail.title || '활성 상담',
                 messages,
                 lastHistoryId: null,  // Redis 세션은 아직 DB에 없음
+                rootHistoryId: null,
                 created_at: createdAt,
                 updated_at: updatedAt,
               });
@@ -471,7 +479,7 @@ export const useChatStore = create<ChatState>()(
         } catch {
           // History bootstrap failure is non-critical
         } finally {
-          isBootstrapping = false;
+          set({ isBootstrapping: false });
         }
       },
       resetOnLogout: () => {

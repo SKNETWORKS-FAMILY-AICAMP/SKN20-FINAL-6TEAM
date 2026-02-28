@@ -94,6 +94,11 @@ async def _get_redis_client():
     return _redis_client
 
 
+async def get_session_redis_client() -> Any:
+    """공유 Redis 클라이언트 공개 접근자 (헬스체크·배치 잡용)."""
+    return await _get_redis_client()
+
+
 def _use_redis() -> bool:
     if _session_backend() != "redis":
         return False

@@ -45,37 +45,6 @@ class HistoryService:
         return list(self.db.execute(stmt).scalars().all())
 
     @staticmethod
-    def _resolve_root_history_id(
-        history_id: int,
-        parent_map: dict[int, int | None],
-        cache: dict[int, int],
-    ) -> int:
-        """parent 체인을 따라 root history_id를 찾습니다."""
-        if history_id in cache:
-            return cache[history_id]
-
-        current = history_id
-        visited: set[int] = set()
-        while True:
-            if current in cache:
-                root_id = cache[current]
-                break
-            if current in visited:
-                root_id = history_id
-                break
-            visited.add(current)
-
-            parent_id = parent_map.get(current)
-            if parent_id is None or parent_id not in parent_map:
-                root_id = current
-                break
-            current = parent_id
-
-        for hid in visited:
-            cache[hid] = root_id
-        return root_id
-
-    @staticmethod
     def _build_thread_title(histories: list[History], root_id: int) -> str:
         """thread 제목(첫 user 질문 기반)을 생성합니다."""
         root = next((h for h in histories if h.history_id == root_id), None)
@@ -85,31 +54,18 @@ class HistoryService:
             title_source = (first.question or "").strip() or "상담 세션"
         return title_source[:30] + ("..." if len(title_source) > 30 else "")
 
-    def _get_parent_map(self, user_id: int) -> dict[int, int | None]:
-        """사용자의 전체 이력(삭제 포함)에서 parent chain map을 빌드합니다.
-
-        soft-delete된 중간 노드를 포함하여 스레드 분열을 방지합니다.
-        """
-        stmt = (
-            select(History.history_id, History.parent_history_id)
-            .where(History.user_id == user_id)
-        )
-        rows = self.db.execute(stmt).all()
-        return {row.history_id: row.parent_history_id for row in rows}
-
     def _build_thread_summaries(self, user_id: int) -> list[_ThreadSummary]:
-        """사용자 이력을 root chain 기준으로 thread summary로 그룹핑합니다."""
+        """사용자 이력을 parent_history_id 기준으로 thread summary로 그룹핑합니다."""
         histories = self._get_all_user_histories(user_id)
         if not histories:
             return []
 
-        # 삭제된 레코드 포함 parent map → 스레드 분열 방지
-        parent_map = self._get_parent_map(user_id)
-        cache: dict[int, int] = {}
         groups: dict[int, list[History]] = {}
-
         for history in histories:
-            root_id = self._resolve_root_history_id(history.history_id, parent_map, cache)
+            # root: parent_history_id == history_id (자기 참조)
+            # non-root: parent_history_id == root_id
+            # 미마이그레이션(NULL): history_id를 root로 취급
+            root_id = int(history.parent_history_id or history.history_id)
             groups.setdefault(root_id, []).append(history)
 
         summaries: list[_ThreadSummary] = []
@@ -126,11 +82,11 @@ class HistoryService:
             summaries.append(
                 {
                     "root_history_id": root_id,
-                    "last_history_id": last_item.history_id,
+                    "last_history_id": int(last_item.history_id),
                     "title": self._build_thread_title(items_sorted, root_id),
                     "message_count": len(items_sorted),
-                    "first_create_date": first_item.create_date,
-                    "last_create_date": last_item.create_date,
+                    "first_create_date": first_item.create_date,  # type: ignore[typeddict-item]
+                    "last_create_date": last_item.create_date,  # type: ignore[typeddict-item]
                 }
             )
 
@@ -193,36 +149,28 @@ class HistoryService:
         root_history_id: int,
     ) -> HistoryThreadDetailResponse | None:
         """특정 thread(root 기준)의 전체 이력을 반환합니다."""
-        summaries = self._build_thread_summaries(user_id)
-        target_summary = next(
-            (item for item in summaries if item["root_history_id"] == root_history_id),
-            None,
+        # parent_history_id == root_history_id 인 레코드가 해당 스레드 전체
+        # (root 자신은 자기 참조, 나머지는 root를 직접 가리킴)
+        stmt = (
+            select(History)
+            .where(
+                History.user_id == user_id,
+                History.parent_history_id == root_history_id,
+                History.use_yn == True,
+            )
+            .order_by(History.create_date.asc(), History.history_id.asc())
         )
-        if target_summary is None:
+        thread_histories = list(self.db.execute(stmt).scalars().all())
+        if not thread_histories:
             return None
 
-        histories = self._get_all_user_histories(user_id)
-        parent_map = self._get_parent_map(user_id)
-        cache: dict[int, int] = {}
-        thread_histories = [
-            h
-            for h in histories
-            if self._resolve_root_history_id(h.history_id, parent_map, cache) == root_history_id
-        ]
-        thread_histories.sort(
-            key=lambda h: (
-                h.create_date or datetime.min,
-                h.history_id,
-            )
-        )
-
         return HistoryThreadDetailResponse(
-            root_history_id=target_summary["root_history_id"],
-            last_history_id=target_summary["last_history_id"],
-            title=target_summary["title"],
-            message_count=target_summary["message_count"],
-            first_create_date=target_summary["first_create_date"],
-            last_create_date=target_summary["last_create_date"],
+            root_history_id=root_history_id,
+            last_history_id=int(thread_histories[-1].history_id),
+            title=self._build_thread_title(thread_histories, root_history_id),
+            message_count=len(thread_histories),
+            first_create_date=thread_histories[0].create_date,  # type: ignore[arg-type]
+            last_create_date=thread_histories[-1].create_date,  # type: ignore[arg-type]
             histories=[HistoryResponse.model_validate(h) for h in thread_histories],
         )
 
@@ -246,6 +194,9 @@ class HistoryService:
     def create_history(self, data: HistoryCreate, user_id: int) -> History:
         """상담 이력을 저장합니다.
 
+        parent_history_id가 None이면 첫 메시지(root)로 간주하여 자기 참조를 설정합니다.
+        parent_history_id가 제공되면 해당 값이 root ID임을 가정하고 그대로 사용합니다.
+
         Args:
             data: 상담 이력 생성 요청 데이터
             user_id: 사용자 ID
@@ -267,6 +218,12 @@ class HistoryService:
             evaluation_data=data.evaluation_data.model_dump() if data.evaluation_data else None,
         )
         self.db.add(history)
+
+        if data.parent_history_id is None:
+            # 첫 메시지: flush로 ID 확보 후 자기 참조 설정
+            self.db.flush()
+            history.parent_history_id = history.history_id
+
         self.db.commit()
         self.db.refresh(history)
         return history
@@ -301,6 +258,8 @@ class HistoryService:
     ) -> tuple[int, int, list[int]]:
         """배치로 히스토리를 저장합니다 (RAG 마이그레이션용).
 
+        첫 턴은 자기 참조(root), 이후 턴은 모두 root_id를 직접 참조합니다.
+
         Args:
             data: 배치 저장 요청 (user_id, session_id, turns)
 
@@ -310,8 +269,7 @@ class HistoryService:
         saved_count = 0
         skipped_count = 0
         history_ids: list[int] = []
-        # 새 세션은 독립 스레드로 시작 (기존 스레드에 잘못 연결 방지)
-        parent_id: int | None = None
+        root_id: int | None = None
 
         for turn in data.turns:
             # 멱등성: question + answer 앞 200자로 중복 체크
@@ -328,10 +286,10 @@ class HistoryService:
             )
             existing = self.db.execute(dup_stmt).scalar_one_or_none()
             if existing:
-                # 중복 발견 — skip하되 parent_id는 변경하지 않음
-                # (다른 세션의 레코드와 교차 연결 방지)
                 history_ids.append(existing.history_id)
                 skipped_count += 1
+                if root_id is None:
+                    root_id = int(existing.history_id)
                 continue
 
             history = History(
@@ -339,12 +297,17 @@ class HistoryService:
                 agent_code=turn.agent_code,
                 question=turn.question,
                 answer=turn.answer,
-                parent_history_id=parent_id,
+                parent_history_id=root_id,  # 첫 턴은 flush 후 자기 참조로 덮어씀
                 evaluation_data=turn.evaluation_data,
             )
             self.db.add(history)
             self.db.flush()  # history_id 할당
-            parent_id = history.history_id
+
+            if root_id is None:
+                # 첫 턴: 자기 참조 설정
+                history.parent_history_id = history.history_id
+                root_id = int(history.history_id)
+
             history_ids.append(history.history_id)
             saved_count += 1
 
