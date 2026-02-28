@@ -1,5 +1,14 @@
 # Release Notes
 
+## [2026-02-28] - parent_history_id 플랫 루트 참조 구조 전환 + 멀티턴 안정성 개선
+
+### Features
+- **rootHistoryId 상태 추가** (`stores/chatStore.ts`, `types/index.ts`): `ChatSession`에 `rootHistoryId` 필드 추가, `syncGuestMessages` 플랫 구조 반영으로 guest → 로그인 동기화 정합성 향상
+- **isBootstrapping Zustand 상태 이전** (`stores/chatStore.ts`): 모듈 변수 → Zustand 상태로 이동하여 리액트 반응성 확보
+
+### Bug Fixes
+- **로그인 사용자 메시지 synced 플래그 설정** (`hooks/useChat.ts`): 로그인 상태에서 전송된 메시지에 `synced: true` 설정 — 재로그인 시 중복 동기화 방지
+
 ## [2026-02-27] - Dialog → 공통 Modal 컴포넌트 전환 + 에러 toast 일원화 + 기업 삭제 confirm 제거
 
 ### Bug Fixes

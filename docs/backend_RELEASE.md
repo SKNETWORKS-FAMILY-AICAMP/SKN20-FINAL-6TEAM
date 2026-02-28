@@ -1,5 +1,13 @@
 # Release Notes
 
+## [2026-02-28] - parent_history_id 플랫 루트 참조 구조 전환 + Redis 멀티턴 이슈 수정
+
+### Features
+- **parent_history_id 플랫 루트 참조 구조 전환** (`apps/histories/service.py`): 체인 탐색 메서드(`_resolve_root_history_id`, `_get_parent_map`) 제거, 모든 메시지가 root를 직접 참조하도록 변경 — 쿼리 단순화 및 성능 개선
+
+### Bug Fixes
+- **Redis 멀티턴 미해결 이슈 수정** (`apps/histories/service.py`): `create_history_batch` parent_id → root_id 패턴으로 정합성 보완
+
 ## [2026-02-27] - 알림 설정 관리 + 생년월일 CRUD + 신규 공고 알림 + 첫 기업 main_yn 자동 설정
 
 ### Features

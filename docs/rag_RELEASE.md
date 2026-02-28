@@ -1,5 +1,14 @@
 # Release Notes
 
+## [2026-02-28] - Redis 세션 안정성 강화 + 공개 Redis 접근자 추가
+
+### Features
+- **get_session_redis_client 공개 접근자 추가** (`routes/_session_memory.py`): 헬스체크·배치 잡용 공개 Redis 클라이언트 접근자 분리
+
+### Bug Fixes
+- **Redis 세션 turns OOM 방지 + flush 경쟁조건 해소** (`routes/_session_memory.py`): 세션 메모리 크기 제한 및 flush 경쟁조건 수정
+- **session_migrator TTL 재확인 파이프라인 배치 처리** (`jobs/session_migrator.py`): N번 개별 TTL 조회 → 파이프라인 1회 일괄 처리
+
 ## [2026-02-27] - Redis 멀티턴 세션 메모리 보안/안정성 강화 + 모지바케 수정
 
 ### Features
