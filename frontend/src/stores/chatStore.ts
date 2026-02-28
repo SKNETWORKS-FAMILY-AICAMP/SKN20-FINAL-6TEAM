@@ -30,6 +30,18 @@ interface HistoryThreadDetail extends HistoryThreadSummary {
   histories: HistoryItem[];
 }
 
+const historyItemToMessages = (item: HistoryItem): ChatMessage[] => {
+  if (!item.question || !item.answer) return [];
+  const timestamp = item.create_date ? new Date(item.create_date) : new Date();
+  const safeAgentCode: AgentCode = /^A\d{7}$/.test(item.agent_code)
+    ? (item.agent_code as AgentCode)
+    : 'A0000001';
+  return [
+    { id: generateId(), type: 'user', content: item.question, timestamp, synced: true },
+    { id: generateId(), type: 'assistant', content: item.answer, agent_code: safeAgentCode, timestamp, synced: true },
+  ];
+};
+
 interface ChatState {
   sessions: ChatSession[];
   currentSessionId: string | null;
@@ -356,31 +368,7 @@ export const useChatStore = create<ChatState>()(
               return aTime - bTime;
             });
 
-            const messages: ChatMessage[] = [];
-            for (const item of sorted) {
-              if (!item.question || !item.answer) continue;
-
-              const timestamp = item.create_date ? new Date(item.create_date) : new Date();
-              const safeAgentCode: AgentCode = /^A\d{7}$/.test(item.agent_code)
-                ? (item.agent_code as AgentCode)
-                : 'A0000001';
-
-              messages.push({
-                id: generateId(),
-                type: 'user',
-                content: item.question,
-                timestamp,
-                synced: true,
-              });
-              messages.push({
-                id: generateId(),
-                type: 'assistant',
-                content: item.answer,
-                agent_code: safeAgentCode,
-                timestamp,
-                synced: true,
-              });
-            }
+            const messages = sorted.flatMap(historyItemToMessages);
 
             if (!messages.length) continue;
 
@@ -398,41 +386,17 @@ export const useChatStore = create<ChatState>()(
           }
 
           // Redis 활성 세션 변환 (상세 조회 + session_id를 프론트엔드 세션 ID로 매핑)
-          for (const redisThread of redisThreads) {
+          await Promise.all(redisThreads.map(async (redisThread) => {
             try {
               const detailResp = await api.get<HistoryThreadDetail>(
                 `/histories/threads/${redisThread.root_history_id}`,
                 { params: { session_id: redisThread.session_id } }
               );
               const detail = detailResp.data;
-              if (!detail || !detail.histories.length) continue;
+              if (!detail || !detail.histories.length) return;
 
-              const messages: ChatMessage[] = [];
-              for (const item of detail.histories) {
-                if (!item.question || !item.answer) continue;
-                const timestamp = item.create_date ? new Date(item.create_date) : new Date();
-                const safeAgentCode: AgentCode = /^A\d{7}$/.test(item.agent_code)
-                  ? (item.agent_code as AgentCode)
-                  : 'A0000001';
-
-                messages.push({
-                  id: generateId(),
-                  type: 'user',
-                  content: item.question,
-                  timestamp,
-                  synced: true,
-                });
-                messages.push({
-                  id: generateId(),
-                  type: 'assistant',
-                  content: item.answer,
-                  agent_code: safeAgentCode,
-                  timestamp,
-                  synced: true,
-                });
-              }
-
-              if (!messages.length) continue;
+              const messages = detail.histories.flatMap(historyItemToMessages);
+              if (!messages.length) return;
 
               // Redis 세션: session_id를 프론트엔드 세션 ID로 사용하여 채팅 연결
               const sessionId = redisThread.session_id || generateId();
@@ -450,7 +414,7 @@ export const useChatStore = create<ChatState>()(
             } catch {
               // Redis session detail fetch failure is non-critical
             }
-          }
+          }));
 
           if (!fetchedSessions.length) return;
 
