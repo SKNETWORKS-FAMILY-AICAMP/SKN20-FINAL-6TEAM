@@ -31,19 +31,24 @@ RERANK_PROMPT = """주어진 질문과 문서의 관련성을 0-10 점수로 평
 점수만 숫자로 출력하세요 (예: 8):"""
 
 # 도메인 외 질문 거부 응답
-REJECTION_RESPONSE = """Sorry, this question is outside Bizi support scope.
+REJECTION_RESPONSE = """죄송합니다. 해당 질문은 Bizi의 상담 범위에 포함되지 않습니다.
 
-Bizi supports these domains:
-1. Startup/Funding
-2. Finance/Tax
-3. HR/Labor
-4. Legal
+Bizi는 다음 분야의 전문 상담을 제공합니다:
 
-Please rephrase your question within these domains."""
+**1. 창업/지원사업** 🚀
+- 사업자등록, 법인설립, 업종별 인허가
+- 정부/지자체 지원사업, 보조금, 정책자금
+- 마케팅, 홍보 전략
 
-LLM_CLASSIFICATION_FAILURE_RESPONSE = """Sorry, a temporary system error prevented domain classification.
+**2. 세무/회계** 📊
+- 부가세, 법인세, 소득세 신고
+- 세금 계산, 절세 방법
+- 회계 처리, 재무제표
 
-Please try again in a moment. If this repeats, write your question more specifically.
+**3. 인사/노무** 👥
+- 채용, 근로계약, 해고
+- 급여, 퇴직금, 4대보험
+- 연차, 근로시간 관리
 
 **4. 법률** ⚖️
 - 상법, 민법 관련 안내
