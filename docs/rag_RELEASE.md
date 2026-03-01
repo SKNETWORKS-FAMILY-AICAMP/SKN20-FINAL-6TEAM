@@ -1,5 +1,13 @@
 # Release Notes
 
+## [2026-03-01] - RAGAS 평가 파일 통합 정리 + prompts.py 수정
+
+### Documentation
+- **RAGAS 평가 파일 docs/ragas-evaluation/으로 일괄 정리** (`rag/ragas_dataset_v5.jsonl` 이동): qa_test/·docs/ 루트 산재 파일을 버전별(v2~v4, v5, eval_0301)로 통합 — docs/reports/ 중복 보고서 삭제 포함
+
+### Bug Fixes
+- **prompts.py 수정** (`utils/prompts.py`): 프롬프트 내용 업데이트
+
 ## [2026-02-28] - Redis 세션 안정성 강화 + 공개 Redis 접근자 추가
 
 ### Features
