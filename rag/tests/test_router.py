@@ -694,3 +694,78 @@ class TestRagasEvaluationInEvaluateNode:
 
             assert result["ragas_metrics"] is None, \
                 "ragas_evaluator가 None이면 ragas_metrics도 None이어야 함"
+
+
+class TestStreamRewriteMeta:
+    """astream() done dict에 query_rewrite_* 메타데이터 포함 여부 테스트."""
+
+    @pytest.fixture
+    def router_with_mocks(self):
+        """모킹된 MainRouter 인스턴스."""
+        with patch("agents.router.ChromaVectorStore"), \
+             patch("agents.router.RAGChain"), \
+             patch("agents.router.StartupFundingAgent"), \
+             patch("agents.router.FinanceTaxAgent"), \
+             patch("agents.router.HRLaborAgent"), \
+             patch("agents.router.EvaluatorAgent"), \
+             patch("agents.router.get_settings") as mock_settings:
+
+            mock_settings.return_value = Mock(
+                enable_ragas_evaluation=False,
+                enable_llm_evaluation=False,
+                enable_legal_supplement=False,
+                total_timeout=30.0,
+                stream_hard_timeout=60.0,
+                fallback_message="fallback",
+            )
+            yield MainRouter()
+
+    @pytest.mark.asyncio
+    async def test_done_includes_rewrite_meta_rewritten(self, router_with_mocks):
+        """쿼리 재작성 시 done dict에 applied=True 포함."""
+        # query_rewriter: 재작성 수행
+        router_with_mocks._query_rewriter = _make_mock_query_rewriter(return_original=False)
+
+        # domain_classifier: 도메인 외 → reject (가장 짧은 경로)
+        mock_classifier = Mock()
+        mock_classifier.classify.return_value = DomainClassificationResult(
+            domains=[], confidence=0.9, is_relevant=False, method="vector",
+        )
+        router_with_mocks._domain_classifier = mock_classifier
+
+        chunks = []
+        async for chunk in router_with_mocks.astream("그거 자세히 알려줘", history=[
+            {"role": "user", "content": "창업 절차가 궁금합니다"},
+        ]):
+            chunks.append(chunk)
+
+        done_chunks = [c for c in chunks if c.get("type") == "done"]
+        assert len(done_chunks) == 1
+        done = done_chunks[0]
+        assert done["query_rewrite_applied"] is True
+        assert done["query_rewrite_reason"] == "rewritten"
+        assert isinstance(done["query_rewrite_time"], float)
+
+    @pytest.mark.asyncio
+    async def test_done_includes_rewrite_meta_skipped(self, router_with_mocks):
+        """쿼리 재작성 스킵 시 done dict에 applied=False 포함."""
+        # query_rewriter: 원본 그대로
+        router_with_mocks._query_rewriter = _make_mock_query_rewriter(return_original=True)
+
+        # domain_classifier: 도메인 외 → reject
+        mock_classifier = Mock()
+        mock_classifier.classify.return_value = DomainClassificationResult(
+            domains=[], confidence=0.9, is_relevant=False, method="vector",
+        )
+        router_with_mocks._domain_classifier = mock_classifier
+
+        chunks = []
+        async for chunk in router_with_mocks.astream("날씨 알려줘"):
+            chunks.append(chunk)
+
+        done_chunks = [c for c in chunks if c.get("type") == "done"]
+        assert len(done_chunks) == 1
+        done = done_chunks[0]
+        assert done["query_rewrite_applied"] is False
+        assert done["query_rewrite_reason"] == "skip_no_history"
+        assert done["query_rewrite_time"] == 0.0

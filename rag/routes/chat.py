@@ -338,6 +338,9 @@ async def chat_stream(request: ChatRequest):
             done_evaluation = None
             done_ragas_metrics = None
             done_retrieval_results = None
+            done_query_rewrite_applied = None
+            done_query_rewrite_reason = None
+            done_query_rewrite_time = None
 
             async with RequestTokenTracker() as tracker:
                 token_index = 0
@@ -461,6 +464,9 @@ async def chat_stream(request: ChatRequest):
                         done_evaluation = chunk.get("evaluation")
                         done_ragas_metrics = chunk.get("ragas_metrics")
                         done_retrieval_results = chunk.get("retrieval_results")
+                        done_query_rewrite_applied = chunk.get("query_rewrite_applied")
+                        done_query_rewrite_reason = chunk.get("query_rewrite_reason")
+                        done_query_rewrite_time = chunk.get("query_rewrite_time")
 
                 token_usage = tracker.get_usage()
 
@@ -528,6 +534,9 @@ async def chat_stream(request: ChatRequest):
                     contexts=contexts,
                     domains=final_domains,
                     retrieval_evaluation=retrieval_eval,
+                    query_rewrite_applied=done_query_rewrite_applied,
+                    query_rewrite_reason=done_query_rewrite_reason,
+                    query_rewrite_time=done_query_rewrite_time,
                     response_time=response_time,
                 )
                 eval_data_dict = eval_data.model_dump()

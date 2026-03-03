@@ -183,10 +183,15 @@ services:
       - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-runpod}
       - RUNPOD_API_KEY=${RUNPOD_API_KEY}
       - RUNPOD_ENDPOINT_ID=${RUNPOD_ENDPOINT_ID}
+      # Redis 세션 메모리
+      - SESSION_MEMORY_BACKEND=redis
+      - REDIS_URL=redis://redis:6379
     depends_on:
       ssh-tunnel:
         condition: service_healthy
       chromadb:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
@@ -195,6 +200,25 @@ services:
       retries: 3
       start_period: 30s
     command: uvicorn main:app --host 0.0.0.0 --port 8001
+
+  # Redis (세션 메모리)
+  redis:
+    image: redis:7-alpine
+    container_name: bizi-redis
+    restart: unless-stopped
+    expose:
+      - "6379"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
 
   # ChromaDB (벡터 데이터베이스 서버)
   chromadb:

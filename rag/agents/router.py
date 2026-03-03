@@ -288,34 +288,6 @@ class MainRouter:
 
         return "__end__"
 
-    def _augment_query_with_history(self, query: str, history: list[dict]) -> str:
-        """대명사/지시어 질문을 history로 보강합니다.
-
-        짧은 후속 질문("그럼 세금은요?")에 이전 사용자 메시지를 접두사로 붙여
-        분류·검색·생성·평가 전체 파이프라인의 정확도를 높입니다.
-        LLM 호출 없이 휴리스틱으로 동작합니다.
-
-        Args:
-            query: 현재 사용자 질문
-            history: 대화 이력 (role/content dict 리스트)
-
-        Returns:
-            보강된 쿼리 (조건 불충족 시 원본 그대로 반환)
-        """
-        if not history or len(query) > 30:
-            return query
-
-        pronouns = ["그럼", "그거", "그건", "그러면", "이거", "저거", "거기", "이건"]
-        if not any(p in query for p in pronouns):
-            return query
-
-        for msg in reversed(history):
-            if msg.get("role") == "user":
-                logger.info("[쿼리 보강] '%s' → '%s %s'", query, msg["content"][:30], query)
-                return f"{msg['content']} {query}"
-
-        return query
-
     def _is_document_shortcut(self, query: str) -> list[ActionSuggestion] | None:
         """문서 생성만 요청하는 질문인지 판별합니다.
 
@@ -372,11 +344,6 @@ class MainRouter:
         state["timing_metrics"]["query_rewrite_reason"] = rewrite_meta.reason
         state["timing_metrics"]["query_rewrite_applied"] = was_rewritten
 
-        # 대명사/지시어 보강 (history 기반)
-        augmented_query = self._augment_query_with_history(
-            rewritten_query if was_rewritten else query, history
-        )
-
         # 벡터 유사도 기반 도메인 분류 (CPU-bound → 스레드 위임)
         classify_query = rewritten_query if was_rewritten else query
         classification = await asyncio.to_thread(
@@ -388,7 +355,7 @@ class MainRouter:
         if not classification.is_relevant:
             # 거부 시에도 키워드 기반 액션 수집 (문서 생성 버튼 등)
             fallback_actions = self.generator._collect_actions(
-                augmented_query, {}, []
+                classify_query, {}, []
             )
 
             # LLM 재시도 실패 vs 도메인 외 질문 분기
@@ -410,7 +377,7 @@ class MainRouter:
             )
         else:
             # 문서 생성 shortcut 판별: document_generation 액션만 매칭되면 검색 파이프라인 스킵
-            doc_actions = self._is_document_shortcut(augmented_query)
+            doc_actions = self._is_document_shortcut(classify_query)
             if doc_actions:
                 state["domains"] = ["document"]
                 state["final_response"] = DOCUMENT_GENERATION_SHORTCUT_RESPONSE
@@ -997,9 +964,6 @@ class MainRouter:
         if was_rewritten:
             query = rewritten_query
 
-        # 대명사/지시어 보강 (history 기반)
-        augmented_query = self._augment_query_with_history(query, history or [])
-
         # 도메인 분류
         classification = self.domain_classifier.classify(query)
 
@@ -1007,7 +971,7 @@ class MainRouter:
         if not classification.is_relevant:
             # 거부 시에도 키워드 기반 액션은 수집 (문서 생성 버튼 등)
             fallback_actions = self.generator._collect_actions(
-                augmented_query, {}, []
+                query, {}, []
             )
 
             if classification.method == "llm_retry_failed":
@@ -1038,12 +1002,15 @@ class MainRouter:
                 "domains": done_domains,
                 "sources": [],
                 "actions": fallback_actions,
+                "query_rewrite_applied": rewrite_meta.rewritten,
+                "query_rewrite_reason": rewrite_meta.reason,
+                "query_rewrite_time": rewrite_meta.elapsed,
             }
             return
 
         # 문서 생성 shortcut (스트리밍 경로)
         if classification.is_relevant:
-            doc_actions = self._is_document_shortcut(augmented_query)
+            doc_actions = self._is_document_shortcut(query)
             if doc_actions:
                 logger.info(
                     "[스트리밍→단축] 문서 생성 shortcut (원본 도메인=%s, 액션=%d건)",
@@ -1061,6 +1028,9 @@ class MainRouter:
                     "domains": ["document"],
                     "sources": [],
                     "actions": doc_actions,
+                    "query_rewrite_applied": rewrite_meta.rewritten,
+                    "query_rewrite_reason": rewrite_meta.reason,
+                    "query_rewrite_time": rewrite_meta.elapsed,
                 }
                 return
 
@@ -1178,6 +1148,9 @@ class MainRouter:
                 "evaluation": single_evaluation,
                 "ragas_metrics": ragas_metrics_single,
                 "retrieval_results": retrieval_results_map,
+                "query_rewrite_applied": rewrite_meta.rewritten,
+                "query_rewrite_reason": rewrite_meta.reason,
+                "query_rewrite_time": rewrite_meta.elapsed,
             }
         else:
             # 복수 도메인: 통합 생성 에이전트로 LLM 토큰 스트리밍
@@ -1265,4 +1238,7 @@ class MainRouter:
                 "evaluation": evaluation,
                 "ragas_metrics": ragas_metrics_multi,
                 "retrieval_results": retrieval_results,
+                "query_rewrite_applied": rewrite_meta.rewritten,
+                "query_rewrite_reason": rewrite_meta.reason,
+                "query_rewrite_time": rewrite_meta.elapsed,
             }
