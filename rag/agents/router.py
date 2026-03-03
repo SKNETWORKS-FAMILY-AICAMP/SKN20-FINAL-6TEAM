@@ -380,23 +380,34 @@ class MainRouter:
                 len(fallback_actions),
             )
         else:
-            # 문서 생성 shortcut 판별: document_generation 액션만 매칭되면 검색 파이프라인 스킵
+            # 문서 생성 shortcut 판별: LLM intent 우선, fallback으로 키워드 매칭
             # 도메인은 원래 분류 결과를 유지 (hr_labor, startup_funding 등)
-            doc_actions = self._is_document_shortcut(augmented_query)
-            if doc_actions:
-                state["final_response"] = DOCUMENT_GENERATION_SHORTCUT_RESPONSE
-                state["sources"] = []
-                state["actions"] = doc_actions
-                logger.info(
-                    "[분류→단축] 문서 생성 shortcut (도메인=%s, 액션=%d건)",
-                    classification.domains,
-                    len(doc_actions),
-                )
-            else:
+            is_doc_gen = classification.intent == "document_generation"
+            if not is_doc_gen:
+                # LLM intent 없으면 (non-LLM 분류 등) 기존 키워드 방식 fallback
+                is_doc_gen = classification.intent is None and self._is_document_shortcut(classify_query) is not None
+
+            shortcut_done = False
+            if is_doc_gen:
+                doc_actions = self._is_document_shortcut(classify_query) or self.generator._collect_actions(classify_query, {}, [])
+                doc_actions = [a for a in doc_actions if a.type == "document_generation"] if doc_actions else []
+                if doc_actions:
+                    state["final_response"] = DOCUMENT_GENERATION_SHORTCUT_RESPONSE
+                    state["sources"] = []
+                    state["actions"] = doc_actions
+                    logger.info(
+                        "[분류→단축] 문서 생성 shortcut (intent=%s, 도메인=%s, 액션=%d건)",
+                        classification.intent,
+                        classification.domains,
+                        len(doc_actions),
+                    )
+                    shortcut_done = True
+
+            if not shortcut_done:
                 # document_tool BM25+LLM 하이브리드로 문서 생성 의도 감지
                 # (shortcut 아닌 경우: 도메인 응답 + 문서 생성 액션 병행)
                 should_doc, detected_doc_type = self.document_tool.should_invoke(
-                    augmented_query,
+                    classify_query,
                     classification.domains[0] if classification.domains else "",
                 )
                 if should_doc and detected_doc_type:
@@ -408,10 +419,11 @@ class MainRouter:
                     )
 
                 logger.info(
-                    "[분류] 도메인=%s (방법: %s, 신뢰도: %.2f)",
+                    "[분류] 도메인=%s (방법: %s, 신뢰도: %.2f, intent=%s)",
                     classification.domains,
                     classification.method,
                     classification.confidence,
+                    classification.intent,
                 )
 
         classify_time = time.time() - start
@@ -1048,12 +1060,20 @@ class MainRouter:
             }
             return
 
-        # 문서 생성 shortcut (스트리밍 경로)
+        # 문서 생성 shortcut (스트리밍 경로): LLM intent 우선, fallback으로 키워드
         if classification.is_relevant:
-            doc_actions = self._is_document_shortcut(query)
+            is_doc_gen = classification.intent == "document_generation"
+            if not is_doc_gen:
+                is_doc_gen = classification.intent is None and self._is_document_shortcut(query) is not None
+            doc_actions = self._is_document_shortcut(query) if is_doc_gen else None
+            if is_doc_gen and not doc_actions:
+                # intent는 document_generation이지만 매칭 액션이 없으면 수집 시도
+                all_actions = self.generator._collect_actions(query, {}, [])
+                doc_actions = [a for a in all_actions if a.type == "document_generation"] if all_actions else None
             if doc_actions:
                 logger.info(
-                    "[스트리밍→단축] 문서 생성 shortcut (원본 도메인=%s, 액션=%d건)",
+                    "[스트리밍→단축] 문서 생성 shortcut (intent=%s, 원본 도메인=%s, 액션=%d건)",
+                    classification.intent,
                     classification.domains,
                     len(doc_actions),
                 )

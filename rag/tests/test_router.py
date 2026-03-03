@@ -769,3 +769,146 @@ class TestStreamRewriteMeta:
         assert done["query_rewrite_applied"] is False
         assert done["query_rewrite_reason"] == "skip_no_history"
         assert done["query_rewrite_time"] == 0.0
+
+
+class TestIntentBasedShortcut:
+    """LLM intent 기반 문서 생성 shortcut 분기 테스트."""
+
+    @pytest.fixture
+    def router_with_mocks(self):
+        """모킹된 MainRouter 인스턴스."""
+        with patch("agents.router.ChromaVectorStore"), \
+             patch("agents.router.RAGChain"), \
+             patch("agents.router.StartupFundingAgent"), \
+             patch("agents.router.FinanceTaxAgent"), \
+             patch("agents.router.HRLaborAgent"), \
+             patch("agents.router.EvaluatorAgent"), \
+             patch("agents.router.get_settings") as mock_settings:
+
+            mock_settings.return_value = Mock(enable_ragas_evaluation=False)
+            yield MainRouter()
+
+    @pytest.mark.asyncio
+    async def test_intent_document_generation_triggers_shortcut(self, router_with_mocks):
+        """intent=document_generation이면 문서 생성 shortcut 발동."""
+        mock_classification = DomainClassificationResult(
+            domains=["hr_labor"],
+            confidence=0.95,
+            is_relevant=True,
+            method="llm",
+            intent="document_generation",
+        )
+        mock_classifier = Mock()
+        mock_classifier.classify.return_value = mock_classification
+        router_with_mocks._domain_classifier = mock_classifier
+        router_with_mocks._query_rewriter = _make_mock_query_rewriter()
+
+        # _is_document_shortcut이 doc actions 반환하도록 mock
+        mock_action = Mock()
+        mock_action.type = "document_generation"
+        with patch.object(router_with_mocks, "_is_document_shortcut", return_value=[mock_action]):
+            state: RouterState = {
+                "query": "근로계약서 만들어줘",
+                "user_context": None,
+                "domains": [],
+                "classification_result": None,
+                "sub_queries": [],
+                "retrieval_results": {},
+                "responses": {},
+                "documents": [],
+                "final_response": "",
+                "sources": [],
+                "actions": [],
+                "evaluation": None,
+                "ragas_metrics": None,
+                "retry_count": 0,
+                "timing_metrics": {},
+            }
+
+            updated = await router_with_mocks._aclassify_node(state)
+
+        assert updated["domains"] == ["hr_labor"]  # 원본 도메인 유지 (리모트 설계)
+        assert updated["actions"]
+        assert updated["actions"][0].type == "document_generation"
+
+    @pytest.mark.asyncio
+    async def test_intent_consultation_skips_shortcut(self, router_with_mocks):
+        """intent=consultation이면 shortcut 스킵, 일반 상담 흐름."""
+        mock_classification = DomainClassificationResult(
+            domains=["law_common"],
+            confidence=0.90,
+            is_relevant=True,
+            method="llm",
+            intent="consultation",
+        )
+        mock_classifier = Mock()
+        mock_classifier.classify.return_value = mock_classification
+        router_with_mocks._domain_classifier = mock_classifier
+        router_with_mocks._query_rewriter = _make_mock_query_rewriter()
+
+        state: RouterState = {
+            "query": "계약서 작성할 때 주의사항",
+            "user_context": None,
+            "domains": [],
+            "classification_result": None,
+            "sub_queries": [],
+            "retrieval_results": {},
+            "responses": {},
+            "documents": [],
+            "final_response": "",
+            "sources": [],
+            "actions": [],
+            "evaluation": None,
+            "ragas_metrics": None,
+            "retry_count": 0,
+            "timing_metrics": {},
+        }
+
+        updated = await router_with_mocks._aclassify_node(state)
+
+        # shortcut 아님 → domains는 원래 분류 결과 유지
+        assert updated["domains"] == ["law_common"]
+        # final_response가 shortcut 응답이 아님
+        assert updated["final_response"] == ""
+
+    @pytest.mark.asyncio
+    async def test_intent_none_falls_back_to_keyword_shortcut(self, router_with_mocks):
+        """intent=None (non-LLM 분류)이면 기존 키워드 기반 fallback."""
+        mock_classification = DomainClassificationResult(
+            domains=["hr_labor"],
+            confidence=0.80,
+            is_relevant=True,
+            method="keyword",
+            intent=None,
+        )
+        mock_classifier = Mock()
+        mock_classifier.classify.return_value = mock_classification
+        router_with_mocks._domain_classifier = mock_classifier
+        router_with_mocks._query_rewriter = _make_mock_query_rewriter()
+
+        mock_action = Mock()
+        mock_action.type = "document_generation"
+
+        with patch.object(router_with_mocks, "_is_document_shortcut", return_value=[mock_action]):
+            state: RouterState = {
+                "query": "근로계약서 만들어줘",
+                "user_context": None,
+                "domains": [],
+                "classification_result": None,
+                "sub_queries": [],
+                "retrieval_results": {},
+                "responses": {},
+                "documents": [],
+                "final_response": "",
+                "sources": [],
+                "actions": [],
+                "evaluation": None,
+                "ragas_metrics": None,
+                "retry_count": 0,
+                "timing_metrics": {},
+            }
+
+            updated = await router_with_mocks._aclassify_node(state)
+
+        # intent=None + keyword shortcut 매칭 → document shortcut (도메인 유지)
+        assert updated["domains"] == ["hr_labor"]

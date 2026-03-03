@@ -199,7 +199,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    command: uvicorn main:app --host 0.0.0.0 --port 8001
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 
   # Redis (세션 메모리)
   redis:

@@ -68,6 +68,7 @@ class DomainClassificationResult:
     is_relevant: bool
     method: str
     matched_keywords: dict[str, list[str]] | None = None
+    intent: str | None = None
 
 
 _kiwi: Kiwi | None = None
@@ -361,6 +362,7 @@ class VectorDomainClassifier:
                 confidence=float(result.get("confidence", 0.5)),
                 is_relevant=result.get("is_relevant", True),
                 method="llm",
+                intent=result.get("intent", "consultation"),
             )
 
         except Exception as e:

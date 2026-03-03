@@ -62,6 +62,38 @@ class TestDomainClassificationResult:
         assert result.is_relevant is False
         assert result.method == "vector"
 
+    def test_intent_default_none(self):
+        """intent 필드 기본값 None 검증."""
+        result = DomainClassificationResult(
+            domains=["startup_funding"],
+            confidence=0.9,
+            is_relevant=True,
+            method="keyword",
+        )
+        assert result.intent is None
+
+    def test_intent_document_generation(self):
+        """intent=document_generation 설정 검증."""
+        result = DomainClassificationResult(
+            domains=["hr_labor"],
+            confidence=0.95,
+            is_relevant=True,
+            method="llm",
+            intent="document_generation",
+        )
+        assert result.intent == "document_generation"
+
+    def test_intent_consultation(self):
+        """intent=consultation 설정 검증."""
+        result = DomainClassificationResult(
+            domains=["law_common"],
+            confidence=0.90,
+            is_relevant=True,
+            method="llm",
+            intent="consultation",
+        )
+        assert result.intent == "consultation"
+
 
 class TestVectorDomainClassifier:
     """VectorDomainClassifier 클래스 테스트."""
@@ -649,6 +681,68 @@ class TestVectorDomainClassifier:
         assert "startup_funding" in result.domains
         assert "finance_tax" in result.domains
         assert result.method == "llm+heuristic_override"
+
+
+class TestLLMIntentParsing:
+    """LLM 분류 시 intent 필드 파싱 테스트."""
+
+    @pytest.fixture
+    def classifier(self):
+        mock_embeddings = Mock()
+        mock_settings = Mock()
+        mock_settings.enable_vector_domain_classification = False
+        mock_settings.enable_llm_domain_classification = True
+
+        with patch("utils.domain_classifier.get_settings") as mock_get_settings:
+            mock_get_settings.return_value = mock_settings
+            return VectorDomainClassifier(mock_embeddings)
+
+    def test_llm_returns_document_generation_intent(self, classifier):
+        """LLM이 document_generation intent 반환 시 파싱."""
+        json_response = '{"domains": ["hr_labor"], "confidence": 0.95, "is_relevant": true, "reasoning": "근로계약서 작성 요청", "intent": "document_generation"}'
+        with patch.object(classifier, "_llm_classify") as mock_llm:
+            mock_llm.return_value = DomainClassificationResult(
+                domains=["hr_labor"],
+                confidence=0.95,
+                is_relevant=True,
+                method="llm",
+                intent="document_generation",
+            )
+            result = classifier.classify("근로계약서 만들어줘")
+
+        assert result.intent == "document_generation"
+        assert result.is_relevant is True
+        assert "hr_labor" in result.domains
+
+    def test_llm_returns_consultation_intent(self, classifier):
+        """LLM이 consultation intent 반환 시 파싱."""
+        with patch.object(classifier, "_llm_classify") as mock_llm:
+            mock_llm.return_value = DomainClassificationResult(
+                domains=["law_common"],
+                confidence=0.90,
+                is_relevant=True,
+                method="llm",
+                intent="consultation",
+            )
+            result = classifier.classify("계약서 작성할 때 주의사항")
+
+        assert result.intent == "consultation"
+        assert result.is_relevant is True
+        assert "law_common" in result.domains
+
+    def test_llm_missing_intent_defaults_consultation(self, classifier):
+        """LLM 응답에 intent 없으면 consultation 기본값."""
+        with patch.object(classifier, "_llm_classify") as mock_llm:
+            mock_llm.return_value = DomainClassificationResult(
+                domains=["startup_funding"],
+                confidence=0.85,
+                is_relevant=True,
+                method="llm",
+                intent="consultation",
+            )
+            result = classifier.classify("사업자등록 절차")
+
+        assert result.intent == "consultation"
 
 
 class TestGetDomainClassifier:
