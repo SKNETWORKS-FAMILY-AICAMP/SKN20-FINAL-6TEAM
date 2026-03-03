@@ -42,6 +42,20 @@ class CompanyUpdate(BaseModel):
         return v
 
 
+class BiznoLookupResponse(BaseModel):
+    """bizno.net API 조회 결과"""
+    biz_num: str = ""
+    com_name: str = ""
+    ceo: str = ""
+    addr: str = ""
+    open_date: str = ""
+    biz_type: str = ""
+    biz_item: str = ""
+    status: str = ""
+    tax_type: str = ""
+    found: bool = False
+
+
 class CompanyResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

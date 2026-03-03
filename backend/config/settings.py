@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/auth/google/callback"
 
+    # External API
+    BIZNO_API_KEY: str = ""
+
     # RAG Service
     RAG_SERVICE_URL: str = "http://rag:8001"
     RAG_API_KEY: str = ""
