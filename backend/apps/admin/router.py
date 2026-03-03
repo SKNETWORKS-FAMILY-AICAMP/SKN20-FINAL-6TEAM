@@ -3,12 +3,11 @@
 import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from datetime import datetime
 
 from apps.common.deps import get_db, get_current_user
+from apps.common.limiter import limiter
 from apps.common.models import User
 from apps.admin.service import AdminService
 from apps.users.service import ADMIN_TYPE_CODE
@@ -24,7 +23,6 @@ from apps.admin.schemas import (
 from apps.histories.schemas import HistoryDetailResponse
 from config.settings import settings
 
-limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 

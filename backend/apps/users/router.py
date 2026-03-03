@@ -1,13 +1,12 @@
 """사용자 API 라우터."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from config.database import get_db
 from apps.common.models import User
 from apps.common.deps import get_current_user
+from apps.common.limiter import limiter
 from apps.users.service import UserService
 from .schemas import (
     NotificationSettingsResponse,
@@ -17,7 +16,6 @@ from .schemas import (
     UserTypeUpdate,
 )
 
-limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/users", tags=["users"])
 
 

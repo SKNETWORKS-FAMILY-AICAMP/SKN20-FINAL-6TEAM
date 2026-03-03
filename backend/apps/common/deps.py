@@ -1,4 +1,15 @@
+from typing import TypeVar
+
 from fastapi import Depends, HTTPException, Request, status
+
+_T = TypeVar("_T")
+
+
+def require_or_404(obj: _T | None, detail: str = "Not found") -> _T:
+    """obj가 None이면 404를 발생시키고, 아니면 그대로 반환합니다."""
+    if obj is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+    return obj
 from sqlalchemy import select
 from sqlalchemy.orm import Session, load_only
 import jwt

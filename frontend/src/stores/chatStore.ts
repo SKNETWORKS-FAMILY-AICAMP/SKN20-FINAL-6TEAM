@@ -193,11 +193,7 @@ export const useChatStore = create<ChatState>()(
         }));
       },
 
-      updateMessage: (messageId: string, updates: Partial<ChatMessage>) => {
-        const state = get();
-        const sessionId = state.currentSessionId;
-        if (!sessionId) return;
-
+      updateMessageInSession: (sessionId: string, messageId: string, updates: Partial<ChatMessage>) => {
         set((prev) => ({
           sessions: prev.sessions.map((s) => {
             if (s.id !== sessionId) return s;
@@ -212,19 +208,10 @@ export const useChatStore = create<ChatState>()(
         }));
       },
 
-      updateMessageInSession: (sessionId: string, messageId: string, updates: Partial<ChatMessage>) => {
-        set((prev) => ({
-          sessions: prev.sessions.map((s) => {
-            if (s.id !== sessionId) return s;
-            return {
-              ...s,
-              messages: s.messages.map((m) =>
-                m.id === messageId ? { ...m, ...updates } : m
-              ),
-              updated_at: new Date().toISOString(),
-            };
-          }),
-        }));
+      updateMessage: (messageId: string, updates: Partial<ChatMessage>) => {
+        const sessionId = get().currentSessionId;
+        if (!sessionId) return;
+        get().updateMessageInSession(sessionId, messageId, updates);
       },
 
       setLoading: (loading: boolean) => set({ isLoading: loading }),
@@ -472,9 +459,7 @@ export const useChatStore = create<ChatState>()(
       },
 
       getMessages: () => {
-        const state = get();
-        const session = state.sessions.find((s) => s.id === state.currentSessionId);
-        return session?.messages || [];
+        return get().getCurrentSession()?.messages || [];
       },
     }),
     {

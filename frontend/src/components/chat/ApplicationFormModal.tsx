@@ -6,16 +6,14 @@ import {
   analyzeApplicationForm,
   generateDocument,
 } from '../../lib/documentApi';
-import type { ApplicationFormItem, ApplicationFormAnalysis, DocumentTypeField } from '../../lib/documentApi';
+import type { ApplicationFormItem, ApplicationFormAnalysis } from '../../lib/documentApi';
 import { useChatStore } from '../../stores/chatStore';
 import { generateId } from '../../lib/utils';
+import { useDocumentForm } from '../../hooks/useDocumentForm';
 
 interface ApplicationFormModalProps {
   onClose: () => void;
 }
-
-const inputClass =
-  'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500';
 
 type Step = 'select' | 'analyze' | 'fill';
 
@@ -24,10 +22,10 @@ export const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({ onCl
   const [forms, setForms] = useState<ApplicationFormItem[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<ApplicationFormAnalysis | null>(null);
-  const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { formValues, initFormValues, handleChange, isValid, renderField } = useDocumentForm();
 
   // 양식 목록 로드
   useEffect(() => {
@@ -55,11 +53,7 @@ export const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({ onCl
     try {
       const result = await analyzeApplicationForm(key);
       setAnalysis(result);
-      const initial: Record<string, string> = {};
-      for (const f of result.fields) {
-        initial[f.name] = '';
-      }
-      setFormValues(initial);
+      initFormValues(result.fields);
       setStep('fill');
     } catch {
       setError('양식 분석에 실패했습니다. 다시 시도해주세요.');
@@ -69,25 +63,8 @@ export const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({ onCl
     }
   };
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
-  ) => {
-    const { name, value } = e.target;
-    setFormValues((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const isValid = (): boolean => {
-    if (!analysis) return false;
-    return analysis.fields
-      .filter((f) => f.required)
-      .every((f) => {
-        const val = formValues[f.name];
-        return val !== undefined && val.trim() !== '';
-      });
-  };
-
   const handleSubmit = async (format: 'pdf' | 'docx') => {
-    if (!isValid() || !analysis) return;
+    if (!analysis || !isValid(analysis.fields)) return;
     setLoading(true);
     setError(null);
     try {
@@ -129,48 +106,6 @@ export const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({ onCl
     } finally {
       setLoading(false);
     }
-  };
-
-  const renderField = (field: DocumentTypeField) => {
-    const value = formValues[field.name] ?? '';
-
-    if (field.field_type === 'textarea') {
-      return (
-        <textarea
-          name={field.name}
-          value={value}
-          onChange={handleChange}
-          placeholder={field.placeholder}
-          rows={3}
-          className={`${inputClass} resize-none`}
-        />
-      );
-    }
-
-    if (field.field_type === 'select' && field.options) {
-      return (
-        <select name={field.name} value={value} onChange={handleChange} className={inputClass}>
-          <option value="">선택하세요</option>
-          {field.options.map((opt) => (
-            <option key={opt} value={opt}>{opt}</option>
-          ))}
-        </select>
-      );
-    }
-
-    const inputType =
-      field.field_type === 'number' ? 'number' : field.field_type === 'date' ? 'date' : 'text';
-
-    return (
-      <input
-        name={field.name}
-        type={inputType}
-        value={value}
-        onChange={handleChange}
-        placeholder={field.placeholder}
-        className={inputClass}
-      />
-    );
   };
 
   return (
@@ -261,14 +196,14 @@ export const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({ onCl
             </button>
             <button
               onClick={() => handleSubmit('docx')}
-              disabled={!isValid() || loading}
+              disabled={!isValid(analysis.fields) || loading}
               className="inline-flex items-center gap-1.5 px-4 py-2 text-sm text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
             >
               {loading ? '생성중...' : 'DOCX 다운로드'}
             </button>
             <button
               onClick={() => handleSubmit('pdf')}
-              disabled={!isValid() || loading}
+              disabled={!isValid(analysis.fields) || loading}
               className="inline-flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
             >
               {loading ? '생성중...' : 'PDF 다운로드'}

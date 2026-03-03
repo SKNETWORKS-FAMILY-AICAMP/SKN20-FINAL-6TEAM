@@ -1,8 +1,6 @@
 import logging
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy import insert, select
 from sqlalchemy.orm import Session, load_only
 from datetime import datetime, timedelta, timezone
@@ -10,11 +8,12 @@ import jwt
 from jwt.exceptions import InvalidTokenError
 
 logger = logging.getLogger("auth")
-limiter = Limiter(key_func=get_remote_address)
 
+from apps.common.limiter import limiter
 from config.database import get_db
 from config.settings import settings
 from apps.common.models import User
+from apps.common.constants import USER_TYPE_PROSPECTIVE
 from apps.common.deps import get_current_user
 from .services import verify_google_token
 from .schemas import LoginResponse, TestLoginRequest, UserInfo, GoogleLoginRequest
@@ -153,7 +152,7 @@ async def login_google(
             insert(User).values(
                 google_email=email,
                 username=name,
-                type_code="U0000002",
+                type_code=USER_TYPE_PROSPECTIVE,
                 birth=None,
                 google_sub=sub,
                 profile_image=picture,
@@ -172,7 +171,7 @@ async def login_google(
             google_sub=sub,
             profile_image=picture,
             username=name,
-            type_code="U0000002",
+            type_code=USER_TYPE_PROSPECTIVE,
         )
     else:
         updated = False

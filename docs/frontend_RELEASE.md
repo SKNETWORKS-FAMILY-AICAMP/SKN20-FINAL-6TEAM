@@ -1,10 +1,14 @@
 # Release Notes
 
-## [2026-03-03] - 문서 생성 에이전트 UI + 비즈노 사업자 조회 연동
+## [2026-03-03] - 문서 생성 에이전트 UI + 비즈노 사업자 조회 연동 + 코드 정리
 
 ### Features
 - **문서 자동 생성 에이전트 UI** (`components/chat/ActionButtons.tsx`, `ApplicationFormModal.tsx`, `ContractFormModal.tsx`, `DocumentFormModal.tsx`, `lib/documentApi.ts`, `pages/MainPage.tsx`, `stores/chatStore.ts`, `types/index.ts`): 채팅 액션 버튼에 문서 생성 기능 연동 — 근로계약서·사업계획서·범용 문서 생성 모달 추가
 - **비즈노 사업자등록번호 조회 UI 연동** (`components/company/CompanyForm.tsx`): 기업 등록 폼에서 비즈노 API 사업자등록번호 검증 연동
+
+### Refactoring
+- **`useDocumentForm` 커스텀 훅 추출** (`hooks/useDocumentForm.tsx` 신규): `ApplicationFormModal` / `DocumentFormModal` 공유 폼 로직(formValues, initFormValues, handleChange, isValid, renderField) 단일 훅으로 통합
+- **chatStore 중복 상태 제거** (`stores/chatStore.ts`): 중복 메시지 디버그 코드 및 불필요한 중간 상태 정리
 
 ## [2026-02-28] - parent_history_id 플랫 루트 참조 구조 전환 + 멀티턴 안정성 개선 + chatStore 리팩토링
 

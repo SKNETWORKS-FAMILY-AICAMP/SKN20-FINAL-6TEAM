@@ -4,19 +4,17 @@ import {
   fetchDocumentTypes,
   generateDocument,
 } from '../../lib/documentApi';
-import type { DocumentTypeInfo, DocumentTypeField } from '../../lib/documentApi';
+import type { DocumentTypeInfo } from '../../lib/documentApi';
 import { useChatStore } from '../../stores/chatStore';
 import { generateId } from '../../lib/utils';
 import { Modal } from '../common/Modal';
 import { useToastStore } from '../../stores/toastStore';
+import { useDocumentForm } from '../../hooks/useDocumentForm';
 
 interface DocumentFormModalProps {
   documentType: string;
   onClose: () => void;
 }
-
-const inputClass =
-  'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none transition-colors focus:border-blue-500 focus:ring-1 focus:ring-blue-500';
 
 export const DocumentFormModal: React.FC<DocumentFormModalProps> = ({
   documentType,
@@ -24,9 +22,9 @@ export const DocumentFormModal: React.FC<DocumentFormModalProps> = ({
 }) => {
   const addToast = useToastStore((s) => s.addToast);
   const [typeDef, setTypeDef] = useState<DocumentTypeInfo | null>(null);
-  const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
+  const { formValues, initFormValues, handleChange, isValid, renderField } = useDocumentForm();
 
   useEffect(() => {
     let cancelled = false;
@@ -37,12 +35,7 @@ export const DocumentFormModal: React.FC<DocumentFormModalProps> = ({
         const found = types.find((t) => t.type_key === documentType);
         if (found) {
           setTypeDef(found);
-          // 초기값 세팅
-          const initial: Record<string, string> = {};
-          for (const f of found.fields) {
-            initial[f.name] = '';
-          }
-          setFormValues(initial);
+          initFormValues(found.fields);
         } else {
           addToast({ type: 'error', message: `알 수 없는 문서 유형: ${documentType}` });
         }
@@ -58,25 +51,8 @@ export const DocumentFormModal: React.FC<DocumentFormModalProps> = ({
     };
   }, [documentType]);
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
-  ) => {
-    const { name, value } = e.target;
-    setFormValues((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const isValid = (): boolean => {
-    if (!typeDef) return false;
-    return typeDef.fields
-      .filter((f) => f.required)
-      .every((f) => {
-        const val = formValues[f.name];
-        return val !== undefined && val.toString().trim() !== '';
-      });
-  };
-
   const handleSubmit = async (format: 'pdf' | 'docx') => {
-    if (!isValid() || !typeDef) return;
+    if (!typeDef || !isValid(typeDef.fields)) return;
     setLoading(true);
     try {
       // number 필드는 숫자로 변환
@@ -114,50 +90,6 @@ export const DocumentFormModal: React.FC<DocumentFormModalProps> = ({
     }
   };
 
-  const renderField = (field: DocumentTypeField) => {
-    const value = formValues[field.name] ?? '';
-
-    if (field.field_type === 'textarea') {
-      return (
-        <textarea
-          name={field.name}
-          value={value}
-          onChange={handleChange}
-          placeholder={field.placeholder}
-          rows={3}
-          className={`${inputClass} resize-none`}
-        />
-      );
-    }
-
-    if (field.field_type === 'select' && field.options) {
-      return (
-        <select name={field.name} value={value} onChange={handleChange} className={inputClass}>
-          <option value="">선택하세요</option>
-          {field.options.map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </select>
-      );
-    }
-
-    const inputType =
-      field.field_type === 'number' ? 'number' : field.field_type === 'date' ? 'date' : 'text';
-
-    return (
-      <input
-        name={field.name}
-        type={inputType}
-        value={value}
-        onChange={handleChange}
-        placeholder={field.placeholder}
-        className={inputClass}
-      />
-    );
-  };
-
   return (
     <Modal
       open
@@ -176,7 +108,7 @@ export const DocumentFormModal: React.FC<DocumentFormModalProps> = ({
             </button>
             <button
               onClick={() => handleSubmit('docx')}
-              disabled={!isValid() || loading}
+              disabled={!isValid(typeDef.fields) || loading}
               className="inline-flex items-center gap-1.5 px-4 py-2 text-sm text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
             >
               {loading && <LoadingSpinner />}
@@ -184,7 +116,7 @@ export const DocumentFormModal: React.FC<DocumentFormModalProps> = ({
             </button>
             <button
               onClick={() => handleSubmit('pdf')}
-              disabled={!isValid() || loading}
+              disabled={!isValid(typeDef.fields) || loading}
               className="inline-flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
             >
               {loading && <LoadingSpinner />}

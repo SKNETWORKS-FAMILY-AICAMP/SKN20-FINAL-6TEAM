@@ -1,6 +1,6 @@
 # Release Notes
 
-## [2026-03-03] - 프롬프트 리팩토링 + 문서 생성 에이전트 + 멀티턴 개선
+## [2026-03-03] - 프롬프트 리팩토링 + 문서 생성 에이전트 + 멀티턴 개선 + 코드 정리
 
 ### Features
 - **문서 자동 생성 에이전트** (`agents/document_tool.py`, `agents/executor.py`, `agents/router.py`, `routes/documents.py`, `schemas/request.py`, `schemas/response.py`, `utils/s3_client.py`, `utils/file_parser.py`, `utils/search.py`, `utils/config/settings.py`, `vectorstores/build_vectordb.py`, `fonts/`): 근로계약서·사업계획서·범용 문서·신청 양식 자동 생성 에이전트 추가 — S3 저장, PDF/DOCX 출력, 파일 파싱 지원
@@ -8,6 +8,8 @@
 
 ### Refactoring
 - **프롬프트 구조 리팩토링** (`utils/prompts.py`, `schemas/request.py`): `_BASE_PROMPT_TEMPLATE` 추출로 4개 도메인 프롬프트 통합 관리 — Instruction Dilution 해소(grounding 5→2회), `{context}` 끝 배치로 faithfulness 개선, 중복 53% 제거. `UserContext`에 `age` 추가, `annual_revenue` 제거
+- **`shared_actions.py` 공유 ActionRule 추출** (`utils/shared_actions.py` 신규): legal/hr_labor 에이전트의 중복 용역계약서 ActionRule → 공유 모듈로 통합
+- **`_exec_document` 헬퍼 추출** (`routes/documents.py`): generate/modify/contract/business_plan 4개 엔드포인트의 중복 실행 패턴 → 단일 내부 헬퍼로 통합
 
 ### Tests
 - **멀티턴 컨텍스트 E2E 테스트** (`tests/test_multiturn_context.py`, `tests/test_prompts_format_history.py`, `tests/test_router.py`): 멀티턴 시나리오 통합 테스트 추가

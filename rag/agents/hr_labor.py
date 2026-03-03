@@ -6,6 +6,7 @@
 from agents.base import ActionRule, BaseAgent
 from schemas.response import ActionSuggestion
 from utils.prompts import HR_LABOR_PROMPT
+from utils.shared_actions import SERVICE_AGREEMENT_RULE
 
 
 class HRLaborAgent(BaseAgent):
@@ -72,15 +73,7 @@ class HRLaborAgent(BaseAgent):
                 params={"url": "https://www.4insure.or.kr"},
             ),
         ),
-        ActionRule(
-            keywords=["용역", "용역계약", "외주", "아웃소싱", "프리랜서 계약"],
-            action=ActionSuggestion(
-                type="document_generation",
-                label="용역 계약서 생성",
-                description="용역(외주) 계약서를 생성합니다",
-                params={"document_type": "service_agreement"},
-            ),
-        ),
+        SERVICE_AGREEMENT_RULE,
         ActionRule(
             keywords=["개인정보", "개인정보동의", "개인정보 수집", "개인정보 처리"],
             action=ActionSuggestion(
