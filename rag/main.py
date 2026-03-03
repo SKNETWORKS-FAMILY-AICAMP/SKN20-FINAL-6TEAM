@@ -110,6 +110,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     state.router_agent = MainRouter(vector_store=state.vector_store)
     state.executor = ActionExecutor()
 
+    # Write-through httpx 클라이언트 초기화
+    from routes._write_through import init_http_client
+    init_http_client()
+
     # Redis 연결 확인 (session_memory_backend=redis인 경우)
     settings = get_settings()
     if settings.session_memory_backend == "redis" and settings.redis_url:
@@ -194,6 +198,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Redis 세션 클라이언트 정리
     from routes._session_memory import close_redis_client
     await close_redis_client()
+    # Write-through httpx 클라이언트 정리
+    from routes._write_through import close_http_client
+    await close_http_client()
     if state.vector_store:
         state.vector_store.close()
     logger.info("RAG 서비스 종료 완료")

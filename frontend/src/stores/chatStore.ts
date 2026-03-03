@@ -373,7 +373,7 @@ export const useChatStore = create<ChatState>()(
             const createdAt = detail.first_create_date ?? new Date().toISOString();
             const updatedAt = detail.last_create_date ?? createdAt;
             fetchedSessions.push({
-              id: generateId(),
+              id: `db-${detail.root_history_id}`,
               title: detail.title || '기존 상담 내역',
               messages,
               lastHistoryId: detail.last_history_id,

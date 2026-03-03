@@ -284,6 +284,11 @@ class HistoryService:
                 )
                 .limit(1)
             )
+            # root_id 확보 후에는 같은 스레드 내로 중복 체크 범위 축소
+            if root_id is not None:
+                dup_stmt = dup_stmt.where(
+                    History.parent_history_id == root_id,
+                )
             existing = self.db.execute(dup_stmt).scalar_one_or_none()
             if existing:
                 history_ids.append(existing.history_id)
