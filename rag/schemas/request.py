@@ -30,7 +30,6 @@ class CompanyContext(BaseModel):
     employee_count: int | None = Field(default=None, description="직원 수")
     years_in_business: int | None = Field(default=None, description="업력 (년)")
     region: str | None = Field(default=None, description="지역")
-    annual_revenue: int | None = Field(default=None, description="연매출 (원)")
 
     def to_context_string(self) -> str:
         """컨텍스트 문자열로 변환합니다."""
@@ -62,16 +61,20 @@ class UserContext(BaseModel):
         default="prospective",
         description="사용자 유형 (prospective: 예비창업자, startup_ceo: 스타트업 CEO, sme_owner: 중소기업 대표)",
     )
+    age: int | None = Field(default=None, description="사용자 나이")
     company: CompanyContext | None = Field(default=None, description="기업 정보")
 
     def get_user_type_label(self) -> str:
-        """사용자 유형 라벨을 반환합니다."""
+        """사용자 유형 라벨을 반환합니다. 나이가 있으면 함께 표기합니다."""
         labels = {
             "prospective": "예비 창업자",
             "startup_ceo": "스타트업 CEO",
             "sme_owner": "중소기업 대표",
         }
-        return labels.get(self.user_type, "일반 사용자")
+        label = labels.get(self.user_type, "일반 사용자")
+        if self.age is not None:
+            label += f" ({self.age}세)"
+        return label
 
     # -- 메타데이터 필터링 헬퍼 --
 

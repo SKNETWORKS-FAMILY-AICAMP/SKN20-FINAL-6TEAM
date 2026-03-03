@@ -38,6 +38,7 @@ def _build_user_context(user: User, db: Session) -> dict:
     context: dict = {
         "user_id": str(user.user_id),
         "user_type": TYPE_CODE_MAP.get(user.type_code, "prospective"),
+        "age": user.age,
         "company": None,
     }
 
@@ -70,7 +71,6 @@ def _build_user_context(user: User, db: Session) -> dict:
         "employee_count": None,
         "years_in_business": years,
         "region": company.addr,
-        "annual_revenue": None,
     }
     return context
 
