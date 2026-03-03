@@ -1,5 +1,17 @@
 # Release Notes
 
+## [2026-03-03] - 프롬프트 리팩토링 + 문서 생성 에이전트 + 멀티턴 개선
+
+### Features
+- **문서 자동 생성 에이전트** (`agents/document_tool.py`, `agents/executor.py`, `agents/router.py`, `routes/documents.py`, `schemas/request.py`, `schemas/response.py`, `utils/s3_client.py`, `utils/file_parser.py`, `utils/search.py`, `utils/config/settings.py`, `vectorstores/build_vectordb.py`, `fonts/`): 근로계약서·사업계획서·범용 문서·신청 양식 자동 생성 에이전트 추가 — S3 저장, PDF/DOCX 출력, 파일 파싱 지원
+- **멀티턴 P1-P3 개선 + Redis Docker 통합** (`routes/chat.py`, `main.py`, `agents/router.py`): 멀티턴 세션 안정성 3단계 개선, Redis 컨테이너 Docker Compose 통합
+
+### Refactoring
+- **프롬프트 구조 리팩토링** (`utils/prompts.py`, `schemas/request.py`): `_BASE_PROMPT_TEMPLATE` 추출로 4개 도메인 프롬프트 통합 관리 — Instruction Dilution 해소(grounding 5→2회), `{context}` 끝 배치로 faithfulness 개선, 중복 53% 제거. `UserContext`에 `age` 추가, `annual_revenue` 제거
+
+### Tests
+- **멀티턴 컨텍스트 E2E 테스트** (`tests/test_multiturn_context.py`, `tests/test_prompts_format_history.py`, `tests/test_router.py`): 멀티턴 시나리오 통합 테스트 추가
+
 ## [2026-03-01] - RAGAS 평가 파일 통합 정리 + prompts.py 수정
 
 ### Documentation

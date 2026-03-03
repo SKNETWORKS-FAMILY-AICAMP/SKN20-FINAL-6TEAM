@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-03-03] - 멀티턴 E2E 테스트 스크립트 추가
+
+### Tests
+- **멀티턴 E2E 테스트 스크립트** (`test_multiturn.py`, `test_multiturn.sh`): 멀티턴 컨텍스트 종단간 테스트 스크립트 추가
+
 ## [2026-02-27] - clean_jsonl.py 추가 + 로컬 nginx 서비스명 수정
 
 ### Features

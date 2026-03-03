@@ -1,5 +1,12 @@
 # Release Notes
 
+## [2026-03-03] - 문서 생성 에이전트 API + 비즈노 사업자 조회 + age 컨텍스트 전달
+
+### Features
+- **범용 문서 생성 에이전트 API** (`apps/documents/router.py`, `apps/documents/service.py`, `apps/documents/schemas.py`, `apps/common/models.py`, `apps/rag/router.py`, `apps/rag/schemas.py`, `database.sql`, `main.py`): 문서 자동 생성 에이전트 엔드포인트 신규 추가 — generate/modify/contract/business-plan 프록시 및 문서 이력 저장
+- **비즈노 API 사업자등록번호 조회** (`apps/companies/service.py`, `apps/companies/router.py`, `apps/companies/schemas.py`, `config/settings.py`): 기업 등록 시 비즈노 API로 사업자등록번호 유효성 검증
+- **사용자 나이(age) RAG 컨텍스트 전달** (`apps/rag/router.py`): `_build_user_context()`에 `age` 필드 추가 — 연령 맞춤 답변 지원, `annual_revenue` 미사용 필드 제거
+
 ## [2026-02-28] - parent_history_id 플랫 루트 참조 구조 전환 + Redis 멀티턴 이슈 수정
 
 ### Features
