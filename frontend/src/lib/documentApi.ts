@@ -85,6 +85,29 @@ export const generateDocument = async (
   return response.data;
 };
 
+/* ---------- 신청 양식 API ---------- */
+
+export interface ApplicationFormItem {
+  key: string;
+  name: string;
+}
+
+export interface ApplicationFormAnalysis {
+  title: string;
+  description: string;
+  fields: DocumentTypeField[];
+}
+
+export const listApplicationForms = async (): Promise<ApplicationFormItem[]> => {
+  const response = await api.get('/rag/documents/application-forms');
+  return response.data;
+};
+
+export const analyzeApplicationForm = async (formKey: string): Promise<ApplicationFormAnalysis> => {
+  const response = await api.post(`/rag/documents/application-forms/analyze?form_key=${encodeURIComponent(formKey)}`);
+  return response.data;
+};
+
 /* ---------- 문서 수정 API ---------- */
 
 export const modifyDocument = async (
@@ -92,12 +115,16 @@ export const modifyDocument = async (
   fileName: string,
   instructions: string,
   format?: string,
+  userId?: number,
+  documentId?: number,
 ): Promise<DocumentResponse> => {
   const response = await api.post('/rag/documents/modify', {
     file_content: fileContent,
     file_name: fileName,
     instructions,
     format: format || 'docx',
+    ...(userId != null && { user_id: userId }),
+    ...(documentId != null && { document_id: documentId }),
   });
   return response.data;
 };
@@ -118,7 +145,7 @@ export const fileToBase64 = (file: File): Promise<string> => {
 };
 
 /** base64 -> Blob -> 다운로드 트리거 */
-const downloadBase64File = (
+export const downloadBase64File = (
   base64Content: string,
   fileName: string,
   mimeType: string,

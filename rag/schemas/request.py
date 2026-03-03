@@ -287,6 +287,8 @@ class ContractRequest(BaseModel):
 
     company_context: CompanyContext | None = Field(default=None, description="회사 정보")
     format: str = Field(default="pdf", description="출력 형식", pattern=r"^(pdf|docx)$")
+    user_id: int | None = Field(default=None, description="사용자 ID (S3/DB 저장용)")
+    company_id: int | None = Field(default=None, description="회사 ID")
 
 
 class GenerateDocumentRequest(BaseModel):
@@ -303,6 +305,8 @@ class GenerateDocumentRequest(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict, description="문서 필드 값")
     format: str = Field(default="docx", description="출력 형식", pattern=r"^(pdf|docx)$")
     company_context: CompanyContext | None = Field(default=None, description="회사 정보")
+    user_id: int | None = Field(default=None, description="사용자 ID (S3/DB 저장용)")
+    company_id: int | None = Field(default=None, description="회사 ID")
 
 
 class ModifyDocumentRequest(BaseModel):
@@ -313,9 +317,13 @@ class ModifyDocumentRequest(BaseModel):
         file_name: 원본 파일명 (확장자 포함)
         instructions: 수정 지시사항
         format: 출력 형식 (pdf, docx)
+        user_id: 사용자 ID (있으면 S3/DB 저장)
+        document_id: 원본 문서 ID (버전관리)
     """
 
     file_content: str = Field(description="원본 파일 (base64 인코딩)")
     file_name: str = Field(description="원본 파일명 (확장자 포함)")
     instructions: str = Field(description="수정 지시사항", min_length=1, max_length=5000)
     format: str = Field(default="docx", description="출력 형식", pattern=r"^(pdf|docx)$")
+    user_id: int | None = Field(default=None, description="사용자 ID (S3/DB 저장)")
+    document_id: int | None = Field(default=None, description="원본 문서 ID (버전관리)")

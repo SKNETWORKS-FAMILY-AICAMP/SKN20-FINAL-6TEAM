@@ -184,16 +184,21 @@ const MainPage: React.FC = () => {
       try {
         const base64 = await fileToBase64(file);
         const ext = file.name.split('.').pop()?.toLowerCase() || 'docx';
-        const result = await modifyDocument(base64, file.name, message, ext === 'pdf' ? 'pdf' : 'docx');
+        const result = await modifyDocument(base64, file.name, message, ext === 'pdf' ? 'pdf' : 'docx', user?.user_id);
 
-        if (result.success) {
-          downloadDocumentResponse(result);
+        if (result.success && result.file_content && result.file_name) {
           addMessage({
             id: generateId(),
             type: 'assistant',
-            content: `문서가 수정되었습니다. **${result.file_name}** 파일이 다운로드됩니다.`,
+            content: '문서가 수정되었습니다.',
             agent_code: 'A0000008',
             timestamp: new Date(),
+            documentAttachment: {
+              fileContent: result.file_content,
+              fileName: result.file_name,
+              documentType: result.document_type || 'modified_document',
+              downloadable: true,
+            },
           });
         } else {
           addMessage({
@@ -363,6 +368,31 @@ const MainPage: React.FC = () => {
                         )}
                         {msg.actions && msg.actions.length > 0 && (
                           <ActionButtons actions={msg.actions} />
+                        )}
+                        {msg.documentAttachment && (
+                          <div className="mt-3 pt-2 border-t border-gray-200">
+                            <button
+                              onClick={() => {
+                                if (msg.documentAttachment?.downloadable && msg.documentAttachment.fileContent) {
+                                  downloadDocumentResponse({
+                                    success: true,
+                                    file_content: msg.documentAttachment.fileContent,
+                                    file_name: msg.documentAttachment.fileName,
+                                  });
+                                }
+                              }}
+                              disabled={!msg.documentAttachment.downloadable}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                                msg.documentAttachment.downloadable
+                                  ? 'border-green-200 text-green-600 hover:bg-green-50 hover:border-green-300'
+                                  : 'border-gray-200 text-gray-400 cursor-not-allowed bg-gray-50 opacity-50'
+                              }`}
+                              title={msg.documentAttachment.downloadable ? msg.documentAttachment.fileName : '최신 문서만 다운로드할 수 있습니다'}
+                            >
+                              <DocumentArrowDownIcon className="h-4 w-4" />
+                              {msg.documentAttachment.fileName}
+                            </button>
+                          </div>
                         )}
                       </>
                     ) : (

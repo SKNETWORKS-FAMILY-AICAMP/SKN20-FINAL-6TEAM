@@ -685,16 +685,23 @@ CREATE TABLE IF NOT EXISTS `file` (
     `file_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `file_name` VARCHAR(255) NOT NULL DEFAULT '',
     `file_path` VARCHAR(500) NOT NULL DEFAULT '',
-    `history_id` INT DEFAULT NULL,
+    `s3_key` VARCHAR(500) DEFAULT NULL COMMENT 'S3 오브젝트 키',
     `company_id` INT DEFAULT NULL,
+    `user_id` INT DEFAULT NULL,
+    `document_type` VARCHAR(50) DEFAULT NULL COMMENT '문서 유형 (labor_contract, nda 등)',
+    `version` INT NOT NULL DEFAULT 1 COMMENT '문서 버전 (수정 시 증가)',
+    `parent_file_id` INT DEFAULT NULL COMMENT '수정 원본 파일 ID',
+    `metadata` JSON DEFAULT NULL COMMENT '생성 시 사용한 파라미터 등',
     `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
     `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `use_yn` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0: 미사용, 1: 사용',
-    
-    FOREIGN KEY (`history_id`) REFERENCES `history`(`history_id`) ON DELETE SET NULL,
+
     FOREIGN KEY (`company_id`) REFERENCES `company`(`company_id`) ON DELETE SET NULL,
-    INDEX `idx_file_history_id` (`history_id`),
+    FOREIGN KEY (`user_id`) REFERENCES `user`(`user_id`) ON DELETE SET NULL,
+    FOREIGN KEY (`parent_file_id`) REFERENCES `file`(`file_id`) ON DELETE SET NULL,
     INDEX `idx_file_company_id` (`company_id`),
+    INDEX `idx_file_user_id` (`user_id`),
+    INDEX `idx_file_document_type` (`document_type`),
     INDEX `idx_file_use_yn` (`use_yn`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -1098,3 +1105,4 @@ CROSS JOIN (
     UNION ALL SELECT '회사 관련 법적 분쟁 해결'
 ) rq
 WHERE c.code = 'A0000007' AND NOT EXISTS (SELECT 1 FROM `domain_representative_query` LIMIT 1);
+

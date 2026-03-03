@@ -7,6 +7,7 @@ import {
   MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '../../stores/authStore';
+import { ApplicationFormModal } from './ApplicationFormModal';
 import { ContractFormModal } from './ContractFormModal';
 import { DocumentFormModal } from './DocumentFormModal';
 import { LoginPromptModal } from './LoginPromptModal';
@@ -26,6 +27,7 @@ const LLM_DOC_TYPES = new Set([
 
 const ACTION_ICONS: Record<string, typeof DocumentArrowDownIcon> = {
   document_generation: DocumentArrowDownIcon,
+  application_form: DocumentArrowDownIcon,
   external_link: ArrowTopRightOnSquareIcon,
   calculator: CalculatorIcon,
   schedule_alert: BellIcon,
@@ -42,6 +44,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ actions }) => {
   const { isAuthenticated } = useAuthStore();
   const [contractModalOpen, setContractModalOpen] = useState(false);
   const [docModalType, setDocModalType] = useState<string | null>(null);
+  const [appFormModalOpen, setAppFormModalOpen] = useState(false);
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,6 +74,11 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ actions }) => {
     // 그 외 액션은 인증 필요
     if (!isAuthenticated) {
       setLoginPromptOpen(true);
+      return;
+    }
+
+    if (action.type === 'application_form') {
+      setAppFormModalOpen(true);
       return;
     }
 
@@ -123,6 +131,9 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ actions }) => {
           documentType={docModalType}
           onClose={() => setDocModalType(null)}
         />
+      )}
+      {appFormModalOpen && (
+        <ApplicationFormModal onClose={() => setAppFormModalOpen(false)} />
       )}
       {loginPromptOpen && (
         <LoginPromptModal onClose={() => setLoginPromptOpen(false)} />

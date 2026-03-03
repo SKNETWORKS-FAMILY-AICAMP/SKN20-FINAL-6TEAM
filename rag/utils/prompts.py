@@ -982,3 +982,52 @@ def format_history_for_prompt(
     history_text = "\n".join(lines)
     return HISTORY_SECTION_TEMPLATE.format(history_text=history_text)
 
+
+# ================================================================
+# 문서 생성 의도 판별 프롬프트
+# ================================================================
+
+DOCUMENT_INTENT_CLASSIFICATION_PROMPT = """사용자의 질문이 문서 생성/작성 요청인지 판단하세요.
+
+질문: {query}
+탐지된 문서 유형: {detected_type}
+
+다음 중 하나로 답하세요:
+- GENERATE: 문서를 생성/작성해달라는 요청
+- INFO: 문서에 대한 정보/설명 요청
+- UNRELATED: 문서와 무관한 질문
+
+답변 (GENERATE/INFO/UNRELATED):"""
+
+
+# ================================================================
+# 문서 적합성 검증 프롬프트
+# ================================================================
+
+DOCUMENT_RELEVANCE_CHECK_PROMPT = """당신은 비즈니스 문서 분류 전문가입니다.
+
+다음 문서 내용이 사업자 또는 예비창업자에게 도움이 되는 비즈니스 관련 문서인지 판단하세요.
+
+허용 카테고리: 근로계약, 사업계획, 인사/노무, 법률/계약, 재무/세무, 지원사업 관련 문서
+
+문서 내용 (첫 500자):
+{document_text_preview}
+
+판단 결과를 JSON으로 답변:
+{{"is_relevant": true, "category": "카테고리명", "reason": "판단 이유"}}"""
+
+
+# ================================================================
+# S3 신청 양식 분석 프롬프트
+# ================================================================
+
+APPLICATION_FORM_ANALYSIS_PROMPT = """다음 신청 양식 문서를 분석하여 사용자가 입력해야 할 필드를 JSON으로 추출하세요.
+
+양식 내용:
+{form_text}
+
+다음 JSON 형식으로 응답하세요:
+{{"title": "양식 제목", "description": "양식 설명", "fields": [{{"name": "field_key", "label": "필드 라벨", "field_type": "text", "required": true, "placeholder": "예시"}}]}}
+
+field_type은 text, date, number, textarea, select 중 하나입니다."""
+

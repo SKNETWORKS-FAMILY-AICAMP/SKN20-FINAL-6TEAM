@@ -97,16 +97,22 @@ async def _warmup_bm25_indexes(vector_store: ChromaVectorStore) -> bool:
 
     searcher = get_hybrid_searcher(vector_store)
 
+    # law_common(55k건)은 BM25 형태소 분석 시 메모리 초과로 프로세스가 죽으므로 제외
+    _BM25_SKIP_DOMAINS = {"law_common"}
+    bm25_domains = [d for d in _WARMUP_DOMAINS if d not in _BM25_SKIP_DOMAINS]
+    if _BM25_SKIP_DOMAINS & set(_WARMUP_DOMAINS):
+        logger.info("[ChromaDB Warmup] BM25 스킵 도메인 (메모리 제한): %s", _BM25_SKIP_DOMAINS & set(_WARMUP_DOMAINS))
+
     tasks = [
         asyncio.to_thread(_build_bm25_for_domain, searcher, vector_store, domain)
-        for domain in _WARMUP_DOMAINS
+        for domain in bm25_domains
     ]
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     all_ok = True
     failed_domains: list[str] = []
-    for domain, result in zip(_WARMUP_DOMAINS, results):
+    for domain, result in zip(bm25_domains, results):
         if isinstance(result, Exception):
             logger.warning("[ChromaDB Warmup] BM25 빌드 실패: %s — %s", domain, result)
             failed_domains.append(domain)

@@ -22,6 +22,7 @@ from langchain_core.documents import Document
 from langgraph.graph import END, StateGraph
 
 from agents.base import RetrievalEvaluationResult, RetrievalResult, RetrievalStatus
+from agents.document_tool import DocumentTool
 from agents.evaluator import EvaluatorAgent
 from agents.generator import (
     FALLBACK_NO_DOCUMENTS,
@@ -83,6 +84,7 @@ class RouterState(TypedDict):
     ragas_metrics: dict[str, float | None] | None
     retry_count: int
     timing_metrics: dict[str, Any]
+    detected_document_type: str | None
 
 
 class MainRouter:
@@ -122,6 +124,9 @@ class MainRouter:
             agents=self.agents,
             rag_chain=shared_rag_chain,
         )
+
+        # 문서 생성 툴
+        self.document_tool = DocumentTool()
 
         # 검색 에이전트 (3번 retrieve 파트 전담)
         self.retrieval_agent = RetrievalAgent(
@@ -363,7 +368,6 @@ class MainRouter:
                 state["final_response"] = LLM_CLASSIFICATION_FAILURE_RESPONSE
             else:
                 if fallback_actions:
-                    state["domains"] = ["document"]
                     state["final_response"] = DOCUMENT_GENERATION_SHORTCUT_RESPONSE
                 else:
                     state["final_response"] = REJECTION_RESPONSE
@@ -377,18 +381,32 @@ class MainRouter:
             )
         else:
             # 문서 생성 shortcut 판별: document_generation 액션만 매칭되면 검색 파이프라인 스킵
-            doc_actions = self._is_document_shortcut(classify_query)
+            # 도메인은 원래 분류 결과를 유지 (hr_labor, startup_funding 등)
+            doc_actions = self._is_document_shortcut(augmented_query)
             if doc_actions:
-                state["domains"] = ["document"]
                 state["final_response"] = DOCUMENT_GENERATION_SHORTCUT_RESPONSE
                 state["sources"] = []
                 state["actions"] = doc_actions
                 logger.info(
-                    "[분류→단축] 문서 생성 shortcut (원본 도메인=%s, 액션=%d건)",
+                    "[분류→단축] 문서 생성 shortcut (도메인=%s, 액션=%d건)",
                     classification.domains,
                     len(doc_actions),
                 )
             else:
+                # document_tool BM25+LLM 하이브리드로 문서 생성 의도 감지
+                # (shortcut 아닌 경우: 도메인 응답 + 문서 생성 액션 병행)
+                should_doc, detected_doc_type = self.document_tool.should_invoke(
+                    augmented_query,
+                    classification.domains[0] if classification.domains else "",
+                )
+                if should_doc and detected_doc_type:
+                    state["detected_document_type"] = detected_doc_type
+                    logger.info(
+                        "[분류] 문서 생성 의도 감지: type=%s (도메인=%s)",
+                        detected_doc_type,
+                        classification.domains,
+                    )
+
                 logger.info(
                     "[분류] 도메인=%s (방법: %s, 신뢰도: %.2f)",
                     classification.domains,
@@ -450,6 +468,27 @@ class MainRouter:
         state["final_response"] = result.content
         state["actions"] = result.actions
         state["sources"] = result.sources
+
+        # document_tool이 GENERATE 의도를 감지했으면 해당 문서 액션 추가
+        detected_doc_type = state.get("detected_document_type")
+        if detected_doc_type:
+            existing_doc_types = {
+                a.params.get("document_type")
+                for a in result.actions
+                if a.type == "document_generation"
+            }
+            if detected_doc_type not in existing_doc_types:
+                from agents.document_tool import _DOC_TYPE_LABELS
+
+                label = _DOC_TYPE_LABELS.get(detected_doc_type, detected_doc_type)
+                state["actions"].append(
+                    ActionSuggestion(
+                        type="document_generation",
+                        label=f"{label} 작성",
+                        description=f"{label}을(를) 자동으로 생성합니다.",
+                        params={"document_type": detected_doc_type},
+                    )
+                )
 
         generate_time = time.time() - start
         state["timing_metrics"]["generate_time"] = generate_time
@@ -752,6 +791,7 @@ class MainRouter:
             "ragas_metrics": None,
             "retry_count": 0,
             "timing_metrics": {},
+            "detected_document_type": None,
         }
 
     def _create_response(
@@ -988,9 +1028,9 @@ class MainRouter:
                     reject_msg = REJECTION_RESPONSE
                     logger.info("[스트리밍] 도메인 외 질문 - 거부 응답 반환")
 
-            # fallback 액션이 있으면 domain을 "document"로 설정
-            done_domain = "document" if fallback_actions else "general"
-            done_domains = ["document"] if fallback_actions else []
+            # fallback 액션이 있으면 분류된 도메인 유지, 없으면 general
+            done_domain = classification.domains[0] if fallback_actions and classification.domains else "general"
+            done_domains = classification.domains if fallback_actions else []
 
             for char in reject_msg:
                 yield {"type": "token", "content": char}
@@ -1024,8 +1064,8 @@ class MainRouter:
                 yield {
                     "type": "done",
                     "content": msg,
-                    "domain": "document",
-                    "domains": ["document"],
+                    "domain": classification.domains[0] if classification.domains else "general",
+                    "domains": classification.domains,
                     "sources": [],
                     "actions": doc_actions,
                     "query_rewrite_applied": rewrite_meta.rewritten,

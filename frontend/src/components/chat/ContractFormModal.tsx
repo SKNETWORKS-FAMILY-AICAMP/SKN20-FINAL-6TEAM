@@ -5,6 +5,8 @@ import { generateContract, downloadDocumentResponse } from '../../lib/documentAp
 import type { ContractFormData } from '../../lib/documentApi';
 import { useCompanyStore } from '../../stores/companyStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useChatStore } from '../../stores/chatStore';
+import { generateId } from '../../lib/utils';
 import { Modal } from '../common/Modal';
 import { useToastStore } from '../../stores/toastStore';
 
@@ -114,7 +116,22 @@ export const ContractFormModal: React.FC<ContractFormModalProps> = ({ onClose })
         format,
       };
       const response = await generateContract(data);
-      downloadDocumentResponse(response);
+      if (!response.success || !response.file_content || !response.file_name) {
+        throw new Error(response.message || '문서 생성에 실패했습니다.');
+      }
+      useChatStore.getState().addMessage({
+        id: generateId(),
+        type: 'assistant',
+        content: '**근로계약서**가 생성되었습니다.',
+        agent_code: 'A0000008',
+        timestamp: new Date(),
+        documentAttachment: {
+          fileContent: response.file_content,
+          fileName: response.file_name,
+          documentType: 'labor_contract',
+          downloadable: true,
+        },
+      });
       onClose();
     } catch (err) {
       const message = axios.isAxiosError(err)

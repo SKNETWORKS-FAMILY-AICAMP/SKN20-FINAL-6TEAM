@@ -13,7 +13,12 @@ from config.settings import settings
 from apps.common.deps import get_optional_user
 from apps.common.models import User, Company, Code
 
-from .schemas import RagChatRequest, ContractGenerateRequest
+from .schemas import (
+    RagChatRequest,
+    ContractGenerateRequest,
+    GenerateDocumentProxyRequest,
+    ModifyDocumentProxyRequest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +192,7 @@ async def generate_contract(
 
     # 인증 사용자의 기업 정보 자동 주입
     if user:
+        payload["user_id"] = user.user_id
         context = _build_user_context(user, db)
         if context.get("company"):
             payload["company_context"] = {
@@ -224,6 +230,7 @@ async def generate_business_plan(
 
     payload: dict = {}
     if user:
+        payload["user_id"] = user.user_id
         context = _build_user_context(user, db)
         if context.get("company"):
             payload["company_context"] = context["company"]
@@ -246,22 +253,17 @@ async def generate_business_plan(
 @router.post("/documents/generate")
 async def generate_document(
     request: Request,
-    body: dict,
+    body: GenerateDocumentProxyRequest,
     user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
-):
-    """범용 문서 생성 프록시.
-
-    Args:
-        request: FastAPI Request
-        body: 문서 생성 요청 (RAG에서 검증)
-        user: 인증된 사용자 (선택)
-        db: DB 세션
-    """
+) -> dict:
+    """범용 문서 생성 프록시."""
+    payload = body.model_dump()
     if user:
+        payload["user_id"] = user.user_id
         context = _build_user_context(user, db)
         if context.get("company"):
-            body["company_context"] = {
+            payload["company_context"] = {
                 "company_name": context["company"]["company_name"],
                 "business_number": context["company"]["business_number"],
                 "industry_code": context["company"]["industry_code"],
@@ -271,7 +273,7 @@ async def generate_document(
     url = f"{settings.RAG_SERVICE_URL}/api/documents/generate"
     async with httpx.AsyncClient(timeout=_RAG_TIMEOUT) as client:
         try:
-            resp = await client.post(url, json=body, headers=_build_rag_headers(request))
+            resp = await client.post(url, json=payload, headers=_build_rag_headers(request))
         except httpx.ConnectError:
             raise HTTPException(502, "RAG 서비스에 연결할 수 없습니다.")
         except httpx.TimeoutException:
@@ -287,18 +289,18 @@ async def generate_document(
 @router.post("/documents/modify")
 async def modify_document(
     request: Request,
-    body: dict,
+    body: ModifyDocumentProxyRequest,
+    user: User | None = Depends(get_optional_user),
 ) -> dict:
-    """문서 수정 프록시.
+    """문서 수정 프록시."""
+    payload = body.model_dump()
+    if user:
+        payload["user_id"] = user.user_id
 
-    Args:
-        request: FastAPI Request
-        body: 문서 수정 요청 (RAG에서 검증)
-    """
     url = f"{settings.RAG_SERVICE_URL}/api/documents/modify"
     async with httpx.AsyncClient(timeout=_RAG_TIMEOUT) as client:
         try:
-            resp = await client.post(url, json=body, headers=_build_rag_headers(request))
+            resp = await client.post(url, json=payload, headers=_build_rag_headers(request))
         except httpx.ConnectError:
             raise HTTPException(502, "RAG 서비스에 연결할 수 없습니다.")
         except httpx.TimeoutException:
@@ -330,6 +332,49 @@ async def list_document_types(request: Request) -> list:
     if resp.status_code != 200:
         logger.error("Document types error: status=%d body=%s", resp.status_code, resp.text[:500])
         raise HTTPException(502, "문서 유형 목록 조회 실패")
+
+    return resp.json()
+
+
+@router.get("/documents/application-forms")
+async def list_application_forms(request: Request) -> list:
+    """신청 양식 목록 프록시."""
+    url = f"{settings.RAG_SERVICE_URL}/api/documents/application-forms"
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+        try:
+            resp = await client.get(url, headers=_build_rag_headers(request))
+        except httpx.ConnectError:
+            raise HTTPException(502, "RAG 서비스에 연결할 수 없습니다.")
+        except httpx.TimeoutException:
+            raise HTTPException(504, "RAG 서비스 응답 시간이 초과되었습니다.")
+
+    if resp.status_code != 200:
+        logger.error("Application forms list error: status=%d", resp.status_code)
+        raise HTTPException(502, "신청 양식 목록 조회 실패")
+
+    return resp.json()
+
+
+@router.post("/documents/application-forms/analyze")
+async def analyze_application_form(
+    request: Request,
+    form_key: str = Query(..., max_length=500),
+) -> dict:
+    """신청 양식 분석 프록시."""
+    url = f"{settings.RAG_SERVICE_URL}/api/documents/application-forms/analyze"
+    async with httpx.AsyncClient(timeout=_RAG_TIMEOUT) as client:
+        try:
+            resp = await client.post(
+                url, params={"form_key": form_key}, headers=_build_rag_headers(request),
+            )
+        except httpx.ConnectError:
+            raise HTTPException(502, "RAG 서비스에 연결할 수 없습니다.")
+        except httpx.TimeoutException:
+            raise HTTPException(504, "RAG 서비스 응답 시간이 초과되었습니다.")
+
+    if resp.status_code != 200:
+        logger.error("Application form analyze error: status=%d", resp.status_code)
+        raise HTTPException(502, "양식 분석 중 오류가 발생했습니다.")
 
     return resp.json()
 

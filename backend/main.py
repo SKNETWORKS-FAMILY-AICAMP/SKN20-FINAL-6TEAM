@@ -111,6 +111,7 @@ from apps.schedules.router import router as schedules_router
 from apps.admin.router import router as admin_router
 from apps.rag.router import router as rag_router
 from apps.announces.router import router as announces_router
+from apps.documents.router import router as documents_router
 
 _docs_url = "/docs" if settings.ENVIRONMENT != "production" else None
 _redoc_url = "/redoc" if settings.ENVIRONMENT != "production" else None
@@ -218,6 +219,7 @@ app.include_router(schedules_router)
 app.include_router(admin_router)
 app.include_router(rag_router)
 app.include_router(announces_router)
+app.include_router(documents_router)
 
 
 @app.get("/")

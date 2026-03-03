@@ -22,7 +22,9 @@ async def generate_contract(request: ContractRequest) -> DocumentResponse:
 
     try:
         async with RequestTokenTracker() as tracker:
-            result = _state.executor.generate_labor_contract(request)
+            result = _state.executor.generate_labor_contract(
+                request, user_id=request.user_id, company_id=request.company_id,
+            )
             token_usage = tracker.get_usage()
         if token_usage and token_usage.get("total_tokens", 0) > 0:
             logger.info(
@@ -86,6 +88,8 @@ async def generate_document(request: GenerateDocumentRequest) -> DocumentRespons
                 document_type=request.document_type,
                 params=params,
                 format=request.format,
+                user_id=request.user_id,
+                company_id=request.company_id,
             )
             token_usage = tracker.get_usage()
         if token_usage and token_usage.get("total_tokens", 0) > 0:
@@ -120,6 +124,8 @@ async def modify_document(request: ModifyDocumentRequest) -> DocumentResponse:
                 file_name=request.file_name,
                 instructions=request.instructions,
                 format=request.format,
+                user_id=request.user_id,
+                document_id=request.document_id,
             )
             token_usage = tracker.get_usage()
         if token_usage and token_usage.get("total_tokens", 0) > 0:
@@ -135,6 +141,59 @@ async def modify_document(request: ModifyDocumentRequest) -> DocumentResponse:
             status_code=500,
             detail="문서 수정 중 오류가 발생했습니다."
         )
+
+
+@router.get("/application-forms")
+async def list_application_forms() -> list[dict[str, str]]:
+    """S3에 저장된 신청 양식 목록을 반환합니다."""
+    from utils.s3_client import get_s3_client
+
+    try:
+        s3 = get_s3_client()
+        return s3.list_application_forms()
+    except Exception as e:
+        logger.error("신청 양식 목록 조회 실패: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="양식 목록을 불러올 수 없습니다.")
+
+
+@router.post("/application-forms/analyze")
+async def analyze_application_form(form_key: str = Query(..., description="S3 양식 파일 키")) -> dict:
+    """S3 양식 파일을 LLM으로 분석하여 필드 정보를 반환합니다."""
+    import json
+
+    from utils.config.llm import create_llm
+    from utils.s3_client import get_s3_client
+
+    try:
+        import base64
+
+        from utils import prompts
+        from utils.file_parser import extract_text_from_base64
+
+        s3 = get_s3_client()
+        file_bytes = s3.get_application_form(form_key)
+
+        file_name = form_key.split("/")[-1]
+        b64_content = base64.b64encode(file_bytes).decode()
+        form_text = extract_text_from_base64(b64_content, file_name)
+
+        prompt = prompts.APPLICATION_FORM_ANALYSIS_PROMPT.format(form_text=form_text)
+        llm = create_llm(label="양식분석", temperature=0.0, max_tokens=2048)
+        response = llm.invoke([{"role": "user", "content": prompt}])
+        raw = response.content.strip()
+
+        if "```" in raw:
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            raw = raw.strip()
+
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=422, detail="양식 분석 결과를 파싱할 수 없습니다.")
+    except Exception as e:
+        logger.error("양식 분석 실패 (%s): %s", form_key, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="양식 분석 중 오류가 발생했습니다.")
 
 
 @router.get("/types")

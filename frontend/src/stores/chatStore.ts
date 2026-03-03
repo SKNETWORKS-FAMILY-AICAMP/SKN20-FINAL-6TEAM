@@ -168,9 +168,20 @@ export const useChatStore = create<ChatState>()(
         set((prev) => ({
           sessions: prev.sessions.map((s) => {
             if (s.id !== sessionId) return s;
+
+            // 새 메시지에 documentAttachment가 있으면 이전 문서 다운로드 비활성화
+            let prevMessages = s.messages;
+            if (message.documentAttachment) {
+              prevMessages = s.messages.map((m) =>
+                m.documentAttachment
+                  ? { ...m, documentAttachment: { ...m.documentAttachment, downloadable: false } }
+                  : m
+              );
+            }
+
             const updated = {
               ...s,
-              messages: [...s.messages, message],
+              messages: [...prevMessages, message],
               updated_at: new Date().toISOString(),
             };
             // Auto-update title from first user message

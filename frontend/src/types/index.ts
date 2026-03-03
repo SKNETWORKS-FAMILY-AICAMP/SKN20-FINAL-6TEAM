@@ -106,6 +106,14 @@ export interface SourceReference {
   url: string;
 }
 
+// 문서 다운로드 첨부 정보
+export interface DocumentAttachment {
+  fileContent: string;    // base64
+  fileName: string;
+  documentType: string;
+  downloadable: boolean;  // 활성/비활성 상태
+}
+
 // Chat message
 export interface ChatMessage {
   id: string;
@@ -118,6 +126,7 @@ export interface ChatMessage {
   sources?: SourceReference[];
   actions?: RagActionSuggestion[];
   evaluation_data?: EvaluationData | null;
+  documentAttachment?: DocumentAttachment;
 }
 
 // Chat session

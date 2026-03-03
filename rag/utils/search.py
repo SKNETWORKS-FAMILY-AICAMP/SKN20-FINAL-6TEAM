@@ -316,12 +316,17 @@ class HybridSearcher:
         except Exception as e:
             logger.error(f"BM25 인덱스 빌드 실패: {domain} - {e}")
 
+    # BM25 형태소 분석 시 메모리 초과로 프로세스가 죽는 대규모 도메인 제외
+    _BM25_SKIP_DOMAINS = {"law_common"}
+
     def _ensure_bm25_index(self, domain: str) -> None:
         """도메인 BM25 인덱스를 필요 시 지연 초기화합니다.
 
         런타임 경로에서 `build_bm25_index`가 호출되지 않아 BM25가 비활성처럼
         동작하는 문제를 방지하기 위해, 최초 검색 시 1회 자동 빌드를 시도합니다.
         """
+        if domain in self._BM25_SKIP_DOMAINS:
+            return
         if domain in self.bm25_indices:
             return
         if domain in self._bm25_init_attempted:

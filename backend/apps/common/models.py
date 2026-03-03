@@ -97,11 +97,22 @@ class File(Base):
     file_id = Column(Integer, primary_key=True, autoincrement=True)
     file_name = Column(String(255), nullable=False, default="")
     file_path = Column(String(500), nullable=False, default="")
-    history_id = Column(Integer, ForeignKey("history.history_id", ondelete="SET NULL"), nullable=True)
+    s3_key = Column(String(500), nullable=True, comment="S3 오브젝트 키")
     company_id = Column(Integer, ForeignKey("company.company_id", ondelete="SET NULL"), nullable=True)
+    user_id = Column(Integer, ForeignKey("user.user_id", ondelete="SET NULL"), nullable=True)
+    document_type = Column(String(50), nullable=True, comment="문서 유형 (labor_contract, nda 등)")
+    file_size = Column(Integer, nullable=True, comment="파일 크기 (bytes)")
+    file_format = Column(String(10), nullable=True, comment="pdf 또는 docx")
+    version = Column(Integer, nullable=False, default=1, comment="문서 버전")
+    parent_file_id = Column(Integer, ForeignKey("file.file_id", ondelete="SET NULL"), nullable=True, comment="수정 원본 파일 ID")
+    file_metadata = Column("metadata", JSON, nullable=True, comment="생성 시 사용한 파라미터 등")
     create_date = Column(DateTime, default=datetime.now)
     update_date = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     use_yn = Column(Boolean, nullable=False, default=True, comment="0: 미사용, 1: 사용")
+
+    # Relationships
+    user = relationship("User", backref="files")
+    parent = relationship("File", remote_side=[file_id], backref="revisions")
 
 
 class Announce(Base):

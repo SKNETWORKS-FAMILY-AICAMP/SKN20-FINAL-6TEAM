@@ -12,9 +12,12 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape as xml_escape
 
+import httpx
+
 from schemas.request import CompanyContext, ContractRequest
 from schemas.response import DocumentResponse
 from utils.config import get_settings
+from utils.s3_client import get_s3_client
 
 logger = logging.getLogger(__name__)
 
@@ -72,35 +75,146 @@ class ActionExecutor:
         >>> print(result.file_name)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """ActionExecutor를 초기화합니다."""
         self.settings = get_settings()
         self.output_dir = Path(__file__).parent.parent / "output"
         self.output_dir.mkdir(exist_ok=True)
 
+    # ---------- S3 업로드 + DB 저장 ----------
+
+    def _upload_and_save(
+        self,
+        response: DocumentResponse,
+        user_id: int | None,
+        company_id: int | None = None,
+    ) -> DocumentResponse:
+        """생성된 문서를 S3에 업로드하고 DB에 메타데이터를 저장합니다.
+
+        user_id가 None이면 S3/DB 저장을 스킵합니다 (게스트 사용자).
+
+        Args:
+            response: 문서 생성 응답 (file_content base64 포함)
+            user_id: 사용자 ID (None이면 스킵)
+            company_id: 회사 ID (선택)
+
+        Returns:
+            s3_key, file_id가 추가된 DocumentResponse
+        """
+        if not user_id or not response.success or not response.file_content:
+            return response
+
+        try:
+            s3_client = get_s3_client()
+            file_bytes = base64.b64decode(response.file_content)
+            ext = (response.file_name or "doc").rsplit(".", 1)[-1]
+            s3_key = s3_client._generate_key(user_id, response.document_type, ext)
+
+            content_type = "application/pdf" if ext == "pdf" else (
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+            s3_client.upload_document(file_bytes, s3_key, content_type)
+
+            file_id = self._save_file_metadata(
+                user_id=user_id,
+                company_id=company_id,
+                document_type=response.document_type,
+                file_name=response.file_name or "",
+                s3_key=s3_key,
+                file_size=len(file_bytes),
+                file_format=ext,
+            )
+
+            response.s3_key = s3_key
+            response.file_id = file_id
+            logger.info("문서 S3 업로드 + DB 저장 완료: s3_key=%s file_id=%s", s3_key, file_id)
+        except Exception:
+            logger.error("문서 S3/DB 저장 실패 (문서 생성은 성공)", exc_info=True)
+
+        return response
+
+    def _save_file_metadata(
+        self,
+        user_id: int,
+        company_id: int | None,
+        document_type: str,
+        file_name: str,
+        s3_key: str,
+        file_size: int,
+        file_format: str,
+        parent_file_id: int | None = None,
+    ) -> int | None:
+        """Backend API를 호출하여 파일 메타데이터를 DB에 저장합니다.
+
+        Args:
+            user_id: 사용자 ID
+            company_id: 회사 ID
+            document_type: 문서 유형
+            file_name: 파일명
+            s3_key: S3 오브젝트 키
+            file_size: 파일 크기 (bytes)
+            file_format: 파일 형식 (pdf, docx)
+            parent_file_id: 수정 원본 파일 ID (버전관리)
+
+        Returns:
+            생성된 file_id 또는 None (실패 시)
+        """
+        settings = get_settings()
+        url = f"{settings.backend_internal_url}/documents/save"
+        payload = {
+            "user_id": user_id,
+            "company_id": company_id,
+            "document_type": document_type,
+            "file_name": file_name,
+            "s3_key": s3_key,
+            "file_size": file_size,
+            "file_format": file_format,
+        }
+        if parent_file_id:
+            payload["parent_file_id"] = parent_file_id
+
+        headers: dict[str, str] = {}
+        if settings.rag_api_key:
+            headers["X-API-Key"] = settings.rag_api_key
+
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.post(url, json=payload, headers=headers)
+            if resp.status_code == 201:
+                return resp.json().get("file_id")
+            logger.error("DB 메타데이터 저장 실패: status=%d body=%s", resp.status_code, resp.text[:500])
+        except Exception:
+            logger.error("Backend API 호출 실패", exc_info=True)
+        return None
+
     def generate_labor_contract(
         self,
         request: ContractRequest,
+        user_id: int | None = None,
+        company_id: int | None = None,
     ) -> DocumentResponse:
         """근로계약서를 생성합니다.
 
         Args:
             request: 근로계약서 생성 요청
+            user_id: 사용자 ID (있으면 S3/DB 저장)
+            company_id: 회사 ID (선택)
 
         Returns:
             문서 생성 응답
         """
         try:
             if request.format == "pdf":
-                return self._generate_contract_pdf(request)
+                result = self._generate_contract_pdf(request)
             elif request.format == "docx":
-                return self._generate_contract_docx(request)
+                result = self._generate_contract_docx(request)
             else:
                 return DocumentResponse(
                     success=False,
                     document_type="labor_contract",
                     message=f"지원하지 않는 형식: {request.format} (pdf 또는 docx만 가능)",
                 )
+            return self._upload_and_save(result, user_id, company_id)
         except Exception as e:
             return DocumentResponse(
                 success=False,
@@ -393,11 +507,15 @@ class ActionExecutor:
     def generate_business_plan_template(
         self,
         format: str = "docx",
+        user_id: int | None = None,
+        company_id: int | None = None,
     ) -> DocumentResponse:
         """사업계획서 템플릿을 생성합니다.
 
         Args:
             format: 출력 형식 (docx)
+            user_id: 사용자 ID (있으면 S3/DB 저장)
+            company_id: 회사 ID (선택)
 
         Returns:
             문서 생성 응답
@@ -465,7 +583,7 @@ class ActionExecutor:
             with open(file_path, "rb") as f:
                 file_content = base64.b64encode(f.read()).decode("utf-8")
 
-            return DocumentResponse(
+            result = DocumentResponse(
                 success=True,
                 document_type="business_plan",
                 file_path=str(file_path),
@@ -473,6 +591,7 @@ class ActionExecutor:
                 file_content=file_content,
                 message="사업계획서 템플릿이 생성되었습니다.",
             )
+            return self._upload_and_save(result, user_id, company_id)
 
         except Exception as e:
             return DocumentResponse(
@@ -488,6 +607,8 @@ class ActionExecutor:
         document_type: str,
         params: dict[str, Any],
         format: str = "docx",
+        user_id: int | None = None,
+        company_id: int | None = None,
     ) -> DocumentResponse:
         """범용 문서 생성 엔트리포인트.
 
@@ -495,6 +616,8 @@ class ActionExecutor:
             document_type: 문서 유형 키
             params: 문서 필드 값
             format: 출력 형식 (pdf, docx)
+            user_id: 사용자 ID (있으면 S3/DB 저장)
+            company_id: 회사 ID (선택)
 
         Returns:
             문서 생성 응답
@@ -512,10 +635,13 @@ class ActionExecutor:
         # 하드코딩 문서 → 기존 로직 위임
         if type_def.generation_method == "hardcoded":
             if document_type == "labor_contract":
-                return self.generate_labor_contract(ContractRequest(**params))
+                return self.generate_labor_contract(
+                    ContractRequest(**params), user_id=user_id, company_id=company_id,
+                )
 
         # LLM 기반 생성
-        return self._generate_document_by_llm(type_def, params, format)
+        result = self._generate_document_by_llm(type_def, params, format)
+        return self._upload_and_save(result, user_id, company_id)
 
     def _generate_document_by_llm(
         self,
@@ -576,6 +702,9 @@ class ActionExecutor:
         file_name: str,
         instructions: str,
         format: str = "docx",
+        user_id: int | None = None,
+        document_id: int | None = None,
+        company_id: int | None = None,
     ) -> DocumentResponse:
         """업로드된 문서를 LLM으로 수정합니다.
 
@@ -584,6 +713,9 @@ class ActionExecutor:
             file_name: 원본 파일명 (확장자 포함)
             instructions: 수정 지시사항
             format: 출력 형식 (pdf, docx)
+            user_id: 사용자 ID (있으면 S3/DB 저장)
+            document_id: 원본 문서 ID (버전관리)
+            company_id: 회사 ID (선택)
 
         Returns:
             수정된 문서 응답
@@ -594,6 +726,16 @@ class ActionExecutor:
 
         try:
             original_text = extract_text_from_base64(file_content, file_name)
+
+            # 비즈니스 문서 적합성 검증
+            relevance = self._check_document_relevance(original_text)
+            if not relevance.get("is_relevant", True):
+                reason = relevance.get("reason", "비즈니스 관련 문서가 아닙니다.")
+                return DocumentResponse(
+                    success=False,
+                    document_type="rejected",
+                    message=f"문서 수정이 거부되었습니다: {reason}",
+                )
 
             full_prompt = prompts.DOCUMENT_MODIFY_PROMPT.format(
                 original_text=original_text,
@@ -608,9 +750,41 @@ class ActionExecutor:
             type_key = "modified_document"
 
             if format == "pdf":
-                return self._build_pdf_from_text(content, type_key, title)
+                result = self._build_pdf_from_text(content, type_key, title)
             else:
-                return self._build_docx_from_text(content, type_key, title)
+                result = self._build_docx_from_text(content, type_key, title)
+
+            # S3 + DB 저장 (수정 버전)
+            if user_id and result.success:
+                if document_id:
+                    # 버전관리: parent_file_id를 통해 원본 연결
+                    try:
+                        file_bytes = base64.b64decode(result.file_content or "")
+                        ext = (result.file_name or "doc").rsplit(".", 1)[-1]
+                        s3_client = get_s3_client()
+                        s3_key = s3_client._generate_key(user_id, type_key, ext)
+                        content_type = "application/pdf" if ext == "pdf" else (
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        )
+                        s3_client.upload_document(file_bytes, s3_key, content_type)
+                        file_id = self._save_file_metadata(
+                            user_id=user_id,
+                            company_id=company_id,
+                            document_type=type_key,
+                            file_name=result.file_name or "",
+                            s3_key=s3_key,
+                            file_size=len(file_bytes),
+                            file_format=ext,
+                            parent_file_id=document_id,
+                        )
+                        result.s3_key = s3_key
+                        result.file_id = file_id
+                    except Exception:
+                        logger.error("수정 문서 S3/DB 저장 실패", exc_info=True)
+                else:
+                    result = self._upload_and_save(result, user_id, company_id)
+
+            return result
 
         except ValueError as e:
             logger.warning("문서 수정 입력 오류: %s", e)
@@ -626,6 +800,39 @@ class ActionExecutor:
                 document_type="modified_document",
                 message=f"문서 수정 실패: {str(e)}",
             )
+
+    def _check_document_relevance(self, text: str) -> dict[str, Any]:
+        """문서가 비즈니스 관련 문서인지 LLM으로 검증합니다.
+
+        Args:
+            text: 문서에서 추출한 텍스트
+
+        Returns:
+            {"is_relevant": bool, "category": str, "reason": str}
+        """
+        import json
+
+        from utils import prompts
+        from utils.config.llm import create_llm
+
+        preview = text[:500]
+        prompt = prompts.DOCUMENT_RELEVANCE_CHECK_PROMPT.format(
+            document_text_preview=preview,
+        )
+        try:
+            llm = create_llm(label="문서적합성검증", temperature=0.0, max_tokens=256)
+            response = llm.invoke([{"role": "user", "content": prompt}])
+            raw = response.content.strip()
+            # JSON 블록 추출
+            if "```" in raw:
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+                raw = raw.strip()
+            return json.loads(raw)
+        except Exception:
+            logger.warning("문서 적합성 검증 파싱 실패, 기본 허용 처리")
+            return {"is_relevant": True, "category": "unknown", "reason": "검증 실패 — 기본 허용"}
 
     def _build_docx_from_text(
         self,

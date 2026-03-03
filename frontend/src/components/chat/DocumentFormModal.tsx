@@ -3,9 +3,10 @@ import axios from 'axios';
 import {
   fetchDocumentTypes,
   generateDocument,
-  downloadDocumentResponse,
 } from '../../lib/documentApi';
 import type { DocumentTypeInfo, DocumentTypeField } from '../../lib/documentApi';
+import { useChatStore } from '../../stores/chatStore';
+import { generateId } from '../../lib/utils';
 import { Modal } from '../common/Modal';
 import { useToastStore } from '../../stores/toastStore';
 
@@ -86,7 +87,22 @@ export const DocumentFormModal: React.FC<DocumentFormModalProps> = ({
         params[f.name] = f.field_type === 'number' ? Number(val) : val;
       }
       const response = await generateDocument(documentType, params, format);
-      downloadDocumentResponse(response);
+      if (!response.success || !response.file_content || !response.file_name) {
+        throw new Error(response.message || '문서 생성에 실패했습니다.');
+      }
+      useChatStore.getState().addMessage({
+        id: generateId(),
+        type: 'assistant',
+        content: `**${typeDef.label}**이(가) 생성되었습니다.`,
+        agent_code: 'A0000008',
+        timestamp: new Date(),
+        documentAttachment: {
+          fileContent: response.file_content,
+          fileName: response.file_name,
+          documentType: response.document_type || documentType,
+          downloadable: true,
+        },
+      });
       onClose();
     } catch (err) {
       const message = axios.isAxiosError(err)

@@ -211,6 +211,18 @@ class Settings(BaseSettings):
         default="", description="관리자 API 키 (모니터링 엔드포인트 인증용, 비어있으면 인증 비활성화)"
     )
 
+    # -- Backend 연동 --
+    backend_internal_url: str = Field(
+        default="http://backend:8000",
+        description="Backend 서비스 내부 URL (Docker 내부 통신용)"
+    )
+
+    # -- AWS S3 --
+    aws_s3_bucket: str = Field(default="bizi-documents", description="S3 버킷명")
+    aws_s3_application_forms_prefix: str = Field(
+        default="application-forms/", description="S3 신청양식 prefix"
+    )
+
     # ================================================================
     # [3] RAG Pipeline Parameters (검색/평가 튜닝)
     # ================================================================

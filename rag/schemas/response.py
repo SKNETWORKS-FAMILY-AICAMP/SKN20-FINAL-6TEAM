@@ -90,6 +90,8 @@ class DocumentResponse(BaseModel):
     file_name: str | None = Field(default=None, description="file name")
     file_content: str | None = Field(default=None, description="file content base64")
     message: str | None = Field(default=None, description="message")
+    s3_key: str | None = Field(default=None, description="S3 object key")
+    file_id: int | None = Field(default=None, description="DB file ID")
 
 
 class StreamResponse(BaseModel):
