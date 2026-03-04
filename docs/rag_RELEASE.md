@@ -1,6 +1,6 @@
 # Release Notes
 
-## [2026-03-04] - AWS ElastiCache Redis TLS 연결 수정 + 복수 기업 지원 + 후속 질문 폴백 + 참고 자료 꼬리말 제거 + ChromaDB/BM25 Cold Start 최적화 + VectorDB 빌드 코드 분리
+## [2026-03-04] - AWS ElastiCache Redis TLS 연결 수정 + 복수 기업 지원 + 후속 질문 폴백 + 참고 자료 꼬리말 제거 + ChromaDB/BM25 Cold Start 최적화 + VectorDB 빌드 코드 분리 + 벡터 도메인 분류 삭제 + LLM 재시도 설정
 
 ### Features
 - **복수 기업 컨텍스트 지원** (`schemas/request.py`, `agents/base.py`, `agents/retrieval_agent.py`): `UserContext.companies` 필드 추가 — `get_all_companies_context_string()`, `get_normalized_regions()` 메서드로 복수 기업 지역 OR 필터 지원
@@ -18,6 +18,7 @@
 - **BM25 metadata 캐시 활용** (`utils/search.py`): `BM25Index.fit()`에서 `doc.metadata["bm25_tokens"]` 존재 시 토크나이징 생략 — vectordb 재빌드 후 BM25 빌드 30-90초 → 5-10초
 
 ### Refactoring
+- **벡터 도메인 분류 삭제 + LLM 재시도 설정** (`utils/domain_classifier.py`, `utils/config/settings.py`, `utils/config/llm.py`, `main.py`, `routes/monitoring.py`): `VectorDomainClassifier` → `DomainClassifier` 리네임, numpy/threading/Embeddings 의존성 제거, `_precompute_vectors`/`_vector_classify` 삭제. `classify()` LLM 재시도를 하드코딩 1회 → `settings.llm_max_retries` 루프로 변경, LLM 최종 실패 시 키워드 fallback 추가. `enable_vector_domain_classification`/`domain_classification_threshold`/`multi_domain_gap_threshold` 설정 제거, `llm_max_retries` 추가. `ChatOpenAI(max_retries=settings.llm_max_retries)` 적용
 - **VectorDB 빌드 코드 rag/ 외부 분리** (`rag/vectorstores/build_vectordb.py` 삭제, `rag/utils/prompts.py`): `scripts/vectordb/`로 이관 완료된 빌드 thin-wrapper(`build_vectordb.py`) 삭제 — rag/ 런타임 미사용 확인 후 제거. `CONTEXTUAL_RETRIEVAL_PROMPT` 빌드 전용 프롬프트를 `prompts.py`에서 제거하고 `scripts/vectordb/contextual_retrieval.py`로 이전. `rag/README.md` VectorDB 빌드 명령어를 `python -m scripts.vectordb`로 업데이트
 
 ### Chores
