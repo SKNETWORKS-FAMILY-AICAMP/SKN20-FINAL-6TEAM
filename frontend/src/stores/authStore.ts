@@ -95,6 +95,7 @@ export const useAuthStore = create<AuthState>()(
         await useChatStore.getState().syncGuestMessages();
         useChatStore.getState().resetGuestCount();
         await useChatStore.getState().bootstrapFromServerHistories();
+        useChatStore.getState().createSession();  // 로그인 후 새 채팅으로 시작
       },
       logout: async () => {
         const logoutSyncPromise = syncAnnounceNotificationsToStore('logout');
