@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-03-04] - 세션 ID 안정화
+
+### Bug Fixes
+- **세션 ID `db-{root_history_id}`로 안정화** (`src/stores/chatStore.ts`): 세션 ID 충돌 방지 및 write-through 파이프라인 연동
+
 ## [2026-03-03] - 문서 생성 에이전트 UI + 비즈노 사업자 조회 연동 + 코드 정리
 
 ### Features
