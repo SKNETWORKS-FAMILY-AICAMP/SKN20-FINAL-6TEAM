@@ -165,24 +165,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             )
         )
 
-    # 도메인 벡터 사전 계산: background (첫 요청 전 완료 목표)
-    if settings.enable_vector_domain_classification:
-        async def _precompute_domain_vectors() -> None:
-            try:
-                from utils.domain_classifier import get_domain_classifier
-                classifier = get_domain_classifier()
-                await classifier._aprecompute_vectors()
-                logger.info("도메인 벡터 사전 계산 완료")
-            except Exception as exc:
-                logger.warning("도메인 벡터 사전 계산 실패 (서비스는 정상 시작): %s", exc)
-
-        background_tasks.append(
-            asyncio.create_task(
-                _precompute_domain_vectors(),
-                name="domain_vector_precompute",
-            )
-        )
-
     # 세션 마이그레이션 백그라운드 태스크
     migration_task: asyncio.Task | None = None
     if settings.enable_session_migration and settings.session_memory_backend == "redis":
@@ -251,8 +233,6 @@ def _log_settings_summary(settings) -> None:
 
     if settings.enable_llm_domain_classification:
         classify_info = "LLM 기반"
-    elif settings.enable_vector_domain_classification:
-        classify_info = "벡터 기반"
     else:
         classify_info = "키워드만"
 

@@ -9,7 +9,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from utils.domain_classifier import (
-    VectorDomainClassifier,
+    DomainClassifier,
     DomainClassificationResult,
     extract_lemmas,
 )
@@ -102,8 +102,6 @@ def _reset():
 def mock_settings():
     """Mock 설정."""
     settings = MagicMock()
-    settings.domain_classification_threshold = 0.6
-    settings.enable_vector_domain_classification = True
     settings.enable_llm_domain_classification = False
     settings.openai_api_key = "test-key"
     return settings
@@ -396,22 +394,21 @@ class TestHardcodedVsMySQLComparison:
 
 
 # ===================================================================
-# 4. VectorDomainClassifier 통합 테스트 (12개 전 케이스)
+# 4. DomainClassifier 통합 테스트 (12개 전 케이스)
 # ===================================================================
 
 
 class TestClassifierIntegration:
-    """VectorDomainClassifier._keyword_classify() 통합 테스트."""
+    """DomainClassifier._keyword_classify() 통합 테스트."""
 
     @pytest.fixture
     def classifier(self, mock_settings):
         """테스트용 분류기."""
-        mock_embeddings = MagicMock()
         with patch(
             "utils.domain_classifier.get_settings",
             return_value=mock_settings,
         ):
-            clf = VectorDomainClassifier(mock_embeddings)
+            clf = DomainClassifier()
             clf.settings = mock_settings
             return clf
 

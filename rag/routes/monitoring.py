@@ -140,6 +140,5 @@ async def get_config() -> dict[str, Any]:
         "llm_timeout": settings.llm_timeout,
         "enable_fallback": settings.enable_fallback,
         "enable_ragas_evaluation": settings.enable_ragas_evaluation,
-        "enable_vector_domain_classification": settings.enable_vector_domain_classification,
         "enable_llm_domain_classification": settings.enable_llm_domain_classification,
     }

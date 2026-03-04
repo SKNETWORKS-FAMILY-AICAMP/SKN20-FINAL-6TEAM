@@ -29,6 +29,9 @@ def create_llm(
         "api_key": settings.openai_api_key,
         "temperature": temperature if temperature is not None else settings.openai_temperature,
         "callbacks": [TokenUsageCallbackHandler(label)],
+        # ChatOpenAI의 max_retries는 API 레벨 실패(rate limit, 5xx)를 처리.
+        # domain_classifier.py의 outer retry loop은 응답 파싱 실패를 별도 처리.
+        "max_retries": settings.llm_max_retries,
     }
     if request_timeout is not None:
         kwargs["request_timeout"] = request_timeout

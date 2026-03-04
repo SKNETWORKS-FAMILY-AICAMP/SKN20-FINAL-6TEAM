@@ -63,13 +63,11 @@ class Settings(BaseSettings):
         default=True,
         description="도메인 외 질문 거부 기능 활성화"
     )
-    enable_vector_domain_classification: bool = Field(
-        default=True, description="벡터 유사도 기반 도메인 분류 활성화"
-    )
     enable_llm_domain_classification: bool = Field(
         default=False,
         description="LLM 기반 도메인 분류 활성화 (true 시 LLM이 1차 분류기, 추가 비용 발생)"
     )
+    llm_max_retries: int = Field(default=1, description="LLM API 호출 재시도 횟수 (API 연결 실패 대비)")
 
     # -- 평가 & 재시도 --
     enable_llm_evaluation: bool = Field(
@@ -272,11 +270,6 @@ class Settings(BaseSettings):
     )
     rerank_top_k: int = Field(default=5, description="Re-ranking 후 반환할 문서 수")
 
-    # -- 도메인 분류 파라미터 --
-    domain_classification_threshold: float = Field(
-        default=0.6, ge=0.0, le=1.0, description="벡터 유사도 기반 도메인 분류 임계값"
-    )
-
     # -- 검색 평가 (규칙 기반) --
     min_retrieval_doc_count: int = Field(
         default=2, description="최소 검색 문서 수"
@@ -391,10 +384,6 @@ class Settings(BaseSettings):
     )
 
     # -- RetrievalAgent / 동적 K / 재시도 --
-    multi_domain_gap_threshold: float = Field(
-        default=0.08, ge=0.0, le=1.0,
-        description="벡터 유사도 복합 도메인 탐지 갭 임계값 (best_score - score < 이 값이면 추가 도메인 포함)"
-    )
     dynamic_k_min: int = Field(
         default=3, gt=0, description="동적 K 최소값"
     )
@@ -628,7 +617,6 @@ class Settings(BaseSettings):
         "enable_cross_domain_rerank",
         "enable_legal_supplement",
         "enable_domain_rejection",
-        "enable_vector_domain_classification",
         "enable_llm_domain_classification",
         "enable_llm_evaluation",
         "enable_ragas_evaluation",
