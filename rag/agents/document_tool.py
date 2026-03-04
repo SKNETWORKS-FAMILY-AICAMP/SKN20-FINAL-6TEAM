@@ -1,7 +1,7 @@
 """문서 자동생성 툴.
 
 도메인 에이전트가 문서 생성이 필요할 때 호출하는 tool 인터페이스입니다.
-BM25 키워드 1차 필터 + LLM 의도 2차 판별 하이브리드 방식으로 문서 생성 필요 여부를 판단합니다.
+LLM 의도 판별로 문서 생성 필요 여부와 문서 유형을 판단합니다.
 """
 
 import logging
@@ -12,35 +12,11 @@ from schemas.response import ActionSuggestion, DocumentResponse
 
 logger = logging.getLogger(__name__)
 
-# 문서 유형별 트리거 키워드 사전
-DOCUMENT_TRIGGER_KEYWORDS: dict[str, list[str]] = {
-    "labor_contract": [
-        "근로계약서", "근로계약", "고용계약서", "계약서 작성", "근로계약 작성",
-    ],
-    "business_plan": [
-        "사업계획서", "사업계획", "사업 계획서 작성", "비즈니스 플랜",
-    ],
-    "nda": [
-        "비밀유지계약서", "NDA", "비밀유지", "기밀유지",
-    ],
-    "service_agreement": [
-        "용역계약서", "용역계약", "외주계약", "프리랜서 계약",
-    ],
-    "cofounder_agreement": [
-        "공동창업계약서", "공동창업", "동업계약",
-    ],
-    "investment_loi": [
-        "투자의향서", "LOI", "투자유치",
-    ],
-    "mou": [
-        "업무협약서", "MOU", "양해각서",
-    ],
-    "privacy_consent": [
-        "개인정보동의서", "개인정보 수집", "개인정보 처리",
-    ],
-    "shareholders_agreement": [
-        "주주간계약서", "주주간 계약", "주주 계약",
-    ],
+# LLM 응답 검증용 허용 문서 유형 키 집합
+_VALID_DOC_TYPES: set[str] = {
+    "labor_contract", "business_plan", "nda", "service_agreement",
+    "cofounder_agreement", "investment_loi", "mou", "privacy_consent",
+    "shareholders_agreement",
 }
 
 # 문서 유형 키 → 한글 라벨 (LLM 프롬프트용)
@@ -75,10 +51,9 @@ class DocumentTool:
         domain: str,
         context: dict[str, Any] | None = None,
     ) -> tuple[bool, str | None]:
-        """문서 생성이 필요한지 판단합니다 (BM25 + LLM 하이브리드).
+        """문서 생성이 필요한지 판단합니다 (LLM 의도 분류).
 
-        1차: 키워드 매칭으로 문서 유형 탐지 (빠름, 저비용)
-        2차: LLM 의도 분류로 GENERATE 여부 확인 (1차 통과 시에만)
+        LLM이 직접 문서 생성 의도와 문서 유형을 동시에 판별합니다.
 
         Args:
             query: 사용자 질문
@@ -88,91 +63,48 @@ class DocumentTool:
         Returns:
             (호출 여부, 탐지된 문서 유형 키)
         """
-        # 1차: 키워드 기반 문서 유형 탐지
-        detected_type = self._keyword_detect(query)
-        if not detected_type:
-            return False, None
-
-        # 2차: LLM 의도 판별
-        intent = self._llm_intent_classify(query, detected_type)
-        if intent == "GENERATE":
-            return True, detected_type
+        intent, doc_type = self._llm_intent_classify(query)
+        if intent == "GENERATE" and doc_type:
+            return True, doc_type
         return False, None
 
-    def _keyword_detect(self, query: str) -> str | None:
-        """키워드 매칭으로 문서 유형을 탐지합니다.
-
-        kiwipiepy 형태소 분석으로 lemma를 추출한 뒤,
-        각 문서 유형의 키워드와 매칭합니다.
+    def _llm_intent_classify(self, query: str) -> tuple[str, str | None]:
+        """LLM으로 문서 생성 의도와 문서 유형을 분류합니다.
 
         Args:
             query: 사용자 질문
 
         Returns:
-            매칭된 문서 유형 키 또는 None
-        """
-        from utils.domain_classifier import extract_lemmas
-
-        query_lower = query.lower()
-        lemmas = extract_lemmas(query)
-
-        best_type: str | None = None
-        best_score = 0
-
-        for doc_type, keywords in DOCUMENT_TRIGGER_KEYWORDS.items():
-            score = 0
-            for kw in keywords:
-                kw_lower = kw.lower()
-                # 원본 쿼리에서 직접 매칭 (복합어 대응)
-                if kw_lower in query_lower:
-                    score += 2
-                # lemma 집합에서 매칭 (형태소 분석 결과)
-                elif kw_lower in lemmas:
-                    score += 1
-
-            if score > best_score:
-                best_score = score
-                best_type = doc_type
-
-        # 최소 1점 이상이어야 유효
-        if best_score >= 1:
-            return best_type
-        return None
-
-    def _llm_intent_classify(self, query: str, detected_type: str) -> str:
-        """LLM으로 문서 생성 의도를 분류합니다.
-
-        Args:
-            query: 사용자 질문
-            detected_type: 1차 탐지된 문서 유형 키
-
-        Returns:
-            "GENERATE", "INFO", 또는 "UNRELATED"
+            (intent, document_type_key): ("GENERATE", "nda") 또는 ("INFO", None)
         """
         from utils.config.llm import create_llm
         from utils.prompts import DOCUMENT_INTENT_CLASSIFICATION_PROMPT
 
-        label = _DOC_TYPE_LABELS.get(detected_type, detected_type)
-        prompt = DOCUMENT_INTENT_CLASSIFICATION_PROMPT.format(
-            query=query,
-            detected_type=label,
-        )
+        prompt = DOCUMENT_INTENT_CLASSIFICATION_PROMPT.format(query=query)
 
         try:
-            llm = create_llm(label="문서의도판별", temperature=0.0, max_tokens=16)
+            llm = create_llm(label="문서의도판별", temperature=0.0, max_tokens=32)
             response = llm.invoke([{"role": "user", "content": prompt}])
             result = response.content.strip().upper()
 
-            # 응답에서 키워드 추출 (여러 줄 응답 대비)
-            for intent in ("GENERATE", "INFO", "UNRELATED"):
-                if intent in result:
-                    return intent
+            # "GENERATE <type_key>" 파싱
+            if "GENERATE" in result:
+                parts = result.split()
+                for i, part in enumerate(parts):
+                    if part == "GENERATE" and i + 1 < len(parts):
+                        doc_type = parts[i + 1].lower()
+                        if doc_type in _VALID_DOC_TYPES:
+                            return "GENERATE", doc_type
+                        logger.warning("LLM 의도 분류: 알 수 없는 문서 유형 '%s'", doc_type)
+                        return "INFO", None
+                # GENERATE만 있고 타입이 없는 경우
+                logger.warning("LLM 의도 분류: GENERATE이나 문서 유형 없음 (원문: %s)", result)
+                return "INFO", None
 
-            logger.warning("LLM 의도 분류 파싱 실패 (원문: %s), INFO 기본값", result)
-            return "INFO"
+            return "INFO", None
         except Exception:
             logger.error("LLM 의도 분류 호출 실패, INFO 기본값", exc_info=True)
-            return "INFO"
+            return "INFO", None
 
     # ---------- 액션 필터링 ----------
 

@@ -447,7 +447,7 @@ class MainRouter:
                     shortcut_done = True
 
             if not shortcut_done:
-                # document_tool BM25+LLM 하이브리드로 문서 생성 의도 감지
+                # document_tool LLM 의도 분류로 문서 생성 감지
                 # (shortcut 아닌 경우: 도메인 응답 + 문서 생성 액션 병행)
                 should_doc, detected_doc_type = self.document_tool.should_invoke(
                     classify_query,

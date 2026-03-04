@@ -863,14 +863,26 @@ def format_history_for_prompt(
 DOCUMENT_INTENT_CLASSIFICATION_PROMPT = """사용자의 질문이 문서 생성/작성 요청인지 판단하세요.
 
 질문: {query}
-탐지된 문서 유형: {detected_type}
 
-다음 중 하나로 답하세요:
-- GENERATE: 문서를 생성/작성해달라는 요청
-- INFO: 문서에 대한 정보/설명 요청
-- UNRELATED: 문서와 무관한 질문
+## 지원 문서 유형
+- labor_contract: 근로계약서
+- business_plan: 사업계획서
+- nda: 비밀유지계약서(NDA)
+- service_agreement: 용역계약서
+- cofounder_agreement: 공동창업계약서
+- investment_loi: 투자의향서(LOI)
+- mou: 업무협약서(MOU)
+- privacy_consent: 개인정보동의서
+- shareholders_agreement: 주주간계약서
 
-답변 (GENERATE/INFO/UNRELATED):"""
+## 판단 기준
+- GENERATE: 사용자가 위 문서 중 하나를 직접 생성/작성/만들어달라고 요청하는 경우
+- INFO: 문서에 대한 정보, 설명, 주의사항, 작성 방법 등을 묻는 경우
+
+## 응답 형식
+반드시 한 줄로 답하세요:
+- 생성 요청이면: GENERATE <document_type_key>
+- 그 외: INFO"""
 
 
 # ================================================================
