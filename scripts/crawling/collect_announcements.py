@@ -39,6 +39,9 @@ import olefile
 # =============================================================================
 
 # 신청서/양식 파일 키워드 (공고문 정보 추출에서는 제외하지만 별도 저장)
+SUPPORTED_EXTENSIONS = ('.hwp', '.hwpx', '.ppt', '.pptx', '.pdf', '.docx')
+
+# 신청서/양식 파일 키워드 (공고문 정보 추출에서는 제외하지만 별도 저장)
 APPLICATION_FORM_KEYWORDS = [
     "신청서", "지원서", "신청양식", "지원양식",
     "신청서류", "지원서류", "제출서류",
@@ -397,6 +400,8 @@ class FileDownloader:
                 return True, ".pptx"
             elif filename_lower.endswith('.hwpx'):
                 return True, ".hwpx"
+            elif filename_lower.endswith('.docx'):
+                return True, ".docx"
             # 파일명이 없으면 내부 구조로 판별
             try:
                 import io
@@ -406,10 +411,16 @@ class FileDownloader:
                         return True, ".pptx"
                     elif any(name.startswith('Contents/') for name in namelist):
                         return True, ".hwpx"
+                    elif any(name.startswith('word/') for name in namelist):
+                        return True, ".docx"
                     # 일반 ZIP (내부에 문서 파일 있을 수 있음)
                     return True, ".zip"
             except:
                 return True, ".hwpx"  # 기본값
+
+        # PDF 파일
+        if content[:4] == b'%PDF':
+            return True, ".pdf"
 
         # OLE 기반 파일 (HWP, PPT)
         if content[:8] == self.OLE_MAGIC:
@@ -457,9 +468,62 @@ class FileDownloader:
         """
         safe_filename = self._safe_filename(filename, ann_id, ext)
         output_path = self.config.forms_dir / safe_filename
+        # 파일명 충돌 방지
+        counter = 1
+        while output_path.exists():
+            base = safe_filename.rsplit('.', 1)[0]
+            output_path = self.config.forms_dir / f"{base}_{counter}{ext}"
+            counter += 1
         output_path.write_bytes(content)
-        self.logger.info(f"  📋 신청양식 저장: {output_path.name}")
+        self.logger.info("  신청양식 저장: %s", output_path.name)
         return output_path
+
+    def _convert_to_pdf(self, file_path: Path) -> Path | None:
+        """LibreOffice headless로 PDF 변환. 이미 PDF이면 그대로 반환."""
+        if file_path.suffix.lower() == '.pdf':
+            return file_path
+        try:
+            import subprocess
+            subprocess.run(
+                ['soffice', '--headless', '--convert-to', 'pdf',
+                 '--outdir', str(self.config.temp_dir), str(file_path)],
+                capture_output=True, timeout=60,
+            )
+            pdf_path = self.config.temp_dir / f"{file_path.stem}.pdf"
+            if pdf_path.exists():
+                return pdf_path
+            return None
+        except Exception as e:
+            self.logger.warning("  PDF 변환 실패: %s", e)
+            return None
+
+    def _iter_zip_contents(self, zip_path: Path, ann_id: str, form_files: list):
+        """ZIP 내부의 지원 파일들을 추출하여 순회."""
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zf:
+                idx = 0
+                for name in zf.namelist():
+                    filename = Path(name).name
+                    if not filename:
+                        continue
+                    if not any(name.lower().endswith(e) for e in SUPPORTED_EXTENSIONS):
+                        continue
+                    file_data = zf.read(name)
+                    is_valid, ext = self._detect_file_type(file_data, filename)
+                    if not is_valid:
+                        continue
+                    # 파일명 기반 양식 판별 (독립 양식 파일)
+                    if _is_application_form(filename):
+                        form_path = self.save_form_file(file_data, filename, ann_id, ext)
+                        form_files.append(str(form_path))
+                        continue
+                    safe_name = self._safe_filename(filename, ann_id, ext)
+                    output_path = self.config.temp_dir / f"zip_{idx}_{safe_name}"
+                    output_path.write_bytes(file_data)
+                    idx += 1
+                    yield output_path
+        except Exception as e:
+            self.logger.warning("  ZIP 추출 실패: %s", e)
 
     def iter_files_bizinfo(self, ann_id: str, ann_data: dict = None, form_files: list = None):
         """
@@ -478,6 +542,7 @@ class FileDownloader:
 
         try:
             # 1. API 데이터에서 파일 URL 사용
+            api_file_found = False
             if ann_data:
                 file_urls = []
                 if ann_data.get("printFlpthNm"):
@@ -494,26 +559,33 @@ class FileDownloader:
                         is_valid, ext = self._detect_file_type(resp.content, display_name)
 
                         if is_valid:
+                            api_file_found = True
                             # 신청서/양식 파일인지 확인
                             if _is_application_form(display_name):
                                 form_path = self.save_form_file(resp.content, display_name, ann_id, ext)
                                 form_files.append(str(form_path))
                                 continue  # 정보 추출에서는 스킵
 
-                            filename = self._safe_filename(display_name or f"{file_type}", ann_id, ext)
+                            filename = self._safe_filename(display_name or file_type, ann_id, ext)
                             output_path = self.config.temp_dir / filename
                             output_path.write_bytes(resp.content)
-                            self.logger.info(f"  문서 다운로드 ({file_type}): {output_path.name}")
-                            yield output_path
+                            self.logger.info("  문서 다운로드 (%s): %s", file_type, output_path.name)
+                            # ZIP이면 내부 파일 추출
+                            if ext == '.zip':
+                                yield from self._iter_zip_contents(output_path, ann_id, form_files)
+                                output_path.unlink(missing_ok=True)
+                            else:
+                                yield output_path
                     except Exception as e:
-                        self.logger.warning(f"  파일 다운로드 실패 ({file_type}): {e}")
+                        self.logger.warning("  파일 다운로드 실패 (%s): %s", file_type, e)
                         continue
 
-            # 2. 웹페이지에서 추가 파일 다운로드
-            yield from self._iter_files_bizinfo_from_web(ann_id, form_files)
+            # 2. API에서 파일을 못 찾은 경우에만 웹페이지에서 다운로드
+            if not api_file_found:
+                yield from self._iter_files_bizinfo_from_web(ann_id, form_files)
 
         except Exception as e:
-            self.logger.error(f"  문서 다운로드 실패 [{ann_id}]: {e}")
+            self.logger.error("  문서 다운로드 실패 [%s]: %s", ann_id, e)
 
     def download_bizinfo(self, ann_id: str, ann_data: dict = None) -> Path | None:
         """기업마당 문서 다운로드 (첫 번째 파일만 반환, 하위 호환성)"""
@@ -537,7 +609,7 @@ class FileDownloader:
             for a in soup.select("a[href*='getImageFile.do']"):
                 href = a.get("href", "")
                 link_text = a.get_text(strip=True)
-                file_id_match = re.search(r"atchFileId=([A-Z_0-9]+)", href)
+                file_id_match = re.search(r"atchFileId=([A-Za-z_0-9]+)", href)
                 file_sn_match = re.search(r"fileSn=(\d+)", href)
 
                 if file_id_match:
@@ -561,14 +633,19 @@ class FileDownloader:
 
                             output_path = self.config.temp_dir / f"{ann_id}_file{file_idx}{ext}"
                             output_path.write_bytes(file_resp.content)
-                            self.logger.info(f"  문서 다운로드: {output_path.name}")
+                            self.logger.info("  문서 다운로드: %s", output_path.name)
                             file_idx += 1
-                            yield output_path
+                            # ZIP이면 내부 파일 추출
+                            if ext == '.zip':
+                                yield from self._iter_zip_contents(output_path, ann_id, form_files)
+                                output_path.unlink(missing_ok=True)
+                            else:
+                                yield output_path
                     except Exception as e:
-                        self.logger.warning(f"  파일 다운로드 실패: {e}")
+                        self.logger.warning("  파일 다운로드 실패: %s", e)
                         continue
         except Exception as e:
-            self.logger.error(f"  웹페이지 접근 실패 [{ann_id}]: {e}")
+            self.logger.error("  웹페이지 접근 실패 [%s]: %s", ann_id, e)
 
     def _download_bizinfo_from_web(self, ann_id: str) -> Path | None:
         """기업마당 웹페이지에서 문서 다운로드 (첫 번째 파일만, 하위 호환성)"""
@@ -615,6 +692,17 @@ class FileDownloader:
                             fn_match = re.search(r"filename\*=(?:UTF-8''|utf-8'')([^;\n]+)", content_disp)
                             if fn_match:
                                 filename = unquote(fn_match.group(1))
+                            else:
+                                fn_match2 = re.search(r'filename="?([^";\n]+)"?', content_disp)
+                                if fn_match2:
+                                    raw = fn_match2.group(1)
+                                    try:
+                                        filename = raw.encode('iso-8859-1').decode('euc-kr')
+                                    except (UnicodeDecodeError, UnicodeEncodeError):
+                                        try:
+                                            filename = raw.encode('iso-8859-1').decode('utf-8')
+                                        except Exception:
+                                            filename = raw
 
                         is_valid, ext = self._detect_file_type(file_resp.content, filename)
                         if is_valid:
@@ -627,14 +715,19 @@ class FileDownloader:
                             safe_filename = self._safe_filename(filename, ann_id, ext)
                             output_path = self.config.temp_dir / safe_filename
                             output_path.write_bytes(file_resp.content)
-                            self.logger.info(f"  문서 다운로드: {output_path.name}")
-                            yield output_path
+                            self.logger.info("  문서 다운로드: %s", output_path.name)
+                            # ZIP이면 내부 파일 추출
+                            if ext == '.zip':
+                                yield from self._iter_zip_contents(output_path, ann_id, form_files)
+                                output_path.unlink(missing_ok=True)
+                            else:
+                                yield output_path
                     except Exception as e:
-                        self.logger.warning(f"  파일 다운로드 실패: {e}")
+                        self.logger.warning("  파일 다운로드 실패: %s", e)
                         continue
 
         except Exception as e:
-            self.logger.error(f"  문서 다운로드 실패 [{ann_id}]: {e}")
+            self.logger.error("  문서 다운로드 실패 [%s]: %s", ann_id, e)
 
     def download_kstartup(self, ann_id: str, ann_data: dict = None) -> Path | None:
         """K-Startup 문서 다운로드 (첫 번째 파일만 반환, 하위 호환성)"""
@@ -652,7 +745,7 @@ HWPDownloader = FileDownloader
 # =============================================================================
 
 class TextExtractor:
-    """HWP/HWPX/PPT/PPTX/PDF/ZIP 텍스트 추출기"""
+    """HWP/HWPX/PPT/PPTX/PDF/DOCX/ZIP 텍스트 추출기"""
 
     def __init__(self, logger: logging.Logger):
         self.logger = logger
@@ -671,17 +764,19 @@ class TextExtractor:
             text = self._extract_ppt(file_path)
         elif suffix == '.pdf':
             text = self._extract_pdf(file_path)
+        elif suffix == '.docx':
+            text = self._extract_docx(file_path)
         elif suffix == '.zip':
             text = self._extract_zip(file_path)
         else:
-            self.logger.warning(f"  지원하지 않는 파일 형식: {suffix}")
+            self.logger.warning("  지원하지 않는 파일 형식: %s", suffix)
             return ""
 
         if text and len(text) > 100:
-            self.logger.info(f"  텍스트 추출 완료: {len(text)}자")
+            self.logger.info("  텍스트 추출 완료: %d자", len(text))
             return text
 
-        self.logger.warning(f"  텍스트 추출 실패 또는 내용 부족: {file_path.name}")
+        self.logger.warning("  텍스트 추출 실패 또는 내용 부족: %s", file_path.name)
         return ""
 
     def _extract_hwp(self, hwp_path: Path) -> str:
@@ -724,7 +819,7 @@ class TextExtractor:
             return re.sub(r'\s+', ' ', combined).strip()
 
         except Exception as e:
-            self.logger.warning(f"  HWP 추출 오류: {e}")
+            self.logger.warning("  HWP 추출 오류: %s", e)
             return ""
 
     def _extract_hwpx(self, hwpx_path: Path) -> str:
@@ -753,7 +848,7 @@ class TextExtractor:
                     # ZIP 압축 파일: 내부 문서 파일들에서 텍스트 추출
                     self.logger.info("  ZIP 압축 파일 감지, 내부 문서 추출 시도")
                     import tempfile
-                    supported_extensions = ('.hwp', '.hwpx', '.ppt', '.pptx', '.pdf')
+                    supported_extensions = SUPPORTED_EXTENSIONS
 
                     for name in namelist:
                         name_lower = name.lower()
@@ -765,7 +860,7 @@ class TextExtractor:
 
                         # 신청서/양식 등 스킵
                         if _should_skip_file(filename):
-                            self.logger.info(f"    스킵 (양식/서식): {filename}")
+                            self.logger.info("    스킵 (양식/서식): %s", filename)
                             continue
 
                         try:
@@ -788,21 +883,23 @@ class TextExtractor:
                                 extracted_text = self._extract_ppt(tmp_path)
                             elif suffix == '.pdf':
                                 extracted_text = self._extract_pdf(tmp_path)
+                            elif suffix == '.docx':
+                                extracted_text = self._extract_docx(tmp_path)
 
                             if extracted_text:
                                 text_parts.append(extracted_text)
-                                self.logger.info(f"    추출 성공: {filename} ({len(extracted_text)}자)")
+                                self.logger.info("    추출 성공: %s (%d자)", filename, len(extracted_text))
 
                             # 임시 파일 삭제
                             tmp_path.unlink(missing_ok=True)
                         except Exception as e:
-                            self.logger.warning(f"  내부 파일 추출 실패: {e}")
+                            self.logger.warning("  내부 파일 추출 실패: %s", e)
                             continue
 
             return ' '.join(text_parts).strip()
 
         except Exception as e:
-            self.logger.warning(f"  HWPX 추출 오류: {e}")
+            self.logger.warning("  HWPX 추출 오류: %s", e)
             return ""
 
     def _extract_pdf(self, pdf_path: Path) -> str:
@@ -814,61 +911,90 @@ class TextExtractor:
             doc.close()
             return text.strip()
         except Exception as e:
-            self.logger.warning(f"  PDF 추출 오류: {e}")
+            self.logger.warning("  PDF 추출 오류: %s", e)
             return ""
 
-    def extract_form_pages_from_pdf(self, pdf_path: Path, output_dir: Path, ann_id: str) -> Path | None:
-        """
-        PDF에서 신청서/양식 페이지를 감지하고 분리하여 별도 PDF로 저장
+    def _extract_docx(self, docx_path: Path) -> str:
+        """DOCX에서 텍스트 추출 (ZIP/XML 기반)"""
+        try:
+            text_parts = []
+            with zipfile.ZipFile(docx_path, 'r') as zf:
+                if 'word/document.xml' in zf.namelist():
+                    content = zf.read('word/document.xml').decode('utf-8')
+                    root = ET.fromstring(content)
+                    ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+                    for text_elem in root.findall('.//w:t', ns):
+                        if text_elem.text:
+                            text_parts.append(text_elem.text)
+            return ' '.join(text_parts).strip()
+        except Exception as e:
+            self.logger.warning("  DOCX 추출 오류: %s", e)
+            return ""
 
-        Args:
-            pdf_path: 원본 PDF 경로
-            output_dir: 출력 디렉토리
-            ann_id: 공고 ID (파일명에 사용)
-
-        Returns:
-            Path | None: 분리된 신청서 PDF 경로 (없으면 None)
-        """
+    def extract_pages(self, pdf_path: Path) -> list[str]:
+        """PDF에서 페이지별 텍스트 추출."""
         try:
             import fitz
             doc = fitz.open(pdf_path)
-            form_pages = []
-
-            # 각 페이지에서 신청서/양식 키워드 검색
-            for page_num in range(len(doc)):
-                page = doc[page_num]
-                text = page.get_text()
-
-                # 신청서/양식 페이지인지 확인
-                is_form_page = False
-                for keyword in PDF_FORM_PAGE_KEYWORDS:
-                    if keyword in text:
-                        is_form_page = True
-                        break
-
-                if is_form_page:
-                    form_pages.append(page_num)
-
-            # 신청서/양식 페이지가 있으면 별도 PDF로 저장
-            if form_pages:
-                output_path = output_dir / f"{ann_id}_신청양식.pdf"
-                form_doc = fitz.open()
-
-                for page_num in form_pages:
-                    form_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
-
-                form_doc.save(output_path)
-                form_doc.close()
-                doc.close()
-
-                self.logger.info(f"  신청양식 분리: {len(form_pages)}페이지 → {output_path.name}")
-                return output_path
-
+            pages = [page.get_text() for page in doc]
             doc.close()
+            return pages
+        except Exception as e:
+            self.logger.warning("  PDF 페이지 추출 오류: %s", e)
+            return []
+
+    def split_pdf(self, pdf_path: Path, output_dir: Path, ann_id: str,
+                  start_page: int, end_page: int, suffix: str) -> Path | None:
+        """PDF에서 지정 범위 페이지를 별도 PDF로 추출 (1-based, inclusive)."""
+        try:
+            import fitz
+            doc = fitz.open(pdf_path)
+            new_doc = fitz.open()
+            new_doc.insert_pdf(doc, from_page=start_page - 1, to_page=end_page - 1)
+            output_path = output_dir / f"{ann_id}_{suffix}.pdf"
+            # 파일명 충돌 방지
+            counter = 1
+            while output_path.exists():
+                output_path = output_dir / f"{ann_id}_{suffix}_{counter}.pdf"
+                counter += 1
+            new_doc.save(output_path)
+            new_doc.close()
+            doc.close()
+            self.logger.info("  PDF 분리 (%s): 페이지 %d-%d → %s", suffix, start_page, end_page, output_path.name)
+            return output_path
+        except Exception as e:
+            self.logger.warning("  PDF 분리 오류: %s", e)
             return None
 
+    def remove_pages_from_pdf(self, pdf_path: Path, output_dir: Path, ann_id: str,
+                              remove_start: int, remove_end: int) -> Path | None:
+        """PDF에서 지정 범위를 제외한 나머지 페이지만 추출 (1-based, inclusive)."""
+        try:
+            import fitz
+            doc = fitz.open(pdf_path)
+            new_doc = fitz.open()
+            total = len(doc)
+            # remove_start..remove_end (1-based) 제외
+            for i in range(total):
+                page_num_1based = i + 1
+                if remove_start <= page_num_1based <= remove_end:
+                    continue
+                new_doc.insert_pdf(doc, from_page=i, to_page=i)
+            if len(new_doc) == 0:
+                new_doc.close()
+                doc.close()
+                return None
+            output_path = output_dir / f"{ann_id}_공고.pdf"
+            counter = 1
+            while output_path.exists():
+                output_path = output_dir / f"{ann_id}_공고_{counter}.pdf"
+                counter += 1
+            new_doc.save(output_path)
+            new_doc.close()
+            doc.close()
+            return output_path
         except Exception as e:
-            self.logger.warning(f"  PDF 신청양식 분리 오류: {e}")
+            self.logger.warning("  PDF 페이지 제거 오류: %s", e)
             return None
 
     def _extract_pptx(self, pptx_path: Path) -> str:
@@ -896,14 +1022,14 @@ class TextExtractor:
                             if text_elem.text and text_elem.text.strip():
                                 text_parts.append(text_elem.text.strip())
                     except Exception as e:
-                        self.logger.warning(f"  슬라이드 파싱 오류 ({slide_file}): {e}")
+                        self.logger.warning("  슬라이드 파싱 오류 (%s): %s", slide_file, e)
                         continue
 
             combined = ' '.join(text_parts)
             return re.sub(r'\s+', ' ', combined).strip()
 
         except Exception as e:
-            self.logger.warning(f"  PPTX 추출 오류: {e}")
+            self.logger.warning("  PPTX 추출 오류: %s", e)
             return ""
 
     def _extract_ppt(self, ppt_path: Path) -> str:
@@ -924,7 +1050,7 @@ class TextExtractor:
                     if text.strip():
                         text_parts.append(text)
                 except Exception as e:
-                    self.logger.warning(f"  PPT Document 스트림 추출 오류: {e}")
+                    self.logger.warning("  PPT Document 스트림 추출 오류: %s", e)
 
             # Current User 등 다른 스트림에서도 텍스트 시도
             for entry in ole.listdir():
@@ -944,7 +1070,7 @@ class TextExtractor:
             return re.sub(r'\s+', ' ', combined).strip()
 
         except Exception as e:
-            self.logger.warning(f"  PPT 추출 오류: {e}")
+            self.logger.warning("  PPT 추출 오류: %s", e)
             return ""
 
     def _extract_zip(self, zip_path: Path) -> str:
@@ -955,20 +1081,20 @@ class TextExtractor:
 
             with zipfile.ZipFile(zip_path, 'r') as zf:
                 namelist = zf.namelist()
-                self.logger.info(f"  ZIP 파일 내부 탐색: {len(namelist)}개 파일")
+                self.logger.info("  ZIP 파일 내부 탐색: %d개 파일", len(namelist))
 
                 for name in namelist:
                     name_lower = name.lower()
                     filename = Path(name).name
 
                     # 지원하는 파일 형식 확인
-                    supported_extensions = ('.hwp', '.hwpx', '.ppt', '.pptx', '.pdf')
+                    supported_extensions = SUPPORTED_EXTENSIONS
                     if not any(name_lower.endswith(ext) for ext in supported_extensions):
                         continue
 
                     # 신청서/양식 등 스킵
                     if _should_skip_file(filename):
-                        self.logger.info(f"    스킵 (양식/서식): {filename}")
+                        self.logger.info("    스킵 (양식/서식): %s", filename)
                         continue
 
                     try:
@@ -991,22 +1117,24 @@ class TextExtractor:
                             extracted_text = self._extract_ppt(tmp_path)
                         elif suffix == '.pdf':
                             extracted_text = self._extract_pdf(tmp_path)
+                        elif suffix == '.docx':
+                            extracted_text = self._extract_docx(tmp_path)
 
                         if extracted_text:
                             text_parts.append(extracted_text)
-                            self.logger.info(f"    추출 성공: {filename} ({len(extracted_text)}자)")
+                            self.logger.info("    추출 성공: %s (%d자)", filename, len(extracted_text))
 
                         # 임시 파일 삭제
                         tmp_path.unlink(missing_ok=True)
 
                     except Exception as e:
-                        self.logger.warning(f"  내부 파일 추출 실패 ({filename}): {e}")
+                        self.logger.warning("  내부 파일 추출 실패 (%s): %s", filename, e)
                         continue
 
             return ' '.join(text_parts).strip()
 
         except Exception as e:
-            self.logger.warning(f"  ZIP 추출 오류: {e}")
+            self.logger.warning("  ZIP 추출 오류: %s", e)
             return ""
 
 
@@ -1057,6 +1185,22 @@ class OpenAIAnalyzer:
   "지원대상": "...",
   "제외대상": "...",
   "지원금액": "..."
+}"""
+
+    SYSTEM_PROMPT_FORM_DETECTION = """너는 정부 공고문 문서 분석 전문가야.
+주어진 PDF 문서의 각 페이지 텍스트를 보고, 신청서/지원서/양식 페이지를 찾아줘.
+
+신청양식 판단 기준:
+- 빈칸/기입란이 있는 서식 (이름: ___, 사업자번호: ___ 등)
+- "신청서", "지원서", "서식", "양식" 등의 제목이 있는 페이지
+- 체크박스, 서명란, 날인란이 있는 서류
+- 단순 안내문/공고 본문은 신청양식이 아님
+
+반드시 아래 JSON 형식으로만 응답해:
+{
+  "has_form": true 또는 false,
+  "form_start_page": 시작페이지번호 (1부터, 없으면 null),
+  "form_end_page": 끝페이지번호 (1부터, 없으면 null)
 }"""
 
     DEFAULT_RESULT = {"지원대상": "정보 없음", "제외대상": "정보 없음", "지원금액": "정보 없음"}
@@ -1168,8 +1312,62 @@ class OpenAIAnalyzer:
                 }
 
         except Exception as e:
-            self.logger.error(f"  OpenAI API 호출 실패: {e}")
+            self.logger.error("  OpenAI API 호출 실패: %s", e)
             return self.DEFAULT_RESULT.copy()
+
+    def detect_form_pages(self, page_texts: list[str]) -> dict | None:
+        """LLM으로 PDF 내 양식 페이지 범위 감지.
+
+        Args:
+            page_texts: 페이지별 텍스트 (index 0 = page 1)
+
+        Returns:
+            {"has_form": bool, "form_start_page": int|None, "form_end_page": int|None}
+        """
+        if not self.client or not page_texts:
+            return None
+
+        # 페이지별 번호 부여 + 각 500자 제한
+        page_summaries = []
+        for i, text in enumerate(page_texts, 1):
+            truncated = text[:500] if len(text) > 500 else text
+            page_summaries.append(f"--- 페이지 {i} ---\n{truncated}")
+
+        combined = "\n".join(page_summaries)
+        # 전체 최대 10000자
+        if len(combined) > 10000:
+            combined = combined[:10000]
+
+        try:
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": self.SYSTEM_PROMPT_FORM_DETECTION},
+                    {"role": "user", "content": combined}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1,
+                max_tokens=200
+            )
+
+            if response.usage:
+                input_t = response.usage.prompt_tokens
+                output_t = response.usage.completion_tokens
+                total_t = response.usage.total_tokens
+                cost = _calculate_cost("gpt-4o-mini", input_t, output_t)
+                self.total_input_tokens += input_t
+                self.total_output_tokens += output_t
+                self.total_tokens += total_t
+                self.total_cost += cost
+                self.call_count += 1
+
+            result = json.loads(response.choices[0].message.content)
+            self.logger.info("  양식 감지 결과: %s", result)
+            return result
+
+        except Exception as e:
+            self.logger.warning("  양식 감지 실패: %s", e)
+            return None
 
     def log_total_usage(self) -> None:
         """토큰 사용량 총합 로깅"""
@@ -1219,7 +1417,7 @@ class AnnouncementProcessor:
 
         self.logger.info("=" * 60)
         self.logger.info("공고문 처리 시작")
-        self.logger.info(f"대상: {vrf_str or '전체'}, 개수: {'전체' if count == 0 else count}")
+        self.logger.info("대상: %s, 개수: %s", vrf_str or '전체', '전체' if count == 0 else count)
         self.logger.info("=" * 60)
 
         # 기업마당 처리
@@ -1248,8 +1446,8 @@ class AnnouncementProcessor:
 
         self.logger.info("\n" + "=" * 60)
         self.logger.info("처리 완료!")
-        self.logger.info(f"기업마당: {len(results['bizinfo'])}개, K-Startup: {len(results['kstartup'])}개")
-        self.logger.info(f"결과 파일: {self.config.output_dir}")
+        self.logger.info("기업마당: %d개, K-Startup: %d개", len(results['bizinfo']), len(results['kstartup']))
+        self.logger.info("결과 파일: %s", self.config.output_dir)
         self.logger.info("=" * 60)
 
         self.analyzer.log_total_usage()
@@ -1287,7 +1485,7 @@ class AnnouncementProcessor:
         for idx, ann in enumerate(announcements, 1):
             ann_id = ann["id"]
             title = ann.get("pblancNm") or ann.get("biz_pbanc_nm") or ann_id
-            self.logger.info(f"[{idx}/{total}] 처리 중: [{ann_id}] {title[:40]}...")
+            self.logger.info("[%d/%d] 처리 중: [%s] %s...", idx, total, ann_id, title[:40])
 
             # K-Startup: API에서 지원대상 가져오기
             if is_kstartup:
@@ -1314,19 +1512,55 @@ class AnnouncementProcessor:
 
                 file_count += 1
 
-                # PDF인 경우 신청서/양식 페이지 분리 시도
-                if file_path.suffix.lower() == '.pdf':
-                    form_pdf_path = self.extractor.extract_form_pages_from_pdf(
-                        file_path, self.config.forms_dir, ann_id
-                    )
-                    if form_pdf_path:
-                        form_files.append(str(form_pdf_path))
+                # 1단계: 비-PDF → PDF 변환
+                pdf_path = self.downloader._convert_to_pdf(file_path)
+                if not pdf_path:
+                    self._cleanup_temp_files(file_path)
+                    continue
 
-                # 텍스트 추출
-                text = self.extractor.extract(file_path)
+                # 2단계: LLM 양식 페이지 감지
+                text = ""
+                page_texts = self.extractor.extract_pages(pdf_path)
+                if page_texts:
+                    form_info = self.analyzer.detect_form_pages(page_texts)
 
+                    if form_info and form_info.get("has_form"):
+                        start_p = form_info.get("form_start_page")
+                        end_p = form_info.get("form_end_page")
+
+                        if start_p and end_p:
+                            # 양식 페이지 분리 → forms_dir에 저장
+                            form_pdf = self.extractor.split_pdf(
+                                pdf_path, self.config.forms_dir, ann_id,
+                                start_p, end_p, suffix="양식"
+                            )
+                            if form_pdf:
+                                form_files.append(str(form_pdf))
+
+                            # 공고 페이지만 추출 (양식 제거)
+                            doc_pdf = self.extractor.remove_pages_from_pdf(
+                                pdf_path, self.config.temp_dir, ann_id,
+                                start_p, end_p
+                            )
+                            if doc_pdf:
+                                text = self.extractor.extract(doc_pdf)
+                                self._cleanup_temp_files(doc_pdf)
+                            else:
+                                text = self.extractor.extract(pdf_path)
+                        else:
+                            text = self.extractor.extract(pdf_path)
+                    else:
+                        # 양식 미포함 → 전체가 공고
+                        text = self.extractor.extract(pdf_path)
+                else:
+                    text = self.extractor.extract(pdf_path)
+
+                # 변환된 PDF 정리 (원본이 아닌 경우)
+                if pdf_path != file_path:
+                    self._cleanup_temp_files(pdf_path)
+
+                # 3단계: LLM 정보 분석
                 if text:
-                    # date_ambiguous 공고는 첫 번째 파일에서 모집중 여부도 함께 판단
                     check_recruiting = is_ambiguous and file_count == 1
                     extracted_info = self.analyzer.analyze(
                         text,
@@ -1336,12 +1570,11 @@ class AnnouncementProcessor:
 
                     # 모집 종료로 판단되면 이 공고 스킵
                     if check_recruiting and not extracted_info.get("모집중", True):
-                        self.logger.info("  ✗ 모집 종료 (LLM 판단) — 스킵")
+                        self.logger.info("  모집 종료 (LLM 판단) - 스킵")
                         skip_announcement = True
                         self._cleanup_temp_files(file_path)
                         break
 
-                    # 기업마당인 경우 지원대상도 LLM에서 추출
                     if not is_kstartup:
                         지원대상 = self._merge_info(지원대상, extracted_info.get("지원대상", ""))
 
@@ -1353,7 +1586,7 @@ class AnnouncementProcessor:
 
                 # 필요한 정보가 모두 추출되면 나머지 파일은 스킵
                 if self._is_info_complete(지원대상, 제외대상, 지원금액, is_kstartup):
-                    self.logger.info(f"  ✓ 정보 추출 완료 (파일 {file_count}개 처리)")
+                    self.logger.info("  정보 추출 완료 (파일 %d개 처리)", file_count)
                     break
 
             if skip_announcement:
@@ -1364,7 +1597,7 @@ class AnnouncementProcessor:
 
             # 신청양식 파일 로그
             if form_files:
-                self.logger.info(f"  📋 신청양식 {len(form_files)}개 저장됨")
+                self.logger.info("  신청양식 %d개 저장됨", len(form_files))
 
             # 결과 병합 (신청양식 파일 경로 포함)
             result = {
@@ -1380,12 +1613,12 @@ class AnnouncementProcessor:
 
         return results
 
-    def _cleanup_temp_files(self, hwp_path: Path):
+    def _cleanup_temp_files(self, file_path: Path):
         """임시 파일 정리"""
         try:
-            hwp_path.unlink(missing_ok=True)
-            hwp_path.with_suffix('.pdf').unlink(missing_ok=True)
-        except:
+            if file_path and file_path.exists():
+                file_path.unlink(missing_ok=True)
+        except Exception:
             pass
 
     def _save_results(self, source: str, data: list[dict], timestamp: str):
@@ -1402,7 +1635,7 @@ class AnnouncementProcessor:
                 "data": data
             }, f, ensure_ascii=False, indent=2)
 
-        self.logger.info(f"결과 저장: {output_file}")
+        self.logger.info("결과 저장: %s", output_file)
 
 
 # =============================================================================
