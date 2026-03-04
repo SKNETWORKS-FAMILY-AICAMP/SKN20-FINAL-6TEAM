@@ -142,11 +142,15 @@ async def login_google(
     )
     user = db.execute(user_stmt).scalar_one_or_none()
     if user and not user.use_yn:
-        logger.warning("LOGIN_BLOCKED email=%s reason=deactivated", email)
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="비활성화된 계정입니다",
-        )
+        logger.info("REACTIVATE email=%s user_id=%d", email, user.user_id)
+        user.use_yn = True
+        if sub:
+            user.google_sub = sub
+        if name:
+            user.username = name
+        if picture is not None:
+            user.profile_image = picture
+        db.commit()
     if not user:
         result = db.execute(
             insert(User).values(
