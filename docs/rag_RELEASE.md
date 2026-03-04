@@ -1,8 +1,13 @@
 # Release Notes
 
-## [2026-03-04] - AWS ElastiCache Redis TLS 연결 수정 + 참고 자료 꼬리말 제거
+## [2026-03-04] - AWS ElastiCache Redis TLS 연결 수정 + 복수 기업 지원 + 후속 질문 폴백 + 참고 자료 꼬리말 제거
+
+### Features
+- **복수 기업 컨텍스트 지원** (`schemas/request.py`, `agents/base.py`, `agents/retrieval_agent.py`): `UserContext.companies` 필드 추가 — `get_all_companies_context_string()`, `get_normalized_regions()` 메서드로 복수 기업 지역 OR 필터 지원
+- **후속 질문 도메인 폴백** (`agents/router.py`, `routes/chat.py`): `previous_domains` 상태 추가 — 후속 질문이 도메인 분류 거부될 때 이전 턴 도메인으로 폴백 처리 (chat/stream 양쪽 지원)
 
 ### Bug Fixes
+- **`get_session_full()` 로컬 메모리 항상 None 반환** (`routes/_session_memory.py`): Redis 미사용 환경에서 `_memory_store` 데이터를 반환하지 않던 버그 수정
 - **ElastiCache TLS 인증서 검증 우회** (`routes/_session_memory.py`): `redis.from_url()`에 `ssl_cert_reqs=None` 추가 — AWS ElastiCache 자체 서명 인증서로 인한 `SSL_connect failed` 오류 수정
 - **"참고 자료:" 꼬리말 제거** (`utils/prompts.py`, `agents/generator.py`): 답변 본문 끝에 중복 출력되던 `참고 자료: [1]` 형식의 꼬리말 제거 — 프롬프트 지시 삭제 + `_audit_citations()` 후처리 추가. 본문 내 `[번호]` 인라인 인용은 유지
 

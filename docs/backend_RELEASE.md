@@ -1,9 +1,10 @@
 # Release Notes
 
-## [2026-03-04] - Write-through DB 저장 + 품질 개선
+## [2026-03-04] - Write-through DB 저장 + 복수 기업 지원 + 품질 개선
 
 ### Features
 - **Write-through 파이프라인** (`apps/histories/service.py`): RAG 응답 시 Backend로 즉시 턴 저장 — 멱등키 session 범위 축소, 빈 입력 가드, 중복 설정 제거
+- **복수 기업 컨텍스트 지원** (`apps/rag/router.py`): `_build_user_context()`에 `companies` 필드 추가 — main_yn 단일 기업 조회에서 모든 활성 기업 목록 조회로 변경, 하위 호환 `company` 필드 유지
 
 ## [2026-03-03] - 문서 생성 에이전트 API + 비즈노 사업자 조회 + age 컨텍스트 전달 + 코드 정리
 
