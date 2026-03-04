@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Chiron+Sung+HK:ital,wght@0,200..900;1,200..900&family=Gothic+A1&family=Idiqlat:wght@200;300;400&family=Nanum+Myeongjo&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Chiron+Sung+HK:ital,wght@0,200..900;1,200..900&family=Idiqlat:wght@200;300;400&family=Nanum+Gothic:wght@400;700;800&family=Nanum+Myeongjo&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,7 +6,7 @@
 
 html,
 body {
-  font-family: 'Gothic A1', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
+  font-family: 'Nanum Gothic', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
 }
 
 .brand-logo-font {
@@ -26,6 +26,11 @@ body {
 
 .chiron-korean-font {
   font-family: 'Chiron Sung HK', 'Nanum Myeongjo', serif;
+}
+
+.sidebar-readable-font,
+.sidebar-readable-font * {
+  font-family: 'Nanum Gothic', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif !important;
 }
 
 .guide-soft-italic {
