@@ -102,6 +102,8 @@ async def rag_chat(
         payload["history"] = [msg.model_dump() for msg in body.history]
     if body.session_id:
         payload["session_id"] = body.session_id
+    if body.root_history_id:
+        payload["root_history_id"] = body.root_history_id
     if user:
         payload["user_context"] = _build_user_context(user, db)
 
@@ -166,6 +168,8 @@ async def rag_chat_stream(
         payload["history"] = [msg.model_dump() for msg in body.history]
     if body.session_id:
         payload["session_id"] = body.session_id
+    if body.root_history_id:
+        payload["root_history_id"] = body.root_history_id
     if user:
         payload["user_context"] = _build_user_context(user, db)
 

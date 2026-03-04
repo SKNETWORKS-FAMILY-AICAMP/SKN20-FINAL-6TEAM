@@ -610,6 +610,127 @@ async def flush_memory_to_redis() -> int:
     return flushed
 
 
+async def restore_session_from_db(
+    owner_key: str,
+    session_id: str,
+    user_id: int,
+    root_history_id: int,
+) -> dict | None:
+    """MySQL에서 스레드 이력을 조회하여 Redis 세션을 복원합니다.
+
+    Returns:
+        v2 세션 dict 또는 실패 시 None
+    """
+    settings = _settings()
+    if not settings.session_restore_enabled:
+        return None
+
+    from routes._write_through import _get_http_client
+
+    backend_url = settings.backend_internal_url.rstrip("/")
+    api_key = settings.rag_api_key
+
+    try:
+        client = _get_http_client()
+        resp = await asyncio.wait_for(
+            client.get(
+                f"{backend_url}/histories/thread/{root_history_id}/restore",
+                params={"user_id": user_id},
+                headers={"X-Internal-Key": api_key},
+            ),
+            timeout=settings.session_restore_timeout,
+        )
+        if resp.status_code != 200:
+            logger.warning(
+                "session restore failed: status=%d, user=%d, root=%d",
+                resp.status_code, user_id, root_history_id,
+            )
+            return None
+
+        histories = resp.json()
+        if not histories:
+            return None
+
+        # v2 세션 형식 재구성
+        max_messages = _session_max_messages()
+        max_turns = _session_max_turns()
+        now_iso = _now_iso()
+
+        messages: list[dict[str, str]] = []
+        turns: list[dict[str, Any]] = []
+
+        for h in histories:
+            question = h.get("question", "")
+            answer = h.get("answer", "")
+            if question:
+                messages.append({"role": "user", "content": question})
+            if answer:
+                messages.append({"role": "assistant", "content": answer})
+
+            turn_entry: dict[str, Any] = {
+                "question": question,
+                "answer": answer,
+                "timestamp": h.get("create_date") or now_iso,
+            }
+            if h.get("agent_code"):
+                turn_entry["agent_code"] = h["agent_code"]
+            eval_data = h.get("evaluation_data")
+            if isinstance(eval_data, dict):
+                if eval_data.get("domains"):
+                    turn_entry["domains"] = eval_data["domains"]
+                turn_entry["evaluation_data"] = eval_data
+            turns.append(turn_entry)
+
+        # 트리밍
+        messages = messages[-max_messages:]
+        turns = turns[-max_turns:]
+
+        session_data: dict[str, Any] = {
+            "v": 2,
+            "messages": messages,
+            "turns": turns,
+            "user_id": user_id,
+            "session_id": session_id,
+            "created_at": turns[0]["timestamp"] if turns else now_iso,
+            "updated_at": now_iso,
+        }
+
+        # Redis에 복원된 세션 저장
+        key = _make_key(owner_key, session_id)
+        if _use_redis():
+            try:
+                redis_client = await _get_redis_client()
+                await redis_client.set(
+                    key,
+                    json.dumps(session_data, ensure_ascii=False, separators=(",", ":")),
+                    ex=_session_ttl(),
+                )
+            except Exception as exc:
+                logger.warning("session restore Redis write failed, using memory: %s", exc)
+                with _memory_lock:
+                    _memory_store[key] = (time.time(), session_data)
+        else:
+            with _memory_lock:
+                _memory_store[key] = (time.time(), session_data)
+
+        logger.info(
+            "session restored from DB: user=%d, root=%d, turns=%d, messages=%d",
+            user_id, root_history_id, len(turns), len(messages),
+        )
+        return session_data
+
+    except asyncio.TimeoutError:
+        logger.warning(
+            "session restore timeout: user=%d, root=%d", user_id, root_history_id,
+        )
+        return None
+    except Exception as exc:
+        logger.warning(
+            "session restore error: user=%d, root=%d, %s", user_id, root_history_id, exc,
+        )
+        return None
+
+
 async def close_redis_client() -> None:
     """Gracefully close the Redis client connection pool."""
     global _redis_client

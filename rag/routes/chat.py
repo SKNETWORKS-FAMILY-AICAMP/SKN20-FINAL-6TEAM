@@ -12,10 +12,12 @@ from fastapi.responses import StreamingResponse
 
 from routes import _state
 from routes._session_memory import (
+    _sanitize_history,
     append_session_turn,
     delete_session,
     get_session_full,
     get_session_history,
+    restore_session_from_db,
     upsert_session_history,
 )
 from routes._write_through import schedule_write_through
@@ -98,9 +100,22 @@ async def chat(request: ChatRequest) -> ChatResponse:
         session_history = await get_session_history(owner_key, request.session_id)
         if session_history:
             effective_history = session_history
-        elif request_history:
-            # 세션이 비어있고 프론트엔드가 히스토리를 보낸 경우 → 초기 seed
-            await upsert_session_history(owner_key, request.session_id, request_history)
+        else:
+            # MySQL 복원 시도 (인증 사용자 + root_history_id 있을 때만)
+            user_id = _extract_user_id(request)
+            if user_id and request.root_history_id:
+                restored = await restore_session_from_db(
+                    owner_key, request.session_id, user_id, request.root_history_id
+                )
+                if restored:
+                    effective_history = _sanitize_history(restored.get("messages", []))
+                    logger.info(
+                        "[chat] MySQL 세션 복원: session=%s, root=%d",
+                        request.session_id, request.root_history_id,
+                    )
+            if effective_history is request_history and request_history:
+                # 세션이 비어있고 프론트엔드가 히스토리를 보낸 경우 → 초기 seed
+                await upsert_session_history(owner_key, request.session_id, request_history)
     cache_query = _build_cache_query(query, effective_history)
 
     try:
@@ -284,8 +299,21 @@ async def chat_stream(request: ChatRequest):
         session_history = await get_session_history(owner_key, request.session_id)
         if session_history:
             effective_history = session_history
-        elif request_history:
-            await upsert_session_history(owner_key, request.session_id, request_history)
+        else:
+            # MySQL 복원 시도 (인증 사용자 + root_history_id 있을 때만)
+            user_id = _extract_user_id(request)
+            if user_id and request.root_history_id:
+                restored = await restore_session_from_db(
+                    owner_key, request.session_id, user_id, request.root_history_id
+                )
+                if restored:
+                    effective_history = _sanitize_history(restored.get("messages", []))
+                    logger.info(
+                        "[stream] MySQL 세션 복원: session=%s, root=%d",
+                        request.session_id, request.root_history_id,
+                    )
+            if effective_history is request_history and request_history:
+                await upsert_session_history(owner_key, request.session_id, request_history)
     cache_query = _build_cache_query(stream_query, effective_history)
 
     async def generate():

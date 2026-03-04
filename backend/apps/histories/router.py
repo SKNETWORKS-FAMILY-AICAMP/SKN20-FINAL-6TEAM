@@ -188,6 +188,28 @@ def _verify_internal_key(request: Request) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid internal key")
 
 
+@router.get("/thread/{root_history_id}/restore")
+async def get_thread_for_restore(
+    request: Request,
+    root_history_id: int,
+    user_id: int = Query(...),
+    service: HistoryService = Depends(get_history_service),
+):
+    """세션 복원용 스레드 데이터 (RAG 내부 API)."""
+    _verify_internal_key(request)
+    histories = service.get_thread_histories(user_id, root_history_id)
+    return [
+        {
+            "question": h.question,
+            "answer": h.answer,
+            "agent_code": h.agent_code,
+            "evaluation_data": h.evaluation_data,
+            "create_date": h.create_date.isoformat() if h.create_date else None,
+        }
+        for h in histories
+    ]
+
+
 @router.post("/batch", response_model=BatchHistoryResponse, status_code=status.HTTP_201_CREATED)
 async def create_history_batch(
     request: Request,

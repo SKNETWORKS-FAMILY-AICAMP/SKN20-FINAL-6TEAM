@@ -134,6 +134,9 @@ export const useChat = () => {
 
             let finalDomain = 'general';
 
+            const session = useChatStore.getState().sessions.find(s => s.id === targetSessionId);
+            const rootHistoryId = session?.rootHistoryId ?? null;
+
             await streamChat(message, {
               onToken: (token) => {
                 if (streamingContentRef.current === '') {
@@ -199,16 +202,19 @@ export const useChat = () => {
                 });
                 console.error('Streaming error:', error);
               },
-            }, abortController.signal, history, targetSessionId);
+            }, abortController.signal, history, targetSessionId, rootHistoryId);
 
             response = streamingContentRef.current;
             agentCode = domainToAgentCode(finalDomain);
           } else {
             // Non-streaming mode
+            const nonStreamSession = useChatStore.getState().sessions.find(s => s.id === targetSessionId);
+            const nonStreamRootHistoryId = nonStreamSession?.rootHistoryId ?? null;
             const ragResponse = await ragApi.post<RagChatResponse>('/rag/chat', {
               message,
               ...(history.length ? { history } : {}),
               session_id: targetSessionId,
+              ...(nonStreamRootHistoryId ? { root_history_id: nonStreamRootHistoryId } : {}),
             });
             response = ragResponse.data.content;
             agentCode = domainToAgentCode(ragResponse.data.domain);

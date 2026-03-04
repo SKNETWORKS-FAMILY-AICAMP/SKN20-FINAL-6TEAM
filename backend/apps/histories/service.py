@@ -143,14 +143,8 @@ class HistoryService:
         window = summaries[offset: offset + limit]
         return [HistoryThreadSummaryResponse(**item) for item in window]
 
-    def get_history_thread_detail(
-        self,
-        user_id: int,
-        root_history_id: int,
-    ) -> HistoryThreadDetailResponse | None:
-        """특정 thread(root 기준)의 전체 이력을 반환합니다."""
-        # parent_history_id == root_history_id 인 레코드가 해당 스레드 전체
-        # (root 자신은 자기 참조, 나머지는 root를 직접 가리킴)
+    def get_thread_histories(self, user_id: int, root_history_id: int) -> list[History]:
+        """복원용: 특정 스레드의 전체 이력을 시간순 반환."""
         stmt = (
             select(History)
             .where(
@@ -160,7 +154,15 @@ class HistoryService:
             )
             .order_by(History.create_date.asc(), History.history_id.asc())
         )
-        thread_histories = list(self.db.execute(stmt).scalars().all())
+        return list(self.db.execute(stmt).scalars().all())
+
+    def get_history_thread_detail(
+        self,
+        user_id: int,
+        root_history_id: int,
+    ) -> HistoryThreadDetailResponse | None:
+        """특정 thread(root 기준)의 전체 이력을 반환합니다."""
+        thread_histories = self.get_thread_histories(user_id, root_history_id)
         if not thread_histories:
             return None
 

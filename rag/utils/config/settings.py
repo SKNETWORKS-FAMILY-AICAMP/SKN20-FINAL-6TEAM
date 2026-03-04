@@ -535,6 +535,14 @@ class Settings(BaseSettings):
         description="Backend 내부 통신 URL (배치 마이그레이션 → Backend API)"
     )
 
+    # -- 세션 복원 (MySQL → Redis lazy restore) --
+    session_restore_enabled: bool = Field(
+        default=True, description="MySQL 세션 복원 활성화"
+    )
+    session_restore_timeout: float = Field(
+        default=5.0, gt=0, description="복원 요청 타임아웃 (초)"
+    )
+
     @field_validator("session_memory_backend")
     @classmethod
     def validate_session_memory_backend(cls, v: str) -> str:

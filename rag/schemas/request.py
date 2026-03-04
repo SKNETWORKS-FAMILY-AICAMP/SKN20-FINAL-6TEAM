@@ -235,6 +235,10 @@ class ChatRequest(BaseModel):
         pattern=r"^[a-zA-Z0-9_-]+$",
         description="세션 ID (영숫자, 하이픈, 언더스코어만 허용)",
     )
+    root_history_id: int | None = Field(
+        default=None,
+        description="MySQL 스레드 루트 ID (세션 복원용)",
+    )
 
 
 class DocumentRequest(BaseModel):
