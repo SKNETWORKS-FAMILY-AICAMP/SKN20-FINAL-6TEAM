@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-03-04] - Contextual Retrieval VectorDB 빌더 추가
+
+### Features
+- **Contextual Retrieval 전처리 파이프라인** (`scripts/vectordb/contextual_prefix.py` 신규, `scripts/vectordb/builder.py`, `scripts/vectordb/loader.py`, `scripts/vectordb/__main__.py`): 청크마다 LLM으로 문서 컨텍스트 접두어를 생성하여 검색 정확도를 높이는 Contextual Retrieval 방식 vectordb 빌더 추가 — `--contextual` 플래그로 활성화, 비동기 배치 처리 지원
+
 ## [2026-03-03] - 멀티턴 E2E 테스트 스크립트 추가
 
 ### Tests
