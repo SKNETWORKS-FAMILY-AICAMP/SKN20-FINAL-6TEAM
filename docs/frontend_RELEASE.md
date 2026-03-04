@@ -1,9 +1,14 @@
 # Release Notes
 
-## [2026-03-04] - 세션 ID 안정화
+## [2026-03-04] - 토스트 시스템 통합 + 공고 패널 개선 + 폰트 수정
+
+### Features
+- **통합 토스트 시스템** (`components/common/ToastContainer.tsx`): 액션/알림 토스트를 단일 컨테이너로 통합
+- **관련 공고 패널 헤더 개선** (`pages/SchedulePage.tsx`): 정렬 드롭다운 추가 + 토스트 마이그레이션
 
 ### Bug Fixes
 - **세션 ID `db-{root_history_id}`로 안정화** (`src/stores/chatStore.ts`): 세션 ID 충돌 방지 및 write-through 파이프라인 연동
+- **전역 폰트 Nanum Gothic으로 수정** (`src/index.css`, `tailwind.config.js`): 전체 UI 폰트 일관성 확보
 
 ## [2026-03-03] - 문서 생성 에이전트 UI + 비즈노 사업자 조회 연동 + 코드 정리
 
