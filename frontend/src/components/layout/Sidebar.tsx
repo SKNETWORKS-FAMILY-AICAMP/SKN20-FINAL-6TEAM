@@ -26,6 +26,7 @@ import { useChatStore } from '../../stores/chatStore';
 import { useDisplayUserType } from '../../hooks/useDisplayUserType';
 import { USER_TYPE_NAMES } from '../../types';
 import { ChatHistoryPanel } from './ChatHistoryPanel';
+import { APP_HEADER_HEIGHT_CLASS, APP_HEADER_HORIZONTAL_PADDING_CLASS } from './layoutConstants';
 import { ProfileDialog } from '../profile/ProfileDialog';
 
 /** Routes that require authentication to access */
@@ -169,7 +170,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }`}
         >
           {/* Logo / Toggle */}
-          <div className="flex h-[81px] items-center border-b px-3">
+          <div className={`flex items-center border-b ${APP_HEADER_HEIGHT_CLASS} ${APP_HEADER_HORIZONTAL_PADDING_CLASS}`}>
             <div
               className={`min-w-0 overflow-hidden transition-[max-width] duration-180 ease-[cubic-bezier(0.2,0,0,1)] ${
                 !isMobile && effectiveCollapsed ? 'max-w-0 flex-1' : 'max-w-[13rem] flex-1'
