@@ -622,6 +622,11 @@ class ActionExecutor:
         Returns:
             문서 생성 응답
         """
+        # application_form은 동적 필드이므로 레지스트리 우회
+        if document_type == "application_form":
+            result = self._generate_application_form(params, format)
+            return self._upload_and_save(result, user_id, company_id)
+
         from agents.document_registry import DOCUMENT_TYPE_REGISTRY
 
         type_def = DOCUMENT_TYPE_REGISTRY.get(document_type)
@@ -694,6 +699,70 @@ class ActionExecutor:
                 success=False,
                 document_type=type_def.type_key,
                 message=f"문서 생성 실패: {str(e)}",
+            )
+
+    def _generate_application_form(
+        self,
+        params: dict[str, Any],
+        format: str = "docx",
+    ) -> DocumentResponse:
+        """S3 신청 양식을 기반으로 사용자 입력값을 채운 문서를 생성합니다.
+
+        Args:
+            params: 사용자 입력 필드값 + _form_key, _form_title 메타 키
+            format: 출력 형식 (pdf, docx)
+
+        Returns:
+            문서 생성 응답
+        """
+        from utils import prompts
+        from utils.config.llm import create_llm
+        from utils.file_parser import extract_text_from_base64
+
+        form_key: str = params.pop("_form_key", "")
+        form_title: str = params.pop("_form_title", "신청서")
+
+        if not form_key:
+            return DocumentResponse(
+                success=False,
+                document_type="application_form",
+                message="양식 키(_form_key)가 전달되지 않았습니다.",
+            )
+
+        try:
+            # S3에서 원본 양식 다운로드 → 텍스트 추출
+            s3 = get_s3_client()
+            file_bytes: bytes = s3.get_application_form(form_key)
+            file_name: str = form_key.split("/")[-1]
+            b64_content: str = base64.b64encode(file_bytes).decode()
+            form_text: str = extract_text_from_base64(b64_content, file_name)
+
+            # 사용자 입력값 포매팅
+            today: str = datetime.now().strftime("%Y년 %m월 %d일")
+            field_text: str = "\n".join(
+                f"- {k}: {v}" for k, v in params.items() if v
+            )
+            field_text += f"\n- 작성일: {today}"
+
+            full_prompt: str = prompts.APPLICATION_FORM_GENERATION_PROMPT.format(
+                form_text=form_text,
+                field_values=field_text,
+            )
+
+            llm = create_llm(label="신청서생성", temperature=0.3, max_tokens=4096)
+            response = llm.invoke([{"role": "user", "content": full_prompt}])
+            content: str = response.content
+
+            if format == "pdf":
+                return self._build_pdf_from_text(content, "application_form", form_title)
+            return self._build_docx_from_text(content, "application_form", form_title)
+
+        except Exception as e:
+            logger.error("신청서 생성 실패 (%s): %s", form_key, e, exc_info=True)
+            return DocumentResponse(
+                success=False,
+                document_type="application_form",
+                message=f"신청서 생성 실패: {str(e)}",
             )
 
     def modify_document(

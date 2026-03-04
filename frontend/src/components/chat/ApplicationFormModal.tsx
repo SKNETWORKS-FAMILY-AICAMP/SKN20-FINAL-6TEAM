@@ -74,7 +74,9 @@ export const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({ onCl
         if (val === undefined || val === '') continue;
         params[f.name] = f.field_type === 'number' ? Number(val) : val;
       }
-      // application_form 타입으로 범용 문서 생성 API 호출
+      // 원본 양식 키·제목을 함께 전달하여 executor가 S3 양식을 참조할 수 있도록 함
+      params['_form_key'] = selectedKey;
+      params['_form_title'] = analysis.title;
       const response = await generateDocument('application_form', params, format);
       if (!response.success || !response.file_content || !response.file_name) {
         throw new Error(response.message || '문서 생성에 실패했습니다.');
