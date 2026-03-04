@@ -349,6 +349,7 @@ class MainRouter:
         state["timing_metrics"]["query_rewrite_time"] = rewrite_meta.elapsed
         state["timing_metrics"]["query_rewrite_reason"] = rewrite_meta.reason
         state["timing_metrics"]["query_rewrite_applied"] = was_rewritten
+        state["timing_metrics"]["query_rewrite_topic_changed"] = rewrite_meta.topic_changed
 
         # 벡터 유사도 기반 도메인 분류 (CPU-bound → 스레드 위임)
         classify_query = rewritten_query if was_rewritten else query
@@ -375,7 +376,7 @@ class MainRouter:
             # 2) 재작성 실패(timeout/exception) + history 존재 + previous_domains → 후속 질문 가능성
             previous_domains = state.get("previous_domains")
             should_fallback = False
-            if was_rewritten and previous_domains:
+            if was_rewritten and previous_domains and not rewrite_meta.topic_changed:
                 should_fallback = True
             elif not was_rewritten and previous_domains and state.get("history"):
                 fallback_reasons = {"fallback_timeout", "fallback_exception"}
@@ -511,13 +512,14 @@ class MainRouter:
         """비동기 생성 노드: 통합 생성 에이전트 사용."""
         start = time.time()
 
+        topic_changed = state.get("timing_metrics", {}).get("query_rewrite_topic_changed", False)
         result = await self.generator.agenerate(
             query=state.get("original_query", state["query"]),
             sub_queries=state["sub_queries"],
             retrieval_results=state["retrieval_results"],
             user_context=state.get("user_context"),
             domains=state["domains"],
-            history=state.get("history"),
+            history=None if topic_changed else state.get("history"),
         )
         state["final_response"] = result.content
         state["actions"] = result.actions
@@ -957,6 +959,7 @@ class MainRouter:
             query_rewrite_applied=timing_data.get("query_rewrite_applied"),
             query_rewrite_reason=timing_data.get("query_rewrite_reason"),
             query_rewrite_time=timing_data.get("query_rewrite_time"),
+            query_rewrite_topic_changed=timing_data.get("query_rewrite_topic_changed"),
             timeout_cause=timing_data.get("timeout_cause"),
             response_time=total_time,
         )
@@ -1082,7 +1085,7 @@ class MainRouter:
         if not classification.is_relevant:
             # 후속 질문 도메인 폴백 (astream 경로)
             should_fallback = False
-            if was_rewritten and previous_domains:
+            if was_rewritten and previous_domains and not rewrite_meta.topic_changed:
                 should_fallback = True
             elif not was_rewritten and previous_domains and history:
                 fallback_reasons = {"fallback_timeout", "fallback_exception"}
@@ -1141,6 +1144,7 @@ class MainRouter:
                 "query_rewrite_applied": rewrite_meta.rewritten,
                 "query_rewrite_reason": rewrite_meta.reason,
                 "query_rewrite_time": rewrite_meta.elapsed,
+                "query_rewrite_topic_changed": rewrite_meta.topic_changed,
             }
             return
 
@@ -1249,7 +1253,7 @@ class MainRouter:
                 user_context=user_context,
                 domain=domain,
                 actions=pre_actions,
-                history=history,
+                history=None if rewrite_meta.topic_changed else history,
             ):
                 if chunk["type"] == "token":
                     yield {"type": "token", "content": chunk["content"]}
@@ -1295,6 +1299,7 @@ class MainRouter:
                 "query_rewrite_applied": rewrite_meta.rewritten,
                 "query_rewrite_reason": rewrite_meta.reason,
                 "query_rewrite_time": rewrite_meta.elapsed,
+                "query_rewrite_topic_changed": rewrite_meta.topic_changed,
             }
         else:
             # 복수 도메인: 통합 생성 에이전트로 LLM 토큰 스트리밍
@@ -1334,7 +1339,7 @@ class MainRouter:
                 user_context=user_context,
                 domains=domains,
                 actions=pre_actions,
-                history=history,
+                history=None if rewrite_meta.topic_changed else history,
             ):
                 if chunk["type"] == "token":
                     yield {"type": "token", "content": chunk["content"]}
@@ -1385,4 +1390,5 @@ class MainRouter:
                 "query_rewrite_applied": rewrite_meta.rewritten,
                 "query_rewrite_reason": rewrite_meta.reason,
                 "query_rewrite_time": rewrite_meta.elapsed,
+                "query_rewrite_topic_changed": rewrite_meta.topic_changed,
             }

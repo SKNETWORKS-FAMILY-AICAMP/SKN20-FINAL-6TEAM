@@ -10,11 +10,12 @@ from agents.router import MainRouter, RouterState
 from utils.domain_classifier import DomainClassificationResult
 
 
-def _make_mock_query_rewriter(return_original: bool = True):
+def _make_mock_query_rewriter(return_original: bool = True, topic_changed: bool = False):
     """query_rewriter mock 생성 함수.
 
     Args:
         return_original: True면 원본을 그대로 반환, False면 재작성 쿼리 반환
+        topic_changed: 주제 전환 여부
 
     Returns:
         mock query_rewriter
@@ -24,14 +25,16 @@ def _make_mock_query_rewriter(return_original: bool = True):
         mock_rewriter.arewrite = AsyncMock(side_effect=lambda q, h: (q, False))
         mock_rewriter.arewrite_with_meta = AsyncMock(
             side_effect=lambda q, h: SimpleNamespace(
-                query=q, rewritten=False, reason="skip_no_history", elapsed=0.0
+                query=q, rewritten=False, reason="skip_no_history", elapsed=0.0,
+                topic_changed=topic_changed,
             )
         )
     else:
         mock_rewriter.arewrite = AsyncMock(return_value=("재작성 쿼리", True))
         mock_rewriter.arewrite_with_meta = AsyncMock(
             return_value=SimpleNamespace(
-                query="재작성 쿼리", rewritten=True, reason="rewritten", elapsed=0.01
+                query="재작성 쿼리", rewritten=True, reason="rewritten", elapsed=0.01,
+                topic_changed=topic_changed,
             )
         )
     return mock_rewriter
@@ -769,6 +772,109 @@ class TestStreamRewriteMeta:
         assert done["query_rewrite_applied"] is False
         assert done["query_rewrite_reason"] == "skip_no_history"
         assert done["query_rewrite_time"] == 0.0
+
+
+class TestTopicChangeFallbackGuard:
+    """주제 전환 시 폴백 가드 테스트."""
+
+    @pytest.fixture
+    def router_with_mocks(self):
+        """모킹된 MainRouter 인스턴스."""
+        with patch("agents.router.ChromaVectorStore"), \
+             patch("agents.router.RAGChain"), \
+             patch("agents.router.StartupFundingAgent"), \
+             patch("agents.router.FinanceTaxAgent"), \
+             patch("agents.router.HRLaborAgent"), \
+             patch("agents.router.EvaluatorAgent"), \
+             patch("agents.router.get_settings") as mock_settings:
+
+            mock_settings.return_value = Mock(
+                enable_ragas_evaluation=False,
+                enable_llm_evaluation=False,
+                enable_legal_supplement=False,
+                total_timeout=30.0,
+                stream_hard_timeout=60.0,
+                fallback_message="fallback",
+            )
+            yield MainRouter()
+
+    @pytest.mark.asyncio
+    async def test_no_fallback_when_topic_changed(self, router_with_mocks):
+        """topic_changed=True + previous_domains → 폴백 차단, 거부 응답."""
+        router_with_mocks._query_rewriter = _make_mock_query_rewriter(
+            return_original=False, topic_changed=True,
+        )
+
+        # classifier: 거부 (is_relevant=False)
+        mock_classifier = Mock()
+        mock_classifier.classify.return_value = DomainClassificationResult(
+            domains=[], confidence=0.3, is_relevant=False, method="vector",
+        )
+        router_with_mocks._domain_classifier = mock_classifier
+
+        chunks = []
+        async for chunk in router_with_mocks.astream(
+            "근로계약서 작성법",
+            history=[
+                {"role": "user", "content": "사업자등록 절차 알려줘"},
+                {"role": "assistant", "content": "사업자등록은..."},
+            ],
+            previous_domains=["startup_funding"],
+        ):
+            chunks.append(chunk)
+
+        done_chunks = [c for c in chunks if c.get("type") == "done"]
+        assert len(done_chunks) == 1
+        done = done_chunks[0]
+        # topic_changed=True이므로 폴백 차단 → 거부 응답 (도메인 general)
+        assert done["domain"] == "general"
+        assert done["query_rewrite_topic_changed"] is True
+
+    @pytest.mark.asyncio
+    async def test_fallback_when_not_topic_changed(self, router_with_mocks):
+        """topic_changed=False + previous_domains → 정상 폴백."""
+        router_with_mocks._query_rewriter = _make_mock_query_rewriter(
+            return_original=False, topic_changed=False,
+        )
+
+        # classifier: 거부 (is_relevant=False) — 폴백 필요
+        mock_classifier = Mock()
+        mock_classifier.classify.return_value = DomainClassificationResult(
+            domains=[], confidence=0.3, is_relevant=False, method="vector",
+        )
+        router_with_mocks._domain_classifier = mock_classifier
+
+        # 단일 도메인 에이전트 mock
+        mock_agent = MagicMock()
+        mock_agent.aretrieve_only = AsyncMock(return_value=MagicMock(
+            documents=[], sources=[], scores=[], evaluation=None, used_multi_query=False,
+        ))
+        router_with_mocks.agents["startup_funding"] = mock_agent
+
+        # generator mock
+        async def fake_stream(**kwargs):
+            yield {"type": "token", "content": "응답"}
+            yield {"type": "generation_done", "content": "응답"}
+        router_with_mocks.generator.astream_generate = fake_stream
+        router_with_mocks.generator._collect_actions = Mock(return_value=[])
+
+        chunks = []
+        async for chunk in router_with_mocks.astream(
+            "서류는?",
+            history=[
+                {"role": "user", "content": "사업자등록 절차 알려줘"},
+                {"role": "assistant", "content": "사업자등록은..."},
+            ],
+            previous_domains=["startup_funding"],
+        ):
+            chunks.append(chunk)
+
+        done_chunks = [c for c in chunks if c.get("type") == "done"]
+        assert len(done_chunks) == 1
+        done = done_chunks[0]
+        # topic_changed=False이므로 정상 폴백 → startup_funding 도메인
+        assert done["domain"] == "startup_funding"
+        assert done["query_rewrite_topic_changed"] is False
 
 
 class TestIntentBasedShortcut:

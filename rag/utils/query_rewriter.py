@@ -44,6 +44,7 @@ class RewriteMeta:
     rewritten: bool
     reason: str
     elapsed: float
+    topic_changed: bool = False
 
 
 def _format_history_for_rewrite(
@@ -160,6 +161,7 @@ class QueryRewriter:
 
             rewritten = result.get("rewritten", "").strip()
             is_rewritten = result.get("is_rewritten", False)
+            topic_changed = bool(result.get("topic_changed", False))
 
             if is_rewritten and rewritten:
                 logger.info("[query_rewrite] '%s' -> '%s'", query[:30], rewritten[:50])
@@ -168,6 +170,7 @@ class QueryRewriter:
                     rewritten=True,
                     reason=REWRITE_STATUS_REWRITTEN,
                     elapsed=time.perf_counter() - started_at,
+                    topic_changed=topic_changed,
                 )
 
             return RewriteMeta(
@@ -175,6 +178,7 @@ class QueryRewriter:
                 rewritten=False,
                 reason=REWRITE_STATUS_NO_REWRITE,
                 elapsed=time.perf_counter() - started_at,
+                topic_changed=topic_changed,
             )
 
         except asyncio.TimeoutError:

@@ -65,6 +65,7 @@ class EvaluationDataForDB(BaseModel):
     query_rewrite_applied: bool | None = Field(default=None, description="query rewrite applied")
     query_rewrite_reason: str | None = Field(default=None, description="query rewrite reason")
     query_rewrite_time: float | None = Field(default=None, description="query rewrite elapsed (sec)")
+    query_rewrite_topic_changed: bool | None = Field(default=None, description="topic changed detected")
     timeout_cause: str | None = Field(default=None, description="timeout cause")
     response_time: float | None = Field(default=None, description="response time in seconds")
 

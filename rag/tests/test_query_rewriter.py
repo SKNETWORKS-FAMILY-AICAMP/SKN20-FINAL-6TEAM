@@ -138,6 +138,125 @@ class TestQueryRewriter:
         assert was_rewritten is False
 
 
+class TestTopicChanged:
+    """topic_changed 필드 파싱 테스트."""
+
+    @pytest.fixture
+    def mock_settings(self):
+        settings = MagicMock()
+        settings.enable_query_rewrite = True
+        settings.query_rewrite_timeout = 5.0
+        settings.openai_model = "gpt-4o-mini"
+        settings.openai_api_key = "sk-test"
+        settings.openai_temperature = 0.1
+        settings.multiturn_history_turns = 6
+        settings.multiturn_history_chars = 350
+        settings.enable_active_directive_memory = True
+        return settings
+
+    @pytest.fixture
+    def rewriter(self, mock_settings):
+        with patch("utils.query_rewriter.get_settings", return_value=mock_settings), patch(
+            "utils.query_rewriter.create_llm"
+        ) as mock_create_llm:
+            mock_llm = MagicMock()
+            mock_create_llm.return_value = mock_llm
+            instance = QueryRewriter()
+            instance.llm = mock_llm
+            yield instance
+
+    def _make_chain_mock(self, response_dict):
+        mock_chain = MagicMock()
+        mock_chain.ainvoke = AsyncMock(return_value=json.dumps(response_dict))
+        return mock_chain
+
+    def _patch_chain(self, rewriter, mock_chain):
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _ctx():
+            with patch.object(rewriter, "llm"):
+                with patch("utils.query_rewriter.ChatPromptTemplate") as mock_prompt:
+                    mock_prompt.from_messages.return_value = MagicMock()
+                    mock_prompt.from_messages.return_value.__or__ = Mock(return_value=MagicMock())
+                    mock_prompt.from_messages.return_value.__or__.return_value.__or__ = Mock(
+                        return_value=mock_chain
+                    )
+                    yield
+
+        return _ctx()
+
+    @pytest.mark.asyncio
+    async def test_topic_changed_parsed_from_llm_response(self, rewriter):
+        """LLM이 topic_changed=true 반환 시 파싱."""
+        history = [
+            {"role": "user", "content": "사업자등록 절차 알려주세요"},
+            {"role": "assistant", "content": "사업자등록은..."},
+        ]
+        mock_chain = self._make_chain_mock({
+            "rewritten": "근로계약서 작성 시 주의사항을 알려주세요",
+            "is_rewritten": False,
+            "topic_changed": True,
+        })
+        with self._patch_chain(rewriter, mock_chain):
+            meta = await rewriter.arewrite_with_meta("근로계약서 작성 시 주의사항을 알려주세요", history)
+
+        assert meta.topic_changed is True
+        assert meta.rewritten is False
+        assert meta.query == "근로계약서 작성 시 주의사항을 알려주세요"
+
+    @pytest.mark.asyncio
+    async def test_topic_changed_defaults_false(self, rewriter):
+        """LLM 응답에 topic_changed 필드가 누락되면 기본값 False."""
+        history = [
+            {"role": "user", "content": "사업자등록 절차?"},
+            {"role": "assistant", "content": "사업자등록은..."},
+        ]
+        mock_chain = self._make_chain_mock({
+            "rewritten": "사업자등록에 필요한 서류는?",
+            "is_rewritten": True,
+        })
+        with self._patch_chain(rewriter, mock_chain):
+            meta = await rewriter.arewrite_with_meta("서류?", history)
+
+        assert meta.topic_changed is False
+        assert meta.rewritten is True
+
+    @pytest.mark.asyncio
+    async def test_topic_changed_false_on_followup(self, rewriter):
+        """후속 질문(같은 주제) 시 topic_changed=False."""
+        history = [
+            {"role": "user", "content": "퇴직금 계산 방법은?"},
+            {"role": "assistant", "content": "퇴직금은..."},
+        ]
+        mock_chain = self._make_chain_mock({
+            "rewritten": "퇴직금에 대한 세금은 어떻게 되나요?",
+            "is_rewritten": True,
+            "topic_changed": False,
+        })
+        with self._patch_chain(rewriter, mock_chain):
+            meta = await rewriter.arewrite_with_meta("그러면 세금은?", history)
+
+        assert meta.topic_changed is False
+        assert meta.rewritten is True
+
+    @pytest.mark.asyncio
+    async def test_topic_changed_false_on_timeout(self, rewriter):
+        """타임아웃 시 topic_changed 기본값 False."""
+        history = [
+            {"role": "user", "content": "사업자등록 절차?"},
+            {"role": "assistant", "content": "사업자등록은..."},
+        ]
+        mock_chain = MagicMock()
+        mock_chain.ainvoke = AsyncMock(side_effect=asyncio.TimeoutError())
+        with self._patch_chain(rewriter, mock_chain):
+            meta = await rewriter.arewrite_with_meta("근로계약서 주의사항", history)
+
+        assert meta.topic_changed is False
+        assert meta.rewritten is False
+        assert meta.reason == "fallback_timeout"
+
+
 class TestParseResponse:
     def test_parses_plain_json(self):
         response = '{"rewritten": "재작성된 질문", "is_rewritten": true}'
