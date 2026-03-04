@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDownIcon, ChevronUpIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, ChevronDownIcon, ChevronUpIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 import type { SourceReference } from '../../types';
 
 interface SourceReferencesProps {
@@ -57,6 +57,17 @@ export const SourceReferences: React.FC<SourceReferencesProps> = ({ sources }) =
                 )}
                 {source.source && (
                   <span className="ml-1.5 text-gray-400">({source.source})</span>
+                )}
+                {source.docDownloadUrl && (
+                  <a
+                    href={source.docDownloadUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-1.5 text-gray-400 hover:text-blue-500"
+                    title="원본 공고문 다운로드"
+                  >
+                    <ArrowDownTrayIcon className="h-3.5 w-3.5 inline" />
+                  </a>
                 )}
               </div>
             </li>

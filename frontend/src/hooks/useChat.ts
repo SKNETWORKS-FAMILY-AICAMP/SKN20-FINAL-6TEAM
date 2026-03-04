@@ -228,6 +228,7 @@ export const useChat = () => {
               title: s.title || '',
               source: s.source || '',
               url: (s.metadata?.source_url as string) || '',
+              docDownloadUrl: (s.metadata?.doc_download_url as string) || '',
             }));
 
             const ragActions: RagActionSuggestion[] = ragResponse.data.actions || [];

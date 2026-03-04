@@ -271,7 +271,7 @@ class BaseAgent(ABC):
         return RetrievalResult(
             documents=documents,
             scores=scores,
-            sources=self.rag_chain.documents_to_sources(documents),
+            sources=self.rag_chain.documents_to_sources(documents, query=query),
             evaluation=evaluation,
             used_multi_query=False,
             retrieve_time=elapsed,

@@ -451,7 +451,169 @@ class RAGChain:
 
         return "\n\n---\n\n".join(context_parts)
 
-    def documents_to_sources(self, documents: list[Document]) -> list[SourceDocument]:
+    def _lookup_s3_keys(self, original_ids: list[str]) -> dict[str, str]:
+        """DB announce 테이블에서 original_id → doc_s3_key 매핑을 배치 조회합니다."""
+        if not original_ids:
+            return {}
+        try:
+            import pymysql
+            from utils.config import get_settings
+            s = get_settings()
+            conn = pymysql.connect(
+                host=s.mysql_host,
+                port=s.mysql_port,
+                user=s.mysql_user,
+                password=s.mysql_password,
+                database=s.mysql_database,
+                charset="utf8mb4",
+                cursorclass=pymysql.cursors.DictCursor,
+            )
+            try:
+                with conn.cursor() as cursor:
+                    placeholders = ",".join(["%s"] * len(original_ids))
+                    cursor.execute(
+                        f"SELECT source_id, doc_s3_key FROM announce "
+                        f"WHERE source_id IN ({placeholders}) AND doc_s3_key IS NOT NULL AND doc_s3_key != ''",
+                        original_ids,
+                    )
+                    return {row["source_id"]: row["doc_s3_key"] for row in cursor.fetchall()}
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.warning("[S3 키 조회] DB 조회 실패: %s", e)
+            return {}
+
+    def _lookup_announcement_by_query(
+        self, query: str, existing_ids: set[str],
+    ) -> list[SourceDocument]:
+        """사용자 쿼리 기반으로 RDS announce 테이블에서 공고를 검색하여 SourceDocument를 반환합니다.
+
+        ChromaDB 벡터 검색에서 누락된 공고를 보충하기 위한 fallback 로직입니다.
+        kiwipiepy로 명사를 추출하고 ann_name LIKE 검색을 수행합니다.
+
+        Args:
+            query: 사용자 질문
+            existing_ids: 이미 sources에 포함된 source_id 집합 (중복 방지)
+
+        Returns:
+            매칭된 공고의 SourceDocument 리스트
+        """
+        import re
+
+        # 1) 키워드 추출: [지역] 패턴 + 연도 + kiwipiepy 명사 추출
+        keywords: list[str] = []
+
+        # 대괄호 안 지역명
+        region_match = re.search(r"\[([^\]]+)\]", query)
+        if region_match:
+            keywords.append(region_match.group(1))
+
+        # 연도 (4자리 숫자 + 년)
+        year_match = re.search(r"(20\d{2})년?", query)
+        if year_match:
+            keywords.append(year_match.group(1))
+
+        # kiwipiepy 명사 추출 (2글자 이상 일반명사/고유명사만)
+        try:
+            from utils.domain_classifier import _get_kiwi
+            kiwi = _get_kiwi()
+            tokens = kiwi.tokenize(query)
+            nouns = [
+                t.form for t in tokens
+                if t.tag.startswith("NN") and len(t.form) >= 2
+            ]
+            keywords.extend(nouns)
+        except Exception as e:
+            logger.warning("[공고 조회] kiwipiepy 토큰화 실패: %s", e)
+
+        # 불용어 제거 (공고명에 거의 안 나오는 일반 조사/동사만)
+        stopwords = {"공고", "안내", "대상", "신청", "접수", "내용", "관련", "어떤", "알려"}
+        keywords = list(dict.fromkeys(kw for kw in keywords if kw not in stopwords))
+
+        if not keywords:
+            return []
+
+        # 최대 5개 키워드만 사용
+        keywords = keywords[:5]
+        logger.info("[공고 조회] 추출 키워드: %s", keywords)
+
+        # 2) RDS 조회 — 점진적 완화: 전체 AND → 상위 2개 AND 순으로 시도
+        try:
+            import pymysql
+            from utils.config import get_settings
+            s = get_settings()
+            conn = pymysql.connect(
+                host=s.mysql_host,
+                port=s.mysql_port,
+                user=s.mysql_user,
+                password=s.mysql_password,
+                database=s.mysql_database,
+                charset="utf8mb4",
+                cursorclass=pymysql.cursors.DictCursor,
+            )
+            try:
+                rows: list[dict] = []
+                # 키워드 수를 줄여가며 점진적으로 검색 (전체 → 2개까지)
+                attempts = [keywords]
+                if len(keywords) > 2:
+                    attempts.append(keywords[:2])
+                for attempt_kws in attempts:
+                    with conn.cursor() as cursor:
+                        conditions = " AND ".join(
+                            ["ann_name LIKE %s"] * len(attempt_kws)
+                        )
+                        params = [f"%{kw}%" for kw in attempt_kws]
+                        cursor.execute(
+                            f"SELECT ann_name, source_id, source_url, doc_s3_key "
+                            f"FROM announce "
+                            f"WHERE {conditions} AND doc_s3_key IS NOT NULL AND doc_s3_key != '' "
+                            f"LIMIT 3",
+                            params,
+                        )
+                        rows = cursor.fetchall()
+                    if rows:
+                        logger.info("[공고 조회] %d개 키워드 AND로 %d건 매칭", len(attempt_kws), len(rows))
+                        break
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.warning("[공고 조회] DB 조회 실패: %s", e)
+            return []
+
+        if not rows:
+            return []
+
+        # 3) SourceDocument 생성
+        results: list[SourceDocument] = []
+        for row in rows:
+            source_id = row.get("source_id", "")
+            if source_id in existing_ids:
+                continue
+
+            doc_s3_key = row["doc_s3_key"]
+            metadata: dict = {"source_id": source_id, "doc_s3_key": doc_s3_key}
+
+            try:
+                from utils.s3_client import get_s3_client
+                s3 = get_s3_client()
+                presigned = s3.generate_presigned_url(doc_s3_key)
+                if presigned:
+                    metadata["doc_download_url"] = presigned
+            except Exception as e:
+                logger.warning("[공고 조회] presigned URL 생성 실패: %s", e)
+
+            results.append(SourceDocument(
+                title=row.get("ann_name", ""),
+                content="",
+                source=row.get("ann_name", ""),
+                url=row.get("source_url") or "https://www.bizinfo.go.kr/",
+                metadata=metadata,
+            ))
+
+        logger.info("[공고 조회] RDS fallback 결과: %d건 추가", len(results))
+        return results
+
+    def documents_to_sources(self, documents: list[Document], query: str | None = None) -> list[SourceDocument]:
         """문서 리스트를 SourceDocument 리스트로 변환합니다.
 
         Args:
@@ -460,6 +622,15 @@ class RAGChain:
         Returns:
             SourceDocument 리스트
         """
+        # ChromaDB에 meta_doc_s3_key가 없는 문서들은 DB에서 배치 조회
+        # ChromaDB metadata 키: meta_original_id (예: "PBLN_000000000117742")
+        ids_needing_lookup = [
+            doc.metadata.get("meta_original_id", "")
+            for doc in documents
+            if not doc.metadata.get("meta_doc_s3_key") and doc.metadata.get("meta_original_id")
+        ]
+        s3_key_map = self._lookup_s3_keys(ids_needing_lookup)
+
         sources = []
         for doc in documents:
             # source 정보 추출 (source_name 또는 source_file 사용)
@@ -468,15 +639,42 @@ class RAGChain:
                 or doc.metadata.get("source_file")
                 or doc.metadata.get("source")
             )
+            metadata = doc.metadata
+
+            # doc_s3_key → presigned URL 생성
+            doc_s3_key = doc.metadata.get("meta_doc_s3_key", "")
+            if not doc_s3_key:
+                doc_s3_key = s3_key_map.get(doc.metadata.get("meta_original_id", ""), "")
+            if doc_s3_key:
+                try:
+                    from utils.s3_client import get_s3_client
+                    s3 = get_s3_client()
+                    presigned = s3.generate_presigned_url(doc_s3_key)
+                    if presigned:
+                        metadata = {**metadata, "doc_download_url": presigned}
+                except Exception as e:
+                    logger.warning("[S3 Presigned URL] 생성 실패 (key=%s): %s", doc_s3_key, e)
+
             sources.append(
                 SourceDocument(
                     title=doc.metadata.get("title"),
                     content=doc.page_content[:self.settings.source_content_length],
                     source=source,
                     url=doc.metadata.get("source_url") or "https://law.go.kr/",
-                    metadata=doc.metadata,
+                    metadata=metadata,
                 )
             )
+
+        # RDS fallback: 쿼리 기반으로 ann_name 검색하여 누락된 공고 다운로드 링크 보충
+        if query:
+            existing_ids = {
+                doc.metadata.get("meta_original_id", "")
+                for doc in documents
+                if doc.metadata.get("meta_original_id")
+            }
+            fallback_sources = self._lookup_announcement_by_query(query, existing_ids)
+            sources.extend(fallback_sources)
+
         return sources
 
     async def ainvoke(
@@ -600,7 +798,7 @@ class RAGChain:
 
         result = {
             "content": response,
-            "sources": self.documents_to_sources(documents),
+            "sources": self.documents_to_sources(documents, query=query),
             "documents": documents,
             "retrieve_time": retrieve_time,
             "generate_time": generate_time,

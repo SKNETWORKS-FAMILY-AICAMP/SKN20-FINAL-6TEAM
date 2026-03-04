@@ -55,6 +55,7 @@ class AnnouncementMetadata:
     amount: str  # 지원금액
     hashtags: List[str] = field(default_factory=list)
     original_id: str = ""  # 원본 ID
+    doc_s3_key: str = ""  # S3 원본 공고문 키
     # 정규화 필드 (ChromaDB 메타데이터 필터링용)
     normalized_region: str = ""
     target_예비창업자: str = "false"
@@ -444,6 +445,7 @@ class BizinfoProcessor:
             amount=amount,
             hashtags=hashtags,
             original_id=original_id,
+            doc_s3_key=clean_value(item.get("_doc_s3_key", "")),
             normalized_region=normalized_region,
             **target_flags,
         )
@@ -560,6 +562,7 @@ class KstartupProcessor:
             amount=amount,
             hashtags=[],
             original_id=str(original_id),
+            doc_s3_key=clean_value(item.get("_doc_s3_key", "")),
             normalized_region=normalized_region,
             **target_flags,
         )

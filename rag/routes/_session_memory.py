@@ -86,12 +86,14 @@ async def _get_redis_client():
         if _redis_client is None:
             from redis import asyncio as redis  # Lazy import (optional dependency)
 
-            _redis_client = redis.from_url(
-                _redis_url(),
-                encoding="utf-8",
-                decode_responses=True,
-                ssl_cert_reqs=None,
-            )
+            url = _redis_url()
+            kwargs: dict[str, Any] = {
+                "encoding": "utf-8",
+                "decode_responses": True,
+            }
+            if url.startswith("rediss://"):
+                kwargs["ssl_cert_reqs"] = None
+            _redis_client = redis.from_url(url, **kwargs)
     return _redis_client
 
 

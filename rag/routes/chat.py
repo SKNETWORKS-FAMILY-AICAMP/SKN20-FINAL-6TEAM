@@ -319,6 +319,7 @@ async def chat_stream(request: ChatRequest):
                                 "title": src.get("title", ""),
                                 "source": src.get("source", ""),
                                 "url": src.get("url", ""),
+                                "doc_download_url": src.get("metadata", {}).get("doc_download_url", ""),
                             },
                         )
                         yield f"data: {source_chunk.model_dump_json()}\n\n"
@@ -647,6 +648,7 @@ async def chat_stream(request: ChatRequest):
                         "title": source.title if hasattr(source, 'title') else "",
                         "source": source.source if hasattr(source, 'source') else "",
                         "url": source.url if hasattr(source, 'url') else "",
+                        "doc_download_url": source.metadata.get("doc_download_url", "") if hasattr(source, 'metadata') else "",
                     },
                 )
                 yield f"data: {source_chunk.model_dump_json()}\n\n"
@@ -675,6 +677,7 @@ async def chat_stream(request: ChatRequest):
                             "title": s.title if hasattr(s, 'title') else "",
                             "source": s.source if hasattr(s, 'source') else "",
                             "url": s.url if hasattr(s, 'url') else "",
+                            "metadata": {"doc_download_url": s.metadata.get("doc_download_url", "")} if hasattr(s, 'metadata') else {},
                         }
                         for s in final_sources
                     ],

@@ -63,6 +63,18 @@ class S3Client:
             logger.error("S3 양식 다운로드 실패: %s", form_key, exc_info=True)
             raise
 
+    def generate_presigned_url(self, key: str, expires_in: int = 3600) -> str:
+        """S3 오브젝트의 presigned URL을 생성합니다."""
+        try:
+            return self.s3.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": self.bucket, "Key": key},
+                ExpiresIn=expires_in,
+            )
+        except ClientError:
+            logger.warning("Presigned URL 생성 실패: %s", key)
+            return ""
+
     def list_application_forms(self) -> list[dict[str, str]]:
         """사용 가능한 신청 양식 목록을 조회합니다."""
         prefix = self.forms_prefix

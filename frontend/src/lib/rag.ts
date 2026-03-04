@@ -102,6 +102,7 @@ export const streamChat = async (
                     title: event.metadata.title || '',
                     source: event.metadata.source || '',
                     url: event.metadata.url || '',
+                    docDownloadUrl: event.metadata.doc_download_url || '',
                   });
                 }
                 break;
