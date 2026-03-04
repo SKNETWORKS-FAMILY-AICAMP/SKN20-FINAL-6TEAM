@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, TypedDict
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from apps.common.models import History
@@ -320,6 +320,23 @@ class HistoryService:
 
         self.db.commit()
         return saved_count, skipped_count, history_ids
+
+    def get_message_count_today(self, user_id: int) -> int:
+        """오늘 자정부터 현재까지 사용자의 메시지 수를 반환합니다.
+
+        DB의 create_date가 datetime.now() 로컬 타임 기준이므로 동일하게 맞춤.
+        """
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        stmt = (
+            select(func.count())
+            .select_from(History)
+            .where(
+                History.user_id == user_id,
+                History.use_yn == True,
+                History.create_date >= today_start,
+            )
+        )
+        return self.db.execute(stmt).scalar_one()
 
     def delete_history(self, history_id: int, user_id: int) -> bool:
         """상담 이력을 소프트 삭제합니다.

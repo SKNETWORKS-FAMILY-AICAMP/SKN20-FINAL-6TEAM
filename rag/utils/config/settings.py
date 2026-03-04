@@ -502,8 +502,8 @@ class Settings(BaseSettings):
         description="세션당 최대 턴 메타데이터 수 (evaluation_data 포함, ~5KB/턴)"
     )
     session_memory_ttl_seconds: int = Field(
-        default=90000, gt=0,
-        description="세션 메모리 TTL (초). 기본 25시간 (24시간 후 마이그레이션 + 1시간 버퍼)"
+        default=4500, gt=0,
+        description="세션 메모리 TTL (초). 기본 75분 (1시간 비활동 만료 + 15분 마이그레이션 버퍼)"
     )
 
     # -- 세션 마이그레이션 (Redis → DB 배치 이관) --
@@ -512,12 +512,12 @@ class Settings(BaseSettings):
         description="세션 마이그레이션 활성화 (Redis → DB 배치 이관)"
     )
     session_migrate_interval: int = Field(
-        default=3600, gt=0,
-        description="마이그레이션 배치 체크 간격 (초)"
+        default=300, gt=0,
+        description="마이그레이션 배치 체크 간격 (초). 기본 5분 (15분 윈도우에서 최소 3번 체크)"
     )
     session_migrate_ttl_threshold: int = Field(
-        default=3600, gt=0,
-        description="마이그레이션 대상 TTL 임계값 (초). 이 값 이하인 세션을 이관 (기본 1시간)"
+        default=900, gt=0,
+        description="마이그레이션 대상 TTL 임계값 (초). 이 값 이하인 세션을 이관 (기본 15분)"
     )
     backend_internal_url: str = Field(
         default="http://backend:8000",
@@ -583,6 +583,16 @@ class Settings(BaseSettings):
                     "프로덕션 환경에서 OPENAI_API_KEY가 설정되지 않았습니다."
                 )
             # 프로덕션에서 CORS localhost 자동 제거
+        # 세션 마이그레이션 threshold < ttl 검증 (환경 무관)
+        if self.session_migrate_ttl_threshold >= self.session_memory_ttl_seconds:
+            old_threshold = self.session_migrate_ttl_threshold
+            self.session_migrate_ttl_threshold = self.session_memory_ttl_seconds // 3
+            logger.warning(
+                "session_migrate_ttl_threshold(%d) >= session_memory_ttl_seconds(%d) "
+                "— threshold를 %d로 자동 조정합니다.",
+                old_threshold, self.session_memory_ttl_seconds,
+                self.session_migrate_ttl_threshold,
+            )
         # 타임아웃 상호 검증 (환경 무관)
         if self.total_timeout < self.llm_timeout:
             logger.warning(

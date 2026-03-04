@@ -94,6 +94,13 @@ export const useAuthStore = create<AuthState>()(
         void syncAnnounceNotificationsToStore('login');
         await useChatStore.getState().syncGuestMessages();
         useChatStore.getState().resetGuestCount();
+        // Fetch authenticated user's today message count from server
+        try {
+          const quotaRes = await api.get<{ today_count: number }>('/histories/quota');
+          useChatStore.getState().setAuthenticatedCount(quotaRes.data.today_count);
+        } catch {
+          // Quota fetch failure is non-critical
+        }
         await useChatStore.getState().bootstrapFromServerHistories();
         useChatStore.getState().createSession();  // 로그인 후 새 채팅으로 시작
       },

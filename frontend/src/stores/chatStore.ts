@@ -50,6 +50,7 @@ interface ChatState {
   isSyncing: boolean;
   isBootstrapping: boolean;
   guestMessageCount: number;
+  authenticatedMessageCount: number;
 
   // Session management
   createSession: (title?: string) => string;
@@ -75,6 +76,10 @@ interface ChatState {
   // Guest message limit
   incrementGuestCount: () => void;
   resetGuestCount: () => void;
+
+  // Authenticated message quota
+  incrementAuthenticatedCount: () => void;
+  setAuthenticatedCount: (count: number) => void;
 
   // Guest -> Login sync
   syncGuestMessages: () => Promise<void>;
@@ -108,6 +113,7 @@ export const useChatStore = create<ChatState>()(
       isSyncing: false,
       isBootstrapping: false,
       guestMessageCount: 0,
+      authenticatedMessageCount: 0,
 
       createSession: (title?: string) => {
         const session = createNewSession(title);
@@ -258,6 +264,11 @@ export const useChatStore = create<ChatState>()(
         set((state) => ({ guestMessageCount: state.guestMessageCount + 1 })),
 
       resetGuestCount: () => set({ guestMessageCount: 0 }),
+
+      incrementAuthenticatedCount: () =>
+        set((state) => ({ authenticatedMessageCount: state.authenticatedMessageCount + 1 })),
+
+      setAuthenticatedCount: (count: number) => set({ authenticatedMessageCount: count }),
 
       syncGuestMessages: async () => {
         if (get().isSyncing) return;
@@ -449,7 +460,8 @@ export const useChatStore = create<ChatState>()(
         set({
           sessions: [newSession],
           currentSessionId: newSession.id,
-          guestMessageCount: 0,
+          // guestMessageCount는 유지 (로그아웃→게스트→로그인 순환 악용 방지)
+          authenticatedMessageCount: 0,
         });
       },
 
