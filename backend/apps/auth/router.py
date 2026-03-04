@@ -229,6 +229,11 @@ async def test_login(
         .where(User.google_email == test_email)
     )
     user = db.execute(user_stmt).scalar_one_or_none()
+    if user and not user.use_yn:
+        logger.info("REACTIVATE(test) email=%s user_id=%d", test_email, user.user_id)
+        user.use_yn = True
+        user.username = test_username
+        db.commit()
     if not user:
         result = db.execute(
             insert(User).values(
