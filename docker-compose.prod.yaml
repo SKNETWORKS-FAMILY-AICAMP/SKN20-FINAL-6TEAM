@@ -153,6 +153,9 @@ services:
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-runpod}
       RUNPOD_API_KEY: ${RUNPOD_API_KEY}
       RUNPOD_ENDPOINT_ID: ${RUNPOD_ENDPOINT_ID}
+      # Redis 세션 메모리 (AWS ElastiCache)
+      SESSION_MEMORY_BACKEND: ${SESSION_MEMORY_BACKEND:-memory}
+      REDIS_URL: ${REDIS_URL:-}
     depends_on:
       chromadb:
         condition: service_healthy
@@ -170,7 +173,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2560M
+          memory: 2304M
     networks:
       - backend
 
@@ -203,7 +206,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: 1024M
     networks:
       - backend
 

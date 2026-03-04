@@ -90,6 +90,7 @@ async def _get_redis_client():
                 _redis_url(),
                 encoding="utf-8",
                 decode_responses=True,
+                ssl_cert_reqs=None,
             )
     return _redis_client
 
