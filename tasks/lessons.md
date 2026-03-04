@@ -24,3 +24,8 @@ Record mistakes, corrections, and insights during development.
 - **Mistake**: I initially tried to expand Playwright coverage by depending on `/auth/test-login`, but local DB/schema differences and rate limiting made that path unreliable for final feature verification.
 - **Fix**: Switched the final verification approach to real Playwright browser interaction with an actual logged-in session for protected pages, and recorded only the scenarios that were truly executed.
 - **Lesson**: For final acceptance-style QA, prefer real authentication state over convenience test endpoints unless the test-login path is guaranteed to be stable in the target environment.
+
+### 2026-03-04 - Precreate Capture Paths And Reload After Role-Switch Login
+- **Mistake**: I first attempted to save Playwright screenshots into a deliverable image path that did not exist, and later switched browser auth roles with `/auth/test-login` without fully reloading the SPA, so the UI still showed the previous Zustand auth state.
+- **Fix**: Created `산출물/7주차/images/user-flows` before capturing assets, then performed a full page reload after role-switch login so the frontend re-read the authenticated user and rendered the correct protected/admin screens.
+- **Lesson**: When collecting deliverable screenshots, create the output directory before capture and fully reload the SPA after changing auth cookies so persisted frontend state matches the active server session.
