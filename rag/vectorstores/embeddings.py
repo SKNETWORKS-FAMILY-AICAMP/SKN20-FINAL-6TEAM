@@ -64,7 +64,7 @@ class RunPodEmbeddings(Embeddings):
         max_poll = 120
         poll_interval_sec = 1.5
 
-        with httpx.Client(timeout=120.0) as client:
+        with httpx.Client(timeout=300.0) as client:
             submit = client.post(self.run_url, json=payload, headers=self.headers)
             submit.raise_for_status()
             run = submit.json()

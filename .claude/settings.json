@@ -3,7 +3,8 @@
     "allow": [
       "Bash(docker ps --filter name=bizi-rag --format \"{{.Status}}\")",
       "Bash(curl -s --max-time 120 -X POST http://localhost:80/rag/documents/generate -H \"Content-Type: application/json\" -d '{:*)",
-      "Bash(python3 -c \":*)"
+      "Bash(python3 -c \":*)",
+      "Bash(venv/bin/python -u -m scripts.vectordb --all --force)"
     ]
   },
   "hooks": {

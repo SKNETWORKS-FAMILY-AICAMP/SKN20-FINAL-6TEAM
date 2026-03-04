@@ -18,6 +18,7 @@
 """
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -31,6 +32,12 @@ else:
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S",
+)
 
 from vectorstores.config import COLLECTION_NAMES
 from .builder import VectorDBBuilder
@@ -92,6 +99,16 @@ def main():
         action="store_true",
         help="실제 임베딩/저장 없이 로드+청킹 통계만 출력",
     )
+    parser.add_argument(
+        "--no-prefix",
+        action="store_true",
+        help="Contextual prefix 비활성화 (디버깅/비교용)",
+    )
+    parser.add_argument(
+        "--no-parent-child",
+        action="store_true",
+        help="Parent-Child 분할 비활성화 (디버깅/비교용)",
+    )
 
     args = parser.parse_args()
 
@@ -100,9 +117,13 @@ def main():
         parser.print_help()
         sys.exit(1)
 
+    # 기능 플래그
+    enable_prefix = not args.no_prefix
+    enable_parent_child = not args.no_parent_child
+
     # dry-run 모드
     if args.dry_run:
-        _run_dry_run(args)
+        _run_dry_run(args, enable_prefix=enable_prefix, enable_parent_child=enable_parent_child)
         return
 
     # 빌더 초기화
@@ -137,7 +158,10 @@ def main():
         print("=" * 60)
 
         results = builder.build_all_vectordbs(
-            force_rebuild=args.force, resume=args.resume,
+            force_rebuild=args.force,
+            resume=args.resume,
+            enable_prefix=enable_prefix,
+            enable_parent_child=enable_parent_child,
         )
 
         print("\n" + "=" * 60)
@@ -153,16 +177,26 @@ def main():
         mode = "Resume" if args.resume else ("재빌드" if args.force else "빌드")
         print(f"\n{args.domain} {mode} 중...")
         count = builder.build_vectordb(
-            args.domain, force_rebuild=args.force, resume=args.resume,
+            args.domain,
+            force_rebuild=args.force,
+            resume=args.resume,
+            enable_prefix=enable_prefix,
+            enable_parent_child=enable_parent_child,
         )
         print(f"\n완료: {count}개 문서")
 
 
-def _run_dry_run(args: argparse.Namespace) -> None:
+def _run_dry_run(
+    args: argparse.Namespace,
+    enable_prefix: bool = True,
+    enable_parent_child: bool = True,
+) -> None:
     """실제 임베딩 없이 로드+청킹 통계만 출력합니다.
 
     Args:
         args: argparse 네임스페이스 (--all 또는 --domain 포함)
+        enable_prefix: True이면 contextual prefix 적용
+        enable_parent_child: True이면 parent/child 분할 적용
     """
     loader = DataLoader()
 
@@ -174,8 +208,15 @@ def _run_dry_run(args: argparse.Namespace) -> None:
     else:
         domains = list(COLLECTION_NAMES.keys())
 
+    mode_flags: list[str] = []
+    if enable_prefix:
+        mode_flags.append("prefix=ON")
+    if enable_parent_child:
+        mode_flags.append("parent-child=ON")
+    flags_str = ", ".join(mode_flags) if mode_flags else "기본 모드"
+
     print("\n" + "=" * 60)
-    print("[DRY-RUN] 로드 + 청킹 통계 (임베딩 없음)")
+    print(f"[DRY-RUN] 로드 + 청킹 통계 (임베딩 없음) [{flags_str}]")
     print("=" * 60)
 
     grand_total = 0
@@ -183,7 +224,11 @@ def _run_dry_run(args: argparse.Namespace) -> None:
         collection_name = COLLECTION_NAMES[domain]
         print(f"\n{domain} 빌드 시뮬레이션...")
 
-        file_stats = loader.get_file_stats(domain)
+        file_stats = loader.get_file_stats(
+            domain,
+            enable_prefix=enable_prefix,
+            enable_parent_child=enable_parent_child,
+        )
         domain_total = 0
         for file_name, count in file_stats.items():
             print(f"  {file_name:<40} → {count:>6,}건")

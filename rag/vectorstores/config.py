@@ -196,3 +196,8 @@ FILE_CHUNKING_CONFIG: dict[str, ChunkingConfig | None] = {
 # 조건부 청킹 임계값 (문자 수)
 # 전처리에서 조문 단위(MAX_ARTICLE_CHUNK=3000)로 제어하므로 안전망 상향
 OPTIONAL_CHUNK_THRESHOLD = 3500
+
+# P2-3: Parent-Child 검색용 자식 청크 설정
+# 작은 청크(child)로 정밀 검색 → 부모(parent) 청크의 넓은 맥락을 LLM에 전달
+CHILD_CHUNK_SIZE = 500
+CHILD_CHUNK_OVERLAP = 50

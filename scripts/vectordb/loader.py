@@ -21,6 +21,8 @@ from langchain_core.documents import Document
 logger = logging.getLogger(__name__)
 
 from vectorstores.config import (
+    CHILD_CHUNK_SIZE,
+    CHILD_CHUNK_OVERLAP,
     ChunkingConfig,
     DATA_SOURCES,
     FILE_CHUNKING_CONFIG,
@@ -28,6 +30,7 @@ from vectorstores.config import (
     FILE_TO_COLLECTION_MAPPING,
     OPTIONAL_CHUNK_THRESHOLD,
 )
+from .contextual_prefix import generate_prefix
 
 # 마크다운 테이블 행 패턴 (| 로 시작하는 행)
 _TABLE_ROW_RE = re.compile(r"^\|.*\|$", re.MULTILINE)
@@ -100,7 +103,10 @@ class DataLoader:
         data: dict[str, Any],
         file_name: str,
         chunk_index: int | None = None,
+        child_index: int | None = None,
         collection_domain: str = "",
+        chunk_type: str = "standalone",
+        parent_id: str = "",
     ) -> Document:
         """데이터로부터 LangChain Document를 생성합니다.
 
@@ -108,7 +114,10 @@ class DataLoader:
             data: 문서 데이터 딕셔너리
             file_name: 원본 파일 이름
             chunk_index: 청킹된 경우 청크 인덱스
+            child_index: child 청크인 경우 자식 인덱스
             collection_domain: 적재 대상 컬렉션 도메인 키
+            chunk_type: 청크 유형 ("parent", "child", "standalone")
+            parent_id: child 청크의 부모 ID
 
         Returns:
             LangChain Document 인스턴스
@@ -121,6 +130,7 @@ class DataLoader:
             "collection": collection_domain,
             "title": data.get("title", ""),
             "source_file": file_name,
+            "chunk_type": chunk_type,
         }
 
         # Add source info if available
@@ -134,11 +144,21 @@ class DataLoader:
         if "effective_date" in data:
             metadata["effective_date"] = data["effective_date"]
 
-        # Add chunk index if chunked
-        if chunk_index is not None:
+        # P2-3: ID 및 인덱스 설정 (chunk_type에 따라 분기)
+        if chunk_type == "child" and chunk_index is not None and child_index is not None:
+            metadata["chunk_index"] = chunk_index
+            metadata["child_index"] = child_index
+            metadata["original_id"] = data.get("id", "")
+            metadata["parent_id"] = parent_id
+            metadata["id"] = f"{data.get('id', '')}_{chunk_index}_c{child_index}"
+        elif chunk_index is not None:
             metadata["chunk_index"] = chunk_index
             metadata["original_id"] = data.get("id", "")
             metadata["id"] = f"{data.get('id', '')}_{chunk_index}"
+
+        # Add parent_id for child chunks
+        if parent_id and "parent_id" not in metadata:
+            metadata["parent_id"] = parent_id
 
         # Add additional metadata fields
         extra_metadata = data.get("metadata", {})
@@ -206,6 +226,27 @@ class DataLoader:
         else:
             splitter = self._get_splitter(config)
             return splitter.split_text(content)
+
+    def _split_child_text(self, parent_text: str) -> list[str]:
+        """부모 청크를 검색용 자식 청크로 분할합니다.
+
+        Parent-Child 검색에서 child는 500자 단위로 분할되어
+        정밀한 벡터 검색에 사용됩니다.
+
+        Args:
+            parent_text: 부모 청크 텍스트 (prefix 제외 원본)
+
+        Returns:
+            자식 청크 리스트. 부모가 CHILD_CHUNK_SIZE 이하이면 [parent_text] 반환.
+        """
+        if len(parent_text) <= CHILD_CHUNK_SIZE:
+            return [parent_text]
+        config = ChunkingConfig(
+            chunk_size=CHILD_CHUNK_SIZE,
+            chunk_overlap=CHILD_CHUNK_OVERLAP,
+        )
+        splitter = self._get_splitter(config)
+        return splitter.split_text(parent_text)
 
     def _split_with_table_awareness(
         self, content: str, config: ChunkingConfig
@@ -362,7 +403,11 @@ class DataLoader:
         return [c for c in chunks if c.strip()]
 
     def load_file(
-        self, file_path: Path, collection_domain: str = ""
+        self,
+        file_path: Path,
+        collection_domain: str = "",
+        enable_prefix: bool = True,
+        enable_parent_child: bool = True,
     ) -> Iterator[Document]:
         """파일에서 문서를 로드합니다.
 
@@ -372,6 +417,8 @@ class DataLoader:
         Args:
             file_path: 파일 경로
             collection_domain: 적재 대상 컬렉션 도메인 키
+            enable_prefix: True이면 contextual prefix를 page_content에 추가
+            enable_parent_child: True이면 parent/child 2단계 분할 적용
 
         Yields:
             LangChain Document 인스턴스
@@ -387,26 +434,62 @@ class DataLoader:
 
                 content = data.get("content", "")
 
-                # Check if we should chunk this content
-                if self._should_chunk(content, file_name, chunk_config):
-                    chunks = self._split_text(content, chunk_config)
+                # P2-2: Contextual prefix 생성
+                prefix = generate_prefix(data, file_name) if enable_prefix else ""
 
-                    for i, chunk in enumerate(chunks):
-                        chunk_data = data.copy()
-                        chunk_data["content"] = chunk
+                if self._should_chunk(content, file_name, chunk_config):
+                    # Parent 청크 생성 (기존 chunk_size 유지)
+                    parent_chunks = self._split_text(content, chunk_config)
+
+                    for p_idx, parent_text in enumerate(parent_chunks):
+                        parent_content = f"{prefix} {parent_text}" if prefix else parent_text
+                        parent_data = data.copy()
+                        parent_data["content"] = parent_content
+                        p_id = f"{data.get('id', '')}_{p_idx}"
+
+                        # Parent Document
                         yield self._create_document(
-                            chunk_data, file_name,
-                            chunk_index=i, collection_domain=collection_domain,
+                            parent_data, file_name,
+                            chunk_index=p_idx,
+                            collection_domain=collection_domain,
+                            chunk_type="parent",
                         )
+
+                        # P2-3: Child 청크 생성 (500자, 정밀 검색용)
+                        if enable_parent_child:
+                            child_chunks = self._split_child_text(parent_text)
+                            for c_idx, child_text in enumerate(child_chunks):
+                                child_content = f"{prefix} {child_text}" if prefix else child_text
+                                child_data = data.copy()
+                                child_data["content"] = child_content
+
+                                yield self._create_document(
+                                    child_data, file_name,
+                                    chunk_index=p_idx,
+                                    child_index=c_idx,
+                                    collection_domain=collection_domain,
+                                    chunk_type="child",
+                                    parent_id=p_id,
+                                )
                 else:
+                    # Standalone: 청킹 불필요한 문서
+                    if prefix:
+                        standalone_data = data.copy()
+                        standalone_data["content"] = f"{prefix} {content}"
+                    else:
+                        standalone_data = data
                     yield self._create_document(
-                        data, file_name, collection_domain=collection_domain,
+                        standalone_data, file_name,
+                        collection_domain=collection_domain,
+                        chunk_type="standalone",
                     )
 
     def load_db_documents(
         self,
         domain: str,
         source_files: list[str] | None = None,
+        enable_prefix: bool = True,
+        enable_parent_child: bool = True,
     ) -> Iterator[Document]:
         """특정 도메인의 문서를 로드합니다.
 
@@ -416,6 +499,8 @@ class DataLoader:
         Args:
             domain: 도메인 키 (startup_funding, finance_tax, hr_labor, law_common)
             source_files: 로드할 파일명 목록. None이면 도메인 전체 파일 로드.
+            enable_prefix: True이면 contextual prefix를 page_content에 추가
+            enable_parent_child: True이면 parent/child 2단계 분할 적용
 
         Yields:
             LangChain Document 인스턴스
@@ -444,13 +529,25 @@ class DataLoader:
                 continue
 
             logger.info("Loading %s → %s_db [source: %s/]", file_name, domain, source_key)
-            yield from self.load_file(file_path, collection_domain=domain)
+            yield from self.load_file(
+                file_path,
+                collection_domain=domain,
+                enable_prefix=enable_prefix,
+                enable_parent_child=enable_parent_child,
+            )
 
-    def get_file_stats(self, domain: str) -> dict[str, int]:
+    def get_file_stats(
+        self,
+        domain: str,
+        enable_prefix: bool = True,
+        enable_parent_child: bool = True,
+    ) -> dict[str, int]:
         """도메인의 파일별 문서 수 통계를 반환합니다.
 
         Args:
             domain: 도메인 키
+            enable_prefix: True이면 contextual prefix 적용
+            enable_parent_child: True이면 parent/child 분할 적용
 
         Returns:
             파일 이름별 문서 수 딕셔너리
@@ -471,7 +568,12 @@ class DataLoader:
 
             file_path = source_dir / file_name
             if file_path.exists():
-                count = sum(1 for _ in self.load_file(file_path, collection_domain=domain))
+                count = sum(1 for _ in self.load_file(
+                    file_path,
+                    collection_domain=domain,
+                    enable_prefix=enable_prefix,
+                    enable_parent_child=enable_parent_child,
+                ))
                 stats[file_name] = count
 
         return stats

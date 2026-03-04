@@ -129,6 +129,8 @@ class VectorDBBuilder:
         domain: str,
         force_rebuild: bool = False,
         resume: bool = False,
+        enable_prefix: bool = True,
+        enable_parent_child: bool = True,
     ) -> int:
         """특정 도메인의 벡터 데이터베이스를 빌드합니다.
 
@@ -136,6 +138,8 @@ class VectorDBBuilder:
             domain: 빌드할 도메인 키
             force_rebuild: True이면 기존 데이터를 삭제하고 재빌드
             resume: True이면 기존 데이터를 유지하고 누락된 문서만 추가
+            enable_prefix: True이면 contextual prefix를 page_content에 추가
+            enable_parent_child: True이면 parent/child 2단계 분할 적용
 
         Returns:
             추가된 문서 수
@@ -184,7 +188,11 @@ class VectorDBBuilder:
         duplicates = 0
         batch: list[Document] = []
 
-        for doc in self.loader.load_db_documents(domain):
+        for doc in self.loader.load_db_documents(
+            domain,
+            enable_prefix=enable_prefix,
+            enable_parent_child=enable_parent_child,
+        ):
             sf = doc.metadata.get("source_file", "unknown")
             file_counts[sf] = file_counts.get(sf, 0) + 1
 
@@ -268,12 +276,16 @@ class VectorDBBuilder:
         self,
         force_rebuild: bool = False,
         resume: bool = False,
+        enable_prefix: bool = True,
+        enable_parent_child: bool = True,
     ) -> dict[str, int]:
         """모든 도메인의 벡터 데이터베이스를 빌드합니다.
 
         Args:
             force_rebuild: True이면 기존 데이터를 삭제하고 재빌드
             resume: True이면 기존 데이터를 유지하고 누락된 문서만 추가
+            enable_prefix: True이면 contextual prefix를 page_content에 추가
+            enable_parent_child: True이면 parent/child 2단계 분할 적용
 
         Returns:
             도메인별 추가된 문서 수 딕셔너리
@@ -284,7 +296,11 @@ class VectorDBBuilder:
             logger.info("%s 빌드 중...", domain)
             logger.info("=" * 50)
             count = self.build_vectordb(
-                domain, force_rebuild=force_rebuild, resume=resume,
+                domain,
+                force_rebuild=force_rebuild,
+                resume=resume,
+                enable_prefix=enable_prefix,
+                enable_parent_child=enable_parent_child,
             )
             results[domain] = count
 
