@@ -40,38 +40,40 @@ def _build_user_context(user: User, db: Session) -> dict:
         "user_type": TYPE_CODE_MAP.get(user.type_code, "prospective"),
         "age": user.age,
         "company": None,
+        "companies": [],
     }
 
-    # 대표 기업 조회 (main_yn=True)
+    # 모든 활성 기업 조회 (main_yn DESC, company_id ASC 정렬)
     stmt = select(Company).where(
         Company.user_id == user.user_id,
         Company.use_yn == True,
-        Company.main_yn == True,
-    )
-    company = db.execute(stmt).scalar_one_or_none()
-    if not company:
+    ).order_by(Company.main_yn.desc(), Company.company_id.asc())
+    all_companies = list(db.execute(stmt).scalars().all())
+    if not all_companies:
         return context
 
-    # 업종명 조회 (Company 조회와 분리 — 1회 추가 쿼리)
-    industry_name = None
-    if company.biz_code:
-        industry_name = db.execute(
-            select(Code.name).where(Code.code == company.biz_code, Code.use_yn == True)
-        ).scalar_one_or_none()
+    companies_list = []
+    for comp in all_companies:
+        industry_name = None
+        if comp.biz_code:
+            industry_name = db.execute(
+                select(Code.name).where(Code.code == comp.biz_code, Code.use_yn == True)
+            ).scalar_one_or_none()
+        years = None
+        if comp.open_date:
+            years = (datetime.now() - comp.open_date).days // 365
+        companies_list.append({
+            "company_name": comp.com_name,
+            "business_number": comp.biz_num,
+            "industry_code": comp.biz_code,
+            "industry_name": industry_name,
+            "employee_count": None,
+            "years_in_business": years,
+            "region": comp.addr,
+        })
 
-    years = None
-    if company.open_date:
-        years = (datetime.now() - company.open_date).days // 365
-
-    context["company"] = {
-        "company_name": company.com_name,
-        "business_number": company.biz_num,
-        "industry_code": company.biz_code,
-        "industry_name": industry_name,
-        "employee_count": None,
-        "years_in_business": years,
-        "region": company.addr,
-    }
+    context["company"] = companies_list[0]  # 하위 호환
+    context["companies"] = companies_list
     return context
 
 

@@ -59,7 +59,7 @@ settings.local.json
 raw/
 data/origin/
 data/preprocessed
-
+chroma-data/
 # =============================================
 # VectorDB (데이터 파일만 무시, 소스 코드 제외)
 # =============================================

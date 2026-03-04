@@ -63,6 +63,7 @@ class UserContext(BaseModel):
     )
     age: int | None = Field(default=None, description="사용자 나이")
     company: CompanyContext | None = Field(default=None, description="기업 정보")
+    companies: list[CompanyContext] = Field(default_factory=list, description="모든 활성 기업 목록")
 
     def get_user_type_label(self) -> str:
         """사용자 유형 라벨을 반환합니다. 나이가 있으면 함께 표기합니다."""
@@ -123,6 +124,54 @@ class UserContext(BaseModel):
 
         return None
 
+    def get_all_companies(self) -> list[CompanyContext]:
+        """모든 활성 기업 목록을 반환합니다.
+
+        Returns:
+            기업 목록 (companies 필드 우선, 없으면 company 필드 래핑)
+        """
+        if self.companies:
+            return self.companies
+        if self.company:
+            return [self.company]
+        return []
+
+    def get_all_companies_context_string(self) -> str:
+        """모든 기업의 컨텍스트 문자열을 반환합니다.
+
+        Returns:
+            단일 기업이면 단순 문자열, 복수이면 [기업 N] 형식으로 포맷팅
+        """
+        all_comp = self.get_all_companies()
+        if not all_comp:
+            return "정보 없음"
+        if len(all_comp) == 1:
+            return all_comp[0].to_context_string()
+        parts = []
+        for i, c in enumerate(all_comp, 1):
+            parts.append(f"[기업 {i}] {c.to_context_string()}")
+        return "\n".join(parts)
+
+    def get_normalized_regions(self) -> list[str]:
+        """모든 기업의 지역을 시도 레벨로 정규화하여 합집합을 반환합니다.
+
+        Returns:
+            정규화된 시도명 리스트 (중복 없음, 정렬됨)
+        """
+        regions: set[str] = set()
+        for c in self.get_all_companies():
+            if not c.region:
+                continue
+            region = c.region.strip()
+            if region in self._REGION_NORMALIZATION:
+                regions.add(self._REGION_NORMALIZATION[region])
+                continue
+            for key in sorted(self._REGION_NORMALIZATION.keys(), key=len, reverse=True):
+                if key in region:
+                    regions.add(self._REGION_NORMALIZATION[key])
+                    break
+        return sorted(regions)
+
     def get_target_types_for_filter(self) -> list[str] | None:
         """사용자 유형에 맞는 공고 대상 필터 태그를 반환합니다.
 
@@ -139,18 +188,18 @@ class UserContext(BaseModel):
     def get_filter_hash(self) -> str | None:
         """캐시 키용 필터 해시를 생성합니다.
 
-        region + user_type 조합의 해시를 반환합니다.
+        regions + user_type 조합의 해시를 반환합니다.
 
         Returns:
             해시 문자열 또는 None (필터링 대상 아님)
         """
-        region = self.get_normalized_region()
+        regions = self.get_normalized_regions()
         targets = self.get_target_types_for_filter()
 
-        if region is None and targets is None:
+        if not regions and targets is None:
             return None
 
-        parts = [region or "", self.user_type or ""]
+        parts = [",".join(regions), self.user_type or ""]
         return hashlib.md5(":".join(parts).encode()).hexdigest()[:8]
 
 

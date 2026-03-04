@@ -85,6 +85,7 @@ class RouterState(TypedDict):
     retry_count: int
     timing_metrics: dict[str, Any]
     detected_document_type: str | None
+    previous_domains: list[str] | None
 
 
 class MainRouter:
@@ -357,28 +358,69 @@ class MainRouter:
         state["classification_result"] = classification
         state["domains"] = classification.domains
 
-        if not classification.is_relevant:
-            # 거부 시에도 키워드 기반 액션 수집 (문서 생성 버튼 등)
-            fallback_actions = self.generator._collect_actions(
-                classify_query, {}, []
-            )
+        logger.info(
+            "[분류] 원본='%s' | 재작성=%s('%s') | 도메인=%s(%.2f) | relevant=%s | method=%s",
+            query[:30],
+            was_rewritten,
+            rewritten_query[:30] if was_rewritten else "-",
+            classification.domains,
+            classification.confidence,
+            classification.is_relevant,
+            classification.method,
+        )
 
-            # LLM 재시도 실패 vs 도메인 외 질문 분기
-            if classification.method == "llm_retry_failed":
-                state["final_response"] = LLM_CLASSIFICATION_FAILURE_RESPONSE
+        if not classification.is_relevant:
+            # 후속 질문 도메인 폴백: 두 가지 조건
+            # 1) 재작성 성공 + classifier 거부 → cold start 등으로 재작성된 쿼리가 거부된 경우
+            # 2) 재작성 실패(timeout/exception) + history 존재 + previous_domains → 후속 질문 가능성
+            previous_domains = state.get("previous_domains")
+            should_fallback = False
+            if was_rewritten and previous_domains:
+                should_fallback = True
+            elif not was_rewritten and previous_domains and state.get("history"):
+                fallback_reasons = {"fallback_timeout", "fallback_exception"}
+                if rewrite_meta.reason in fallback_reasons:
+                    should_fallback = True
+
+            if should_fallback:
+                logger.info(
+                    "[분류] 후속 질문 도메인 폴백: rewrite=%s(reason=%s), 분류 거부(%.2f) -> 이전 도메인 %s",
+                    was_rewritten,
+                    rewrite_meta.reason,
+                    classification.confidence,
+                    previous_domains,
+                )
+                classification = DomainClassificationResult(
+                    domains=previous_domains,
+                    confidence=max(classification.confidence, 0.5),
+                    is_relevant=True,
+                    method="followup_fallback",
+                )
+                state["classification_result"] = classification
+                state["domains"] = classification.domains
+
             else:
-                if fallback_actions:
-                    state["final_response"] = DOCUMENT_GENERATION_SHORTCUT_RESPONSE
+                # 거부 시에도 키워드 기반 액션 수집 (문서 생성 버튼 등)
+                fallback_actions = self.generator._collect_actions(
+                    classify_query, {}, []
+                )
+
+                # LLM 재시도 실패 vs 도메인 외 질문 분기
+                if classification.method == "llm_retry_failed":
+                    state["final_response"] = LLM_CLASSIFICATION_FAILURE_RESPONSE
                 else:
-                    state["final_response"] = REJECTION_RESPONSE
-            state["sources"] = []
-            state["actions"] = fallback_actions
-            logger.info(
-                "[분류] 도메인 외 질문 거부 (방법: %s, 신뢰도: %.2f, 액션: %d건)",
-                classification.method,
-                classification.confidence,
-                len(fallback_actions),
-            )
+                    if fallback_actions:
+                        state["final_response"] = DOCUMENT_GENERATION_SHORTCUT_RESPONSE
+                    else:
+                        state["final_response"] = REJECTION_RESPONSE
+                state["sources"] = []
+                state["actions"] = fallback_actions
+                logger.info(
+                    "[분류] 도메인 외 질문 거부 (방법: %s, 신뢰도: %.2f, 액션: %d건)",
+                    classification.method,
+                    classification.confidence,
+                    len(fallback_actions),
+                )
         else:
             # 문서 생성 shortcut 판별: LLM intent 우선, fallback으로 키워드 매칭
             # 도메인은 원래 분류 결과를 유지 (hr_labor, startup_funding 등)
@@ -783,6 +825,7 @@ class MainRouter:
         query: str,
         user_context: UserContext | None,
         history: list[dict] | None = None,
+        previous_domains: list[str] | None = None,
     ) -> RouterState:
         """초기 상태를 생성합니다."""
         return {
@@ -804,6 +847,7 @@ class MainRouter:
             "retry_count": 0,
             "timing_metrics": {},
             "detected_document_type": None,
+            "previous_domains": previous_domains,
         }
 
     def _create_response(
@@ -922,6 +966,7 @@ class MainRouter:
         query: str,
         user_context: UserContext | None = None,
         history: list[dict] | None = None,
+        previous_domains: list[str] | None = None,
     ) -> ChatResponse:
         """질문을 비동기로 처리합니다.
 
@@ -929,12 +974,13 @@ class MainRouter:
             query: 사용자 질문
             user_context: 사용자 컨텍스트
             history: 대화 이력
+            previous_domains: 이전 턴 도메인 (후속 질문 폴백용)
 
         Returns:
             채팅 응답
         """
         total_start = time.time()
-        initial_state = self._create_initial_state(query, user_context, history)
+        initial_state = self._create_initial_state(query, user_context, history, previous_domains)
 
         # 비동기 그래프 실행 (전체 타임아웃 적용)
         try:
@@ -983,6 +1029,7 @@ class MainRouter:
         query: str,
         user_context: UserContext | None = None,
         history: list[dict] | None = None,
+        previous_domains: list[str] | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """질문을 스트리밍으로 처리합니다.
 
@@ -993,6 +1040,7 @@ class MainRouter:
             query: 사용자 질문
             user_context: 사용자 컨텍스트
             history: 대화 이력
+            previous_domains: 이전 턴 도메인 (후속 질문 폴백용)
 
         Yields:
             스트리밍 응답 딕셔너리
@@ -1019,13 +1067,49 @@ class MainRouter:
         # 도메인 분류
         classification = self.domain_classifier.classify(query)
 
+        logger.info(
+            "[스트리밍/분류] 원본='%s' | 재작성=%s('%s') | 도메인=%s(%.2f) | relevant=%s | method=%s",
+            original_query[:30],
+            was_rewritten,
+            rewritten_query[:30] if was_rewritten else "-",
+            classification.domains,
+            classification.confidence,
+            classification.is_relevant,
+            classification.method,
+        )
+
         # 도메인 외 질문 거부 (LLM 토큰 스트리밍과 동일한 방식)
         if not classification.is_relevant:
-            # 거부 시에도 키워드 기반 액션은 수집 (문서 생성 버튼 등)
-            fallback_actions = self.generator._collect_actions(
-                query, {}, []
-            )
+            # 후속 질문 도메인 폴백 (astream 경로)
+            should_fallback = False
+            if was_rewritten and previous_domains:
+                should_fallback = True
+            elif not was_rewritten and previous_domains and history:
+                fallback_reasons = {"fallback_timeout", "fallback_exception"}
+                if rewrite_meta.reason in fallback_reasons:
+                    should_fallback = True
 
+            if should_fallback:
+                logger.info(
+                    "[스트리밍/분류] 후속 질문 도메인 폴백: rewrite=%s(reason=%s), 분류 거부(%.2f) -> 이전 도메인 %s",
+                    was_rewritten,
+                    rewrite_meta.reason,
+                    classification.confidence,
+                    previous_domains,
+                )
+                classification = DomainClassificationResult(
+                    domains=previous_domains,
+                    confidence=max(classification.confidence, 0.5),
+                    is_relevant=True,
+                    method="followup_fallback",
+                )
+            else:
+                # 거부 시에도 키워드 기반 액션은 수집 (문서 생성 버튼 등)
+                fallback_actions = self.generator._collect_actions(
+                    query, {}, []
+                )
+
+        if not classification.is_relevant:
             if classification.method == "llm_retry_failed":
                 reject_msg = LLM_CLASSIFICATION_FAILURE_RESPONSE
                 logger.info("[스트리밍] LLM 분류 재시도 실패 - 오류 안내 반환")

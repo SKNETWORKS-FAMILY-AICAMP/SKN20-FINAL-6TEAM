@@ -160,7 +160,16 @@ async def get_session_full(owner_key: str, session_id: str) -> dict | None:
 
     key = _make_key(owner_key, session_id)
     if not _use_redis():
-        return None
+        with _memory_lock:
+            entry = _memory_store.get(key)
+            if not entry:
+                return None
+            _, data = entry
+            if isinstance(data, dict):
+                return data
+            if isinstance(data, list):
+                return {"v": 1, "messages": data, "turns": []}
+            return None
 
     try:
         client = await _get_redis_client()

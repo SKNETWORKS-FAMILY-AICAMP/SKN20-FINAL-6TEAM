@@ -14,6 +14,7 @@ from routes import _state
 from routes._session_memory import (
     append_session_turn,
     delete_session,
+    get_session_full,
     get_session_history,
     upsert_session_history,
 )
@@ -135,6 +136,26 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 )
                 return cached_response
 
+        # 이전 도메인 추출 (후속 질문 폴백용)
+        previous_domains: list[str] | None = None
+        if request.session_id:
+            session_data = await get_session_full(owner_key, request.session_id)
+            if session_data and isinstance(session_data, dict):
+                turns = session_data.get("turns", [])
+                if turns:
+                    previous_domains = turns[-1].get("domains")
+
+        if request.user_context:
+            companies_count = len(request.user_context.companies) if request.user_context.companies else (1 if request.user_context.company else 0)
+            logger.info(
+                "[chat] user_id=%s, type=%s, companies=%d, session=%s, prev_domains=%s",
+                request.user_context.user_id,
+                request.user_context.user_type,
+                companies_count,
+                request.session_id,
+                previous_domains,
+            )
+
         start_time = time.time()
 
         async with RequestTokenTracker() as tracker:
@@ -142,6 +163,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 query=query,
                 user_context=request.user_context,
                 history=effective_history,
+                previous_domains=previous_domains,
             )
             response.session_id = request.session_id
             token_usage = tracker.get_usage()
@@ -351,6 +373,26 @@ async def chat_stream(request: ChatRequest):
                     )
                     return
 
+            # 이전 도메인 추출 (후속 질문 폴백용)
+            stream_previous_domains: list[str] | None = None
+            if request.session_id:
+                stream_session_data = await get_session_full(owner_key, request.session_id)
+                if stream_session_data and isinstance(stream_session_data, dict):
+                    stream_turns = stream_session_data.get("turns", [])
+                    if stream_turns:
+                        stream_previous_domains = stream_turns[-1].get("domains")
+
+            if request.user_context:
+                stream_companies_count = len(request.user_context.companies) if request.user_context.companies else (1 if request.user_context.company else 0)
+                logger.info(
+                    "[stream] user_id=%s, type=%s, companies=%d, session=%s, prev_domains=%s",
+                    request.user_context.user_id,
+                    request.user_context.user_type,
+                    stream_companies_count,
+                    request.session_id,
+                    stream_previous_domains,
+                )
+
             start_time = time.time()
             stream_timeout = settings.total_timeout
             hard_timeout = settings.stream_hard_timeout
@@ -377,6 +419,7 @@ async def chat_stream(request: ChatRequest):
                     query=stream_query,
                     user_context=request.user_context,
                     history=effective_history,
+                    previous_domains=stream_previous_domains,
                 ).__aiter__()
                 hard_deadline = time.time() + hard_timeout
 

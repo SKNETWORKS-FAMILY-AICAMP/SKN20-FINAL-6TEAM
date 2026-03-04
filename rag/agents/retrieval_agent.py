@@ -1024,16 +1024,13 @@ class RetrievalAgent:
 
         conditions: list[dict[str, Any]] = []
 
-        # 지역 필터
+        # 지역 필터 (복수 기업 지원)
         if include_region:
-            region = user_context.get_normalized_region()
-            if region:
-                conditions.append({
-                    "$or": [
-                        {"meta_normalized_region": region},
-                        {"meta_normalized_region": ""},  # 전국 공고 포함
-                    ]
-                })
+            regions = user_context.get_normalized_regions()
+            if regions:
+                region_conds: list[dict] = [{"meta_normalized_region": r} for r in regions]
+                region_conds.append({"meta_normalized_region": ""})  # 전국 공고 포함
+                conditions.append({"$or": region_conds})
 
         # 대상 유형 필터
         if include_target:
