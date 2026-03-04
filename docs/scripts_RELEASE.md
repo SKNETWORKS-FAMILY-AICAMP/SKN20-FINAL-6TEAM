@@ -1,12 +1,15 @@
 # Release Notes
 
-## [2026-03-04] - Contextual Retrieval VectorDB 빌더 추가 + BM25 토큰 메타데이터 사전 저장
+## [2026-03-04] - Contextual Retrieval VectorDB 빌더 추가 + BM25 토큰 메타데이터 사전 저장 + VectorDB 빌드/조회 분리
 
 ### Features
 - **Contextual Retrieval 전처리 파이프라인** (`scripts/vectordb/contextual_prefix.py` 신규, `scripts/vectordb/builder.py`, `scripts/vectordb/loader.py`, `scripts/vectordb/__main__.py`): 청크마다 LLM으로 문서 컨텍스트 접두어를 생성하여 검색 정확도를 높이는 Contextual Retrieval 방식 vectordb 빌더 추가 — `--contextual` 플래그로 활성화, 비동기 배치 처리 지원
 
 ### Performance
 - **BM25 토큰 메타데이터 사전 저장** (`scripts/vectordb/builder.py`): `_add_batch()`에서 각 문서의 `page_content`를 kiwipiepy로 토크나이징 후 `metadata["bm25_tokens"]`에 저장 — 서비스 시작 시 BM25 빌드가 토크나이징을 생략하여 30-90초 → 5-10초로 단축. `_tokenize_for_bm25()` 추가, 기존 vectordb는 1회 재빌드 필요 (`python -m scripts.vectordb --all --force`)
+
+### Refactoring
+- **VectorDB 빌드/조회 완전 분리** (`scripts/vectordb/contextual_retrieval.py`): `rag/utils/prompts.py` 의존 제거 — `CONTEXTUAL_RETRIEVAL_PROMPT`를 `contextual_retrieval.py` 내 직접 정의로 전환 (try/except import fallback 제거). rag/ 런타임과 빌드 스크립트가 완전히 독립 동작
 
 ## [2026-03-03] - 멀티턴 E2E 테스트 스크립트 추가
 

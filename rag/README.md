@@ -51,13 +51,13 @@ docker run -p 8001:8001 bizi-rag
 ### VectorDB 빌드
 
 ```bash
-cd rag
-source ../.venv/bin/activate
+# 프로젝트 루트에서 실행
+source .venv/bin/activate
 
-python -m vectorstores.build_vectordb --all          # 전체 빌드
-python -m vectorstores.build_vectordb --db hr_labor   # 특정 DB만
-python -m vectorstores.build_vectordb --all --force   # 강제 재빌드
-python -m vectorstores.build_vectordb --stats         # 통계 확인
+python -m scripts.vectordb --all             # 전체 빌드
+python -m scripts.vectordb --domain hr_labor  # 특정 DB만
+python -m scripts.vectordb --all --force      # 강제 재빌드
+python -m scripts.vectordb --stats            # 통계 확인
 ```
 
 ### 환경 변수

@@ -109,6 +109,29 @@ def main():
         action="store_true",
         help="Parent-Child 분할 비활성화 (디버깅/비교용)",
     )
+    parser.add_argument(
+        "--contextual-retrieval",
+        action="store_true",
+        help="LLM 기반 Contextual Retrieval 활성화 (OpenAI API 호출)",
+    )
+    parser.add_argument(
+        "--cr-model",
+        type=str,
+        default="gpt-4o-mini",
+        help="Contextual Retrieval에 사용할 모델 (기본: gpt-4o-mini)",
+    )
+    parser.add_argument(
+        "--cr-max-concurrent",
+        type=int,
+        default=5,
+        help="Contextual Retrieval 최대 동시 LLM 호출 수 (기본: 5)",
+    )
+    parser.add_argument(
+        "--cr-max-doc-chars",
+        type=int,
+        default=8000,
+        help="Contextual Retrieval 문서 전문 최대 문자 수 (기본: 8000)",
+    )
 
     args = parser.parse_args()
 
@@ -162,6 +185,10 @@ def main():
             resume=args.resume,
             enable_prefix=enable_prefix,
             enable_parent_child=enable_parent_child,
+            enable_contextual_retrieval=args.contextual_retrieval,
+            cr_model=args.cr_model,
+            cr_max_concurrent=args.cr_max_concurrent,
+            cr_max_doc_chars=args.cr_max_doc_chars,
         )
 
         print("\n" + "=" * 60)
@@ -182,6 +209,10 @@ def main():
             resume=args.resume,
             enable_prefix=enable_prefix,
             enable_parent_child=enable_parent_child,
+            enable_contextual_retrieval=args.contextual_retrieval,
+            cr_model=args.cr_model,
+            cr_max_concurrent=args.cr_max_concurrent,
+            cr_max_doc_chars=args.cr_max_doc_chars,
         )
         print(f"\n완료: {count}개 문서")
 

@@ -1,6 +1,6 @@
 # Release Notes
 
-## [2026-03-04] - AWS ElastiCache Redis TLS 연결 수정 + 복수 기업 지원 + 후속 질문 폴백 + 참고 자료 꼬리말 제거 + ChromaDB/BM25 Cold Start 최적화
+## [2026-03-04] - AWS ElastiCache Redis TLS 연결 수정 + 복수 기업 지원 + 후속 질문 폴백 + 참고 자료 꼬리말 제거 + ChromaDB/BM25 Cold Start 최적화 + VectorDB 빌드 코드 분리
 
 ### Features
 - **복수 기업 컨텍스트 지원** (`schemas/request.py`, `agents/base.py`, `agents/retrieval_agent.py`): `UserContext.companies` 필드 추가 — `get_all_companies_context_string()`, `get_normalized_regions()` 메서드로 복수 기업 지역 OR 필터 지원
@@ -16,6 +16,9 @@
 - **ChromaDB/BM25 Non-blocking Cold Start** (`main.py`, `utils/chromadb_warmup.py`): lifespan을 Phase 1(컬렉션 생성, blocking ~2-5초) + Phase 2(BM25 빌드, background ~5-30초)로 분리 — cold start 70-230초 → 35-125초. `warmup_collections_only()`, `warmup_bm25_background()` 공개 함수 추가
 - **BM25 토크나이징 공통 모듈** (`utils/bm25_tokenizer.py` 신규): kiwipiepy Kiwi 모듈 수준 싱글톤 + `tokenize_korean()` 공통 함수 추출 — `BM25Index._tokenize()` 위임, 빌더와 런타임 공유
 - **BM25 metadata 캐시 활용** (`utils/search.py`): `BM25Index.fit()`에서 `doc.metadata["bm25_tokens"]` 존재 시 토크나이징 생략 — vectordb 재빌드 후 BM25 빌드 30-90초 → 5-10초
+
+### Refactoring
+- **VectorDB 빌드 코드 rag/ 외부 분리** (`rag/vectorstores/build_vectordb.py` 삭제, `rag/utils/prompts.py`): `scripts/vectordb/`로 이관 완료된 빌드 thin-wrapper(`build_vectordb.py`) 삭제 — rag/ 런타임 미사용 확인 후 제거. `CONTEXTUAL_RETRIEVAL_PROMPT` 빌드 전용 프롬프트를 `prompts.py`에서 제거하고 `scripts/vectordb/contextual_retrieval.py`로 이전. `rag/README.md` VectorDB 빌드 명령어를 `python -m scripts.vectordb`로 업데이트
 
 ### Chores
 - **프로덕션 Docker Compose Redis 환경변수 추가** (`docker-compose.prod.yaml`): RAG 서비스에 `SESSION_MEMORY_BACKEND`, `REDIS_URL` 환경변수 추가. 메모리 한도 재조정 (rag: 2304M→3072M, chromadb: 1024M→1536M, t3.medium→t3.large, RAG `start_period` 30s→15s)

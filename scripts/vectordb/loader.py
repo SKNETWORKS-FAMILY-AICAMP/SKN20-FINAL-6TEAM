@@ -408,6 +408,7 @@ class DataLoader:
         collection_domain: str = "",
         enable_prefix: bool = True,
         enable_parent_child: bool = True,
+        include_full_content: bool = False,
     ) -> Iterator[Document]:
         """파일에서 문서를 로드합니다.
 
@@ -419,6 +420,8 @@ class DataLoader:
             collection_domain: 적재 대상 컬렉션 도메인 키
             enable_prefix: True이면 contextual prefix를 page_content에 추가
             enable_parent_child: True이면 parent/child 2단계 분할 적용
+            include_full_content: True이면 청킹된 문서의 metadata["_full_content"]에
+                원본 content 전문을 첨부 (Contextual Retrieval용, standalone은 스킵)
 
         Yields:
             LangChain Document 인스턴스
@@ -433,6 +436,7 @@ class DataLoader:
                     continue
 
                 content = data.get("content", "")
+                original_content = content  # 청킹 전 원본 전문 보존
 
                 # P2-2: Contextual prefix 생성
                 prefix = generate_prefix(data, file_name) if enable_prefix else ""
@@ -448,12 +452,15 @@ class DataLoader:
                         p_id = f"{data.get('id', '')}_{p_idx}"
 
                         # Parent Document
-                        yield self._create_document(
+                        parent_doc = self._create_document(
                             parent_data, file_name,
                             chunk_index=p_idx,
                             collection_domain=collection_domain,
                             chunk_type="parent",
                         )
+                        if include_full_content:
+                            parent_doc.metadata["_full_content"] = original_content
+                        yield parent_doc
 
                         # P2-3: Child 청크 생성 (500자, 정밀 검색용)
                         if enable_parent_child:
@@ -463,7 +470,7 @@ class DataLoader:
                                 child_data = data.copy()
                                 child_data["content"] = child_content
 
-                                yield self._create_document(
+                                child_doc = self._create_document(
                                     child_data, file_name,
                                     chunk_index=p_idx,
                                     child_index=c_idx,
@@ -471,8 +478,9 @@ class DataLoader:
                                     chunk_type="child",
                                     parent_id=p_id,
                                 )
+                                yield child_doc
                 else:
-                    # Standalone: 청킹 불필요한 문서
+                    # Standalone: 청킹 불필요한 문서 (include_full_content 스킵)
                     if prefix:
                         standalone_data = data.copy()
                         standalone_data["content"] = f"{prefix} {content}"
@@ -490,6 +498,7 @@ class DataLoader:
         source_files: list[str] | None = None,
         enable_prefix: bool = True,
         enable_parent_child: bool = True,
+        include_full_content: bool = False,
     ) -> Iterator[Document]:
         """특정 도메인의 문서를 로드합니다.
 
@@ -501,6 +510,7 @@ class DataLoader:
             source_files: 로드할 파일명 목록. None이면 도메인 전체 파일 로드.
             enable_prefix: True이면 contextual prefix를 page_content에 추가
             enable_parent_child: True이면 parent/child 2단계 분할 적용
+            include_full_content: True이면 청킹된 문서의 metadata["_full_content"]에 원본 전문 첨부
 
         Yields:
             LangChain Document 인스턴스
@@ -534,6 +544,7 @@ class DataLoader:
                 collection_domain=domain,
                 enable_prefix=enable_prefix,
                 enable_parent_child=enable_parent_child,
+                include_full_content=include_full_content,
             )
 
     def get_file_stats(
