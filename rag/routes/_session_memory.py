@@ -161,32 +161,34 @@ async def get_session_full(owner_key: str, session_id: str) -> dict | None:
         return None
 
     key = _make_key(owner_key, session_id)
-    if not _use_redis():
-        with _memory_lock:
-            entry = _memory_store.get(key)
-            if not entry:
-                return None
-            _, data = entry
-            if isinstance(data, dict):
-                return data
-            if isinstance(data, list):
-                return {"v": 1, "messages": data, "turns": []}
-            return None
 
-    try:
-        client = await _get_redis_client()
-        raw = await client.get(key)
-        if not raw:
+    if _use_redis():
+        try:
+            client = await _get_redis_client()
+            raw = await client.get(key)
+            if raw:
+                data = json.loads(raw)
+                # v1 format: wrap into v2 structure
+                if isinstance(data, list):
+                    return {"v": 1, "messages": data, "turns": []}
+                if isinstance(data, dict):
+                    return data
+                return None
+            # raw is None → in-memory fallback으로 진행
+        except Exception as exc:
+            logger.warning("Redis get_session_full failed, fallback to memory: %s", exc)
+
+    # in-memory fallback (Redis 미설정, Redis 실패, Redis 데이터 없음)
+    with _memory_lock:
+        _prune_expired(time.time())
+        entry = _memory_store.get(key)
+        if not entry:
             return None
-        data = json.loads(raw)
-        # v1 format: wrap into v2 structure
-        if isinstance(data, list):
-            return {"v": 1, "messages": data, "turns": []}
+        _, data = entry
         if isinstance(data, dict):
             return data
-        return None
-    except Exception as exc:
-        logger.warning("Redis get_session_full failed: %s", exc)
+        if isinstance(data, list):
+            return {"v": 1, "messages": data, "turns": []}
         return None
 
 

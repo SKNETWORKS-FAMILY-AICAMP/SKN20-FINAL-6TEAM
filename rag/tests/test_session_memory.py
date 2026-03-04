@@ -424,6 +424,63 @@ async def test_redis_v2_get_session_full(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_session_full_redis_fail_fallback_to_memory(monkeypatch):
+    """Redis 예외 시 get_session_full이 in-memory 데이터를 반환."""
+    monkeypatch.setattr(sm, "_settings", lambda: _RedisSettings())
+    sm._reset_for_test()
+
+    # Redis 실패하는 클라이언트
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(side_effect=ConnectionError("Redis down"))
+    mock_client.set = AsyncMock(side_effect=ConnectionError("Redis down"))
+    monkeypatch.setattr(sm, "_get_redis_client", AsyncMock(return_value=mock_client))
+
+    # Redis 실패 → memory에 저장
+    await sm.append_session_turn(
+        "user:1", "s1", "q1", "a1",
+        user_id=1, agent_code="A0000001", domains=["finance_tax"],
+    )
+
+    # get_session_full도 Redis 실패 → memory fallback
+    full = await sm.get_session_full("user:1", "s1")
+    assert full is not None
+    assert full["v"] == 2
+    assert len(full["messages"]) == 2
+    assert full["turns"][0]["domains"] == ["finance_tax"]
+
+
+@pytest.mark.asyncio
+async def test_get_session_full_redis_empty_fallback_to_memory(monkeypatch):
+    """Redis key 없을 때 get_session_full이 in-memory fallback."""
+    monkeypatch.setattr(sm, "_settings", lambda: _RedisSettings())
+    sm._reset_for_test()
+
+    # Redis는 정상이지만 데이터 없음 (TTL 만료 시나리오)
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=None)
+    monkeypatch.setattr(sm, "_get_redis_client", AsyncMock(return_value=mock_client))
+
+    # in-memory에 직접 데이터 삽입 (이전 Redis 실패로 memory에 저장된 상태 시뮬레이션)
+    key = sm._make_key("user:1", "s1")
+    with sm._memory_lock:
+        sm._memory_store[key] = (time.time(), {
+            "v": 2,
+            "messages": [
+                {"role": "user", "content": "q1"},
+                {"role": "assistant", "content": "a1"},
+            ],
+            "turns": [{"question": "q1", "answer": "a1", "domains": ["hr_labor"]}],
+        })
+
+    # Redis 빈 응답 → in-memory fallback
+    full = await sm.get_session_full("user:1", "s1")
+    assert full is not None
+    assert full["v"] == 2
+    assert len(full["messages"]) == 2
+    assert full["turns"][0]["domains"] == ["hr_labor"]
+
+
+@pytest.mark.asyncio
 async def test_redis_v2_evaluation_data_in_turns(monkeypatch):
     """Redis v2: evaluation_data가 turns에 포함."""
     import json as _json
