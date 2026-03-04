@@ -254,7 +254,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="border-t" />
 
           {/* Navigation Menu */}
-          <div className="space-y-1 px-2 py-1">
+          <div className="sidebar-readable-font space-y-1 px-2 py-1">
             {visibleMenuItems.map((item) => {
               const isActive = location.pathname === item.path;
 

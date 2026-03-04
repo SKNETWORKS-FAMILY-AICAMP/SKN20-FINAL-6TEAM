@@ -54,7 +54,7 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
   return (
     <div className="flex-1 overflow-auto px-2">
       {grouped.map((group) => (
-        <div key={group.label} className="mb-2">
+        <div key={group.id} className={group.label ? 'mb-2' : undefined}>
           {group.label && (
             <Typography variant="small" color="gray" className="px-3 py-1 text-xs font-semibold !text-gray-600">
               {group.label}
@@ -99,6 +99,7 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
 };
 
 interface GroupedSessions {
+  id: 'today' | 'yesterday' | 'older';
   label: string;
   sessions: ChatSession[];
 }
@@ -129,9 +130,9 @@ function groupSessionsByDate(sessions: ChatSession[]): GroupedSessions[] {
 
   const result: GroupedSessions[] = [];
   // Do not show "오늘" header.
-  if (groups.today.length > 0) result.push({ label: '', sessions: groups.today });
-  if (groups.yesterday.length > 0) result.push({ label: '', sessions: groups.yesterday });
-  if (groups.older.length > 0) result.push({ label: '', sessions: groups.older });
+  if (groups.today.length > 0) result.push({ id: 'today', label: '', sessions: groups.today });
+  if (groups.yesterday.length > 0) result.push({ id: 'yesterday', label: '', sessions: groups.yesterday });
+  if (groups.older.length > 0) result.push({ id: 'older', label: '', sessions: groups.older });
 
   return result;
 }
