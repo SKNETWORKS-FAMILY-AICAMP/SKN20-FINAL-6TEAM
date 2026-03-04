@@ -4,7 +4,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import ragApi, { isRagEnabled, isStreamingEnabled, checkRagHealth, streamChat } from '../lib/rag';
 import type { ChatMessage, AgentCode, RagChatResponse, EvaluationData, SourceReference, RagActionSuggestion } from '../types';
-import { GUEST_MESSAGE_LIMIT, domainToAgentCode } from '../lib/constants';
+import { GUEST_MESSAGE_LIMIT, AUTHENTICATED_DAILY_LIMIT, AUTHENTICATED_LIMIT_MESSAGE, domainToAgentCode } from '../lib/constants';
 import { generateId } from '../lib/utils';
 import { getMockResponse } from '../lib/mockResponses';
 
@@ -35,7 +35,7 @@ const addAnswerCompleteNotification = (): void => {
 };
 
 export const useChat = () => {
-  const { addMessage, setLoading, setStreaming, isLoading, isSyncing, updateMessageInSession, guestMessageCount, incrementGuestCount } = useChatStore();
+  const { addMessage, setLoading, setStreaming, isLoading, isSyncing, updateMessageInSession, guestMessageCount, incrementGuestCount, authenticatedMessageCount, incrementAuthenticatedCount } = useChatStore();
   const { isAuthenticated } = useAuthStore();
   const streamingContentRef = useRef<string>('');
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -61,6 +61,20 @@ export const useChat = () => {
           id: generateId(),
           type: 'assistant',
           content: GUEST_LIMIT_MESSAGE,
+          agent_code: 'A0000001',
+          timestamp: new Date(),
+        };
+        addMessage(limitMessage);
+        return;
+      }
+
+      // Authenticated user daily quota check
+      if (isAuthenticated && AUTHENTICATED_DAILY_LIMIT !== null
+          && authenticatedMessageCount >= AUTHENTICATED_DAILY_LIMIT) {
+        const limitMessage: ChatMessage = {
+          id: generateId(),
+          type: 'assistant',
+          content: AUTHENTICATED_LIMIT_MESSAGE,
           agent_code: 'A0000001',
           timestamp: new Date(),
         };
@@ -276,6 +290,8 @@ export const useChat = () => {
         // DB 이관은 RAG 배치 마이그레이션이 처리
         if (!isAuthenticated) {
           incrementGuestCount();
+        } else {
+          incrementAuthenticatedCount();
         }
       } catch (err) {
         // Ignore AbortError (user-initiated cancellation)
@@ -300,7 +316,7 @@ export const useChat = () => {
         abortControllerRef.current = null;
       }
     },
-    [addMessage, setLoading, setStreaming, isLoading, isSyncing, isAuthenticated, updateMessageInSession, guestMessageCount, incrementGuestCount]
+    [addMessage, setLoading, setStreaming, isLoading, isSyncing, isAuthenticated, updateMessageInSession, guestMessageCount, incrementGuestCount, authenticatedMessageCount, incrementAuthenticatedCount]
   );
 
   const stopStreaming = useCallback(() => {

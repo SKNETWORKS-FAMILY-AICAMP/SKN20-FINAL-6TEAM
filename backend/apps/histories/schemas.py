@@ -35,6 +35,14 @@ class EvaluationData(BaseModel):
     timeout_cause: str | None = Field(default=None, description="timeout cause")
 
 
+class MessageQuotaResponse(BaseModel):
+    """메시지 쿼터 응답 (ORM 매핑 아님, ConfigDict 불필요)."""
+
+    today_count: int
+    daily_limit: int | None = None  # None = 무제한
+    remaining: int | None = None
+
+
 class HistoryCreate(BaseModel):
     agent_code: str = Field(..., pattern=r"^A\d{7}$")
     question: str = Field(..., min_length=1, max_length=5000)

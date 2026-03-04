@@ -21,6 +21,7 @@ from .schemas import (
     HistoryResponse,
     HistoryThreadDetailResponse,
     HistoryThreadSummaryResponse,
+    MessageQuotaResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -208,6 +209,22 @@ async def get_thread_for_restore(
         }
         for h in histories
     ]
+
+
+@router.get("/quota", response_model=MessageQuotaResponse)
+async def get_message_quota(
+    service: HistoryService = Depends(get_history_service),
+    current_user: User = Depends(get_current_user),
+) -> MessageQuotaResponse:
+    """인증 유저의 오늘 메시지 사용량을 반환합니다."""
+    today_count = service.get_message_count_today(current_user.user_id)
+    daily_limit = None  # 추후 결정
+    remaining = None if daily_limit is None else max(0, daily_limit - today_count)
+    return MessageQuotaResponse(
+        today_count=today_count,
+        daily_limit=daily_limit,
+        remaining=remaining,
+    )
 
 
 @router.post("/batch", response_model=BatchHistoryResponse, status_code=status.HTTP_201_CREATED)
