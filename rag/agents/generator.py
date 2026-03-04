@@ -198,6 +198,8 @@ class ResponseGeneratorAgent:
         Returns:
             (필요 시 주의 문구가 추가된) 답변 텍스트
         """
+        # "참고 자료: [번호들]" 꼬리말 제거 (UI 하단 "답변 근거" 섹션에서 별도 표시)
+        content = re.sub(r"\n*참고\s*자료\s*:\s*\[[\d,\s]+\]\s*$", "", content).rstrip()
         if doc_count > 0 and not re.search(r"\[\d+\]", content):
             logger.warning(
                 "[생성기] 인용 누락: 문서 %d건 제공, [번호] 인용 0건", doc_count

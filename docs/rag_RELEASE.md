@@ -1,9 +1,10 @@
 # Release Notes
 
-## [2026-03-04] - AWS ElastiCache Redis TLS 연결 수정
+## [2026-03-04] - AWS ElastiCache Redis TLS 연결 수정 + 참고 자료 꼬리말 제거
 
 ### Bug Fixes
 - **ElastiCache TLS 인증서 검증 우회** (`routes/_session_memory.py`): `redis.from_url()`에 `ssl_cert_reqs=None` 추가 — AWS ElastiCache 자체 서명 인증서로 인한 `SSL_connect failed` 오류 수정
+- **"참고 자료:" 꼬리말 제거** (`utils/prompts.py`, `agents/generator.py`): 답변 본문 끝에 중복 출력되던 `참고 자료: [1]` 형식의 꼬리말 제거 — 프롬프트 지시 삭제 + `_audit_citations()` 후처리 추가. 본문 내 `[번호]` 인라인 인용은 유지
 
 ### Chores
 - **프로덕션 Docker Compose Redis 환경변수 추가** (`docker-compose.prod.yaml`): RAG 서비스에 `SESSION_MEMORY_BACKEND`, `REDIS_URL` 환경변수 추가. 메모리 한도 재조정 (rag: 2560M→2304M, chromadb: 768M→1024M)
