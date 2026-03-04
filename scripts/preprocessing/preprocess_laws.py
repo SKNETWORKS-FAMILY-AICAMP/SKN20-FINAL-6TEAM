@@ -279,6 +279,7 @@ def _split_large_article_by_clauses(
     filter_reason: str,
     effective_date: Optional[str],
     ministry: str,
+    seq_counter: List[int],
     f_out: TextIOWrapper,
 ) -> int:
     """대형 조문을 항(clause) 단위로 분할하여 기록합니다.
@@ -294,6 +295,7 @@ def _split_large_article_by_clauses(
         filter_reason: 필터링 사유
         effective_date: 시행일
         ministry: 소관부처
+        seq_counter: 법령 내 레코드 시퀀스 카운터 [현재값] (뮤터블)
         f_out: 출력 파일 핸들
 
     Returns:
@@ -308,8 +310,10 @@ def _split_large_article_by_clauses(
     if not clauses:
         article_text = _format_article_text(article)
         content = f"{law_header}\n{article_text}"
+        seq_counter[0] += 1
         doc = _build_article_doc(
             law_id=law_id, article_num=article_num, article_range=str(article_num),
+            article_seq=seq_counter[0],
             name=name, article_title=article_title, domain=domain,
             content=content, collected_at=collected_at,
             filter_method=filter_method, filter_reason=filter_reason,
@@ -346,10 +350,11 @@ def _split_large_article_by_clauses(
         if buffer_chars + len(clause_text) > MAX_ARTICLE_CHUNK and clause_buffer:
             # 버퍼 출력
             chunk_content = f"{law_header}\n{article_prefix}\n" + '\n'.join(clause_buffer)
-            clause_idx = i  # 현재 항 이전까지
+            seq_counter[0] += 1
             doc = _build_article_doc(
                 law_id=law_id, article_num=f"{article_num}-{count+1}",
                 article_range=f"{article_num}-part{count+1}",
+                article_seq=seq_counter[0],
                 name=name, article_title=article_title, domain=domain,
                 content=chunk_content, collected_at=collected_at,
                 filter_method=filter_method, filter_reason=filter_reason,
@@ -366,9 +371,11 @@ def _split_large_article_by_clauses(
     # 남은 버퍼 출력
     if clause_buffer:
         chunk_content = f"{law_header}\n{article_prefix}\n" + '\n'.join(clause_buffer)
+        seq_counter[0] += 1
         doc = _build_article_doc(
             law_id=law_id, article_num=f"{article_num}-{count+1}" if count > 0 else str(article_num),
             article_range=f"{article_num}-part{count+1}" if count > 0 else str(article_num),
+            article_seq=seq_counter[0],
             name=name, article_title=article_title, domain=domain,
             content=chunk_content, collected_at=collected_at,
             filter_method=filter_method, filter_reason=filter_reason,
@@ -384,6 +391,7 @@ def _build_article_doc(
     law_id: str,
     article_num: str,
     article_range: str,
+    article_seq: int,
     name: str,
     article_title: str,
     domain: str,
@@ -400,7 +408,7 @@ def _build_article_doc(
         title_suffix = f" 제{article_num}조 ({article_title})"
 
     return {
-        'id': f"LAW_{law_id}_A{article_range}",
+        'id': f"LAW_{law_id}_R{article_seq:04d}",
         'type': 'law_article',
         'domain': domain,
         'title': f"{name}{title_suffix}",
@@ -456,7 +464,7 @@ def process_laws(input_path: Path, output_dir: Path) -> Dict[str, str]:
     collected_at = data.get('collected_at', '')
     print(f"  총 법령 수: {len(laws):,}개")
 
-    law_dir = output_dir / "law"
+    law_dir = output_dir
     law_dir.mkdir(parents=True, exist_ok=True)
 
     law_lookup: Dict[str, str] = {}
@@ -500,6 +508,7 @@ def process_laws(input_path: Path, output_dir: Path) -> Dict[str, str]:
             if not articles:
                 doc = _build_article_doc(
                     law_id=law_id, article_num="0", article_range="0",
+                    article_seq=1,
                     name=name, article_title="", domain=domain,
                     content=law_header, collected_at=collected_at,
                     filter_method=filter_method, filter_reason=filter_reason,
@@ -513,12 +522,15 @@ def process_laws(input_path: Path, output_dir: Path) -> Dict[str, str]:
                 buffer_texts: List[str] = []
                 buffer_chars = 0
                 buffer_start_num = ''
+                _seq: List[int] = [0]  # 법령 내 레코드 시퀀스 (뮤터블)
 
                 def flush_buffer() -> int:
                     """버퍼에 쌓인 조문들을 하나의 레코드로 출력합니다."""
                     nonlocal article_buffer, buffer_texts, buffer_chars, buffer_start_num
                     if not article_buffer:
                         return 0
+
+                    _seq[0] += 1
 
                     combined_text = '\n\n'.join(buffer_texts)
                     content = f"{law_header}\n\n{combined_text}"
@@ -537,6 +549,7 @@ def process_laws(input_path: Path, output_dir: Path) -> Dict[str, str]:
                     doc = _build_article_doc(
                         law_id=law_id, article_num=art_num,
                         article_range=art_range,
+                        article_seq=_seq[0],
                         name=name, article_title=art_title, domain=domain,
                         content=content, collected_at=collected_at,
                         filter_method=filter_method, filter_reason=filter_reason,
@@ -576,6 +589,7 @@ def process_laws(input_path: Path, output_dir: Path) -> Dict[str, str]:
                             filter_reason=filter_reason,
                             effective_date=effective_date,
                             ministry=ministry,
+                            seq_counter=_seq,
                             f_out=f_out,
                         )
                     elif buffer_chars + article_len > MAX_ARTICLE_CHUNK and article_buffer:
@@ -653,7 +667,7 @@ def process_interpretations(input_path: Path, output_dir: Path) -> int:
     collected_at = data.get('collected_at', '')
     print(f"  총 해석례 수: {len(items):,}개")
 
-    law_dir = output_dir / "law"
+    law_dir = output_dir
     law_dir.mkdir(parents=True, exist_ok=True)
 
     domain_counts: Dict[str, int] = {}
@@ -807,7 +821,7 @@ def process_court_cases(input_path: Path, output_dir: Path, category: str) -> in
     collected_at = data.get('collected_at', '')
     print(f"  총 판례 수: {len(items):,}개")
 
-    law_dir = output_dir / "law"
+    law_dir = output_dir
     law_dir.mkdir(parents=True, exist_ok=True)
 
     output_file = f"court_cases_{category}.jsonl"
@@ -935,40 +949,49 @@ def process_court_cases(input_path: Path, output_dir: Path, category: str) -> in
 # ============================================================================
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="법령 데이터 전처리 파이프라인")
+    parser.add_argument("--input-dir", type=Path, default=INPUT_DIR, help="원본 JSON 파일 디렉토리")
+    parser.add_argument("--output-dir", type=Path, default=OUTPUT_DIR / "law", help="출력 JSONL 디렉토리")
+    args = parser.parse_args()
+
+    input_dir = args.input_dir
+    output_dir = args.output_dir
+
     print("=" * 70)
     print("법령 데이터 전처리 파이프라인 (도메인 필터링)")
     print("=" * 70)
-    print(f"입력: {INPUT_DIR}")
-    print(f"출력: {OUTPUT_DIR}")
+    print(f"입력: {input_dir}")
+    print(f"출력: {output_dir}")
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     results = {}
 
     # 1. 법령 처리 (필터링 적용)
-    laws_input = INPUT_DIR / "01_laws_full.json"
+    laws_input = input_dir / "01_laws_full.json"
     if laws_input.exists():
-        law_lookup = process_laws(laws_input, OUTPUT_DIR)
+        law_lookup = process_laws(laws_input, output_dir)
         results['laws'] = len(law_lookup)
     else:
         print(f"\n  [경고] 법령 파일 없음: {laws_input}")
 
     # 2. 법령해석례 처리 (필터링 적용)
-    interp_input = INPUT_DIR / "expc_전체.json"
+    interp_input = input_dir / "expc_전체.json"
     if interp_input.exists():
-        results['interpretations'] = process_interpretations(interp_input, OUTPUT_DIR)
+        results['interpretations'] = process_interpretations(interp_input, output_dir)
     else:
         print(f"\n  [경고] 해석례 파일 없음: {interp_input}")
 
     # 3. 판례 처리 - 세무/회계
-    tax_case_input = INPUT_DIR / "prec_tax_accounting.json"
+    tax_case_input = input_dir / "prec_tax_accounting.json"
     if tax_case_input.exists():
-        results['court_cases_tax'] = process_court_cases(tax_case_input, OUTPUT_DIR, "tax")
+        results['court_cases_tax'] = process_court_cases(tax_case_input, output_dir, "tax")
 
     # 4. 판례 처리 - 노무/근로
-    labor_case_input = INPUT_DIR / "prec_labor.json"
+    labor_case_input = input_dir / "prec_labor.json"
     if labor_case_input.exists():
-        results['court_cases_labor'] = process_court_cases(labor_case_input, OUTPUT_DIR, "labor")
+        results['court_cases_labor'] = process_court_cases(labor_case_input, output_dir, "labor")
 
     # 결과 요약
     print("\n" + "=" * 70)

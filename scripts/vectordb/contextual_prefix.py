@@ -19,9 +19,16 @@ def _truncate(text: str, max_len: int = _MAX_TITLE_LEN) -> str:
 
 
 def _prefix_law(data: dict[str, Any]) -> str:
-    """laws_full.jsonl — 법령."""
-    title = data.get("title", "")
-    return f"[{title}]" if title else ""
+    """laws_full.jsonl / laws_etc.jsonl — 법령 조문."""
+    meta = data.get("metadata", {})
+    law_name = _truncate(meta.get("law_name") or data.get("title", ""))
+    article_num = meta.get("article_number", "")
+    article_title = meta.get("article_title", "")
+    if article_num:
+        if article_title:
+            return f"[{law_name} > 제{article_num}조({article_title})]"
+        return f"[{law_name} > 제{article_num}조]"
+    return f"[{law_name}]" if law_name else ""
 
 
 def _prefix_interpretation(data: dict[str, Any]) -> str:
@@ -93,6 +100,7 @@ def _prefix_startup_procedures(data: dict[str, Any]) -> str:
 
 _PREFIX_GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "laws_full.jsonl": _prefix_law,
+    "laws_etc.jsonl": _prefix_law,
     "interpretations.jsonl": _prefix_interpretation,
     "court_cases_tax.jsonl": _prefix_court_case,
     "court_cases_labor.jsonl": _prefix_court_case,
