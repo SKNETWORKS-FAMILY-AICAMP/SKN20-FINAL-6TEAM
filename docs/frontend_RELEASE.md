@@ -1,12 +1,13 @@
 # Release Notes
 
-## [2026-03-04] - 토스트 시스템 통합 + 공고 패널 개선 + 폰트 수정 + 로그인 후 새 채팅 시작 + 지원 공고 상세 문서 다운로드
+## [2026-03-04] - 토스트 시스템 통합 + 공고 패널 개선 + 폰트 수정 + 로그인 후 새 채팅 시작 + 지원 공고 상세 문서 다운로드 + 지원서 생성
 
 ### Features
 - **통합 토스트 시스템** (`components/common/ToastContainer.tsx`): 액션/알림 토스트를 단일 컨테이너로 통합
 - **관련 공고 패널 헤더 개선** (`pages/SchedulePage.tsx`): 정렬 드롭다운 추가 + 토스트 마이그레이션
 - **로그인 후 새 채팅 시작** (`stores/authStore.ts`): 로그인 완료 시 기존 히스토리 유지하면서 새 빈 채팅으로 자동 전환
 - **지원 공고 상세 문서 다운로드** (`components/chat/SourceReferences.tsx`, `hooks/useChat.ts`, `lib/rag.ts`, `types/index.ts`): 채팅 소스 참조에서 지원 공고 상세 문서 다운로드 기능 추가
+- **지원서 생성 양식 키 전달** (`components/chat/ApplicationFormModal.tsx`): `_form_key`, `_form_title` 파라미터를 문서 생성 API에 함께 전달 — executor가 S3 원본 양식을 참조하여 정확한 지원서 생성 가능
 
 ### Bug Fixes
 - **세션 ID `db-{root_history_id}`로 안정화** (`src/stores/chatStore.ts`): 세션 ID 충돌 방지 및 write-through 파이프라인 연동
