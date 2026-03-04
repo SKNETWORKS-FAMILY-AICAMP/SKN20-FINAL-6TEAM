@@ -242,14 +242,33 @@ class VectorDBBuilder:
         logger.info("최종: %d건", final_count)
         return final_count
 
+    def _tokenize_for_bm25(self, text: str) -> list[str]:
+        """BM25용 한국어 토크나이징 (빌드 시 메타데이터 저장용).
+
+        Args:
+            text: 토크나이징할 텍스트
+
+        Returns:
+            토큰 리스트
+        """
+        from utils.bm25_tokenizer import tokenize_korean
+        return tokenize_korean(text)
+
     def _add_batch(self, store: Chroma, batch: list[Document], offset: int) -> None:
         """배치 단위로 문서를 벡터 스토어에 추가합니다.
+
+        bm25_tokens 메타데이터를 미리 저장하여 서비스 시작 시 토크나이징을 생략합니다.
 
         Args:
             store: Chroma 벡터 스토어 인스턴스
             batch: 추가할 문서 배치
             offset: 현재까지 추가된 문서 수 (ID 생성용)
         """
+        for doc in batch:
+            if "bm25_tokens" not in doc.metadata:
+                tokens = self._tokenize_for_bm25(doc.page_content)
+                doc.metadata["bm25_tokens"] = " ".join(tokens)
+
         texts = [doc.page_content for doc in batch]
         metadatas = [
             {k: ("" if v is None else v) for k, v in doc.metadata.items()}

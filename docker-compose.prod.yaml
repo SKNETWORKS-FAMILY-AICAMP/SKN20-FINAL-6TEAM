@@ -1,6 +1,6 @@
 # =============================================================================
 # Bizi 프로덕션 Docker Compose (직접 RDS 연결 + RunPod 추론)
-# 대상: EC2 t3.medium (4GB RAM)
+# 대상: EC2 t3.large (8GB RAM)
 # 컨테이너: nginx, backend, rag, chromadb (4개)
 # =============================================================================
 
@@ -164,7 +164,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 15s
     logging:
       driver: "json-file"
       options:
@@ -173,7 +173,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2304M
+          memory: 3072M
     networks:
       - backend
 
@@ -206,7 +206,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1024M
+          memory: 1536M
     networks:
       - backend
 

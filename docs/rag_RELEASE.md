@@ -1,18 +1,24 @@
 # Release Notes
 
-## [2026-03-04] - AWS ElastiCache Redis TLS 연결 수정 + 복수 기업 지원 + 후속 질문 폴백 + 참고 자료 꼬리말 제거
+## [2026-03-04] - AWS ElastiCache Redis TLS 연결 수정 + 복수 기업 지원 + 후속 질문 폴백 + 참고 자료 꼬리말 제거 + ChromaDB/BM25 Cold Start 최적화
 
 ### Features
 - **복수 기업 컨텍스트 지원** (`schemas/request.py`, `agents/base.py`, `agents/retrieval_agent.py`): `UserContext.companies` 필드 추가 — `get_all_companies_context_string()`, `get_normalized_regions()` 메서드로 복수 기업 지역 OR 필터 지원
 - **후속 질문 도메인 폴백** (`agents/router.py`, `routes/chat.py`): `previous_domains` 상태 추가 — 후속 질문이 도메인 분류 거부될 때 이전 턴 도메인으로 폴백 처리 (chat/stream 양쪽 지원)
+- **`/health` BM25 준비 상태 표시** (`routes/health.py`): `rag_config.bm25_ready` 필드 추가 — 도메인별 BM25 인덱스 빌드 완료 여부 반환 (서비스 상태에 영향 없는 정보성 필드)
 
 ### Bug Fixes
 - **`get_session_full()` 로컬 메모리 항상 None 반환** (`routes/_session_memory.py`): Redis 미사용 환경에서 `_memory_store` 데이터를 반환하지 않던 버그 수정
 - **ElastiCache TLS 인증서 검증 우회** (`routes/_session_memory.py`): `redis.from_url()`에 `ssl_cert_reqs=None` 추가 — AWS ElastiCache 자체 서명 인증서로 인한 `SSL_connect failed` 오류 수정
 - **"참고 자료:" 꼬리말 제거** (`utils/prompts.py`, `agents/generator.py`): 답변 본문 끝에 중복 출력되던 `참고 자료: [1]` 형식의 꼬리말 제거 — 프롬프트 지시 삭제 + `_audit_citations()` 후처리 추가. 본문 내 `[번호]` 인라인 인용은 유지
 
+### Performance
+- **ChromaDB/BM25 Non-blocking Cold Start** (`main.py`, `utils/chromadb_warmup.py`): lifespan을 Phase 1(컬렉션 생성, blocking ~2-5초) + Phase 2(BM25 빌드, background ~5-30초)로 분리 — cold start 70-230초 → 35-125초. `warmup_collections_only()`, `warmup_bm25_background()` 공개 함수 추가
+- **BM25 토크나이징 공통 모듈** (`utils/bm25_tokenizer.py` 신규): kiwipiepy Kiwi 모듈 수준 싱글톤 + `tokenize_korean()` 공통 함수 추출 — `BM25Index._tokenize()` 위임, 빌더와 런타임 공유
+- **BM25 metadata 캐시 활용** (`utils/search.py`): `BM25Index.fit()`에서 `doc.metadata["bm25_tokens"]` 존재 시 토크나이징 생략 — vectordb 재빌드 후 BM25 빌드 30-90초 → 5-10초
+
 ### Chores
-- **프로덕션 Docker Compose Redis 환경변수 추가** (`docker-compose.prod.yaml`): RAG 서비스에 `SESSION_MEMORY_BACKEND`, `REDIS_URL` 환경변수 추가. 메모리 한도 재조정 (rag: 2560M→2304M, chromadb: 768M→1024M)
+- **프로덕션 Docker Compose Redis 환경변수 추가** (`docker-compose.prod.yaml`): RAG 서비스에 `SESSION_MEMORY_BACKEND`, `REDIS_URL` 환경변수 추가. 메모리 한도 재조정 (rag: 2304M→3072M, chromadb: 1024M→1536M, t3.medium→t3.large, RAG `start_period` 30s→15s)
 
 ## [2026-03-03] - 프롬프트 리팩토링 + 문서 생성 에이전트 + 멀티턴 개선 + 코드 정리
 

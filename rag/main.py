@@ -128,6 +128,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # CrossEncoder 모델 사전 로딩 / RunPod warmup / ChromaDB warmup
     settings = get_settings()
     warmup_task: asyncio.Task | None = None
+    background_tasks: list[asyncio.Task] = []
 
     if settings.enable_reranking and settings.embedding_provider == "local":
         logger.info("CrossEncoder 모델 사전 로딩 시작...")
@@ -149,24 +150,38 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 run_periodic_warmup(settings.runpod_warmup_interval)
             )
 
-    # ChromaDB 컬렉션 및 BM25 인덱스 사전 로딩
+    # ChromaDB Phase 1 (컬렉션 생성): blocking (~2-5초, 빠름)
     if health["status"] == "ok" and settings.enable_chromadb_warmup:
-        from utils.chromadb_warmup import warmup_chromadb
-        chroma_ok = await warmup_chromadb(state.vector_store)
-        if chroma_ok:
-            logger.info("ChromaDB 초기 warmup 성공")
-        else:
-            logger.warning("ChromaDB 초기 warmup 실패 (서비스는 정상 시작)")
+        from utils.chromadb_warmup import warmup_bm25_background, warmup_collections_only
+        phase1_ok = await warmup_collections_only(state.vector_store)
+        if not phase1_ok:
+            logger.warning("ChromaDB Phase 1 일부 실패 (서비스는 정상 시작)")
 
-    # 도메인 벡터 사전 계산 (첫 요청 시 이벤트 루프 블로킹 방지)
+        # Phase 2 (BM25 빌드): background (~5-30초, bm25_tokens 메타데이터로 가속)
+        background_tasks.append(
+            asyncio.create_task(
+                warmup_bm25_background(state.vector_store),
+                name="bm25_warmup",
+            )
+        )
+
+    # 도메인 벡터 사전 계산: background (첫 요청 전 완료 목표)
     if settings.enable_vector_domain_classification:
-        try:
-            from utils.domain_classifier import get_domain_classifier
-            classifier = get_domain_classifier()
-            await classifier._aprecompute_vectors()
-            logger.info("도메인 벡터 사전 계산 완료")
-        except Exception as e:
-            logger.warning("도메인 벡터 사전 계산 실패 (서비스는 정상 시작): %s", e)
+        async def _precompute_domain_vectors() -> None:
+            try:
+                from utils.domain_classifier import get_domain_classifier
+                classifier = get_domain_classifier()
+                await classifier._aprecompute_vectors()
+                logger.info("도메인 벡터 사전 계산 완료")
+            except Exception as exc:
+                logger.warning("도메인 벡터 사전 계산 실패 (서비스는 정상 시작): %s", exc)
+
+        background_tasks.append(
+            asyncio.create_task(
+                _precompute_domain_vectors(),
+                name="domain_vector_precompute",
+            )
+        )
 
     # 세션 마이그레이션 백그라운드 태스크
     migration_task: asyncio.Task | None = None
@@ -177,12 +192,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                      settings.session_migrate_interval, settings.session_migrate_ttl_threshold)
 
     _log_settings_summary(settings)
-    logger.info("RAG 서비스 초기화 완료")
+    logger.info("RAG 서비스 초기화 완료 — 요청 수신 가능 (BM25/도메인벡터는 백그라운드 완료 중)")
 
     yield
 
     # 종료 시 정리
     logger.info("RAG 서비스 종료 중...")
+    for task in background_tasks:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     if migration_task:
         migration_task.cancel()
         try:

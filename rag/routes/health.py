@@ -53,6 +53,18 @@ async def health_check() -> HealthResponse:
         "llm_model": settings.openai_model,
     }
 
+    if settings.enable_hybrid_search and _state.vector_store:
+        try:
+            from utils.search import get_hybrid_searcher
+            from vectorstores.config import COLLECTION_NAMES
+            searcher = get_hybrid_searcher(_state.vector_store)
+            rag_config["bm25_ready"] = {
+                domain: domain in searcher.bm25_indices
+                for domain in COLLECTION_NAMES
+            }
+        except Exception as e:
+            logger.warning("[Health] BM25 상태 조회 실패: %s", e)
+
     return HealthResponse(
         status=overall_status,
         version="1.0.0",

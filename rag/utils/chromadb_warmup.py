@@ -25,6 +25,44 @@ logger = logging.getLogger(__name__)
 _WARMUP_DOMAINS = list(COLLECTION_NAMES.keys())
 
 
+async def warmup_collections_only(vector_store: ChromaVectorStore) -> bool:
+    """Phase 1만 실행: 컬렉션 인스턴스 사전 생성 (~2-5초, blocking에 적합).
+
+    Args:
+        vector_store: ChromaVectorStore 인스턴스
+
+    Returns:
+        모든 컬렉션 준비 성공 시 True
+    """
+    start = time.monotonic()
+    ok = await _warmup_collections(vector_store)
+    logger.info("[ChromaDB Warmup] Phase 1 완료 (컬렉션 생성) — %.2fs", time.monotonic() - start)
+    return ok
+
+
+async def warmup_bm25_background(vector_store: ChromaVectorStore) -> None:
+    """Phase 2만 실행: BM25 인덱스 빌드 (~5-30초, background task에 적합).
+
+    bm25_tokens 메타데이터가 저장된 경우 토크나이징을 생략하므로 훨씬 빠릅니다.
+
+    Args:
+        vector_store: ChromaVectorStore 인스턴스
+    """
+    from utils.config import get_settings
+    settings = get_settings()
+    if not settings.enable_hybrid_search:
+        logger.info("[ChromaDB Warmup] Phase 2 스킵 (Hybrid Search 비활성화)")
+        return
+
+    start = time.monotonic()
+    ok = await _warmup_bm25_indexes(vector_store)
+    elapsed = time.monotonic() - start
+    if ok:
+        logger.info("[ChromaDB Warmup] Phase 2 완료 (BM25 빌드) — %.2fs", elapsed)
+    else:
+        logger.warning("[ChromaDB Warmup] Phase 2 일부 실패 — %.2fs", elapsed)
+
+
 async def warmup_chromadb(vector_store: ChromaVectorStore) -> bool:
     """ChromaDB 컬렉션 및 BM25 인덱스를 사전 로딩합니다.
 
