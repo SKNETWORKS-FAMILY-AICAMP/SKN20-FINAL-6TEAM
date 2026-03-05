@@ -85,6 +85,7 @@ export const ContractFormModal: React.FC<ContractFormModalProps> = ({ onClose })
   const handleSubmit = async (format: 'pdf' | 'docx') => {
     if (!isValid) return;
     setLoading(true);
+    const targetSessionId = useChatStore.getState().ensureCurrentSession();
     try {
       const data: ContractFormData = {
         employee_name: form.employee_name.trim(),
@@ -119,7 +120,7 @@ export const ContractFormModal: React.FC<ContractFormModalProps> = ({ onClose })
       if (!response.success || !response.file_content || !response.file_name) {
         throw new Error(response.message || '문서 생성에 실패했습니다.');
       }
-      useChatStore.getState().addMessage({
+      useChatStore.getState().addMessageToSession(targetSessionId, {
         id: generateId(),
         type: 'assistant',
         content: '**근로계약서**가 생성되었습니다.',

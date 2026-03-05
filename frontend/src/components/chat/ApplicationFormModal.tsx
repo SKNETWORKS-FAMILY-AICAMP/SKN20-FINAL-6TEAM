@@ -67,6 +67,7 @@ export const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({ onCl
     if (!analysis || !isValid(analysis.fields)) return;
     setLoading(true);
     setError(null);
+    const targetSessionId = useChatStore.getState().ensureCurrentSession();
     try {
       const params: Record<string, unknown> = {};
       for (const f of analysis.fields) {
@@ -81,7 +82,7 @@ export const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({ onCl
       if (!response.success || !response.file_content || !response.file_name) {
         throw new Error(response.message || '문서 생성에 실패했습니다.');
       }
-      useChatStore.getState().addMessage({
+      useChatStore.getState().addMessageToSession(targetSessionId, {
         id: generateId(),
         type: 'assistant',
         content: `**${analysis.title}** 신청서가 생성되었습니다.`,

@@ -3,9 +3,11 @@ import { persist } from 'zustand/middleware';
 import type { AgentCode, ChatMessage, ChatSession } from '../types';
 import api from '../lib/api';
 import { generateId } from '../lib/utils';
+import { MAX_PARALLEL_CHAT_RESPONSES } from '../lib/constants';
 
 const MAX_SESSIONS = 50;
 const MAX_SERVER_HISTORY_LOAD = 100;
+type ResponsePhase = 'loading' | 'streaming';
 
 interface HistoryItem {
   history_id: number;
@@ -47,12 +49,14 @@ interface ChatState {
   currentSessionId: string | null;
   isLoading: boolean;
   isStreaming: boolean;
+  responsePhaseBySessionId: Record<string, ResponsePhase>;
   isSyncing: boolean;
   isBootstrapping: boolean;
   guestMessageCount: number;
   authenticatedMessageCount: number;
 
   // Session management
+  ensureCurrentSession: () => string;
   createSession: (title?: string) => string;
   switchSession: (sessionId: string) => void;
   deleteSession: (sessionId: string) => void;
@@ -60,6 +64,7 @@ interface ChatState {
 
   // Message management
   addMessage: (message: ChatMessage) => void;
+  addMessageToSession: (sessionId: string, message: ChatMessage) => void;
   updateMessage: (messageId: string, updates: Partial<ChatMessage>) => void;
   setLoading: (loading: boolean) => void;
   setStreaming: (streaming: boolean) => void;
@@ -72,6 +77,12 @@ interface ChatState {
 
   // Session-aware message update (세션 기준 메시지 업데이트)
   updateMessageInSession: (sessionId: string, messageId: string, updates: Partial<ChatMessage>) => void;
+  startSessionResponse: (sessionId: string) => void;
+  markSessionStreaming: (sessionId: string) => void;
+  finishSessionResponse: (sessionId: string) => void;
+  isSessionResponding: (sessionId: string) => boolean;
+  getRespondingSessionIds: () => string[];
+  canStartNewResponse: (sessionId: string) => boolean;
 
   // Guest message limit
   incrementGuestCount: () => void;
@@ -103,6 +114,67 @@ const createNewSession = (title?: string): ChatSession => ({
   updated_at: new Date().toISOString(),
 });
 
+const toSessionTimestamp = (session: ChatSession): number => {
+  const timestamp = new Date(session.updated_at).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+};
+
+const dedupeSessionsById = (sessions: ChatSession[]): ChatSession[] => {
+  const byId = new Map<string, ChatSession>();
+
+  sessions.forEach((session) => {
+    const existing = byId.get(session.id);
+    if (!existing) {
+      byId.set(session.id, session);
+      return;
+    }
+
+    const shouldReplace =
+      toSessionTimestamp(session) > toSessionTimestamp(existing)
+      || (
+        toSessionTimestamp(session) === toSessionTimestamp(existing)
+        && session.messages.length > existing.messages.length
+      );
+
+    if (shouldReplace) {
+      byId.set(session.id, session);
+    }
+  });
+
+  return Array.from(byId.values());
+};
+
+const appendMessageToSession = (session: ChatSession, message: ChatMessage): ChatSession => {
+  // 새 메시지에 documentAttachment가 있으면 이전 문서 다운로드 비활성화
+  let previousMessages = session.messages;
+  if (message.documentAttachment) {
+    previousMessages = session.messages.map((m) =>
+      m.documentAttachment
+        ? { ...m, documentAttachment: { ...m.documentAttachment, downloadable: false } }
+        : m
+    );
+  }
+
+  const updatedSession: ChatSession = {
+    ...session,
+    messages: [...previousMessages, message],
+    updated_at: new Date().toISOString(),
+  };
+
+  // Auto-update title from first user message
+  if (message.type === 'user' && session.messages.length === 0) {
+    updatedSession.title = message.content.slice(0, 30) + (message.content.length > 30 ? '...' : '');
+  }
+
+  return updatedSession;
+};
+
+const hasAnyRespondingSession = (responsePhaseBySessionId: Record<string, ResponsePhase>): boolean =>
+  Object.keys(responsePhaseBySessionId).length > 0;
+
+const hasAnyStreamingSession = (responsePhaseBySessionId: Record<string, ResponsePhase>): boolean =>
+  Object.values(responsePhaseBySessionId).some((phase) => phase === 'streaming');
+
 export const useChatStore = create<ChatState>()(
   persist(
     (set, get) => ({
@@ -110,10 +182,19 @@ export const useChatStore = create<ChatState>()(
       currentSessionId: null,
       isLoading: false,
       isStreaming: false,
+      responsePhaseBySessionId: {},
       isSyncing: false,
       isBootstrapping: false,
       guestMessageCount: 0,
       authenticatedMessageCount: 0,
+
+      ensureCurrentSession: () => {
+        const state = get();
+        if (state.currentSessionId && state.sessions.some((s) => s.id === state.currentSessionId)) {
+          return state.currentSessionId;
+        }
+        return state.createSession();
+      },
 
       createSession: (title?: string) => {
         const session = createNewSession(title);
@@ -132,7 +213,17 @@ export const useChatStore = create<ChatState>()(
       },
 
       switchSession: (sessionId: string) => {
-        set({ currentSessionId: sessionId });
+        set((state) => {
+          const dedupedSessions = dedupeSessionsById(state.sessions);
+          const nextCurrentSessionId = dedupedSessions.some((s) => s.id === sessionId)
+            ? sessionId
+            : (dedupedSessions[0]?.id ?? null);
+
+          return {
+            sessions: dedupedSessions,
+            currentSessionId: nextCurrentSessionId,
+          };
+        });
       },
 
       deleteSession: (sessionId: string) => {
@@ -142,9 +233,13 @@ export const useChatStore = create<ChatState>()(
             state.currentSessionId === sessionId
               ? filtered[0]?.id || null
               : state.currentSessionId;
+          const { [sessionId]: _removed, ...nextResponsePhase } = state.responsePhaseBySessionId;
           return {
             sessions: filtered,
             currentSessionId: newCurrentId,
+            responsePhaseBySessionId: nextResponsePhase,
+            isLoading: hasAnyRespondingSession(nextResponsePhase),
+            isStreaming: hasAnyStreamingSession(nextResponsePhase),
           };
         });
       },
@@ -158,43 +253,17 @@ export const useChatStore = create<ChatState>()(
       },
 
       addMessage: (message: ChatMessage) => {
-        const state = get();
-        let sessionId = state.currentSessionId;
+        const sessionId = get().ensureCurrentSession();
+        get().addMessageToSession(sessionId, message);
+      },
 
-        // Auto-create session if none exists
-        if (!sessionId || !state.sessions.find((s) => s.id === sessionId)) {
-          const session = createNewSession();
-          set((prev) => ({
-            sessions: [session, ...prev.sessions],
-            currentSessionId: session.id,
-          }));
-          sessionId = session.id;
-        }
+      addMessageToSession: (sessionId: string, message: ChatMessage) => {
+        if (!get().sessions.some((s) => s.id === sessionId)) return;
 
         set((prev) => ({
           sessions: prev.sessions.map((s) => {
             if (s.id !== sessionId) return s;
-
-            // 새 메시지에 documentAttachment가 있으면 이전 문서 다운로드 비활성화
-            let prevMessages = s.messages;
-            if (message.documentAttachment) {
-              prevMessages = s.messages.map((m) =>
-                m.documentAttachment
-                  ? { ...m, documentAttachment: { ...m.documentAttachment, downloadable: false } }
-                  : m
-              );
-            }
-
-            const updated = {
-              ...s,
-              messages: [...prevMessages, message],
-              updated_at: new Date().toISOString(),
-            };
-            // Auto-update title from first user message
-            if (message.type === 'user' && s.messages.length === 0) {
-              updated.title = message.content.slice(0, 30) + (message.content.length > 30 ? '...' : '');
-            }
-            return updated;
+            return appendMessageToSession(s, message);
           }),
         }));
       },
@@ -212,6 +281,70 @@ export const useChatStore = create<ChatState>()(
             };
           }),
         }));
+      },
+
+      startSessionResponse: (sessionId: string) => {
+        set((prev) => {
+          if (!prev.sessions.some((s) => s.id === sessionId)) return prev;
+          if (prev.responsePhaseBySessionId[sessionId]) return prev;
+
+          const next = {
+            ...prev.responsePhaseBySessionId,
+            [sessionId]: 'loading' as const,
+          };
+
+          return {
+            responsePhaseBySessionId: next,
+            isLoading: hasAnyRespondingSession(next),
+            isStreaming: hasAnyStreamingSession(next),
+          };
+        });
+      },
+
+      markSessionStreaming: (sessionId: string) => {
+        set((prev) => {
+          if (!prev.responsePhaseBySessionId[sessionId]) return prev;
+
+          const next = {
+            ...prev.responsePhaseBySessionId,
+            [sessionId]: 'streaming' as const,
+          };
+
+          return {
+            responsePhaseBySessionId: next,
+            isLoading: hasAnyRespondingSession(next),
+            isStreaming: hasAnyStreamingSession(next),
+          };
+        });
+      },
+
+      finishSessionResponse: (sessionId: string) => {
+        set((prev) => {
+          if (!prev.responsePhaseBySessionId[sessionId]) return prev;
+          const { [sessionId]: _removed, ...next } = prev.responsePhaseBySessionId;
+
+          return {
+            responsePhaseBySessionId: next,
+            isLoading: hasAnyRespondingSession(next),
+            isStreaming: hasAnyStreamingSession(next),
+          };
+        });
+      },
+
+      isSessionResponding: (sessionId: string) => {
+        return Boolean(get().responsePhaseBySessionId[sessionId]);
+      },
+
+      getRespondingSessionIds: () => {
+        return Object.keys(get().responsePhaseBySessionId);
+      },
+
+      canStartNewResponse: (sessionId: string) => {
+        const state = get();
+        if (state.responsePhaseBySessionId[sessionId]) {
+          return false;
+        }
+        return Object.keys(state.responsePhaseBySessionId).length < MAX_PARALLEL_CHAT_RESPONSES;
       },
 
       updateMessage: (messageId: string, updates: Partial<ChatMessage>) => {
@@ -434,13 +567,13 @@ export const useChatStore = create<ChatState>()(
               .filter((id): id is number => typeof id === 'number')
           );
 
-          const mergedSessions = [
+          const mergedSessions = dedupeSessionsById([
             ...existingSessions,
             ...fetchedSessions.filter((s) => {
               if (!s.lastHistoryId) return true;
               return !existingHistoryIds.has(s.lastHistoryId);
             }),
-          ];
+          ]);
 
           mergedSessions.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
           const currentExists = mergedSessions.some((s) => s.id === state.currentSessionId);
@@ -460,6 +593,9 @@ export const useChatStore = create<ChatState>()(
         set({
           sessions: [newSession],
           currentSessionId: newSession.id,
+          responsePhaseBySessionId: {},
+          isLoading: false,
+          isStreaming: false,
           // guestMessageCount는 유지 (로그아웃→게스트→로그인 순환 악용 방지)
           authenticatedMessageCount: 0,
         });
@@ -481,6 +617,27 @@ export const useChatStore = create<ChatState>()(
         currentSessionId: state.currentSessionId,
         guestMessageCount: state.guestMessageCount,
       }),
+      merge: (persistedState, currentState) => {
+        const typedPersisted = (persistedState as Partial<ChatState> | undefined) ?? {};
+        const persistedSessions = Array.isArray(typedPersisted.sessions)
+          ? dedupeSessionsById(typedPersisted.sessions as ChatSession[])
+          : currentState.sessions;
+        const persistedCurrentSessionId =
+          typeof typedPersisted.currentSessionId === 'string'
+            ? typedPersisted.currentSessionId
+            : null;
+        const currentSessionId = persistedCurrentSessionId
+          && persistedSessions.some((session) => session.id === persistedCurrentSessionId)
+          ? persistedCurrentSessionId
+          : (persistedSessions[0]?.id ?? null);
+
+        return {
+          ...currentState,
+          ...typedPersisted,
+          sessions: persistedSessions,
+          currentSessionId,
+        };
+      },
     }
   )
 );

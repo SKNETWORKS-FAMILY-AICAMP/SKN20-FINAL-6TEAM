@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
 import { useNotificationStore } from '../stores/notificationStore';
@@ -8,10 +8,10 @@ import { GUEST_MESSAGE_LIMIT, AUTHENTICATED_DAILY_LIMIT, AUTHENTICATED_LIMIT_MES
 import { generateId } from '../lib/utils';
 import { getMockResponse } from '../lib/mockResponses';
 
-const ERROR_MESSAGE = '죄송합니다. 응답을 생성하는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
-const GUEST_LIMIT_MESSAGE = '무료 체험 메시지를 모두 사용했습니다. 로그인하시면 무제한으로 상담을 이용할 수 있습니다.';
-const ANSWER_COMPLETE_NOTIFICATION_TITLE = '답변 완료';
-const ANSWER_COMPLETE_NOTIFICATION_MESSAGE = '요청하신 답변 생성이 완료되었습니다.';
+const ERROR_MESSAGE = '\uC8C4\uC1A1\uD569\uB2C8\uB2E4. \uC751\uB2F5\uC744 \uC0DD\uC131\uD558\uB294 \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4. \uC7A0\uC2DC \uD6C4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574\uC8FC\uC138\uC694.';
+const GUEST_LIMIT_MESSAGE = '\uBB34\uB8CC \uCCB4\uD5D8 \uBA54\uC2DC\uC9C0\uB97C \uBAA8\uB450 \uC0AC\uC6A9\uD588\uC2B5\uB2C8\uB2E4. \uB85C\uADF8\uC778\uD558\uC2DC\uBA74 \uBB34\uC81C\uD55C\uC73C\uB85C \uC0C1\uB2F4\uC744 \uC774\uC6A9\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.';
+const ANSWER_COMPLETE_NOTIFICATION_TITLE = '\uB2F5\uBCC0 \uC644\uB8CC';
+const ANSWER_COMPLETE_NOTIFICATION_MESSAGE = '\uC694\uCCAD\uD558\uC2E0 \uB2F5\uBCC0 \uC0DD\uC131\uC774 \uC644\uB8CC\uB418\uC5C8\uC2B5\uB2C8\uB2E4.';
 const ANSWER_COMPLETE_NOTIFICATION_LINK = '/';
 
 const shouldShowAnswerCompleteNotification = (): boolean => {
@@ -34,26 +34,56 @@ const addAnswerCompleteNotification = (): void => {
   });
 };
 
-export const useChat = () => {
-  const { addMessage, setLoading, setStreaming, isLoading, isSyncing, updateMessageInSession, guestMessageCount, incrementGuestCount, authenticatedMessageCount, incrementAuthenticatedCount } = useChatStore();
-  const { isAuthenticated } = useAuthStore();
-  const streamingContentRef = useRef<string>('');
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const rafRef = useRef<number | null>(null);
+const isAbortError = (err: unknown): boolean => err instanceof DOMException && err.name === 'AbortError';
 
-  // Cleanup on unmount: abort any in-flight stream
+export const useChat = () => {
+  const {
+    addMessageToSession,
+    isSyncing,
+    updateMessageInSession,
+    guestMessageCount,
+    incrementGuestCount,
+    authenticatedMessageCount,
+    incrementAuthenticatedCount,
+    startSessionResponse,
+    markSessionStreaming,
+    finishSessionResponse,
+    isSessionResponding,
+    canStartNewResponse,
+  } = useChatStore();
+  const { isAuthenticated } = useAuthStore();
+  const streamingContentRefBySession = useRef<Map<string, string>>(new Map());
+  const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
+  const rafRefBySession = useRef<Map<string, number>>(new Map());
+
+  const cancelPendingRaf = useCallback((sessionId: string) => {
+    const pendingRafId = rafRefBySession.current.get(sessionId);
+    if (pendingRafId !== undefined) {
+      cancelAnimationFrame(pendingRafId);
+      rafRefBySession.current.delete(sessionId);
+    }
+  }, []);
+
+  // Cleanup on unmount: abort all in-flight streams
   useEffect(() => {
     return () => {
-      abortControllerRef.current?.abort();
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
-      }
+      abortControllersRef.current.forEach((controller) => controller.abort());
+      abortControllersRef.current.clear();
+
+      rafRefBySession.current.forEach((rafId) => cancelAnimationFrame(rafId));
+      rafRefBySession.current.clear();
+
+      streamingContentRefBySession.current.clear();
     };
   }, []);
 
   const sendMessage = useCallback(
     async (message: string) => {
-      if (!message.trim() || isLoading || isSyncing) return;
+      if (!message.trim() || isSyncing) return;
+
+      const targetSessionId = useChatStore.getState().ensureCurrentSession();
+      if (isSessionResponding(targetSessionId)) return;
+      if (!canStartNewResponse(targetSessionId)) return;
 
       // Guest message limit check
       if (!isAuthenticated && guestMessageCount >= GUEST_MESSAGE_LIMIT) {
@@ -64,7 +94,7 @@ export const useChat = () => {
           agent_code: 'A0000001',
           timestamp: new Date(),
         };
-        addMessage(limitMessage);
+        addMessageToSession(targetSessionId, limitMessage);
         return;
       }
 
@@ -78,24 +108,21 @@ export const useChat = () => {
           agent_code: 'A0000001',
           timestamp: new Date(),
         };
-        addMessage(limitMessage);
+        addMessageToSession(targetSessionId, limitMessage);
         return;
       }
 
-      // Abort any previous in-flight stream
-      abortControllerRef.current?.abort();
-
       // Build history BEFORE adding current message to avoid self-duplication in RAG augmentation
-      const MAX_HISTORY_MESSAGES = 6; // 3턴 (RAG QuestionDecomposer MAX_HISTORY_TURNS=3)
-      const previousMessages = useChatStore.getState().getMessages();
+      const MAX_HISTORY_MESSAGES = 6; // 3 turns (RAG QuestionDecomposer MAX_HISTORY_TURNS=3)
+      const previousMessages = useChatStore.getState().sessions.find((s) => s.id === targetSessionId)?.messages || [];
       const history = previousMessages
-        .filter(m =>
-          (m.type === 'user' || m.type === 'assistant') &&
-          !m.content.startsWith('죄송합니다. 응답을 생성하는 중') &&
-          !m.content.startsWith('무료 체험 메시지를 모두')
+        .filter((m) =>
+          (m.type === 'user' || m.type === 'assistant')
+          && !m.content.startsWith('\uC8C4\uC1A1\uD569\uB2C8\uB2E4. \uC751\uB2F5\uC744 \uC0DD\uC131\uD558\uB294 \uC911')
+          && !m.content.startsWith('\uBB34\uB8CC \uCCB4\uD5D8 \uBA54\uC2DC\uC9C0\uB97C \uBAA8\uB450')
         )
         .slice(-MAX_HISTORY_MESSAGES)
-        .map(m => ({
+        .map((m) => ({
           role: m.type === 'user' ? 'user' : 'assistant' as const,
           content: m.content,
         }));
@@ -108,11 +135,8 @@ export const useChat = () => {
         timestamp: new Date(),
         synced: isAuthenticated,
       };
-      addMessage(userMessage);
-      setLoading(true);
-
-      // 세션 ID 고정 — 비동기 중 세션 전환 시에도 올바른 세션에 업데이트
-      const targetSessionId = useChatStore.getState().currentSessionId!;
+      addMessageToSession(targetSessionId, userMessage);
+      startSessionResponse(targetSessionId);
 
       try {
         let response: string;
@@ -128,13 +152,13 @@ export const useChat = () => {
           if (useStreaming) {
             // Streaming mode (SSE)
             const assistantMessageId = generateId();
-            streamingContentRef.current = '';
+            streamingContentRefBySession.current.set(targetSessionId, '');
             const collectedSources: SourceReference[] = [];
             const collectedActions: RagActionSuggestion[] = [];
 
             // Create new AbortController for this stream
             const abortController = new AbortController();
-            abortControllerRef.current = abortController;
+            abortControllersRef.current.set(targetSessionId, abortController);
 
             // Add empty assistant message first (without agent_code - will be set on done)
             const initialMessage: ChatMessage = {
@@ -144,27 +168,32 @@ export const useChat = () => {
               timestamp: new Date(),
               synced: isAuthenticated,
             };
-            addMessage(initialMessage);
+            addMessageToSession(targetSessionId, initialMessage);
 
             let finalDomain = 'general';
 
-            const session = useChatStore.getState().sessions.find(s => s.id === targetSessionId);
+            const session = useChatStore.getState().sessions.find((s) => s.id === targetSessionId);
             const rootHistoryId = session?.rootHistoryId ?? null;
 
             await streamChat(message, {
               onToken: (token) => {
-                if (streamingContentRef.current === '') {
-                  setStreaming(true);
+                const previousContent = streamingContentRefBySession.current.get(targetSessionId) || '';
+                if (previousContent === '') {
+                  markSessionStreaming(targetSessionId);
                 }
-                streamingContentRef.current += token;
+
+                const nextContent = `${previousContent}${token}`;
+                streamingContentRefBySession.current.set(targetSessionId, nextContent);
+
                 // RAF-based throttle: batch store updates to ~60fps max
-                if (rafRef.current === null) {
-                  rafRef.current = requestAnimationFrame(() => {
+                if (!rafRefBySession.current.has(targetSessionId)) {
+                  const rafId = requestAnimationFrame(() => {
                     updateMessageInSession(targetSessionId, assistantMessageId, {
-                      content: streamingContentRef.current,
+                      content: streamingContentRefBySession.current.get(targetSessionId) || '',
                     });
-                    rafRef.current = null;
+                    rafRefBySession.current.delete(targetSessionId);
                   });
+                  rafRefBySession.current.set(targetSessionId, rafId);
                 }
               },
               onSource: (source) => {
@@ -174,12 +203,7 @@ export const useChat = () => {
                 collectedActions.push(action);
               },
               onDone: (metadata) => {
-                // Cancel pending RAF and flush final content
-                if (rafRef.current !== null) {
-                  cancelAnimationFrame(rafRef.current);
-                  rafRef.current = null;
-                }
-                setStreaming(false);
+                cancelPendingRaf(targetSessionId);
                 finalDomain = metadata?.domain || 'general';
                 evaluationData = (metadata?.evaluation_data as EvaluationData) || null;
                 const finalAgentCode = domainToAgentCode(finalDomain);
@@ -195,7 +219,7 @@ export const useChat = () => {
                 }
 
                 updateMessageInSession(targetSessionId, assistantMessageId, {
-                  content: streamingContentRef.current,
+                  content: streamingContentRefBySession.current.get(targetSessionId) || '',
                   agent_code: finalAgentCode,
                   ...(agentCodes ? { agent_codes: agentCodes } : {}),
                   ...(collectedSources.length > 0 ? { sources: collectedSources } : {}),
@@ -205,11 +229,7 @@ export const useChat = () => {
                 });
               },
               onError: (error) => {
-                if (rafRef.current !== null) {
-                  cancelAnimationFrame(rafRef.current);
-                  rafRef.current = null;
-                }
-                setStreaming(false);
+                cancelPendingRaf(targetSessionId);
                 updateMessageInSession(targetSessionId, assistantMessageId, {
                   content: ERROR_MESSAGE,
                   ...(collectedActions.length > 0 ? { actions: collectedActions } : {}),
@@ -218,11 +238,11 @@ export const useChat = () => {
               },
             }, abortController.signal, history, targetSessionId, rootHistoryId);
 
-            response = streamingContentRef.current;
+            response = streamingContentRefBySession.current.get(targetSessionId) || '';
             agentCode = domainToAgentCode(finalDomain);
           } else {
             // Non-streaming mode
-            const nonStreamSession = useChatStore.getState().sessions.find(s => s.id === targetSessionId);
+            const nonStreamSession = useChatStore.getState().sessions.find((s) => s.id === targetSessionId);
             const nonStreamRootHistoryId = nonStreamSession?.rootHistoryId ?? null;
             const ragResponse = await ragApi.post<RagChatResponse>('/rag/chat', {
               message,
@@ -264,7 +284,7 @@ export const useChat = () => {
               timestamp: new Date(),
               synced: isAuthenticated,
             };
-            addMessage(assistantMessage);
+            addMessageToSession(targetSessionId, assistantMessage);
           }
         } else {
           // Mock response (fallback when RAG is disabled or unavailable)
@@ -279,15 +299,14 @@ export const useChat = () => {
             agent_code: agentCode,
             timestamp: new Date(),
           };
-          addMessage(assistantMessage);
+          addMessageToSession(targetSessionId, assistantMessage);
         }
 
         if (shouldShowAnswerCompleteNotification()) {
           addAnswerCompleteNotification();
         }
-
-        // Redis-first: 인증 사용자는 RAG 세션 메모리(Redis)에 자동 저장됨
-        // DB 이관은 RAG 배치 마이그레이션이 처리
+        // Redis-first: authenticated users are auto-saved in RAG session memory (Redis).
+        // DB migration is handled by the RAG batch migration process.
         if (!isAuthenticated) {
           incrementGuestCount();
         } else {
@@ -295,7 +314,7 @@ export const useChat = () => {
         }
       } catch (err) {
         // Ignore AbortError (user-initiated cancellation)
-        if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (isAbortError(err)) return;
 
         const errorMessage: ChatMessage = {
           id: generateId(),
@@ -304,29 +323,42 @@ export const useChat = () => {
           agent_code: 'A0000001',
           timestamp: new Date(),
         };
-        addMessage(errorMessage);
+        addMessageToSession(targetSessionId, errorMessage);
       } finally {
-        // Cancel any pending RAF
-        if (rafRef.current !== null) {
-          cancelAnimationFrame(rafRef.current);
-          rafRef.current = null;
-        }
-        setStreaming(false);
-        setLoading(false);
-        abortControllerRef.current = null;
+        cancelPendingRaf(targetSessionId);
+        abortControllersRef.current.delete(targetSessionId);
+        streamingContentRefBySession.current.delete(targetSessionId);
+        finishSessionResponse(targetSessionId);
       }
     },
-    [addMessage, setLoading, setStreaming, isLoading, isSyncing, isAuthenticated, updateMessageInSession, guestMessageCount, incrementGuestCount, authenticatedMessageCount, incrementAuthenticatedCount]
+    [
+      addMessageToSession,
+      isSyncing,
+      guestMessageCount,
+      isAuthenticated,
+      authenticatedMessageCount,
+      updateMessageInSession,
+      incrementGuestCount,
+      incrementAuthenticatedCount,
+      startSessionResponse,
+      markSessionStreaming,
+      finishSessionResponse,
+      isSessionResponding,
+      canStartNewResponse,
+      cancelPendingRaf,
+    ]
   );
 
-  const stopStreaming = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-      setStreaming(false);
-      setLoading(false);
-    }
-  }, [setStreaming, setLoading]);
+  const stopStreaming = useCallback((sessionId?: string) => {
+    const targetSessionId = sessionId ?? useChatStore.getState().currentSessionId;
+    if (!targetSessionId) return;
 
-  return { sendMessage, isLoading, stopStreaming };
+    const controller = abortControllersRef.current.get(targetSessionId);
+    if (!controller) return;
+    controller.abort();
+    abortControllersRef.current.delete(targetSessionId);
+  }, []);
+
+  return { sendMessage, stopStreaming };
 };
+

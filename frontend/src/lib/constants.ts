@@ -676,6 +676,9 @@ export const USER_QUICK_QUESTIONS: Record<string, Array<{ label: string; questio
 // Max guest messages before login prompt
 export const GUEST_MESSAGE_LIMIT = 10;
 
+// Max number of chat sessions that can generate responses in parallel
+export const MAX_PARALLEL_CHAT_RESPONSES = 3;
+
 // Authenticated user daily message quota (null = unlimited)
 export const AUTHENTICATED_DAILY_LIMIT: number | null = null;
 export const AUTHENTICATED_LIMIT_MESSAGE = '오늘의 메시지 사용량을 모두 소진했습니다. 내일 다시 이용해주세요.';

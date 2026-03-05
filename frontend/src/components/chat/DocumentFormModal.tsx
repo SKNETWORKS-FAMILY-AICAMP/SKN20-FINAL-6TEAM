@@ -54,6 +54,7 @@ export const DocumentFormModal: React.FC<DocumentFormModalProps> = ({
   const handleSubmit = async (format: 'pdf' | 'docx') => {
     if (!typeDef || !isValid(typeDef.fields)) return;
     setLoading(true);
+    const targetSessionId = useChatStore.getState().ensureCurrentSession();
     try {
       // number 필드는 숫자로 변환
       const params: Record<string, unknown> = {};
@@ -66,7 +67,7 @@ export const DocumentFormModal: React.FC<DocumentFormModalProps> = ({
       if (!response.success || !response.file_content || !response.file_name) {
         throw new Error(response.message || '문서 생성에 실패했습니다.');
       }
-      useChatStore.getState().addMessage({
+      useChatStore.getState().addMessageToSession(targetSessionId, {
         id: generateId(),
         type: 'assistant',
         content: `**${typeDef.label}**이(가) 생성되었습니다.`,

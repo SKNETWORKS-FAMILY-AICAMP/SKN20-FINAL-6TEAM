@@ -17,7 +17,7 @@ import { useChat } from '../hooks/useChat';
 import { useDisplayUserType } from '../hooks/useDisplayUserType';
 import { useNotifications } from '../hooks/useNotifications';
 import { AGENT_NAMES, AGENT_COLORS, type Company, type Schedule } from '../types';
-import { USER_QUICK_QUESTIONS } from '../lib/constants';
+import { USER_QUICK_QUESTIONS, MAX_PARALLEL_CHAT_RESPONSES } from '../lib/constants';
 import { getSeasonalQuestions } from '../lib/seasonalQuestions';
 import { ResponseProgress } from '../components/chat/ResponseProgress';
 import { SourceReferences } from '../components/chat/SourceReferences';
@@ -56,11 +56,13 @@ const normalizeNotificationCompanies = (value: unknown): Company[] => {
   );
 };
 
+const PARALLEL_LIMIT_MESSAGE = '\uB3D9\uC2DC \uC0DD\uC131 \uD55C\uB3C4 \uCD08\uACFC\uB418\uC5C8\uC2B5\uB2C8\uB2E4';
+
 const MainPage: React.FC = () => {
   const { isAuthenticated, user, notificationSettings, notificationSettingsLoaded } = useAuthStore();
   const displayUserType = useDisplayUserType();
-  const { sessions, currentSessionId, createSession, isStreaming, addMessage } = useChatStore();
-  const { sendMessage, isLoading, stopStreaming } = useChat();
+  const { sessions, currentSessionId, createSession, addMessageToSession, responsePhaseBySessionId } = useChatStore();
+  const { sendMessage, stopStreaming } = useChat();
   const [inputValue, setInputValue] = useState('');
   const [notificationSchedules, setNotificationSchedules] = useState<Schedule[]>([]);
   const [notificationCompanyNameById, setNotificationCompanyNameById] = useState<
@@ -75,6 +77,12 @@ const MainPage: React.FC = () => {
 
   const currentSession = sessions.find((s) => s.id === currentSessionId);
   const messages = currentSession?.messages || [];
+  const isCurrentSessionGenerating = Boolean(currentSessionId && responsePhaseBySessionId[currentSessionId]);
+  const isCurrentSessionStreaming = Boolean(currentSessionId && responsePhaseBySessionId[currentSessionId] === 'streaming');
+  const isParallelLimitReached = Object.keys(responsePhaseBySessionId).length >= MAX_PARALLEL_CHAT_RESPONSES;
+  const isInputBlockedByParallelLimit = !isCurrentSessionGenerating && isParallelLimitReached;
+  const isInputDisabled = isCurrentSessionGenerating || isFileProcessing || isInputBlockedByParallelLimit;
+  const showStopButton = isCurrentSessionGenerating;
 
   useNotifications(
     !isAuthenticated || notificationSettingsLoaded ? notificationSchedules : [],
@@ -106,11 +114,11 @@ const MainPage: React.FC = () => {
 
   // 스트리밍 중 스크롤 따라가기
   useEffect(() => {
-    if (isStreaming) {
+    if (isCurrentSessionStreaming) {
       const interval = setInterval(() => scrollToBottom(false), 100);
       return () => clearInterval(interval);
     }
-  }, [isStreaming]);
+  }, [isCurrentSessionStreaming]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -162,7 +170,7 @@ const MainPage: React.FC = () => {
   }, [isAuthenticated]);
 
   const handleSendMessage = async (message: string) => {
-    if (!message.trim() || isLoading || isStreaming || isFileProcessing) return;
+    if (!message.trim() || isInputDisabled) return;
 
     // 파일 첨부 + 수정 지시 → 문서 수정 플로우
     if (attachedFile) {
@@ -171,6 +179,7 @@ const MainPage: React.FC = () => {
       setAttachedFile(null);
       setFileError(null);
       setIsFileProcessing(true);
+      const targetSessionId = useChatStore.getState().ensureCurrentSession();
 
       // 사용자 메시지 표시
       const userMsg = {
@@ -179,7 +188,7 @@ const MainPage: React.FC = () => {
         content: `[${file.name}] ${message}`,
         timestamp: new Date(),
       };
-      addMessage(userMsg);
+      addMessageToSession(targetSessionId, userMsg);
 
       try {
         const base64 = await fileToBase64(file);
@@ -187,7 +196,7 @@ const MainPage: React.FC = () => {
         const result = await modifyDocument(base64, file.name, message, ext === 'pdf' ? 'pdf' : 'docx', user?.user_id);
 
         if (result.success && result.file_content && result.file_name) {
-          addMessage({
+          addMessageToSession(targetSessionId, {
             id: generateId(),
             type: 'assistant',
             content: '문서가 수정되었습니다.',
@@ -201,7 +210,7 @@ const MainPage: React.FC = () => {
             },
           });
         } else {
-          addMessage({
+          addMessageToSession(targetSessionId, {
             id: generateId(),
             type: 'assistant',
             content: result.message || '문서 수정에 실패했습니다.',
@@ -210,7 +219,7 @@ const MainPage: React.FC = () => {
           });
         }
       } catch {
-        addMessage({
+        addMessageToSession(targetSessionId, {
           id: generateId(),
           type: 'assistant',
           content: '문서 수정 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
@@ -289,7 +298,8 @@ const MainPage: React.FC = () => {
             <button
               key={index}
               onClick={() => handleSendMessage(item.question)}
-              className="px-3 py-1.5 text-sm bg-white border rounded-full hover:bg-blue-50 hover:border-blue-300 transition-colors"
+              disabled={isInputDisabled}
+              className="px-3 py-1.5 text-sm bg-white border rounded-full hover:bg-blue-50 hover:border-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {item.label}
             </button>
@@ -425,7 +435,11 @@ const MainPage: React.FC = () => {
             );
           })
         )}
-        <ResponseProgress isLoading={isLoading} isStreaming={isStreaming} isFileProcessing={isFileProcessing} />
+        <ResponseProgress
+          isLoading={isCurrentSessionGenerating}
+          isStreaming={isCurrentSessionStreaming}
+          isFileProcessing={isFileProcessing}
+        />
         <div ref={messagesEndRef} />
       </div>
 
@@ -466,7 +480,7 @@ const MainPage: React.FC = () => {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading || isStreaming || isFileProcessing}
+              disabled={isInputDisabled}
               className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title="파일 첨부 (DOCX, PDF)"
             >
@@ -476,18 +490,25 @@ const MainPage: React.FC = () => {
               <input
                 ref={inputRef}
                 type="text"
-                placeholder={attachedFile ? '수정할 내용을 입력하세요...' : '메시지를 입력하세요...'}
+                placeholder={
+                  isInputBlockedByParallelLimit
+                    ? PARALLEL_LIMIT_MESSAGE
+                    : attachedFile
+                      ? '\uC218\uC815\uD560 \uB0B4\uC6A9\uC744 \uC785\uB825\uD558\uC138\uC694...'
+                      : '\uBA54\uC2DC\uC9C0\uB97C \uC785\uB825\uD558\uC138\uC694...'
+                }
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
+                disabled={isInputDisabled}
                 className="w-full px-3 py-2 text-sm border-0 focus:outline-none focus:ring-0 bg-transparent placeholder-gray-400"
               />
             </div>
-            {isLoading || isStreaming || isFileProcessing ? (
+            {showStopButton ? (
               <IconButton
                 type="button"
                 color="blue"
-                onClick={stopStreaming}
+                onClick={() => stopStreaming(currentSessionId ?? undefined)}
                 className="rounded-xl !bg-gray-400 hover:!bg-gray-500"
               >
                 <StopIcon className="h-5 w-5" />
@@ -496,13 +517,18 @@ const MainPage: React.FC = () => {
               <IconButton
                 type="submit"
                 color="blue"
-                disabled={!inputValue.trim()}
+                disabled={isInputDisabled || !inputValue.trim()}
                 className="rounded-xl"
               >
                 <PaperAirplaneIcon className="h-5 w-5" />
               </IconButton>
             )}
           </form>
+          {isInputBlockedByParallelLimit && (
+            <Typography variant="small" color="gray" className="mt-2 px-2 text-xs !text-gray-400">
+              {PARALLEL_LIMIT_MESSAGE}
+            </Typography>
+          )}
           <Typography variant="small" color="gray" className="text-center mt-3 mb-2 text-xs !text-gray-600">
             Bizi는 AI 기반 상담 서비스로, 법적 조언이 아닙니다. 중요한 결정은 전문가와 상담하세요.
           </Typography>
