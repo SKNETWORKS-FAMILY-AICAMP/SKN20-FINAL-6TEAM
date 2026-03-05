@@ -157,3 +157,80 @@ def test_get_http_client_not_initialized():
     wt_module._http_client = None
     with pytest.raises(RuntimeError, match="not initialized"):
         wt_module._get_http_client()
+
+
+def test_get_http_client_closed():
+    """닫힌 클라이언트 → RuntimeError."""
+    mock = MagicMock()
+    mock.is_closed = True
+    wt_module._http_client = mock
+    with pytest.raises(RuntimeError, match="not initialized"):
+        wt_module._get_http_client()
+    wt_module._http_client = None
+
+
+def test_schedule_skip_empty_answer():
+    """빈 answer → create_task 호출 안 됨."""
+    with patch("routes._write_through.asyncio.create_task") as mock_ct:
+        schedule_write_through(
+            user_id=1,
+            session_id="sess-1",
+            question="질문",
+            answer="",
+        )
+    mock_ct.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_save_turn_evaluation_data_included():
+    """evaluation_data가 턴에 포함."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 201
+    mock_resp.json.return_value = {"saved_count": 1, "skipped_count": 0, "history_ids": [1]}
+
+    with patch.object(wt_module._http_client, "post", new_callable=AsyncMock, return_value=mock_resp) as mock_post:
+        await save_turn_to_db(
+            user_id=1,
+            session_id="sess-1",
+            question="질문",
+            answer="답변",
+            agent_code="A0000001",
+            evaluation_data={"llm_score": 85, "domains": ["finance_tax"]},
+        )
+
+    sent_turn = mock_post.call_args.kwargs["json"]["turns"][0]
+    assert sent_turn["evaluation_data"]["llm_score"] == 85
+
+
+@pytest.mark.asyncio
+async def test_save_turn_api_key_header():
+    """X-Internal-Key 헤더 전달 확인."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 201
+    mock_resp.json.return_value = {"saved_count": 1, "skipped_count": 0, "history_ids": [1]}
+
+    with patch.object(wt_module._http_client, "post", new_callable=AsyncMock, return_value=mock_resp) as mock_post:
+        await save_turn_to_db(
+            user_id=1, session_id="sess-1", question="Q", answer="A", agent_code="A0000001",
+        )
+
+    headers = mock_post.call_args.kwargs["headers"]
+    assert "X-Internal-Key" in headers
+
+
+@pytest.mark.asyncio
+async def test_close_http_client():
+    """close_http_client가 클라이언트를 닫고 None으로 설정."""
+    mock = AsyncMock()
+    wt_module._http_client = mock
+    await wt_module.close_http_client()
+    assert wt_module._http_client is None
+    mock.aclose.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_close_http_client_when_none():
+    """이미 None인 경우 에러 없이 완료."""
+    wt_module._http_client = None
+    await wt_module.close_http_client()
+    assert wt_module._http_client is None

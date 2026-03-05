@@ -1067,8 +1067,10 @@ class MainRouter:
         if was_rewritten:
             query = rewritten_query
 
-        # 도메인 분류
-        classification = self.domain_classifier.classify(query)
+        # 벡터 유사도 기반 도메인 분류 (CPU-bound → 스레드 위임)
+        classification = await asyncio.to_thread(
+            self.domain_classifier.classify, query
+        )
 
         logger.info(
             "[스트리밍/분류] 원본='%s' | 재작성=%s('%s') | 도메인=%s(%.2f) | relevant=%s | method=%s",

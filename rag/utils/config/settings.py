@@ -493,6 +493,10 @@ class Settings(BaseSettings):
         default="",
         description="Redis 접속 URL (예: redis://localhost:6379). session_memory_backend=redis 시 필수"
     )
+    redis_ssl_verify: bool = Field(
+        default=False,
+        description="rediss:// TLS 인증서 검증 활성화 (False: 검증 비활성화, True: 시스템 CA로 검증)"
+    )
     session_memory_max_messages: int = Field(
         default=20, gt=0,
         description="세션당 최대 저장 메시지 수 (user+assistant 합산)"

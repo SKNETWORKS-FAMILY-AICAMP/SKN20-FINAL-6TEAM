@@ -91,7 +91,7 @@ async def _get_redis_client():
                 "encoding": "utf-8",
                 "decode_responses": True,
             }
-            if url.startswith("rediss://"):
+            if url.startswith("rediss://") and not _settings().redis_ssl_verify:
                 kwargs["ssl_cert_reqs"] = None
             _redis_client = redis.from_url(url, **kwargs)
     return _redis_client
