@@ -371,7 +371,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
           ) : (
             <div className="flex gap-2">
               <Button onClick={handleNotificationSave} disabled={isNotificationSaving}>
-                {isNotificationSaving ? '저장 중...' : '저장'}
+                저장
               </Button>
             </div>
           )}
