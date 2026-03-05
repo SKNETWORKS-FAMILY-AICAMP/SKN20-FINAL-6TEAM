@@ -21,6 +21,8 @@ from langchain_core.documents import Document
 logger = logging.getLogger(__name__)
 
 from vectorstores.config import (
+    ANNOUNCEMENT_CHUNKING_CONFIG,
+    ANNOUNCEMENT_FULLTEXT_CHUNK_THRESHOLD,
     CHILD_CHUNK_SIZE,
     CHILD_CHUNK_OVERLAP,
     ChunkingConfig,
@@ -480,6 +482,59 @@ class DataLoader:
                                 )
                                 yield child_doc
                 else:
+                    # 공고 원문(_full_text) 청킹 분기
+                    full_text = data.get("_full_text", "")
+                    if (
+                        full_text
+                        and file_name == "announcements.jsonl"
+                        and len(full_text) > ANNOUNCEMENT_FULLTEXT_CHUNK_THRESHOLD
+                    ):
+                        # _full_text를 청크로 분할, 각 청크에 구조화 header 포함
+                        ft_chunks = self._split_text(
+                            full_text, ANNOUNCEMENT_CHUNKING_CONFIG,
+                        )
+                        header = f"{prefix} {content}" if prefix else content
+                        doc_id = data.get("id", "")
+
+                        for p_idx, ft_chunk in enumerate(ft_chunks):
+                            parent_content = f"{header}\n\n[공고 원문]\n{ft_chunk}"
+                            parent_data = data.copy()
+                            parent_data["content"] = parent_content
+                            p_id = f"{doc_id}_{p_idx}"
+
+                            parent_doc = self._create_document(
+                                parent_data, file_name,
+                                chunk_index=p_idx,
+                                collection_domain=collection_domain,
+                                chunk_type="parent",
+                            )
+                            yield parent_doc
+
+                            # Child 청크 생성 (정밀 검색용)
+                            if enable_parent_child:
+                                child_chunks = self._split_child_text(ft_chunk)
+                                for c_idx, child_text in enumerate(child_chunks):
+                                    child_content = (
+                                        f"{prefix} {child_text}"
+                                        if prefix else child_text
+                                    )
+                                    child_data = data.copy()
+                                    child_data["content"] = child_content
+
+                                    yield self._create_document(
+                                        child_data, file_name,
+                                        chunk_index=p_idx,
+                                        child_index=c_idx,
+                                        collection_domain=collection_domain,
+                                        chunk_type="child",
+                                        parent_id=p_id,
+                                    )
+                        continue
+
+                    # _full_text가 짧으면 content에 합침
+                    if full_text and file_name == "announcements.jsonl":
+                        content = f"{content}\n\n[공고 원문]\n{full_text}"
+
                     # Standalone: 청킹 불필요한 문서 (include_full_content 스킵)
                     if prefix:
                         standalone_data = data.copy()

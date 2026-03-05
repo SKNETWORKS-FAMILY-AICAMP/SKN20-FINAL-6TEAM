@@ -753,6 +753,11 @@ class DocumentMerger:
         for domain, docs in domain_docs.items():
             ScoreNormalizer.normalize_documents(docs)
 
+        # 1.6. 같은 원본 문서 청크 중 최고 점수만 유지
+        from chains.rag_chain import RAGChain
+        for domain, docs in domain_docs.items():
+            domain_docs[domain] = RAGChain._deduplicate_same_source(docs)
+
         # 2. 도메인별 예산 적용 + 점수순 정렬
         for domain, docs in domain_docs.items():
             # 점수 내림차순 정렬

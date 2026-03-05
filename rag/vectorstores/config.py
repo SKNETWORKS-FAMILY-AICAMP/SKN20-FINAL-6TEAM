@@ -201,3 +201,8 @@ OPTIONAL_CHUNK_THRESHOLD = 3500
 # 작은 청크(child)로 정밀 검색 → 부모(parent) 청크의 넓은 맥락을 LLM에 전달
 CHILD_CHUNK_SIZE = 500
 CHILD_CHUNK_OVERLAP = 50
+
+# 공고 원문(_full_text) 전용 청킹 설정
+# content(구조화 필드)와 별도로 _full_text를 청킹하여 contextual retrieval 지원
+ANNOUNCEMENT_FULLTEXT_CHUNK_THRESHOLD = 1500
+ANNOUNCEMENT_CHUNKING_CONFIG = ChunkingConfig(chunk_size=1500, chunk_overlap=150)

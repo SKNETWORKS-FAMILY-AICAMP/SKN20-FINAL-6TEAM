@@ -226,7 +226,9 @@ class RAGChain:
                 except Exception as e:
                     logger.error("공통 법령 DB 검색 실패: %s", e)
 
-            return self._deduplicate_documents(documents)
+            return self._deduplicate_same_source(
+                self._deduplicate_documents(documents)
+            )
 
         # MMR/similarity search + rerank
         fetch_k = k * 3 if use_rerank else k
@@ -284,7 +286,9 @@ class RAGChain:
             except Exception as e:
                 logger.error("공통 법령 DB 검색 실패: %s", e)
 
-        documents = self._deduplicate_documents(documents)
+        documents = self._deduplicate_same_source(
+            self._deduplicate_documents(documents)
+        )
 
         # 도메인 내 reranking 제거 — 최종 cross-domain rerank 1회로 통합
         if len(documents) > k:
@@ -827,6 +831,37 @@ class RAGChain:
         if len(unique) < len(documents):
             logger.info("[중복 제거] %d건 → %d건", len(documents), len(unique))
         return unique
+
+    @staticmethod
+    def _deduplicate_same_source(documents: list[Document]) -> list[Document]:
+        """같은 원본 문서(original_id)의 청크 중 최고 점수 1개만 유지합니다.
+
+        공고 원문 청킹 시 같은 공고의 여러 청크가 검색 결과를 점유하는 것을 방지합니다.
+        chunk_type="standalone" 또는 original_id가 없는 문서는 그대로 통과합니다.
+
+        Args:
+            documents: 문서 리스트
+
+        Returns:
+            동일 출처 중복 제거된 문서 리스트
+        """
+        source_best: dict[str, Document] = {}
+        ungrouped: list[Document] = []
+
+        for doc in documents:
+            oid = doc.metadata.get("original_id", "")
+            if not oid or doc.metadata.get("chunk_type") == "standalone":
+                ungrouped.append(doc)
+                continue
+            existing = source_best.get(oid)
+            if existing is None or doc.metadata.get("score", 0) > existing.metadata.get("score", 0):
+                source_best[oid] = doc
+
+        result = list(source_best.values()) + ungrouped
+        removed = len(documents) - len(result)
+        if removed > 0:
+            logger.info("[동일 출처 중복 제거] %d건 → %d건", len(documents), len(result))
+        return result
 
     async def astream(
         self,
