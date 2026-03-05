@@ -12,26 +12,46 @@ export MSYS_NO_PATHCONV=1
 
 BACKUP_FILE="chromadb_backup.tar.gz"
 MANIFEST_FILE="chromadb_backup.manifest"
-CHROMA_PORT="${CHROMA_PORT:-8200}"
 CHROMA_CONTAINER="bizi-chromadb"
-CHROMA_API="http://localhost:${CHROMA_PORT}/api/v2/tenants/default_tenant/databases/default_database"
 
-# compose 파일 자동 감지
-if [ -f "docker-compose.local.yaml" ]; then
+# compose 파일 자동 감지 (prod > local > default)
+if [ -f "docker-compose.prod.yaml" ]; then
+    COMPOSE_FILE="docker-compose.prod.yaml"
+elif [ -f "docker-compose.local.yaml" ]; then
     COMPOSE_FILE="docker-compose.local.yaml"
 else
     COMPOSE_FILE="docker-compose.yaml"
 fi
-
-# 볼륨명 자동 감지
-VOLUME_NAME=$(docker volume ls --format '{{.Name}}' | grep 'chromadb_data$' | head -1)
-if [ -z "$VOLUME_NAME" ]; then
-    echo "[ERROR] chromadb_data 볼륨을 찾을 수 없습니다."
-    echo "        docker compose up -d chromadb 로 먼저 기동하세요."
-    exit 1
-fi
-echo "볼륨: $VOLUME_NAME"
 echo "Compose: $COMPOSE_FILE"
+
+# 데이터 경로 자동 감지 (named volume vs bind mount)
+VOLUME_NAME=$(docker volume ls --format '{{.Name}}' | grep 'chromadb_data$' | head -1)
+BIND_MOUNT_DIR=""
+
+if [ -z "$VOLUME_NAME" ]; then
+    if [ -d "./chroma-data" ]; then
+        BIND_MOUNT_DIR="./chroma-data"
+        echo "데이터: 바인드 마운트 (${BIND_MOUNT_DIR})"
+    else
+        echo "[ERROR] chromadb_data 볼륨과 ./chroma-data 디렉토리를 모두 찾을 수 없습니다."
+        echo "        docker compose up -d chromadb 로 먼저 기동하세요."
+        exit 1
+    fi
+else
+    echo "데이터: Named Volume (${VOLUME_NAME})"
+fi
+
+# API URL 자동 감지 (외부 포트 없으면 컨테이너 내부 IP 사용)
+CHROMA_PORT_MAPPED=$(docker inspect "$CHROMA_CONTAINER" \
+    --format '{{range $p, $conf := .NetworkSettings.Ports}}{{if $conf}}{{(index $conf 0).HostPort}}{{end}}{{end}}' \
+    2>/dev/null | tr -d ' \n' | head -c 10)
+if [ -n "$CHROMA_PORT_MAPPED" ]; then
+    CHROMA_API="http://localhost:${CHROMA_PORT_MAPPED}/api/v2/tenants/default_tenant/databases/default_database"
+else
+    CHROMA_IP=$(docker inspect "$CHROMA_CONTAINER" \
+        --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 2>/dev/null | head -1)
+    CHROMA_API="http://${CHROMA_IP}:8000/api/v2/tenants/default_tenant/databases/default_database"
+fi
 
 # ─────────────────────────────────────────────
 # [1/5] 컬렉션 통계 수집 + 매니페스트 생성
@@ -86,11 +106,15 @@ sleep 2
 # [3/5] 볼륨 tar 압축
 # ─────────────────────────────────────────────
 echo "[3/5] ChromaDB 볼륨 백업 중..."
-docker run --rm \
-    -v "${VOLUME_NAME}:/data:ro" \
-    -v "$(pwd):/backup" \
-    alpine \
-    tar czf "/backup/${BACKUP_FILE}" -C /data .
+if [ -n "$BIND_MOUNT_DIR" ]; then
+    tar czf "$BACKUP_FILE" -C "$BIND_MOUNT_DIR" .
+else
+    docker run --rm \
+        -v "${VOLUME_NAME}:/data:ro" \
+        -v "$(pwd):/backup" \
+        alpine \
+        tar czf "/backup/${BACKUP_FILE}" -C /data .
+fi
 
 FILE_SIZE=$(ls -lh "$BACKUP_FILE" | awk '{print $5}')
 echo "      백업 파일: ${BACKUP_FILE} (${FILE_SIZE})"
