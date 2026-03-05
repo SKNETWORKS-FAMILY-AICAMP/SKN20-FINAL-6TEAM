@@ -622,14 +622,13 @@ class RAGChain:
         Returns:
             SourceDocument 리스트
         """
-        # ChromaDB에 meta_doc_s3_key가 없는 문서들은 DB에서 배치 조회
-        # ChromaDB metadata 키: meta_original_id (예: "PBLN_000000000117742")
-        ids_needing_lookup = [
+        # RDS announce 테이블에서 doc_s3_key 배치 조회
+        ids_for_lookup = [
             doc.metadata.get("meta_original_id", "")
             for doc in documents
-            if not doc.metadata.get("meta_doc_s3_key") and doc.metadata.get("meta_original_id")
+            if doc.metadata.get("meta_original_id")
         ]
-        s3_key_map = self._lookup_s3_keys(ids_needing_lookup)
+        s3_key_map = self._lookup_s3_keys(ids_for_lookup)
 
         sources = []
         for doc in documents:
@@ -642,9 +641,7 @@ class RAGChain:
             metadata = doc.metadata
 
             # doc_s3_key → presigned URL 생성
-            doc_s3_key = doc.metadata.get("meta_doc_s3_key", "")
-            if not doc_s3_key:
-                doc_s3_key = s3_key_map.get(doc.metadata.get("meta_original_id", ""), "")
+            doc_s3_key = s3_key_map.get(doc.metadata.get("meta_original_id", ""), "")
             if doc_s3_key:
                 try:
                     from utils.s3_client import get_s3_client
