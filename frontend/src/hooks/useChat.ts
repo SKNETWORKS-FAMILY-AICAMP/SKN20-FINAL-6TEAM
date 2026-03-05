@@ -34,7 +34,14 @@ const addAnswerCompleteNotification = (): void => {
   });
 };
 
-const isAbortError = (err: unknown): boolean => err instanceof DOMException && err.name === 'AbortError';
+const isAbortError = (err: unknown): boolean => {
+  if (err instanceof DOMException && err.name === 'AbortError') return true;
+  // Some browsers throw TypeError on aborted ReadableStream reads
+  if (err instanceof TypeError && /aborted|abort|cancel/i.test(err.message)) return true;
+  return false;
+};
+
+const sessionAbortControllers = new Map<string, AbortController>();
 
 export const useChat = () => {
   const {
@@ -53,8 +60,8 @@ export const useChat = () => {
   } = useChatStore();
   const { isAuthenticated } = useAuthStore();
   const streamingContentRefBySession = useRef<Map<string, string>>(new Map());
-  const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const rafRefBySession = useRef<Map<string, number>>(new Map());
+  const activeStreamingMessagesRef = useRef<Map<string, string>>(new Map());
 
   const cancelPendingRaf = useCallback((sessionId: string) => {
     const pendingRafId = rafRefBySession.current.get(sessionId);
@@ -64,16 +71,26 @@ export const useChat = () => {
     }
   }, []);
 
-  // Cleanup on unmount: abort all in-flight streams
+  // Cleanup on unmount: flush pending content, let streams continue in background
   useEffect(() => {
     return () => {
-      abortControllersRef.current.forEach((controller) => controller.abort());
-      abortControllersRef.current.clear();
-
+      // 1. Cancel pending RAFs (RAF callbacks may not fire after unmount)
       rafRefBySession.current.forEach((rafId) => cancelAnimationFrame(rafId));
       rafRefBySession.current.clear();
 
-      streamingContentRefBySession.current.clear();
+      // 2. Flush pending streaming content to Zustand (so remount shows latest)
+      activeStreamingMessagesRef.current.forEach((messageId, sessionId) => {
+        const pendingContent = streamingContentRefBySession.current.get(sessionId);
+        if (pendingContent) {
+          useChatStore.getState().updateMessageInSession(sessionId, messageId, {
+            content: pendingContent,
+          });
+        }
+      });
+      activeStreamingMessagesRef.current.clear();
+      // NOTE: streamingContentRefBySession는 clear하지 않음 — 진행 중인 async 코드가 필요
+      // NOTE: 스트림 abort 안 함 — 백그라운드에서 계속 실행
+      // NOTE: finishSessionResponse 안 함 — finally 블록이 처리
     };
   }, []);
 
@@ -118,6 +135,7 @@ export const useChat = () => {
       const history = previousMessages
         .filter((m) =>
           (m.type === 'user' || m.type === 'assistant')
+          && m.content.trim() !== ''
           && !m.content.startsWith('\uC8C4\uC1A1\uD569\uB2C8\uB2E4. \uC751\uB2F5\uC744 \uC0DD\uC131\uD558\uB294 \uC911')
           && !m.content.startsWith('\uBB34\uB8CC \uCCB4\uD5D8 \uBA54\uC2DC\uC9C0\uB97C \uBAA8\uB450')
         )
@@ -138,6 +156,7 @@ export const useChat = () => {
       addMessageToSession(targetSessionId, userMessage);
       startSessionResponse(targetSessionId);
 
+      let streamAborted = false;
       try {
         let response: string;
         let agentCode: AgentCode;
@@ -158,7 +177,8 @@ export const useChat = () => {
 
             // Create new AbortController for this stream
             const abortController = new AbortController();
-            abortControllersRef.current.set(targetSessionId, abortController);
+            abortController.signal.addEventListener('abort', () => { streamAborted = true; });
+            sessionAbortControllers.set(targetSessionId, abortController);
 
             // Add empty assistant message first (without agent_code - will be set on done)
             const initialMessage: ChatMessage = {
@@ -169,6 +189,7 @@ export const useChat = () => {
               synced: isAuthenticated,
             };
             addMessageToSession(targetSessionId, initialMessage);
+            activeStreamingMessagesRef.current.set(targetSessionId, assistantMessageId);
 
             let finalDomain = 'general';
 
@@ -229,6 +250,7 @@ export const useChat = () => {
                 });
               },
               onError: (error) => {
+                if (abortController.signal.aborted) return;
                 cancelPendingRaf(targetSessionId);
                 updateMessageInSession(targetSessionId, assistantMessageId, {
                   content: ERROR_MESSAGE,
@@ -313,8 +335,7 @@ export const useChat = () => {
           incrementAuthenticatedCount();
         }
       } catch (err) {
-        // Ignore AbortError (user-initiated cancellation)
-        if (isAbortError(err)) return;
+        if (isAbortError(err) || streamAborted) return;
 
         const errorMessage: ChatMessage = {
           id: generateId(),
@@ -326,7 +347,8 @@ export const useChat = () => {
         addMessageToSession(targetSessionId, errorMessage);
       } finally {
         cancelPendingRaf(targetSessionId);
-        abortControllersRef.current.delete(targetSessionId);
+        sessionAbortControllers.delete(targetSessionId);
+        activeStreamingMessagesRef.current.delete(targetSessionId);
         streamingContentRefBySession.current.delete(targetSessionId);
         finishSessionResponse(targetSessionId);
       }
@@ -353,10 +375,10 @@ export const useChat = () => {
     const targetSessionId = sessionId ?? useChatStore.getState().currentSessionId;
     if (!targetSessionId) return;
 
-    const controller = abortControllersRef.current.get(targetSessionId);
+    const controller = sessionAbortControllers.get(targetSessionId);
     if (!controller) return;
     controller.abort();
-    abortControllersRef.current.delete(targetSessionId);
+    sessionAbortControllers.delete(targetSessionId);
   }, []);
 
   return { sendMessage, stopStreaming };
