@@ -57,6 +57,35 @@ Bizi는 다음 분야의 전문 상담을 제공합니다:
 
 위 분야에 대해 궁금하신 점이 있으시면 질문해주세요!"""
 
+CHITCHAT_RESPONSES = {
+    "chitchat_greeting": (
+        "안녕하세요! 저는 경영 상담 AI **Bizi**입니다. 😊\n\n"
+        "**창업/지원사업**, **세무/회계**, **인사/노무**, **법률** 분야의 전문 상담을 제공합니다.\n\n"
+        "궁금하신 점이 있으시면 편하게 질문해주세요!"
+    ),
+    "chitchat_farewell": (
+        "감사합니다! 도움이 필요하시면 언제든 찾아주세요. 좋은 하루 되세요! 👋"
+    ),
+    "chitchat_thanks": (
+        "도움이 되셨다니 기쁩니다! 추가 질문이 있으시면 편하게 말씀해주세요. 😊"
+    ),
+    "chitchat_bot_identity": (
+        "저는 **Bizi**, 경영 상담 AI입니다.\n\n"
+        "다음 4개 전문 분야에서 상담을 제공합니다:\n"
+        "1. **창업/지원사업** — 사업자등록, 법인설립, 정부 지원사업\n"
+        "2. **세무/회계** — 부가세, 법인세, 회계 처리\n"
+        "3. **인사/노무** — 근로계약, 급여, 퇴직금, 4대보험\n"
+        "4. **법률** — 상법, 소송, 특허, 계약법\n\n"
+        "궁금하신 분야가 있으시면 질문해주세요!"
+    ),
+    "chitchat_affirmative": (
+        "네, 알겠습니다! 추가 질문이 있으시면 편하게 말씀해주세요. 😊"
+    ),
+    "chitchat_emotional": (
+        "감사합니다! 더 도움이 필요하시면 언제든 말씀해주세요. 😊"
+    ),
+}
+
 DOCUMENT_GENERATION_SHORTCUT_RESPONSE = (
     "요청하신 문서는 아래 버튼을 통해 바로 작성하실 수 있습니다."
 )
@@ -449,6 +478,8 @@ Classify the user question into one or more domains from:
 6. 계약서, 동의서, 의향서, 협약서 등 문서 관련 질문은 문서 내용의 전문 분야에 따라 도메인 분류
 7. **도메인 외 질문 거부 기준**: 개인 투자(주식, 부동산, 코인), 일상 대화(날씨, 음식, 여행), 기술 개발(프로그래밍, 앱개발, 서버 구축), 의료/건강 상담은 반드시 `is_relevant: false`로 분류
 8. 질문에 도메인 키워드가 일부 포함되더라도 핵심 의도가 도메인 외이면 거부 (예: "주식 투자" ≠ "투자유치", "앱 개발" ≠ "사업 개발")
+9. **일상 대화(chitchat)**: 인사, 감사, 작별, 봇 정체 질문, 단순 긍정/확인, 감정 표현 등은 `is_relevant: false`, `domains: []`, intent를 `"chitchat_*"` 카테고리로 설정
+10. 인사 + 도메인 질문 복합 ("안녕 세무 질문인데요")은 도메인으로 분류 (chitchat 아님)
 
 ## 분류 예시
 
@@ -458,18 +489,29 @@ Classify the user question into one or more domains from:
 - "스마트폰 앱을 직접 개발하고 싶습니다" → {{"domains": [], "confidence": 0.9, "is_relevant": false, "reasoning": "소프트웨어 개발 학습은 Bizi 상담 범위 외"}}
 - "마라톤 훈련 계획 알려주세요" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "일상생활/운동은 Bizi 상담 범위 외"}}
 
+### 일상 대화 (chitchat)
+- "안녕하세요" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "인사말", "intent": "chitchat_greeting"}}
+- "고마워요" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "감사 표현", "intent": "chitchat_thanks"}}
+- "너 뭐 할 수 있어?" → {{"domains": [], "confidence": 0.9, "is_relevant": false, "reasoning": "봇 정체 질문", "intent": "chitchat_bot_identity"}}
+- "네 알겠어요" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "단순 긍정", "intent": "chitchat_affirmative"}}
+- "수고하세요" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "작별 인사", "intent": "chitchat_farewell"}}
+
 ### 경계 케이스 (도메인 분류)
 - "투자유치를 위한 IR 자료 준비 방법" → {{"domains": ["startup_funding"], "confidence": 0.85, "is_relevant": true, "reasoning": "투자유치는 창업 영역"}}
 - "법인 설립 후 세금 처리" → {{"domains": ["startup_funding", "finance_tax"], "confidence": 0.9, "is_relevant": true, "reasoning": "법인설립+세무 복합"}}
 - "퇴직금 계산 방법" → {{"domains": ["hr_labor"], "confidence": 0.95, "is_relevant": true, "reasoning": "노무 영역"}}
 
 ## 의도 분류 규칙 (intent)
-- `intent`는 `"document_generation"` 또는 `"consultation"` 중 하나
+- `"consultation"`: 도메인 관련 질문/상담 (기본값)
 - `"document_generation"`: 사용자가 문서를 직접 생성/작성해달라고 요청하는 경우
   - 예: "근로계약서 만들어줘", "NDA 작성해줘", "사업계획서 써줘", "용역계약서 생성해줘"
   - 핵심 동사: 만들어줘, 작성해줘, 생성해줘, 써줘, 작성해주세요
-- `"consultation"`: 문서에 대한 질문, 주의사항, 방법, 조항 등을 묻는 경우 (기본값)
-  - 예: "계약서 작성할 때 주의사항", "NDA에 포함할 조항은?", "사업계획서 잘 쓰는 법"
+- `"chitchat_greeting"`: 인사 ("안녕", "반갑습니다", "하이")
+- `"chitchat_farewell"`: 작별 ("잘가", "수고하세요", "bye")
+- `"chitchat_thanks"`: 감사 ("고마워", "감사합니다", "도움이 됐어요")
+- `"chitchat_bot_identity"`: 봇 정체 질문 ("너 누구야", "뭐 할 수 있어?")
+- `"chitchat_affirmative"`: 긍정/확인 ("네", "응", "알겠어")
+- `"chitchat_emotional"`: 감정 표현 ("ㅋㅋ", "대단해", "멋지다")
 - 확실하지 않으면 `"consultation"`으로 설정
 
 ## 사용자 질문

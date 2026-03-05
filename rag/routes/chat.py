@@ -159,8 +159,11 @@ async def chat(request: ChatRequest) -> ChatResponse:
             session_data = await get_session_full(owner_key, request.session_id)
             if session_data and isinstance(session_data, dict):
                 turns = session_data.get("turns", [])
-                if turns:
-                    previous_domains = turns[-1].get("domains")
+                for turn in reversed(turns):
+                    prev = turn.get("domains")
+                    if prev:
+                        previous_domains = prev
+                        break
 
         if request.user_context:
             companies_count = len(request.user_context.companies) if request.user_context.companies else (1 if request.user_context.company else 0)
@@ -414,8 +417,11 @@ async def chat_stream(request: ChatRequest):
                 stream_session_data = await get_session_full(owner_key, request.session_id)
                 if stream_session_data and isinstance(stream_session_data, dict):
                     stream_turns = stream_session_data.get("turns", [])
-                    if stream_turns:
-                        stream_previous_domains = stream_turns[-1].get("domains")
+                    for turn in reversed(stream_turns):
+                        prev = turn.get("domains")
+                        if prev:
+                            stream_previous_domains = prev
+                            break
 
             if request.user_context:
                 stream_companies_count = len(request.user_context.companies) if request.user_context.companies else (1 if request.user_context.company else 0)

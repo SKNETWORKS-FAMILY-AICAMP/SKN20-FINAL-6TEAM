@@ -11,6 +11,7 @@ DOMAIN_LABELS: dict[str, str] = {
     "hr_labor": "인사/노무",
     "law_common": "법률",
     "document": "문서",
+    "chitchat": "일상대화",
 }
 
 # 도메인 분류 키워드 (원형/lemma 기반)
@@ -64,6 +65,11 @@ _DEFAULT_DOMAIN_KEYWORDS: dict[str, list[str]] = {
         "휴가", "휴직", "병가", "경조사",
         # 동사 (원형)
         "짜르다", "짤리다",
+    ],
+    "chitchat": [
+        "안녕", "반갑다", "하이", "헬로",
+        "고맙다", "감사", "감사하다",
+        "수고", "잘가",
     ],
     "law_common": [
         # 법률 일반

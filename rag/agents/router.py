@@ -51,6 +51,7 @@ from utils.middleware import get_metrics_collector
 from utils.domain_classifier import DomainClassificationResult, get_domain_classifier
 from utils.legal_supplement import needs_legal_supplement
 from utils.prompts import (
+    CHITCHAT_RESPONSES,
     DOCUMENT_GENERATION_SHORTCUT_RESPONSE,
     LLM_CLASSIFICATION_FAILURE_RESPONSE,
     REJECTION_RESPONSE,
@@ -206,6 +207,7 @@ class MainRouter:
         workflow.add_node("generate", self._agenerate_node)
         workflow.add_node("evaluate", self._aevaluate_node)
         workflow.add_node("retry_with_alternatives", self._aretry_with_alternatives_node)
+        workflow.add_node("chitchat_respond", self._achitchat_node)
 
         # 엣지 정의
         workflow.set_entry_point("classify")
@@ -215,10 +217,12 @@ class MainRouter:
             self._should_continue_after_classify,
             {
                 "continue": "decompose",
+                "chitchat": "chitchat_respond",
                 "document_shortcut": END,
                 "reject": END,
             },
         )
+        workflow.add_edge("chitchat_respond", END)
 
         workflow.add_edge("decompose", "retrieve")
         workflow.add_edge("retrieve", "generate")
@@ -245,6 +249,8 @@ class MainRouter:
         """
         classification = state.get("classification_result")
         if classification and not classification.is_relevant:
+            if classification.intent and classification.intent.startswith("chitchat"):
+                return "chitchat"
             return "reject"
         # actions가 이미 설정되어 있으면 document shortcut (_aclassify_node에서 설정)
         if state.get("actions"):
@@ -340,22 +346,47 @@ class MainRouter:
         # 원본 쿼리 보존 (생성/평가에서 사용)
         state["original_query"] = query
 
-        # LLM 기반 쿼리 재작성 (history 있을 때만 동작)
-        rewrite_meta = await self.query_rewriter.arewrite_with_meta(query, history)
-        rewritten_query = rewrite_meta.query
-        was_rewritten = rewrite_meta.rewritten
-        if was_rewritten:
-            state["query"] = rewritten_query
-        state["timing_metrics"]["query_rewrite_time"] = rewrite_meta.elapsed
-        state["timing_metrics"]["query_rewrite_reason"] = rewrite_meta.reason
-        state["timing_metrics"]["query_rewrite_applied"] = was_rewritten
-        state["timing_metrics"]["query_rewrite_topic_changed"] = rewrite_meta.topic_changed
+        # Chitchat 사전검사: query rewrite 전에 원본 쿼리로 키워드 기반 chitchat 감지
+        # (rewrite가 "고마워" → "사업자등록 관련 질문이 있나요?"로 변환하는 문제 방지)
+        pre_chitchat = self.domain_classifier._keyword_classify(query)
+        if pre_chitchat and not pre_chitchat.is_relevant and pre_chitchat.intent and pre_chitchat.intent.startswith("chitchat"):
+            # LLM 모드에서도 원본 쿼리로 LLM 분류 시도 (더 정확한 intent 파악)
+            if self.domain_classifier.settings.enable_llm_domain_classification:
+                llm_result = await asyncio.to_thread(
+                    self.domain_classifier.classify, query
+                )
+                if llm_result.intent and llm_result.intent.startswith("chitchat"):
+                    pre_chitchat = llm_result
+            state["classification_result"] = pre_chitchat
+            state["domains"] = pre_chitchat.domains
+            state["timing_metrics"]["query_rewrite_time"] = 0.0
+            state["timing_metrics"]["query_rewrite_reason"] = "skipped_chitchat"
+            state["timing_metrics"]["query_rewrite_applied"] = False
+            state["timing_metrics"]["query_rewrite_topic_changed"] = False
+            classification = pre_chitchat
+            rewrite_meta = type("Meta", (), {
+                "rewritten": False, "query": query, "reason": "skipped_chitchat",
+                "elapsed": 0.0, "topic_changed": False,
+            })()
+            was_rewritten = False
+            classify_query = query
+        else:
+            # LLM 기반 쿼리 재작성 (history 있을 때만 동작)
+            rewrite_meta = await self.query_rewriter.arewrite_with_meta(query, history)
+            rewritten_query = rewrite_meta.query
+            was_rewritten = rewrite_meta.rewritten
+            if was_rewritten:
+                state["query"] = rewritten_query
+            state["timing_metrics"]["query_rewrite_time"] = rewrite_meta.elapsed
+            state["timing_metrics"]["query_rewrite_reason"] = rewrite_meta.reason
+            state["timing_metrics"]["query_rewrite_applied"] = was_rewritten
+            state["timing_metrics"]["query_rewrite_topic_changed"] = rewrite_meta.topic_changed
 
-        # 벡터 유사도 기반 도메인 분류 (CPU-bound → 스레드 위임)
-        classify_query = rewritten_query if was_rewritten else query
-        classification = await asyncio.to_thread(
-            self.domain_classifier.classify, classify_query
-        )
+            # 벡터 유사도 기반 도메인 분류 (CPU-bound → 스레드 위임)
+            classify_query = rewritten_query if was_rewritten else query
+            classification = await asyncio.to_thread(
+                self.domain_classifier.classify, classify_query
+            )
         state["classification_result"] = classification
         state["domains"] = classification.domains
 
@@ -401,27 +432,40 @@ class MainRouter:
                 state["domains"] = classification.domains
 
             else:
-                # 거부 시에도 키워드 기반 액션 수집 (문서 생성 버튼 등)
-                fallback_actions = self.generator._collect_actions(
-                    classify_query, {}, []
-                )
-
-                # LLM 재시도 실패 vs 도메인 외 질문 분기
-                if classification.method == "llm_retry_failed":
-                    state["final_response"] = LLM_CLASSIFICATION_FAILURE_RESPONSE
+                # chitchat인 경우
+                if classification.intent and classification.intent.startswith("chitchat"):
+                    state["final_response"] = CHITCHAT_RESPONSES.get(
+                        classification.intent, CHITCHAT_RESPONSES["chitchat_greeting"]
+                    )
+                    state["sources"] = []
+                    state["actions"] = []
+                    logger.info(
+                        "[분류] chitchat 감지 (intent: %s, 방법: %s)",
+                        classification.intent,
+                        classification.method,
+                    )
                 else:
-                    if fallback_actions:
-                        state["final_response"] = DOCUMENT_GENERATION_SHORTCUT_RESPONSE
+                    # 거부 시에도 키워드 기반 액션 수집 (문서 생성 버튼 등)
+                    fallback_actions = self.generator._collect_actions(
+                        classify_query, {}, []
+                    )
+
+                    # LLM 재시도 실패 vs 도메인 외 질문 분기
+                    if classification.method == "llm_retry_failed":
+                        state["final_response"] = LLM_CLASSIFICATION_FAILURE_RESPONSE
                     else:
-                        state["final_response"] = REJECTION_RESPONSE
-                state["sources"] = []
-                state["actions"] = fallback_actions
-                logger.info(
-                    "[분류] 도메인 외 질문 거부 (방법: %s, 신뢰도: %.2f, 액션: %d건)",
-                    classification.method,
-                    classification.confidence,
-                    len(fallback_actions),
-                )
+                        if fallback_actions:
+                            state["final_response"] = DOCUMENT_GENERATION_SHORTCUT_RESPONSE
+                        else:
+                            state["final_response"] = REJECTION_RESPONSE
+                    state["sources"] = []
+                    state["actions"] = fallback_actions
+                    logger.info(
+                        "[분류] 도메인 외 질문 거부 (방법: %s, 신뢰도: %.2f, 액션: %d건)",
+                        classification.method,
+                        classification.confidence,
+                        len(fallback_actions),
+                    )
         else:
             # 문서 생성 shortcut 판별: LLM intent 우선, fallback으로 키워드 매칭
             # 도메인은 원래 분류 결과를 유지 (hr_labor, startup_funding 등)
@@ -472,6 +516,10 @@ class MainRouter:
         classify_time = time.time() - start
         state["timing_metrics"]["classify_time"] = classify_time
 
+        return state
+
+    async def _achitchat_node(self, state: RouterState) -> RouterState:
+        """chitchat 응답 노드. _aclassify_node에서 이미 final_response 설정됨."""
         return state
 
     async def _adecompose_node(self, state: RouterState) -> RouterState:
@@ -1060,17 +1108,32 @@ class MainRouter:
         # 원본 쿼리 보존 (생성/평가에서 사용)
         original_query = query
 
-        # LLM 기반 쿼리 재작성 (history 있을 때만 동작)
-        rewrite_meta = await self.query_rewriter.arewrite_with_meta(query, history or [])
-        rewritten_query = rewrite_meta.query
-        was_rewritten = rewrite_meta.rewritten
-        if was_rewritten:
-            query = rewritten_query
+        # Chitchat 사전검사: query rewrite 전에 원본 쿼리로 키워드 기반 chitchat 감지
+        pre_chitchat = self.domain_classifier._keyword_classify(query)
+        if pre_chitchat and not pre_chitchat.is_relevant and pre_chitchat.intent and pre_chitchat.intent.startswith("chitchat"):
+            # LLM 모드에서도 원본 쿼리로 LLM 분류 (더 정확한 intent)
+            if self.domain_classifier.settings.enable_llm_domain_classification:
+                llm_result = self.domain_classifier.classify(query)
+                if llm_result.intent and llm_result.intent.startswith("chitchat"):
+                    pre_chitchat = llm_result
+            classification = pre_chitchat
+            rewrite_meta = type("Meta", (), {
+                "rewritten": False, "query": query, "reason": "skipped_chitchat",
+                "elapsed": 0.0, "topic_changed": False,
+            })()
+            was_rewritten = False
+        else:
+            # LLM 기반 쿼리 재작성 (history 있을 때만 동작)
+            rewrite_meta = await self.query_rewriter.arewrite_with_meta(query, history or [])
+            rewritten_query = rewrite_meta.query
+            was_rewritten = rewrite_meta.rewritten
+            if was_rewritten:
+                query = rewritten_query
 
-        # 벡터 유사도 기반 도메인 분류 (CPU-bound → 스레드 위임)
-        classification = await asyncio.to_thread(
-            self.domain_classifier.classify, query
-        )
+            # 도메인 분류 (CPU-bound → 스레드 위임)
+            classification = await asyncio.to_thread(
+                self.domain_classifier.classify, query
+            )
 
         logger.info(
             "[스트리밍/분류] 원본='%s' | 재작성=%s('%s') | 도메인=%s(%.2f) | relevant=%s | method=%s",
@@ -1115,6 +1178,31 @@ class MainRouter:
                 )
 
         if not classification.is_relevant:
+            # chitchat 처리
+            if classification.intent and classification.intent.startswith("chitchat"):
+                chitchat_msg = CHITCHAT_RESPONSES.get(
+                    classification.intent, CHITCHAT_RESPONSES["chitchat_greeting"]
+                )
+                logger.info(
+                    "[스트리밍] chitchat 감지 (intent: %s)", classification.intent,
+                )
+                for char in chitchat_msg:
+                    yield {"type": "token", "content": char}
+                    await asyncio.sleep(0.02)
+                yield {
+                    "type": "done",
+                    "content": chitchat_msg,
+                    "domain": "general",
+                    "domains": [],
+                    "sources": [],
+                    "actions": [],
+                    "query_rewrite_applied": rewrite_meta.rewritten,
+                    "query_rewrite_reason": rewrite_meta.reason,
+                    "query_rewrite_time": rewrite_meta.elapsed,
+                    "query_rewrite_topic_changed": rewrite_meta.topic_changed,
+                }
+                return
+
             if classification.method == "llm_retry_failed":
                 reject_msg = LLM_CLASSIFICATION_FAILURE_RESPONSE
                 logger.info("[스트리밍] LLM 분류 재시도 실패 - 오류 안내 반환")

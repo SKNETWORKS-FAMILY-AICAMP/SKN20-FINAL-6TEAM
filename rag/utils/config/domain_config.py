@@ -302,6 +302,11 @@ def load_domain_config() -> DomainConfig:
                     row["query_text"] for row in cursor.fetchall()
                 ]
 
+        # chitchat 키워드는 DB에 agent code가 없으므로 default에서 병합
+        default_config = _get_default_config()
+        if "chitchat" not in config.keywords and "chitchat" in default_config.keywords:
+            config.keywords["chitchat"] = default_config.keywords["chitchat"]
+
         logger.info(
             "[도메인 설정 DB] 로드 완료: 키워드 %d개, 규칙 %d개, 쿼리 %d개",
             sum(len(kws) for kws in config.keywords.values()),

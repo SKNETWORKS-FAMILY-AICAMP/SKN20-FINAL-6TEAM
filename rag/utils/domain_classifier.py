@@ -169,6 +169,23 @@ class DomainClassifier:
             total_matches = sum(len(kws) for kws in matched_keywords.values())
             confidence = min(1.0, 0.5 + (total_matches * 0.1))
 
+            # chitchat only → is_relevant=False
+            if detected_domains == ["chitchat"]:
+                return DomainClassificationResult(
+                    domains=[],
+                    confidence=confidence,
+                    is_relevant=False,
+                    method="keyword",
+                    matched_keywords=matched_keywords,
+                    intent="chitchat_greeting",
+                )
+
+            # chitchat + real domains → drop chitchat, keep real domains
+            real_domains = [d for d in detected_domains if d != "chitchat"]
+            if real_domains and len(real_domains) < len(detected_domains):
+                matched_keywords.pop("chitchat", None)
+                detected_domains = real_domains
+
             return DomainClassificationResult(
                 domains=detected_domains,
                 confidence=confidence,
@@ -290,6 +307,14 @@ class DomainClassifier:
         if self.settings.enable_llm_domain_classification:
             llm_result = self._llm_classify(query)
             if llm_result.method != "llm_error":
+                # Chitchat: skip keyword/heuristic guardrails
+                if llm_result.intent and llm_result.intent.startswith("chitchat"):
+                    logger.info(
+                        "[domain classification] chitchat detected by LLM: intent=%s",
+                        llm_result.intent,
+                    )
+                    return llm_result
+
                 # Guardrail: avoid false rejection in LLM-only mode.
                 keyword_result = self._keyword_classify(query)
                 if keyword_result and keyword_result.is_relevant:
