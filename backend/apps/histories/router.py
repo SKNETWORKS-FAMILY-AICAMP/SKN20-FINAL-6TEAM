@@ -141,12 +141,17 @@ async def get_history_thread_detail(
                     if target:
                         histories = []
                         for turn in target.get("turns", []):
+                            turn_eval = turn.get("evaluation_data") or {}
+                            turn_sources = turn.get("sources")
+                            if turn_sources:
+                                turn_eval = {**turn_eval, "sources": turn_sources}
                             histories.append(HistoryResponse(
                                 history_id=0,
                                 user_id=current_user.user_id,
                                 agent_code=turn.get("agent_code", "A0000001"),
                                 question=turn.get("question"),
                                 answer=turn.get("answer"),
+                                evaluation_data=turn_eval if turn_eval else None,
                                 create_date=turn.get("timestamp"),
                             ))
                         return HistoryThreadDetailResponse(

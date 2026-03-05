@@ -131,6 +131,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 cached_response.session_id = request.session_id
                 cached_domains = cached_response.domains or []
                 cached_sources = cached_response.sources or []
+                cached_src_meta = [{"title": s.title, "source": s.source, "url": s.url} for s in cached_sources[:5]]
                 await append_session_turn(
                     owner_key,
                     request.session_id,
@@ -139,7 +140,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
                     user_id=_extract_user_id(request),
                     agent_code=_get_agent_code(cached_domains),
                     domains=cached_domains,
-                    sources=[{"title": s.title, "source": s.source, "url": s.url} for s in cached_sources[:5]],
+                    sources=cached_src_meta,
                 )
                 schedule_write_through(
                     user_id=_extract_user_id(request),
@@ -148,6 +149,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
                     answer=cached_response.content,
                     agent_code=_get_agent_code(cached_domains),
                     evaluation_data=None,
+                    sources=cached_src_meta,
                 )
                 return cached_response
 
@@ -245,6 +247,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         except Exception as e:
             logger.warning("일반 응답 evaluation_data 생성 실패: %s", e)
 
+        resp_src_meta = [{"title": s.title, "source": s.source, "url": s.url} for s in (response.sources or [])[:5]]
         await append_session_turn(
             owner_key,
             request.session_id,
@@ -253,7 +256,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             user_id=_extract_user_id(request),
             agent_code=_get_agent_code(response.domains),
             domains=response.domains,
-            sources=[{"title": s.title, "source": s.source, "url": s.url} for s in (response.sources or [])[:5]],
+            sources=resp_src_meta,
             evaluation_data=eval_data_dict,
         )
         schedule_write_through(
@@ -263,6 +266,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             answer=response.content,
             agent_code=_get_agent_code(response.domains),
             evaluation_data=eval_data_dict,
+            sources=resp_src_meta,
         )
 
         # 캐시 저장
@@ -379,6 +383,10 @@ async def chat_stream(request: ChatRequest):
                     )
                     yield f"data: {done_chunk.model_dump_json()}\n\n"
                     cached_src_list = cached.get("sources", [])
+                    stream_cached_src_meta = [
+                        {"title": s.get("title", ""), "source": s.get("source", ""), "url": s.get("url", "")}
+                        for s in cached_src_list[:5]
+                    ]
                     await append_session_turn(
                         owner_key,
                         request.session_id,
@@ -387,10 +395,7 @@ async def chat_stream(request: ChatRequest):
                         user_id=_extract_user_id(request),
                         agent_code=_get_agent_code(cached_domains),
                         domains=cached_domains,
-                        sources=[
-                            {"title": s.get("title", ""), "source": s.get("source", ""), "url": s.get("url", "")}
-                            for s in cached_src_list[:5]
-                        ],
+                        sources=stream_cached_src_meta,
                     )
                     schedule_write_through(
                         user_id=_extract_user_id(request),
@@ -399,6 +404,7 @@ async def chat_stream(request: ChatRequest):
                         answer=cached_content,
                         agent_code=_get_agent_code(cached_domains),
                         evaluation_data=None,
+                        sources=stream_cached_src_meta,
                     )
                     return
 
@@ -644,6 +650,10 @@ async def chat_stream(request: ChatRequest):
             except Exception as e:
                 logger.warning("스트리밍 evaluation_data 생성 실패: %s", e)
 
+            stream_src_meta = [
+                {"title": s.title if hasattr(s, 'title') else "", "source": s.source if hasattr(s, 'source') else "", "url": s.url if hasattr(s, 'url') else ""}
+                for s in (final_sources or [])[:5]
+            ]
             await append_session_turn(
                 owner_key,
                 request.session_id,
@@ -652,10 +662,7 @@ async def chat_stream(request: ChatRequest):
                 user_id=_extract_user_id(request),
                 agent_code=_get_agent_code(final_domains),
                 domains=final_domains,
-                sources=[
-                    {"title": s.title if hasattr(s, 'title') else "", "source": s.source if hasattr(s, 'source') else "", "url": s.url if hasattr(s, 'url') else ""}
-                    for s in (final_sources or [])[:5]
-                ],
+                sources=stream_src_meta,
                 evaluation_data=eval_data_dict,
             )
             schedule_write_through(
@@ -665,6 +672,7 @@ async def chat_stream(request: ChatRequest):
                 answer=final_content,
                 agent_code=_get_agent_code(final_domains),
                 evaluation_data=eval_data_dict,
+                sources=stream_src_meta,
             )
 
             # 출처 정보

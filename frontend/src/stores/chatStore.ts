@@ -1,6 +1,6 @@
 ﻿import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { AgentCode, ChatMessage, ChatSession } from '../types';
+import type { AgentCode, ChatMessage, ChatSession, SourceReference } from '../types';
 import api from '../lib/api';
 import { generateId } from '../lib/utils';
 
@@ -13,6 +13,10 @@ interface HistoryItem {
   question: string;
   answer: string;
   create_date?: string;
+  evaluation_data?: {
+    sources?: Array<{ title: string; source: string; url: string; doc_download_url?: string }>;
+    [key: string]: unknown;
+  } | null;
 }
 
 interface HistoryThreadSummary {
@@ -36,9 +40,19 @@ const historyItemToMessages = (item: HistoryItem): ChatMessage[] => {
   const safeAgentCode: AgentCode = /^A\d{7}$/.test(item.agent_code)
     ? (item.agent_code as AgentCode)
     : 'A0000001';
+
+  const rawSources = item.evaluation_data?.sources;
+  const sources: SourceReference[] | undefined = rawSources?.length
+    ? rawSources.map(s => ({
+        title: s.title || '', source: s.source || '',
+        url: s.url || '', docDownloadUrl: s.doc_download_url || '',
+      }))
+    : undefined;
+
   return [
     { id: generateId(), type: 'user', content: item.question, timestamp, synced: true },
-    { id: generateId(), type: 'assistant', content: item.answer, agent_code: safeAgentCode, timestamp, synced: true },
+    { id: generateId(), type: 'assistant', content: item.answer, agent_code: safeAgentCode,
+      timestamp, synced: true, ...(sources ? { sources } : {}) },
   ];
 };
 
@@ -293,12 +307,19 @@ export const useChatStore = create<ChatState>()(
               if (!assistantMsg || assistantMsg.type !== 'assistant') continue;
 
               try {
+                const evalData: Record<string, unknown> = { ...(assistantMsg.evaluation_data || {}) };
+                if (assistantMsg.sources?.length) {
+                  evalData.sources = assistantMsg.sources.map(s => ({
+                    title: s.title, source: s.source, url: s.url,
+                    doc_download_url: s.docDownloadUrl || '',
+                  }));
+                }
                 const res: { data: { history_id: number } } = await api.post('/histories', {
                   agent_code: assistantMsg.agent_code || 'A0000001',
                   question: msg.content,
                   answer: assistantMsg.content,
                   parent_history_id: rootHistoryId,
-                  ...(assistantMsg.evaluation_data ? { evaluation_data: assistantMsg.evaluation_data } : {}),
+                  ...(Object.keys(evalData).length > 0 ? { evaluation_data: evalData } : {}),
                 });
                 const newHistoryId = res.data.history_id;
                 // 첫 번째 저장된 메시지의 history_id가 이 세션의 root

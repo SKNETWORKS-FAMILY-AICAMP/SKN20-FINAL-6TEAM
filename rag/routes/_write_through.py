@@ -46,6 +46,7 @@ async def save_turn_to_db(
     answer: str,
     agent_code: str,
     evaluation_data: dict | None = None,
+    sources: list[dict] | None = None,
 ) -> None:
     """단건 턴을 Backend /histories/batch로 저장. 실패 시 로그만 남김."""
     settings = get_settings()
@@ -57,7 +58,12 @@ async def save_turn_to_db(
         "question": question,
         "answer": answer,
     }
-    if evaluation_data:
+    if sources:
+        # sources를 evaluation_data에 병합 (복사 후 추가)
+        merged = dict(evaluation_data) if evaluation_data else {}
+        merged["sources"] = sources
+        turn["evaluation_data"] = merged
+    elif evaluation_data:
         turn["evaluation_data"] = evaluation_data
 
     try:
@@ -95,6 +101,7 @@ def schedule_write_through(
     answer: str,
     agent_code: str = "A0000001",
     evaluation_data: dict | None = None,
+    sources: list[dict] | None = None,
 ) -> None:
     """Fire-and-forget으로 MySQL 저장을 스케줄링.
 
@@ -113,5 +120,6 @@ def schedule_write_through(
             answer=answer,
             agent_code=agent_code,
             evaluation_data=evaluation_data,
+            sources=sources,
         )
     )

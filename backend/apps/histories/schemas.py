@@ -14,6 +14,15 @@ class RetrievalEvaluationData(BaseModel):
     used_multi_query: bool = Field(default=False, description="whether multi-query was used")
 
 
+class SourceReferenceData(BaseModel):
+    """Source reference metadata stored in evaluation_data.sources."""
+
+    title: str = ""
+    source: str = ""
+    url: str = ""
+    doc_download_url: str = ""
+
+
 class EvaluationData(BaseModel):
     """Evaluation payload stored in history.evaluation_data."""
 
@@ -24,6 +33,7 @@ class EvaluationData(BaseModel):
     llm_score: int | None = Field(default=None, description="LLM score (0-100)")
     llm_passed: bool | None = Field(default=None, description="LLM pass/fail")
     contexts: list[str] = Field(default_factory=list, description="retrieved context snippets")
+    sources: list[SourceReferenceData] = Field(default_factory=list, description="source references")
     domains: list[str] = Field(default_factory=list, description="detected domains")
     retrieval_evaluation: RetrievalEvaluationData | None = Field(
         default=None, description="rule-based retrieval evaluation"
