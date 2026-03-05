@@ -124,6 +124,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLookingUp, setIsLookingUp] = useState(false);
+  const [bizVerified, setBizVerified] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
 
   const [formData, setFormData] = useState<CompanyFormData>(INITIAL_FORM_DATA);
@@ -169,6 +170,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
       ...INITIAL_FORM_DATA,
       open_date: new Date().toISOString().split('T')[0],
     });
+    setBizVerified(false);
     setIsDialogOpen(true);
   };
 
@@ -190,6 +192,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
       region_code: displayNameToRegionCode(existingAddr),
       open_date: company.open_date ? company.open_date.split('T')[0] : new Date().toISOString().split('T')[0],
     });
+    setBizVerified(Boolean(company.biz_num));
     setIsDialogOpen(true);
   };
 
@@ -229,6 +232,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
           ? `${data.open_date.slice(0, 4)}-${data.open_date.slice(4, 6)}-${data.open_date.slice(6, 8)}`
           : prev.open_date,
       }));
+      setBizVerified(true);
 
       addToast({ type: 'success', message: '기업 정보가 자동입력되었습니다.' });
     } catch (err) {
@@ -523,7 +527,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
             <Button variant="text" onClick={() => setIsDialogOpen(false)}>
               취소
             </Button>
-            <Button onClick={handleSave} disabled={!formData.com_name.trim() || isSaving}>
+            <Button onClick={handleSave} disabled={!formData.com_name.trim() || formData.biz_num.replace(/[^0-9]/g, '').length !== 10 || isSaving}>
               {isSaving ? '저장 중...' : '저장'}
             </Button>
           </div>
@@ -558,7 +562,8 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
               value={formData.com_name}
               onChange={(e) => setFormData({ ...formData, com_name: e.target.value })}
               id="company-name-input"
-              placeholder={isPreparing ? '(예비) 창업 준비' : '회사명을 입력하세요'}
+              placeholder={isPreparing ? '(예비) 창업 준비' : '사업자등록번호를 조회하세요'}
+              disabled={!isPreparing}
               className="!border-gray-300"
               labelProps={{ className: 'hidden' }}
             />
@@ -571,11 +576,33 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
             </Typography>
             <div className="flex gap-2">
               <Input
-                value={formData.biz_num}
-                onChange={(e) => setFormData({ ...formData, biz_num: e.target.value })}
-                placeholder="000-00-00000"
-                disabled={isPreparing}
-                className="!border-gray-300"
+                value={
+                  formData.biz_num.length > 5
+                    ? `${formData.biz_num.slice(0, 3)}-${formData.biz_num.slice(3, 5)}-${formData.biz_num.slice(5)}`
+                    : formData.biz_num.length > 3
+                      ? `${formData.biz_num.slice(0, 3)}-${formData.biz_num.slice(3)}`
+                      : formData.biz_num
+                }
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
+                  setBizVerified(false);
+                  setFormData({ ...formData, biz_num: digits, com_name: '' });
+                }}
+                maxLength={12}
+                onKeyDown={(e) => {
+                  if (
+                    e.key.length === 1 &&
+                    !/[0-9]/.test(e.key) &&
+                    !e.ctrlKey && !e.metaKey
+                  ) {
+                    e.preventDefault();
+                  }
+                }}
+                inputMode="numeric"
+                placeholder={isPreparing ? '' : '000-00-00000'}
+                disabled={isPreparing || bizVerified}
+                className="!border-gray-300 placeholder:opacity-100"
+                label=""
                 labelProps={{ className: 'hidden' }}
               />
               <Button
