@@ -63,9 +63,10 @@ class Settings(BaseSettings):
         default=True,
         description="도메인 외 질문 거부 기능 활성화"
     )
-    enable_llm_domain_classification: bool = Field(
-        default=False,
-        description="LLM 기반 도메인 분류 활성화 (true 시 LLM이 1차 분류기, 추가 비용 발생)"
+    domain_classification_max_retries: int = Field(
+        default=2,
+        ge=0,
+        description="LLM 도메인 분류 실패 시 최대 재시도 횟수"
     )
     llm_max_retries: int = Field(default=1, description="LLM API 호출 재시도 횟수 (API 연결 실패 대비)")
 
@@ -631,7 +632,7 @@ class Settings(BaseSettings):
         "enable_cross_domain_rerank",
         "enable_legal_supplement",
         "enable_domain_rejection",
-        "enable_llm_domain_classification",
+        "domain_classification_max_retries",
         "enable_llm_evaluation",
         "enable_ragas_evaluation",
         "enable_post_eval_retry",

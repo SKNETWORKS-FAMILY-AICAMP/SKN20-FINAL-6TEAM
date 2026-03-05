@@ -519,7 +519,7 @@ class RAGChain:
 
         # kiwipiepy 명사 추출 (2글자 이상 일반명사/고유명사만)
         try:
-            from utils.domain_classifier import _get_kiwi
+            from utils.bm25_tokenizer import _get_kiwi
             kiwi = _get_kiwi()
             tokens = kiwi.tokenize(query)
             nouns = [

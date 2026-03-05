@@ -61,7 +61,6 @@ TOGGLES_DEFAULT_ON: dict[str, str] = {
 # 기본 OFF (ON으로 테스트) - 3개
 TOGGLES_DEFAULT_OFF: dict[str, str] = {
     "enable_context_compression": "Context Compression",
-    "enable_llm_domain_classification": "LLM Domain Classification",
     "enable_ragas_evaluation": "RAGAS Evaluation",
 }
 

@@ -81,7 +81,6 @@ logger = logging.getLogger(__name__)
 from agents import ActionExecutor, MainRouter
 from routes import all_routers
 import routes._state as state
-from utils.config import init_db, load_domain_config
 from utils.middleware import RateLimitMiddleware, MetricsMiddleware, get_metrics_collector
 from utils.reranker import get_reranker
 from vectorstores.chroma import ChromaVectorStore
@@ -91,11 +90,6 @@ from vectorstores.chroma import ChromaVectorStore
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """애플리케이션 라이프사이클 관리."""
     logger.info("RAG 서비스 초기화 중...")
-
-    # 도메인 설정 DB 초기화 + 로드
-    init_db()
-    load_domain_config()
-    logger.info("도메인 설정 DB 초기화 완료")
 
     # 공유 벡터 스토어 생성 후 ChromaDB 연결 확인
     state.vector_store = ChromaVectorStore()
@@ -231,10 +225,7 @@ def _log_settings_summary(settings) -> None:
     else:
         rerank_info = f"CrossEncoder ({settings.cross_encoder_model})"
 
-    if settings.enable_llm_domain_classification:
-        classify_info = "LLM 기반"
-    else:
-        classify_info = "키워드만"
+    classify_info = "LLM 기반"
 
     logger.info("=" * 60)
     logger.info("[RAG 설정 요약]")

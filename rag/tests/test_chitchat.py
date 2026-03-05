@@ -1,6 +1,6 @@
 """Chitchat(일상 대화) 감지 및 응답 기능 테스트."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -26,48 +26,6 @@ class TestChitchatResponses:
             assert len(CHITCHAT_RESPONSES[intent]) > 0
 
 
-class TestKeywordChitchat:
-    """키워드 모드 chitchat 감지 테스트."""
-
-    @pytest.fixture
-    def classifier(self) -> DomainClassifier:
-        with patch("utils.domain_classifier.get_settings") as mock_settings:
-            settings = MagicMock()
-            settings.enable_llm_domain_classification = False
-            mock_settings.return_value = settings
-            return DomainClassifier()
-
-    def test_greeting_detected(self, classifier: DomainClassifier) -> None:
-        """인사말 chitchat 감지."""
-        result = classifier._keyword_classify("안녕하세요")
-        assert result is not None
-        assert result.is_relevant is False
-        assert result.domains == []
-        assert result.intent == "chitchat_greeting"
-
-    def test_thanks_detected(self, classifier: DomainClassifier) -> None:
-        """감사 chitchat 감지."""
-        result = classifier._keyword_classify("감사합니다")
-        assert result is not None
-        assert result.is_relevant is False
-        assert result.domains == []
-        assert result.intent == "chitchat_greeting"  # keyword mode default
-
-    def test_greeting_plus_domain_not_chitchat(self, classifier: DomainClassifier) -> None:
-        """인사 + 도메인 질문 → 도메인으로 분류 (chitchat 아님)."""
-        result = classifier._keyword_classify("안녕하세요 세무 질문인데요")
-        assert result is not None
-        assert result.is_relevant is True
-        assert "chitchat" not in result.domains
-
-    def test_pure_domain_unaffected(self, classifier: DomainClassifier) -> None:
-        """순수 도메인 질문은 변경 없음."""
-        result = classifier._keyword_classify("사업자등록 절차")
-        assert result is not None
-        assert result.is_relevant is True
-        assert "startup_funding" in result.domains
-
-
 class TestLLMChitchat:
     """LLM 모드 chitchat 처리 테스트."""
 
@@ -75,13 +33,12 @@ class TestLLMChitchat:
     def classifier(self) -> DomainClassifier:
         with patch("utils.domain_classifier.get_settings") as mock_settings:
             settings = MagicMock()
-            settings.enable_llm_domain_classification = True
-            settings.llm_max_retries = 1
+            settings.domain_classification_max_retries = 2
             mock_settings.return_value = settings
             return DomainClassifier()
 
-    def test_chitchat_skips_guardrail(self, classifier: DomainClassifier) -> None:
-        """LLM chitchat intent는 keyword guardrail을 건너뜀."""
+    def test_chitchat_detected(self, classifier: DomainClassifier) -> None:
+        """LLM chitchat intent 감지."""
         llm_result = DomainClassificationResult(
             domains=[],
             confidence=0.95,
@@ -95,8 +52,8 @@ class TestLLMChitchat:
         assert result.is_relevant is False
         assert result.method == "llm"
 
-    def test_non_chitchat_reject_still_uses_guardrail(self, classifier: DomainClassifier) -> None:
-        """chitchat이 아닌 거부는 keyword guardrail이 작동."""
+    def test_non_chitchat_rejection(self, classifier: DomainClassifier) -> None:
+        """chitchat이 아닌 거부 결과 반환."""
         llm_result = DomainClassificationResult(
             domains=[],
             confidence=0.95,
@@ -104,21 +61,10 @@ class TestLLMChitchat:
             method="llm",
             intent="consultation",
         )
-        keyword_result = DomainClassificationResult(
-            domains=["startup_funding"],
-            confidence=0.7,
-            is_relevant=True,
-            method="keyword",
-            matched_keywords={"startup_funding": ["창업"]},
-        )
-        with (
-            patch.object(classifier, "_llm_classify", return_value=llm_result),
-            patch.object(classifier, "_keyword_classify", return_value=keyword_result),
-        ):
-            result = classifier.classify("창업 절차")
-        # keyword guardrail이 override
-        assert result.is_relevant is True
-        assert "startup_funding" in result.domains
+        with patch.object(classifier, "_llm_classify", return_value=llm_result):
+            result = classifier.classify("날씨 어때요")
+        assert result.is_relevant is False
+        assert result.intent == "consultation"
 
 
 class TestRouterChitchat:

@@ -346,47 +346,24 @@ class MainRouter:
         # 원본 쿼리 보존 (생성/평가에서 사용)
         state["original_query"] = query
 
-        # Chitchat 사전검사: query rewrite 전에 원본 쿼리로 키워드 기반 chitchat 감지
-        # (rewrite가 "고마워" → "사업자등록 관련 질문이 있나요?"로 변환하는 문제 방지)
-        pre_chitchat = self.domain_classifier._keyword_classify(query)
-        if pre_chitchat and not pre_chitchat.is_relevant and pre_chitchat.intent and pre_chitchat.intent.startswith("chitchat"):
-            # LLM 모드에서도 원본 쿼리로 LLM 분류 시도 (더 정확한 intent 파악)
-            if self.domain_classifier.settings.enable_llm_domain_classification:
-                llm_result = await asyncio.to_thread(
-                    self.domain_classifier.classify, query
-                )
-                if llm_result.intent and llm_result.intent.startswith("chitchat"):
-                    pre_chitchat = llm_result
-            state["classification_result"] = pre_chitchat
-            state["domains"] = pre_chitchat.domains
-            state["timing_metrics"]["query_rewrite_time"] = 0.0
-            state["timing_metrics"]["query_rewrite_reason"] = "skipped_chitchat"
-            state["timing_metrics"]["query_rewrite_applied"] = False
-            state["timing_metrics"]["query_rewrite_topic_changed"] = False
-            classification = pre_chitchat
-            rewrite_meta = type("Meta", (), {
-                "rewritten": False, "query": query, "reason": "skipped_chitchat",
-                "elapsed": 0.0, "topic_changed": False,
-            })()
-            was_rewritten = False
-            classify_query = query
-        else:
-            # LLM 기반 쿼리 재작성 (history 있을 때만 동작)
-            rewrite_meta = await self.query_rewriter.arewrite_with_meta(query, history)
-            rewritten_query = rewrite_meta.query
-            was_rewritten = rewrite_meta.rewritten
-            if was_rewritten:
-                state["query"] = rewritten_query
-            state["timing_metrics"]["query_rewrite_time"] = rewrite_meta.elapsed
-            state["timing_metrics"]["query_rewrite_reason"] = rewrite_meta.reason
-            state["timing_metrics"]["query_rewrite_applied"] = was_rewritten
-            state["timing_metrics"]["query_rewrite_topic_changed"] = rewrite_meta.topic_changed
+        # LLM 기반 쿼리 재작성 (history 있을 때만 동작)
+        rewrite_meta = await self.query_rewriter.arewrite_with_meta(query, history)
+        rewritten_query = rewrite_meta.query
+        was_rewritten = rewrite_meta.rewritten
+        if was_rewritten:
+            state["query"] = rewritten_query
+        state["timing_metrics"]["query_rewrite_time"] = rewrite_meta.elapsed
+        state["timing_metrics"]["query_rewrite_reason"] = rewrite_meta.reason
+        state["timing_metrics"]["query_rewrite_applied"] = was_rewritten
+        state["timing_metrics"]["query_rewrite_topic_changed"] = rewrite_meta.topic_changed
 
-            # 벡터 유사도 기반 도메인 분류 (CPU-bound → 스레드 위임)
-            classify_query = rewritten_query if was_rewritten else query
-            classification = await asyncio.to_thread(
-                self.domain_classifier.classify, classify_query
-            )
+        # LLM 도메인 분류 — 원본+재작성 쿼리 동시 전달
+        classify_query = rewritten_query if was_rewritten else query
+        classification = await asyncio.to_thread(
+            self.domain_classifier.classify,
+            classify_query,
+            query if was_rewritten else None,
+        )
         state["classification_result"] = classification
         state["domains"] = classification.domains
 
@@ -1108,32 +1085,19 @@ class MainRouter:
         # 원본 쿼리 보존 (생성/평가에서 사용)
         original_query = query
 
-        # Chitchat 사전검사: query rewrite 전에 원본 쿼리로 키워드 기반 chitchat 감지
-        pre_chitchat = self.domain_classifier._keyword_classify(query)
-        if pre_chitchat and not pre_chitchat.is_relevant and pre_chitchat.intent and pre_chitchat.intent.startswith("chitchat"):
-            # LLM 모드에서도 원본 쿼리로 LLM 분류 (더 정확한 intent)
-            if self.domain_classifier.settings.enable_llm_domain_classification:
-                llm_result = self.domain_classifier.classify(query)
-                if llm_result.intent and llm_result.intent.startswith("chitchat"):
-                    pre_chitchat = llm_result
-            classification = pre_chitchat
-            rewrite_meta = type("Meta", (), {
-                "rewritten": False, "query": query, "reason": "skipped_chitchat",
-                "elapsed": 0.0, "topic_changed": False,
-            })()
-            was_rewritten = False
-        else:
-            # LLM 기반 쿼리 재작성 (history 있을 때만 동작)
-            rewrite_meta = await self.query_rewriter.arewrite_with_meta(query, history or [])
-            rewritten_query = rewrite_meta.query
-            was_rewritten = rewrite_meta.rewritten
-            if was_rewritten:
-                query = rewritten_query
+        # LLM 기반 쿼리 재작성 (history 있을 때만 동작)
+        rewrite_meta = await self.query_rewriter.arewrite_with_meta(query, history or [])
+        rewritten_query = rewrite_meta.query
+        was_rewritten = rewrite_meta.rewritten
+        if was_rewritten:
+            query = rewritten_query
 
-            # 도메인 분류 (CPU-bound → 스레드 위임)
-            classification = await asyncio.to_thread(
-                self.domain_classifier.classify, query
-            )
+        # LLM 도메인 분류 — 원본+재작성 쿼리 동시 전달
+        classification = await asyncio.to_thread(
+            self.domain_classifier.classify,
+            query,
+            original_query if was_rewritten else None,
+        )
 
         logger.info(
             "[스트리밍/분류] 원본='%s' | 재작성=%s('%s') | 도메인=%s(%.2f) | relevant=%s | method=%s",

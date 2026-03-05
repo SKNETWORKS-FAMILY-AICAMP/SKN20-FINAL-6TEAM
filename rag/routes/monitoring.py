@@ -1,4 +1,4 @@
-"""메트릭, 캐시, 설정, 도메인 설정 관리 엔드포인트."""
+"""메트릭, 캐시, 설정 관리 엔드포인트."""
 
 import logging
 from typing import Any
@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from utils.cache import get_response_cache
-from utils.config import get_settings, reload_domain_config
+from utils.config import get_settings
 from utils.middleware import get_metrics_collector
 
 logger = logging.getLogger(__name__)
@@ -24,30 +24,6 @@ async def verify_admin_key(
     if settings.admin_api_key and settings.admin_api_key.strip():
         if x_admin_key != settings.admin_api_key:
             raise HTTPException(status_code=403, detail="관리자 인증이 필요합니다")
-
-
-# --- 도메인 설정 ---
-
-
-@router.post("/api/domain-config/reload", tags=["DomainConfig"], dependencies=[Depends(verify_admin_key)])
-async def reload_domain_config_endpoint() -> dict[str, Any]:
-    """도메인 설정을 MySQL DB에서 다시 로드합니다."""
-    try:
-        config = reload_domain_config()
-        return {
-            "status": "reloaded",
-            "keywords_count": sum(len(kws) for kws in config.keywords.values()),
-            "compound_rules_count": len(config.compound_rules),
-            "representative_queries_count": sum(
-                len(qs) for qs in config.representative_queries.values()
-            ),
-        }
-    except Exception as e:
-        logger.error("도메인 설정 리로드 실패: %s", e, exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail="도메인 설정 리로드 중 오류가 발생했습니다."
-        )
 
 
 # --- 메트릭 ---
@@ -140,5 +116,5 @@ async def get_config() -> dict[str, Any]:
         "llm_timeout": settings.llm_timeout,
         "enable_fallback": settings.enable_fallback,
         "enable_ragas_evaluation": settings.enable_ragas_evaluation,
-        "enable_llm_domain_classification": settings.enable_llm_domain_classification,
+        "domain_classification_max_retries": settings.domain_classification_max_retries,
     }

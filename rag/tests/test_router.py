@@ -225,7 +225,7 @@ class TestShouldContinueAfterClassify:
             domains=["finance_tax"],
             confidence=0.9,
             is_relevant=True,
-            method="keyword",
+            method="llm",
         )
         state: RouterState = {
             "query": "부가세 신고는?",
@@ -304,7 +304,7 @@ class TestClassifyNode:
             domains=["startup_funding"],
             confidence=0.95,
             is_relevant=True,
-            method="keyword",
+            method="llm",
         )
 
         mock_classifier = Mock()
@@ -335,7 +335,7 @@ class TestClassifyNode:
         assert updated_state["classification_result"] is not None
         assert updated_state["classification_result"].is_relevant is True
         assert "startup_funding" in updated_state["classification_result"].domains
-        mock_classifier.classify.assert_called_once_with(state["query"])
+        mock_classifier.classify.assert_called_once_with(state["query"], None)
 
     @pytest.mark.asyncio
     async def test_classify_node_sets_domains(self, router_with_mocks):
@@ -420,7 +420,7 @@ class TestClassifyNode:
             domains=["startup_funding"],
             confidence=0.9,
             is_relevant=True,
-            method="keyword",
+            method="llm",
         )
 
         mock_classifier = Mock()
@@ -978,13 +978,13 @@ class TestIntentBasedShortcut:
         assert updated["final_response"] == ""
 
     @pytest.mark.asyncio
-    async def test_intent_none_falls_back_to_keyword_shortcut(self, router_with_mocks):
-        """intent=None (non-LLM 분류)이면 기존 키워드 기반 fallback."""
+    async def test_intent_none_uses_document_shortcut(self, router_with_mocks):
+        """intent=None이면 _is_document_shortcut으로 문서 생성 판단."""
         mock_classification = DomainClassificationResult(
             domains=["hr_labor"],
             confidence=0.80,
             is_relevant=True,
-            method="keyword",
+            method="llm",
             intent=None,
         )
         mock_classifier = Mock()

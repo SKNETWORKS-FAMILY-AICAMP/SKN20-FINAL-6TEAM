@@ -43,7 +43,6 @@ from agents.router import MainRouter
 from schemas.request import UserContext
 from schemas.response import SourceDocument, TimingMetrics
 from utils.config import DOMAIN_LABELS, get_settings
-from utils.config import init_db, load_domain_config
 from utils.exceptions import (
     DomainClassificationError,
     EmbeddingError,
@@ -453,11 +452,6 @@ async def main() -> None:
 
     # 초기화
     print("RAG 서비스 초기화 중...")
-
-    # 도메인 설정 DB 초기화 + 로드
-    init_db()
-    load_domain_config()
-    print("  도메인 설정 DB 초기화 완료")
 
     vector_store = ChromaVectorStore()
     router = MainRouter(vector_store=vector_store)

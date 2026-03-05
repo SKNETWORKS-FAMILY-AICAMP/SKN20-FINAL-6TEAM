@@ -69,7 +69,7 @@ async def run_batch(start: int = 1, end: int | None = None, dataset: str = "v1")
     import logging
     from agents.router import MainRouter
     from schemas.request import UserContext
-    from utils.config import get_settings, init_db, load_domain_config
+    from utils.config import get_settings
     from utils.token_tracker import RequestTokenTracker
     from vectorstores.chroma import ChromaVectorStore
 
@@ -110,8 +110,6 @@ async def run_batch(start: int = 1, end: int | None = None, dataset: str = "v1")
 
     # 초기화
     _print("RAG 서비스 초기화 중...")
-    init_db()
-    load_domain_config()
 
     from utils.config import get_settings
     _embedding_provider = get_settings().embedding_provider
@@ -384,7 +382,7 @@ def _write_analysis_report(
         f"| Multi-Query | ON (count={settings.multi_query_count}) |",
         f"| LLM Evaluation | {'ON' if settings.enable_llm_evaluation else 'OFF'} |",
         f"| Total Timeout | {settings.total_timeout}초 |",
-        f"| Domain Threshold | {settings.domain_classification_threshold} |",
+        f"| Domain Max Retries | {settings.domain_classification_max_retries} |",
         "",
         "---",
         "",
@@ -448,11 +446,8 @@ def _write_analysis_report(
         lines.extend([
             "",
             "**거부 원인 분석:**",
-            f"- 벡터 유사도 임계값({settings.domain_classification_threshold})이 너무 높음",
-            "- 도메인별 대표 쿼리(DOMAIN_REPRESENTATIVE_QUERIES) 수 부족",
-            "- 키워드 매칭 커버리지 부족 (동의어/유의어 미지원)",
+            "- LLM 도메인 분류에서 도메인 외로 판단",
             "- 멀티도메인 질문의 구조적 불이익 (유사도 분산)",
-            f"- LLM 보조 분류 {'비활성' if not settings.enable_llm_domain_classification else '활성'}",
             "",
             "**거부된 질문 샘플:**",
             "",
@@ -584,40 +579,18 @@ def _write_analysis_report(
     if total > 0 and reject_count / total > 0.3:
         suggestion_num += 1
         lines.extend([
-            f"### {suggestion_num}. [P0] 도메인 분류 임계값 하향 조정",
+            f"### {suggestion_num}. [P0] LLM 도메인 분류 재시도 횟수 조정",
             "",
-            f"- 현재: `domain_classification_threshold = {settings.domain_classification_threshold}`",
-            "- 제안: `0.35 ~ 0.45` 범위로 단계적 테스트",
-            "- 너무 낮추면 무관한 질문도 통과하므로 균형 필요",
-            "",
-        ])
-        suggestion_num += 1
-        lines.extend([
-            f"### {suggestion_num}. [P0] 도메인별 대표 쿼리 확충",
-            "",
-            "- 현재 도메인당 15~20개 → 50~100개로 확충",
-            "- 특히 `finance_tax`, `hr_labor` 도메인 커버리지 부족",
-            "- 실제 사용자 질문 패턴을 반영한 다양한 표현 추가",
+            f"- 현재: `domain_classification_max_retries = {settings.domain_classification_max_retries}`",
+            "- 거부율이 높으면 재시도 횟수 증가 또는 프롬프트 개선 검토",
             "",
         ])
         suggestion_num += 1
         lines.extend([
-            f"### {suggestion_num}. [P1] 키워드 사전 확장",
+            f"### {suggestion_num}. [P1] LLM 도메인 분류 프롬프트 개선",
             "",
-            '- "세액감면", "공제", "절세" → finance_tax 매핑 추가',
-            '- "면허", "인허가", "개업" → startup_funding 매핑 추가',
-            "- 동의어/유의어 처리 로직 강화",
-            "",
-        ])
-
-    if not settings.enable_llm_domain_classification:
-        suggestion_num += 1
-        lines.extend([
-            f"### {suggestion_num}. [P1] LLM 보조 분류 활성화 검토",
-            "",
-            "- `enable_llm_domain_classification = True`",
-            "- 벡터 유사도가 임계값 근처(±0.15)인 경우에만 LLM 2차 검증",
-            "- 추가 비용 발생하나 정확도 향상 예상",
+            "- 도메인 분류 프롬프트의 키워드/예시를 보강하여 정확도 향상",
+            "- 재시도 횟수(DOMAIN_CLASSIFICATION_MAX_RETRIES) 조정 검토",
             "",
         ])
 

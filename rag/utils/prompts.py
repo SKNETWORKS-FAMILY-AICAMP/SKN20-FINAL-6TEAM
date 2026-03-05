@@ -1,14 +1,8 @@
 """프롬프트 템플릿 모듈.
 
 모든 에이전트의 시스템 프롬프트를 정의합니다.
-도메인 분류 키워드/규칙은 utils.config에 정의되어 있으며,
-후방 호환을 위해 이 모듈에서 re-export합니다.
 """
 
-from utils.config import (  # noqa: F401 — backward compatibility re-export
-    _DEFAULT_DOMAIN_COMPOUND_RULES,
-    _DEFAULT_DOMAIN_KEYWORDS,
-)
 from utils.sanitizer import PROMPT_INJECTION_GUARD
 
 # Re-ranking 프롬프트 (LLM Reranker용)
@@ -434,11 +428,16 @@ QUESTION_DECOMPOSER_PROMPT = """당신은 질문 분해 전문가입니다.
 
 # LLM 기반 도메인 분류 프롬프트 (벡터 분류와 비교용)
 LLM_DOMAIN_CLASSIFICATION_PROMPT = """You are a domain classifier for Bizi.
-Classify the user question into one or more domains from:
-- startup_funding
-- finance_tax
-- hr_labor
-- law_common
+
+## 입력
+- 원본 질문: {original_query}
+- 분류 대상 질문: {query}
+  (대화 맥락이 반영된 재작성 버전. 원본과 동일할 수 있음)
+
+## 분류 규칙 (2단계)
+1. **먼저 원본 질문을 확인**: 원본 질문이 일상 대화(인사, 감사, 작별, 봇 정체 질문, 단순 긍정/확인, 감정 표현 등)이면
+   즉시 chitchat으로 분류 (분류 대상 질문 무시)
+2. 원본이 일상 대화가 아니면 → 분류 대상 질문을 기준으로 아래 도메인 분류 수행
 
 ## 도메인 목록
 
@@ -468,10 +467,10 @@ Classify the user question into one or more domains from:
 }}
 ```
 
-## 분류 규칙
+## 도메인 분류 세부 규칙
 
-1. 질문이 위 도메인에 해당하면 `is_relevant: true`, 해당 도메인 선택
-2. 질문이 위 도메인과 전혀 관련 없으면 `is_relevant: false`, `domains: []`
+1. 분류 대상 질문이 위 도메인에 해당하면 `is_relevant: true`, 해당 도메인 선택
+2. 분류 대상 질문이 위 도메인과 전혀 관련 없으면 `is_relevant: false`, `domains: []`
 3. 복합 질문인 경우 관련된 모든 도메인을 `domains` 배열에 포함
 4. `confidence`는 0.0~1.0 사이 값으로 분류 확신도 표현
 5. **문서 작성/생성 요청**도 해당 도메인으로 분류 (예: "비밀유지계약서 작성" → law_common, "용역계약서 작성" → hr_labor + law_common)
@@ -514,11 +513,7 @@ Classify the user question into one or more domains from:
 - `"chitchat_emotional"`: 감정 표현 ("ㅋㅋ", "대단해", "멋지다")
 - 확실하지 않으면 `"consultation"`으로 설정
 
-## 사용자 질문
-
-
-User question:
-{query}"""
+위 규칙에 따라 분류하세요."""
 
 
 # 복수 도메인 통합 생성 프롬프트
