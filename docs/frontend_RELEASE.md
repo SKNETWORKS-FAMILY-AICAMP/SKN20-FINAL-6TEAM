@@ -1,6 +1,15 @@
 # Release Notes
 
-## [2026-03-04] - 토스트 시스템 통합 + 공고 패널 개선 + 폰트 수정 + 로그인 후 새 채팅 시작 + 지원 공고 상세 문서 다운로드 + 지원서 생성
+## [2026-03-05] - 채팅 세션 오염 방지 + 알림 저장버튼 수정 + Sources 복원
+
+### Features
+- **세션 재접속 시 참고 문서(Sources) 복원** (`stores/chatStore.ts`): 세션 재접속 시 이전 메시지의 참고 문서 목록 복원
+
+### Bug Fixes
+- **채팅 세션 오염 방지 및 히스토리 선택 중복 수정** (`stores/chatStore.ts`): 히스토리 선택 시 세션 오염 및 중복 로딩 버그 수정
+- **알림 설정 저장버튼 수정** (`components/` 관련): 알림 설정 저장버튼 동작 안정화
+
+## [2026-03-04] - 토스트 시스템 통합 + 공고 패널 개선 + 폰트 수정 + 로그인 후 새 채팅 시작 + 지원 공고 상세 문서 다운로드 + 지원서 생성 + 세션 타임아웃 인프라
 
 ### Features
 - **통합 토스트 시스템** (`components/common/ToastContainer.tsx`): 액션/알림 토스트를 단일 컨테이너로 통합
@@ -8,6 +17,7 @@
 - **로그인 후 새 채팅 시작** (`stores/authStore.ts`): 로그인 완료 시 기존 히스토리 유지하면서 새 빈 채팅으로 자동 전환
 - **지원 공고 상세 문서 다운로드** (`components/chat/SourceReferences.tsx`, `hooks/useChat.ts`, `lib/rag.ts`, `types/index.ts`): 채팅 소스 참조에서 지원 공고 상세 문서 다운로드 기능 추가
 - **지원서 생성 양식 키 전달** (`components/chat/ApplicationFormModal.tsx`): `_form_key`, `_form_title` 파라미터를 문서 생성 API에 함께 전달 — executor가 S3 원본 양식을 참조하여 정확한 지원서 생성 가능
+- **세션 타임아웃 1시간 + 게스트 턴 쿼터 합산 인프라** (`hooks/useChat.ts`, `stores/authStore.ts`, `stores/chatStore.ts`): Frontend 인증 유저 쿼터 체크 프레임워크 구축 (현재 무제한), 로그아웃 시 게스트 카운트 유지
 
 ### Bug Fixes
 - **세션 ID `db-{root_history_id}`로 안정화** (`src/stores/chatStore.ts`): 세션 ID 충돌 방지 및 write-through 파이프라인 연동

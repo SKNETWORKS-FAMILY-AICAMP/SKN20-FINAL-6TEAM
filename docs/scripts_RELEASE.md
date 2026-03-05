@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-03-05] - ChromaDB 백업/복원 스크립트 프로덕션 환경 지원
+
+### Bug Fixes
+- **ChromaDB 백업/복원 스크립트 프로덕션 환경 대응** (`scripts/chromadb-backup.sh`, `scripts/chromadb-restore.sh`): compose 파일 자동 감지(prod > local > default), bind mount(`./chroma-data`) vs named volume 자동 감지, 외부 포트 없는 환경(expose-only)에서 컨테이너 내부 IP로 API URL 자동 전환
+
 ## [2026-03-04] - Contextual Retrieval VectorDB 빌더 추가 + BM25 토큰 메타데이터 사전 저장 + VectorDB 빌드/조회 분리
 
 ### Features

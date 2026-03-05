@@ -1,11 +1,17 @@
 # Release Notes
 
-## [2026-03-04] - Write-through DB 저장 + 복수 기업 지원 + 품질 개선 + MySQL→Redis 세션 역복원
+## [2026-03-05] - 세션 재접속 시 참고 문서(Sources) 복원
+
+### Features
+- **세션 재접속 Sources 복원** (`apps/histories/router.py`, `apps/histories/schemas.py`): `GET /histories/thread/{id}/restore` 응답에 `sources` 필드 추가 — 세션 재접속 시 Frontend가 이전 메시지의 참고 문서 목록을 복원
+
+## [2026-03-04] - Write-through DB 저장 + 복수 기업 지원 + 품질 개선 + MySQL→Redis 세션 역복원 + 세션 타임아웃 인프라
 
 ### Features
 - **Write-through 파이프라인** (`apps/histories/service.py`): RAG 응답 시 Backend로 즉시 턴 저장 — 멱등키 session 범위 축소, 빈 입력 가드, 중복 설정 제거
 - **복수 기업 컨텍스트 지원** (`apps/rag/router.py`): `_build_user_context()`에 `companies` 필드 추가 — main_yn 단일 기업 조회에서 모든 활성 기업 목록 조회로 변경, 하위 호환 `company` 필드 유지
 - **MySQL → Redis 세션 역복원** (`apps/histories/router.py`, `apps/histories/service.py`, `apps/rag/router.py`, `apps/rag/schemas.py`): Redis TTL 만료 후 멀티턴 대화 연속성 유지를 위해 `GET /histories/thread/{id}/restore` 내부 엔드포인트 추가 — Frontend가 `root_history_id`를 전달하면 Backend가 MySQL 스레드 이력을 반환하고 RAG가 Redis 세션을 lazy 복원
+- **세션 타임아웃 1시간 + 게스트 턴 쿼터 합산 인프라** (`apps/histories/router.py`, `apps/histories/schemas.py`, `apps/histories/service.py`): `GET /histories/quota` API 추가 (일일 메시지 카운트), 로그아웃 시 게스트 카운트 유지로 순환 악용 방지
 
 ### Bug Fixes
 - **회원탈퇴 해결** (`apps/auth/router.py`): 회원탈퇴 처리 오류 수정

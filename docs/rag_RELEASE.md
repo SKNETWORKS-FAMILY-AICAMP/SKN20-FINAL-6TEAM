@@ -1,5 +1,16 @@
 # Release Notes
 
+## [2026-03-05] - Redis 멀티턴 개선 + 세션 재접속 Sources 복원
+
+### Features
+- **세션 재접속 시 Sources 복원** (`routes/_write_through.py`, `routes/chat.py`): write-through 응답에 `sources` 포함 — 세션 재접속 시 Frontend가 참고 문서 목록 복원 가능
+
+### Bug Fixes
+- **Redis 멀티턴 이벤트루프 블로킹 수정** (`routes/_session_memory.py`): 동기 Redis 호출로 인한 이벤트루프 블로킹 제거, TLS 연결 토글(`SESSION_MEMORY_TLS`) 환경변수 추가
+
+### Tests
+- **Redis 멀티턴 테스트 강화** (`tests/`): Redis 세션 메모리 관련 테스트 커버리지 강화
+
 ## [2026-03-04] - AWS ElastiCache Redis TLS 연결 수정 + 복수 기업 지원 + 후속 질문 폴백 + 참고 자료 꼬리말 제거 + ChromaDB/BM25 Cold Start 최적화 + VectorDB 빌드 코드 분리 + 벡터 도메인 분류 삭제 + LLM 재시도 설정
 
 ### Features
@@ -23,6 +34,7 @@
 
 ### Chores
 - **프로덕션 Docker Compose Redis 환경변수 추가** (`docker-compose.prod.yaml`): RAG 서비스에 `SESSION_MEMORY_BACKEND`, `REDIS_URL` 환경변수 추가. 메모리 한도 재조정 (rag: 2304M→3072M, chromadb: 1024M→1536M, t3.medium→t3.large, RAG `start_period` 30s→15s)
+- **세션 TTL 조정** (`utils/config/settings.py`): 세션 TTL 90000 → 4500(75분), 마이그레이션 간격 5분/임계값 15분으로 조정
 
 ## [2026-03-03] - 프롬프트 리팩토링 + 문서 생성 에이전트 + 멀티턴 개선 + 코드 정리
 
