@@ -804,7 +804,7 @@ CREATE TABLE IF NOT EXISTS `token_blacklist` (
 -- 9. Job Logs 테이블 (스케줄러 작업 이력)
 -- ============================================
 CREATE TABLE IF NOT EXISTS `job_logs` (
-    `id` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `job_logs_id` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `job_name` VARCHAR(100) NOT NULL COMMENT '작업명 (예: token_cleanup)',
     `status` VARCHAR(20) NOT NULL COMMENT 'started | success | failed',
     `started_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

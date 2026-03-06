@@ -167,7 +167,7 @@ class JobLog(Base):
 
     __tablename__ = "job_logs"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    job_logs_id = Column(BigInteger, primary_key=True, autoincrement=True)
     job_name = Column(String(100), nullable=False, comment="작업명 (예: token_cleanup)")
     status = Column(String(20), nullable=False, comment="started | success | failed")
     started_at = Column(DateTime, nullable=False, default=datetime.utcnow)
