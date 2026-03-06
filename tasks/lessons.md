@@ -29,3 +29,8 @@ Record mistakes, corrections, and insights during development.
 - **Mistake**: I first attempted to save Playwright screenshots into a deliverable image path that did not exist, and later switched browser auth roles with `/auth/test-login` without fully reloading the SPA, so the UI still showed the previous Zustand auth state.
 - **Fix**: Created `산출물/7주차/images/user-flows` before capturing assets, then performed a full page reload after role-switch login so the frontend re-read the authenticated user and rendered the correct protected/admin screens.
 - **Lesson**: When collecting deliverable screenshots, create the output directory before capture and fully reload the SPA after changing auth cookies so persisted frontend state matches the active server session.
+
+### 2026-03-06 - Shared Product Docs Must Be Synced Across Main And Test
+- **Mistake**: I treated `PRD.md` like a branch-local document and updated it on `test` without first reconciling it against the current shipped code and shared branches.
+- **Fix**: Re-validated `PRD.md` against the current implementation, rebuilt the canonical document, and synced the same final content to both `main` and `test`.
+- **Lesson**: If a document describes the current product rather than an experiment, update it from the latest code reality and keep `main` and shared integration branches aligned together.
