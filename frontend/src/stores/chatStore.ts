@@ -16,7 +16,7 @@ interface HistoryItem {
   answer: string;
   create_date?: string;
   evaluation_data?: {
-    sources?: Array<{ title: string; source: string; url: string; doc_download_url?: string }>;
+    sources?: Array<{ title: string; source: string; url: string; doc_download_url?: string; form_download_url?: string; form_s3_key?: string }>;
     [key: string]: unknown;
   } | null;
 }
@@ -48,6 +48,8 @@ const historyItemToMessages = (item: HistoryItem): ChatMessage[] => {
     ? rawSources.map(s => ({
         title: s.title || '', source: s.source || '',
         url: s.url || '', docDownloadUrl: s.doc_download_url || '',
+        formDownloadUrl: s.form_download_url || '',
+        formS3Key: s.form_s3_key || '',
       }))
     : undefined;
 
@@ -445,6 +447,8 @@ export const useChatStore = create<ChatState>()(
                   evalData.sources = assistantMsg.sources.map(s => ({
                     title: s.title, source: s.source, url: s.url,
                     doc_download_url: s.docDownloadUrl || '',
+                    form_download_url: s.formDownloadUrl || '',
+                    form_s3_key: s.formS3Key || '',
                   }));
                 }
                 const res: { data: { history_id: number } } = await api.post('/histories', {

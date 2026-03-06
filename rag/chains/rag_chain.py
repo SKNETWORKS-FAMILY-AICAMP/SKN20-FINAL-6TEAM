@@ -455,8 +455,8 @@ class RAGChain:
 
         return "\n\n---\n\n".join(context_parts)
 
-    def _lookup_s3_keys(self, original_ids: list[str]) -> dict[str, str]:
-        """DB announce 테이블에서 original_id → doc_s3_key 매핑을 배치 조회합니다."""
+    def _lookup_s3_keys(self, original_ids: list[str]) -> dict[str, dict[str, str]]:
+        """DB announce 테이블에서 original_id → {doc_s3_key, form_s3_key} 매핑을 배치 조회합니다."""
         if not original_ids:
             return {}
         try:
@@ -476,11 +476,17 @@ class RAGChain:
                 with conn.cursor() as cursor:
                     placeholders = ",".join(["%s"] * len(original_ids))
                     cursor.execute(
-                        f"SELECT source_id, doc_s3_key FROM announce "
-                        f"WHERE source_id IN ({placeholders}) AND doc_s3_key IS NOT NULL AND doc_s3_key != ''",
+                        f"SELECT source_id, doc_s3_key, form_s3_key FROM announce "
+                        f"WHERE source_id IN ({placeholders}) AND (doc_s3_key IS NOT NULL AND doc_s3_key != '' OR form_s3_key IS NOT NULL AND form_s3_key != '')",
                         original_ids,
                     )
-                    return {row["source_id"]: row["doc_s3_key"] for row in cursor.fetchall()}
+                    return {
+                        row["source_id"]: {
+                            "doc_s3_key": row.get("doc_s3_key") or "",
+                            "form_s3_key": row.get("form_s3_key") or "",
+                        }
+                        for row in cursor.fetchall()
+                    }
             finally:
                 conn.close()
         except Exception as e:
@@ -568,9 +574,9 @@ class RAGChain:
                         )
                         params = [f"%{kw}%" for kw in attempt_kws]
                         cursor.execute(
-                            f"SELECT ann_name, source_id, source_url, doc_s3_key "
+                            f"SELECT ann_name, source_id, source_url, doc_s3_key, form_s3_key "
                             f"FROM announce "
-                            f"WHERE {conditions} AND doc_s3_key IS NOT NULL AND doc_s3_key != '' "
+                            f"WHERE {conditions} AND (doc_s3_key IS NOT NULL AND doc_s3_key != '' OR form_s3_key IS NOT NULL AND form_s3_key != '') "
                             f"LIMIT 3",
                             params,
                         )
@@ -594,15 +600,24 @@ class RAGChain:
             if source_id in existing_ids:
                 continue
 
-            doc_s3_key = row["doc_s3_key"]
-            metadata: dict = {"source_id": source_id, "doc_s3_key": doc_s3_key}
+            doc_s3_key = row.get("doc_s3_key") or ""
+            form_s3_key = row.get("form_s3_key") or ""
+            metadata: dict = {"source_id": source_id}
+            if doc_s3_key:
+                metadata["doc_s3_key"] = doc_s3_key
 
             try:
                 from utils.s3_client import get_s3_client
                 s3 = get_s3_client()
-                presigned = s3.generate_presigned_url(doc_s3_key)
-                if presigned:
-                    metadata["doc_download_url"] = presigned
+                if doc_s3_key:
+                    presigned = s3.generate_presigned_url(doc_s3_key)
+                    if presigned:
+                        metadata["doc_download_url"] = presigned
+                if form_s3_key:
+                    form_presigned = s3.generate_presigned_url(form_s3_key)
+                    if form_presigned:
+                        metadata["form_download_url"] = form_presigned
+                        metadata["form_s3_key"] = form_s3_key
             except Exception as e:
                 logger.warning("[공고 조회] presigned URL 생성 실패: %s", e)
 
@@ -626,7 +641,7 @@ class RAGChain:
         Returns:
             SourceDocument 리스트
         """
-        # RDS announce 테이블에서 doc_s3_key 배치 조회
+        # RDS announce 테이블에서 doc_s3_key, form_s3_key 배치 조회
         ids_for_lookup = [
             doc.metadata.get("meta_original_id", "")
             for doc in documents
@@ -644,17 +659,24 @@ class RAGChain:
             )
             metadata = doc.metadata
 
-            # doc_s3_key → presigned URL 생성
-            doc_s3_key = s3_key_map.get(doc.metadata.get("meta_original_id", ""), "")
-            if doc_s3_key:
+            # doc_s3_key, form_s3_key → presigned URL 생성
+            keys = s3_key_map.get(doc.metadata.get("meta_original_id", ""), {})
+            doc_s3_key = keys.get("doc_s3_key", "")
+            form_s3_key = keys.get("form_s3_key", "")
+            if doc_s3_key or form_s3_key:
                 try:
                     from utils.s3_client import get_s3_client
                     s3 = get_s3_client()
-                    presigned = s3.generate_presigned_url(doc_s3_key)
-                    if presigned:
-                        metadata = {**metadata, "doc_download_url": presigned}
+                    if doc_s3_key:
+                        presigned = s3.generate_presigned_url(doc_s3_key)
+                        if presigned:
+                            metadata = {**metadata, "doc_download_url": presigned}
+                    if form_s3_key:
+                        form_presigned = s3.generate_presigned_url(form_s3_key)
+                        if form_presigned:
+                            metadata = {**metadata, "form_download_url": form_presigned, "form_s3_key": form_s3_key}
                 except Exception as e:
-                    logger.warning("[S3 Presigned URL] 생성 실패 (key=%s): %s", doc_s3_key, e)
+                    logger.warning("[S3 Presigned URL] 생성 실패: %s", e)
 
             sources.append(
                 SourceDocument(

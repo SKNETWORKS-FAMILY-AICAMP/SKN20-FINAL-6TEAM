@@ -105,6 +105,8 @@ export interface SourceReference {
   source: string;
   url: string;
   docDownloadUrl?: string;
+  formDownloadUrl?: string;
+  formS3Key?: string;
 }
 
 // 문서 다운로드 첨부 정보
@@ -197,6 +199,8 @@ export interface RagStreamResponse {
     source?: string;
     url?: string;
     doc_download_url?: string;
+    form_download_url?: string;
+    form_s3_key?: string;
     type?: string;
     params?: Record<string, unknown>;
     domain?: string;

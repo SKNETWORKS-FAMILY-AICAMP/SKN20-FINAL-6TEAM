@@ -21,6 +21,8 @@ class SourceReferenceData(BaseModel):
     source: str = ""
     url: str = ""
     doc_download_url: str = ""
+    form_download_url: str = ""
+    form_s3_key: str = ""
 
 
 class EvaluationData(BaseModel):

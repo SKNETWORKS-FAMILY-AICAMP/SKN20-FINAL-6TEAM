@@ -355,6 +355,8 @@ async def chat_stream(request: ChatRequest):
                                 "source": src.get("source", ""),
                                 "url": src.get("url", ""),
                                 "doc_download_url": src.get("metadata", {}).get("doc_download_url", ""),
+                                "form_download_url": src.get("metadata", {}).get("form_download_url", ""),
+                                "form_s3_key": src.get("metadata", {}).get("form_s3_key", ""),
                             },
                         )
                         yield f"data: {source_chunk.model_dump_json()}\n\n"
@@ -691,6 +693,8 @@ async def chat_stream(request: ChatRequest):
                         "source": source.source if hasattr(source, 'source') else "",
                         "url": source.url if hasattr(source, 'url') else "",
                         "doc_download_url": source.metadata.get("doc_download_url", "") if hasattr(source, 'metadata') else "",
+                        "form_download_url": source.metadata.get("form_download_url", "") if hasattr(source, 'metadata') else "",
+                        "form_s3_key": source.metadata.get("form_s3_key", "") if hasattr(source, 'metadata') else "",
                     },
                 )
                 yield f"data: {source_chunk.model_dump_json()}\n\n"
@@ -719,7 +723,11 @@ async def chat_stream(request: ChatRequest):
                             "title": s.title if hasattr(s, 'title') else "",
                             "source": s.source if hasattr(s, 'source') else "",
                             "url": s.url if hasattr(s, 'url') else "",
-                            "metadata": {"doc_download_url": s.metadata.get("doc_download_url", "")} if hasattr(s, 'metadata') else {},
+                            "metadata": {
+                                "doc_download_url": s.metadata.get("doc_download_url", ""),
+                                "form_download_url": s.metadata.get("form_download_url", ""),
+                                "form_s3_key": s.metadata.get("form_s3_key", ""),
+                            } if hasattr(s, 'metadata') else {},
                         }
                         for s in final_sources
                     ],

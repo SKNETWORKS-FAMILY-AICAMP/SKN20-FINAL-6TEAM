@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowDownTrayIcon, ChevronDownIcon, ChevronUpIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, ChevronDownIcon, ChevronUpIcon, ClipboardDocumentIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 import type { SourceReference } from '../../types';
 
 interface SourceReferencesProps {
@@ -67,6 +67,17 @@ export const SourceReferences: React.FC<SourceReferencesProps> = ({ sources }) =
                     title="원본 공고문 다운로드"
                   >
                     <ArrowDownTrayIcon className="h-3.5 w-3.5 inline" />
+                  </a>
+                )}
+                {source.formDownloadUrl && (
+                  <a
+                    href={source.formDownloadUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-1.5 text-gray-400 hover:text-green-500"
+                    title="신청양식 다운로드"
+                  >
+                    <ClipboardDocumentIcon className="h-3.5 w-3.5 inline" />
                   </a>
                 )}
               </div>

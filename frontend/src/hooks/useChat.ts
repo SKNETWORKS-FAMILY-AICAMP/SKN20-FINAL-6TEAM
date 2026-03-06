@@ -291,6 +291,8 @@ export const useChat = () => {
               source: s.source || '',
               url: (s.metadata?.source_url as string) || '',
               docDownloadUrl: (s.metadata?.doc_download_url as string) || '',
+              formDownloadUrl: (s.metadata?.form_download_url as string) || '',
+              formS3Key: (s.metadata?.form_s3_key as string) || '',
             }));
 
             const ragActions: RagActionSuggestion[] = ragResponse.data.actions || [];
