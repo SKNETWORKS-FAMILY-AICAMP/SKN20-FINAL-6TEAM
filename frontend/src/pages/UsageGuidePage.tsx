@@ -177,7 +177,7 @@ function StepChatUsage() {
     <div className="grid gap-3 sm:grid-cols-2">
       {CHAT_STEPS.map((s) => (
         <Card key={s.num} className="border border-gray-200 shadow-sm">
-          <CardBody className="flex items-start gap-3 p-4">
+          <CardBody className="flex items-center gap-3 p-4">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-500 text-sm font-bold text-white">
               {s.num}
             </div>
@@ -377,7 +377,7 @@ const UsageGuidePage: React.FC = () => {
                 <Step
                   key={i}
                   onClick={() => setActiveStep(i)}
-                  className="cursor-pointer !bg-gray-300 !text-gray-600"
+                  className="cursor-pointer !bg-gray-300 !text-gray-600 !transition-colors !duration-200 !delay-300"
                   activeClassName="!bg-blue-500 !text-white"
                   completedClassName="!bg-blue-500 !text-white"
                   placeholder=""
@@ -412,7 +412,7 @@ const UsageGuidePage: React.FC = () => {
           {/* Navigation buttons (hidden on last step — buttons are inside StepGetStarted) */}
           {!isLastStep && (
             <div className="flex justify-between pb-4">
-              {!isFirstStep ? (
+              {activeStep > 0 ? (
                 <Button
                   onClick={handlePrev}
                   variant="outlined"
