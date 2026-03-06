@@ -58,7 +58,11 @@ class AdminService:
         rag_status = await self._check_rag_service()
         services.append(rag_status)
 
-        # 3. Backend 자체 (응답 가능하면 healthy)
+        # 3. Redis 상태
+        redis_status = await self._check_redis()
+        services.append(redis_status)
+
+        # 4. Backend 자체 (응답 가능하면 healthy)
         services.insert(0, ServiceStatus(
             name="backend",
             status="healthy",
@@ -126,6 +130,35 @@ class AdminService:
             logger.error("RAG service health check failed: %s", e)
             return ServiceStatus(
                 name="rag",
+                status="unhealthy",
+                details={"error": "Service temporarily unavailable"},
+            )
+
+    async def _check_redis(self) -> ServiceStatus:
+        """Redis(ElastiCache) ping으로 연결 상태를 확인합니다."""
+        redis_url = _app_settings.REDIS_URL
+        if not redis_url:
+            return ServiceStatus(
+                name="redis",
+                status="degraded",
+                details={"error": "REDIS_URL not configured"},
+            )
+        try:
+            import redis.asyncio as aioredis
+            start = time.time()
+            client = aioredis.from_url(redis_url, socket_connect_timeout=3, ssl_cert_reqs=None)
+            await client.ping()
+            elapsed_ms = (time.time() - start) * 1000
+            await client.aclose()
+            return ServiceStatus(
+                name="redis",
+                status="healthy",
+                response_time_ms=round(elapsed_ms, 2),
+            )
+        except Exception as e:
+            logger.error("Redis health check failed: %s", e)
+            return ServiceStatus(
+                name="redis",
                 status="unhealthy",
                 details={"error": "Service temporarily unavailable"},
             )

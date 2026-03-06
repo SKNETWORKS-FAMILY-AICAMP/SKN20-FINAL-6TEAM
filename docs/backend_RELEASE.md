@@ -1,13 +1,15 @@
 # Release Notes
 
-## [2026-03-06] - DB 스키마 동기화 + 답변 출처에 지원공고 신청서 다운로드 링크 추가
+## [2026-03-06] - DB 스키마 동기화 + 답변 출처에 지원공고 신청서 다운로드 링크 추가 + JobLogResponse PK 매핑 수정 + Redis 헬스체크 추가
 
 ### Features
 - **지원공고 신청서 다운로드 링크 추가** (`apps/histories/schemas.py`): 답변 출처(Sources) 참조에 신청서 다운로드 링크 표시 기능 추가
+- **Redis(ElastiCache) 헬스체크 추가** (`apps/admin/service.py`, `config/settings.py`, `requirements.txt`): `/admin` 대시보드 서버 상태에 Redis 항목 추가 — `REDIS_URL` 환경변수 기반 ping 체크, TLS(`rediss://`) 지원, 미설정 시 degraded 반환
 
 ### Bug Fixes
 - **DB 스키마 동기화** (`apps/common/models.py`, `apps/documents/schemas.py`, `apps/documents/service.py`, `apps/rag/schemas.py`, `database.sql`): 프로덕션 DB 덤프 기준으로 코드·스키마 불일치 해소 — `file.document_type` → `doc_type_id`, `token_blacklist.id` → `token_blacklist_id`, `user.profile_image` VARCHAR 255, `file` FK 제거, `announce.host_gov_code` FK 추가, `job_logs` DDL 추가, `domain_*` 테이블 제거
 - **job_logs PK 컬럼명 수정** (`apps/common/models.py`, `database.sql`): `job_logs.id` → `job_logs_id` 프로덕션 DB와 동기화
+- **JobLogResponse PK 매핑 수정** (`apps/admin/schemas.py`): `id` 필드에 `validation_alias="job_logs_id"` 추가 — ORM `job_logs_id` 컬럼을 Pydantic `id`로 올바르게 매핑하여 스케줄러 상태 조회 500 오류 해소
 
 ## [2026-03-05] - 세션 재접속 시 참고 문서(Sources) 복원
 

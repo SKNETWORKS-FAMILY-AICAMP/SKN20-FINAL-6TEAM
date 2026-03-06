@@ -33,5 +33,8 @@ requests>=2.31.0,<3.0.0
 # Monitoring
 psutil>=5.9.0,<7.0.0
 
+# Redis
+redis[asyncio]>=5.0.0,<6.0.0
+
 # AWS SES 이메일 알림
 boto3>=1.34.0,<2.0.0

@@ -111,7 +111,7 @@ class JobLogResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: int = Field(validation_alias="job_logs_id")
     job_name: str = Field(description="작업 이름")
     status: str = Field(description="started | success | failed")
     started_at: datetime
