@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-03-06] - 답변 출처에 지원공고 신청서 다운로드 링크 추가
+
+### Features
+- **지원공고 신청서 다운로드 링크 추가** (`apps/histories/schemas.py`): 답변 출처(Sources) 참조에 신청서 다운로드 링크 표시 기능 추가
+
 ## [2026-03-05] - 세션 재접속 시 참고 문서(Sources) 복원
 
 ### Features

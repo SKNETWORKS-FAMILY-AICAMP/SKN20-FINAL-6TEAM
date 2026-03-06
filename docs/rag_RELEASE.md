@@ -1,5 +1,11 @@
 # Release Notes
 
+## [2026-03-06] - gibberish 입력 거부 + 지원공고 신청서 다운로드 링크 추가
+
+### Features
+- **의미 없는 입력(gibberish) LLM 분류 및 응답 템플릿 추가** (`agents/router.py`, `schemas/response.py`): 의미 없는 입력에 대한 LLM 기반 분류 및 전용 거부 응답 템플릿 추가
+- **지원공고 신청서 다운로드 링크 추가** (`routes/chat.py`, `schemas/response.py`): 답변 출처(Sources)에 신청서 다운로드 링크 필드 추가
+
 ## [2026-03-05] - Redis 멀티턴 개선 + 세션 재접속 Sources 복원
 
 ### Features
@@ -10,6 +16,12 @@
 
 ### Tests
 - **Redis 멀티턴 테스트 강화** (`tests/`): Redis 세션 메모리 관련 테스트 커버리지 강화
+
+### Features (추가)
+- **공고 원문(_full_text) 청킹 파이프라인 + 동일 출처 중복 제거** (`scripts/vectordb/`): 공고 원문 전문 청킹 파이프라인 추가 및 동일 출처 청크 중복 제거 처리
+
+### Refactoring
+- **도메인 분류를 LLM 단일 경로로 전환** (`agents/router.py`, `utils/domain_classifier.py`): 키워드/DB 기반 도메인 분류 제거 — LLM 단일 경로로 통합
 
 ## [2026-03-04] - AWS ElastiCache Redis TLS 연결 수정 + 복수 기업 지원 + 후속 질문 폴백 + 참고 자료 꼬리말 제거 + ChromaDB/BM25 Cold Start 최적화 + VectorDB 빌드 코드 분리 + 벡터 도메인 분류 삭제 + LLM 재시도 설정
 
