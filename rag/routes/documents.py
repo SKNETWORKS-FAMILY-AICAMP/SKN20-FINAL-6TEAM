@@ -50,7 +50,7 @@ async def generate_contract(request: ContractRequest) -> DocumentResponse:
 
 @router.post("/business-plan", response_model=DocumentResponse)
 async def generate_business_plan(
-    format: str = Query(default="docx", description="출력 형식"),
+    format: str = Query(default="docx", description="출력 형식", pattern=r"^(pdf|docx)$"),
 ) -> DocumentResponse:
     """사업계획서 템플릿 생성 엔드포인트."""
     return await _exec_document(
@@ -116,7 +116,7 @@ async def list_application_forms() -> list[dict[str, str]]:
 
 
 @router.post("/application-forms/analyze")
-async def analyze_application_form(form_key: str = Query(..., description="S3 양식 파일 키")) -> dict:
+async def analyze_application_form(form_key: str = Query(..., description="S3 양식 파일 키", max_length=500, pattern=r"^[a-zA-Z0-9/_\-\.]+$")) -> dict:
     """S3 양식 파일을 LLM으로 분석하여 필드 정보를 반환합니다."""
     import json
 

@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api", tags=["Sessions"])
 
 @router.get("/sessions/active")
 async def get_active_sessions(
-    user_id: int = Query(..., description="사용자 ID"),
+    user_id: int = Query(..., gt=0, description="사용자 ID"),
 ):
     """Redis에서 활성 세션 목록을 조회합니다.
 

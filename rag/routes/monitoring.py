@@ -1,5 +1,6 @@
 """메트릭, 캐시, 설정 관리 엔드포인트."""
 
+import hmac
 import logging
 from typing import Any
 
@@ -22,7 +23,7 @@ async def verify_admin_key(
     """관리자 API 키를 검증합니다."""
     settings = get_settings()
     if settings.admin_api_key and settings.admin_api_key.strip():
-        if x_admin_key != settings.admin_api_key:
+        if not hmac.compare_digest(x_admin_key or "", settings.admin_api_key):
             raise HTTPException(status_code=403, detail="관리자 인증이 필요합니다")
 
 

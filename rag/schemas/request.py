@@ -250,8 +250,8 @@ class DocumentRequest(BaseModel):
         user_context: 사용자 컨텍스트
     """
 
-    doc_type_id: str = Field(description="문서 유형")
-    format: str = Field(default="pdf", description="출력 형식 (pdf, docx)")
+    doc_type_id: str = Field(description="문서 유형", max_length=50)
+    format: str = Field(default="pdf", description="출력 형식 (pdf, docx)", pattern=r"^(pdf|docx)$")
     user_context: UserContext | None = Field(default=None, description="사용자 컨텍스트")
 
 
@@ -377,7 +377,7 @@ class ModifyDocumentRequest(BaseModel):
         document_id: 원본 문서 ID (버전관리)
     """
 
-    file_content: str = Field(description="원본 파일 (base64 인코딩)")
+    file_content: str = Field(description="원본 파일 (base64 인코딩)", max_length=67_108_864)
     file_name: str = Field(description="원본 파일명 (확장자 포함)")
     instructions: str = Field(description="수정 지시사항", min_length=1, max_length=5000)
     format: str = Field(default="docx", description="출력 형식", pattern=r"^(pdf|docx)$")

@@ -134,14 +134,13 @@ def sanitize_query(query: str) -> SanitizeResult:
             query[:100],
         )
 
-    # 새니타이징 후 유효한 내용이 거의 없으면 원본 유지
-    # (과도한 새니타이징으로 정상 질문까지 삭제되는 것 방지)
+    # 새니타이징 후 유효한 내용이 거의 없으면 안전한 기본 쿼리로 대체
     stripped = sanitized.replace("[FILTERED]", "").strip()
     if is_detected and len(stripped) < 5:
-        logger.info(
-            "[새니타이저] 새니타이징 후 유효 내용 부족 — 원본 유지 (탐지 기록은 보존)"
+        logger.warning(
+            "인젝션 탐지 후 유효 텍스트 부족: '%s' → 기본 응답으로 대체", query[:50]
         )
-        sanitized = query
+        sanitized = "안녕하세요"
 
     return SanitizeResult(
         sanitized_query=sanitized,

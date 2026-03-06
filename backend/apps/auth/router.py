@@ -215,6 +215,10 @@ async def test_login(
     test_username = body.username if body and body.username else "테스트 사용자"
     test_type_code = body.type_code if body and body.type_code else "U0000002"
 
+    ALLOWED_TEST_TYPE_CODES = {"U0000002", "U0000003"}
+    if test_type_code not in ALLOWED_TEST_TYPE_CODES:
+        test_type_code = "U0000002"
+
     user_stmt = (
         select(User)
         .options(

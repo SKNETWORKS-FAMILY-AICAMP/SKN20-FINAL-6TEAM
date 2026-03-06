@@ -772,11 +772,21 @@ async def delete_chat_session(
     """세션 삭제 (대화 초기화).
 
     user_id가 제공되면 인증 사용자 세션을, 없으면 익명 세션을 삭제합니다.
+    owner_key를 구성하여 해당 소유자의 세션만 삭제할 수 있습니다.
     """
-    if user_id:
+    if user_id is not None:
+        if user_id <= 0:
+            raise HTTPException(status_code=400, detail="user_id는 양수여야 합니다.")
         owner_key = f"user:{user_id}"
     else:
         owner_key = "anon"
+
+    # owner_key + session_id 조합으로 키를 구성하므로,
+    # 해당 owner_key로 생성된 세션만 삭제 가능 (소유권 검증)
+    session_data = await get_session_full(owner_key, session_id)
+    if session_data is None:
+        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+
     deleted = await delete_session(owner_key, session_id)
     return {"deleted": deleted}
 

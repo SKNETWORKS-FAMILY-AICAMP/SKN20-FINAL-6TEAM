@@ -282,7 +282,7 @@ app.add_middleware(
 class APIKeyMiddleware:
     """RAG API Key 인증 미들웨어 (순수 ASGI)."""
 
-    PROTECTED_PREFIXES = ("/api/chat", "/api/documents", "/api/funding", "/api/sessions")
+    PROTECTED_PREFIXES = ("/api/chat", "/api/documents", "/api/funding", "/api/sessions", "/api/vectordb", "/api/evaluate")
 
     def __init__(self, app: _ASGIApp):
         self.app = app

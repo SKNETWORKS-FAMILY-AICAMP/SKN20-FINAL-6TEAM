@@ -1,3 +1,4 @@
+import hmac
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Query, status
@@ -23,7 +24,7 @@ def _verify_api_key(x_api_key: str | None = Header(default=None)) -> None:
     """RAG 서비스에서 호출 시 X-API-Key 검증."""
     if not settings.RAG_API_KEY:
         return
-    if x_api_key != settings.RAG_API_KEY:
+    if not hmac.compare_digest(x_api_key or "", settings.RAG_API_KEY):
         raise HTTPException(status_code=401, detail="Invalid API key")
 
 

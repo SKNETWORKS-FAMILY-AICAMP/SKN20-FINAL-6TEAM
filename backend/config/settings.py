@@ -110,6 +110,10 @@ class Settings(BaseSettings):
                     [o for o in self.CORS_ORIGINS if o not in filtered],
                 )
                 self.CORS_ORIGINS = filtered if filtered else self.CORS_ORIGINS
+                if not filtered:
+                    _settings_logger.warning(
+                        "CORS_ORIGINS에 프로덕션 도메인이 없습니다. localhost가 허용됩니다."
+                    )
         return self
 
     class Config:

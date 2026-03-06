@@ -2,6 +2,17 @@ import React, { useState } from 'react';
 import { ArrowDownTrayIcon, ChevronDownIcon, ChevronUpIcon, ClipboardDocumentIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 import type { SourceReference } from '../../types';
 
+/** 안전한 프로토콜(http/https)만 허용하는 URL 검증 */
+const getSafeUrl = (url: string | undefined): string | undefined => {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url, window.location.origin);
+    return ['http:', 'https:'].includes(parsed.protocol) ? url : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 interface SourceReferencesProps {
   sources: SourceReference[];
 }
@@ -36,9 +47,9 @@ export const SourceReferences: React.FC<SourceReferencesProps> = ({ sources }) =
             <li key={index} className="flex items-start gap-2 text-xs">
               <span className="text-gray-400 mt-0.5 shrink-0">[{index + 1}]</span>
               <div className="min-w-0">
-                {source.url ? (
+                {getSafeUrl(source.url) ? (
                   <a
-                    href={source.url}
+                    href={getSafeUrl(source.url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-500 hover:text-blue-600 hover:underline break-words"
@@ -58,9 +69,9 @@ export const SourceReferences: React.FC<SourceReferencesProps> = ({ sources }) =
                 {source.source && (
                   <span className="ml-1.5 text-gray-400">({source.source})</span>
                 )}
-                {source.docDownloadUrl && (
+                {getSafeUrl(source.docDownloadUrl) && (
                   <a
-                    href={source.docDownloadUrl}
+                    href={getSafeUrl(source.docDownloadUrl)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="ml-1.5 text-gray-400 hover:text-blue-500"
@@ -69,9 +80,9 @@ export const SourceReferences: React.FC<SourceReferencesProps> = ({ sources }) =
                     <ArrowDownTrayIcon className="h-3.5 w-3.5 inline" />
                   </a>
                 )}
-                {source.formDownloadUrl && (
+                {getSafeUrl(source.formDownloadUrl) && (
                   <a
-                    href={source.formDownloadUrl}
+                    href={getSafeUrl(source.formDownloadUrl)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="ml-1.5 text-gray-400 hover:text-green-500"
