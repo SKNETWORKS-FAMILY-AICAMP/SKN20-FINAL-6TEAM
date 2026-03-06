@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     RAG_SERVICE_URL: str = "http://rag:8001"
     RAG_API_KEY: str = ""
 
+    # Redis (AWS ElastiCache)
+    REDIS_URL: str = ""  # rediss://:<auth_token>@<host>:6379 (TLS) 또는 redis://<host>:6379
+
     # AWS SES 이메일 알림 (EC2 Instance Role로 자동 인증)
     AWS_REGION: str = "ap-northeast-2"
     SES_FROM: str = ""                    # SES 검증된 발신자 이메일

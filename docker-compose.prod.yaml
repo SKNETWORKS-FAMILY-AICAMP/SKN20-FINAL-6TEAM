@@ -205,7 +205,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1536M
+          memory: 2048M
     networks:
       - backend
 
