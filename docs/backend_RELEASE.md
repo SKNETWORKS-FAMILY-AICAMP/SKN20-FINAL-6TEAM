@@ -7,6 +7,7 @@
 
 ### Bug Fixes
 - **DB 스키마 동기화** (`apps/common/models.py`, `apps/documents/schemas.py`, `apps/documents/service.py`, `apps/rag/schemas.py`, `database.sql`): 프로덕션 DB 덤프 기준으로 코드·스키마 불일치 해소 — `file.document_type` → `doc_type_id`, `token_blacklist.id` → `token_blacklist_id`, `user.profile_image` VARCHAR 255, `file` FK 제거, `announce.host_gov_code` FK 추가, `job_logs` DDL 추가, `domain_*` 테이블 제거
+- **job_logs PK 컬럼명 수정** (`apps/common/models.py`, `database.sql`): `job_logs.id` → `job_logs_id` 프로덕션 DB와 동기화
 
 ## [2026-03-05] - 세션 재접속 시 참고 문서(Sources) 복원
 
