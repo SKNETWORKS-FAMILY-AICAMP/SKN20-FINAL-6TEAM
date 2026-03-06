@@ -78,6 +78,11 @@ CHITCHAT_RESPONSES = {
     "chitchat_emotional": (
         "감사합니다! 더 도움이 필요하시면 언제든 말씀해주세요. 😊"
     ),
+    "chitchat_gibberish": (
+        "입력하신 내용을 이해하지 못했습니다.\n\n"
+        "저는 **창업/지원사업**, **세무/회계**, **인사/노무**, **법률** 분야의 경영 상담을 제공합니다.\n\n"
+        "궁금하신 점을 구체적으로 질문해주시면 도움드리겠습니다!"
+    ),
 }
 
 DOCUMENT_GENERATION_SHORTCUT_RESPONSE = (
@@ -479,6 +484,7 @@ LLM_DOMAIN_CLASSIFICATION_PROMPT = """You are a domain classifier for Bizi.
 8. 질문에 도메인 키워드가 일부 포함되더라도 핵심 의도가 도메인 외이면 거부 (예: "주식 투자" ≠ "투자유치", "앱 개발" ≠ "사업 개발")
 9. **일상 대화(chitchat)**: 인사, 감사, 작별, 봇 정체 질문, 단순 긍정/확인, 감정 표현 등은 `is_relevant: false`, `domains: []`, intent를 `"chitchat_*"` 카테고리로 설정
 10. 인사 + 도메인 질문 복합 ("안녕 세무 질문인데요")은 도메인으로 분류 (chitchat 아님)
+11. **의미 없는 입력(gibberish)**: 무작위 문자열, 자판 낙서, 반복 문자, 해독 불가능한 텍스트는 `is_relevant: false`, `domains: []`, `intent: "chitchat_gibberish"`로 분류
 
 ## 분류 예시
 
@@ -494,6 +500,12 @@ LLM_DOMAIN_CLASSIFICATION_PROMPT = """You are a domain classifier for Bizi.
 - "너 뭐 할 수 있어?" → {{"domains": [], "confidence": 0.9, "is_relevant": false, "reasoning": "봇 정체 질문", "intent": "chitchat_bot_identity"}}
 - "네 알겠어요" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "단순 긍정", "intent": "chitchat_affirmative"}}
 - "수고하세요" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "작별 인사", "intent": "chitchat_farewell"}}
+
+### 의미 없는 입력 (gibberish)
+- "asdfasdfasdf" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "무작위 문자열, 의미 없는 입력", "intent": "chitchat_gibberish"}}
+- "ㅁㄴㅇㄹㅁㄴㅇㄹ" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "자판 낙서", "intent": "chitchat_gibberish"}}
+- "wefwefwefwef" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "반복 무의미 문자열", "intent": "chitchat_gibberish"}}
+- "aaaaaaaaaaa" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "반복 문자", "intent": "chitchat_gibberish"}}
 
 ### 경계 케이스 (도메인 분류)
 - "투자유치를 위한 IR 자료 준비 방법" → {{"domains": ["startup_funding"], "confidence": 0.85, "is_relevant": true, "reasoning": "투자유치는 창업 영역"}}
@@ -511,6 +523,7 @@ LLM_DOMAIN_CLASSIFICATION_PROMPT = """You are a domain classifier for Bizi.
 - `"chitchat_bot_identity"`: 봇 정체 질문 ("너 누구야", "뭐 할 수 있어?")
 - `"chitchat_affirmative"`: 긍정/확인 ("네", "응", "알겠어")
 - `"chitchat_emotional"`: 감정 표현 ("ㅋㅋ", "대단해", "멋지다")
+- `"chitchat_gibberish"`: 의미 없는 입력 ("asdf", "ㅁㄴㅇㄹ", 반복 문자, 해독 불가 텍스트)
 - 확실하지 않으면 `"consultation"`으로 설정
 
 위 규칙에 따라 분류하세요."""
