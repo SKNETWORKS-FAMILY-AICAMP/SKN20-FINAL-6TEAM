@@ -1,12 +1,13 @@
 # Release Notes
 
-## [2026-03-06] - DB 스키마 동기화 + 지원공고 신청서 다운로드 링크 + 가이드 페이지 온보딩 리디자인
+## [2026-03-06] - DB 스키마 동기화 + 지원공고 신청서 다운로드 링크 + 가이드 페이지 온보딩 리디자인 + Redis 카드 레이아웃 대응
 
 ### Features
 - **지원공고 신청서 다운로드 링크 추가** (`components/chat/SourceReferences.tsx`): 답변 출처(Sources) 참조에 신청서 다운로드 링크 표시 기능 추가
 - **가이드 페이지 스텝 바이 스텝 온보딩 플로우 리디자인** (`pages/UsageGuidePage.tsx`): 사용 설명서 온보딩 플로우 전면 재설계
 
 ### Bug Fixes
+- **서버 상태 그리드 레이아웃 수정** (`pages/AdminDashboardPage.tsx`): Redis 서비스 카드 추가로 4개 항목 대응 — `md:grid-cols-3` → `md:grid-cols-2 lg:grid-cols-4`
 - **DB 스키마 동기화** (`lib/documentApi.ts`, `pages/MainPage.tsx`, `components/chat/ActionButtons.tsx`, `components/chat/DocumentFormModal.tsx`, `components/chat/ApplicationFormModal.tsx`): API 응답 필드명 `document_type` → `doc_type_id` 전환
 - **가이드 페이지 UX 개선** (`pages/UsageGuidePage.tsx`): 텍스트 수직 중앙정렬, 이전 버튼 깜빡임 제거, 스텝 아이콘 전환 타이밍 지연 추가
 
