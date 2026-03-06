@@ -1,10 +1,13 @@
 # Release Notes
 
-## [2026-03-06] - gibberish 입력 거부 + 지원공고 신청서 다운로드 링크 추가
+## [2026-03-06] - DB 스키마 동기화 + gibberish 입력 거부 + 지원공고 신청서 다운로드 링크 추가
 
 ### Features
 - **의미 없는 입력(gibberish) LLM 분류 및 응답 템플릿 추가** (`agents/router.py`, `schemas/response.py`): 의미 없는 입력에 대한 LLM 기반 분류 및 전용 거부 응답 템플릿 추가
 - **지원공고 신청서 다운로드 링크 추가** (`routes/chat.py`, `schemas/response.py`): 답변 출처(Sources)에 신청서 다운로드 링크 필드 추가
+
+### Bug Fixes
+- **DB 스키마 동기화** (`schemas/request.py`, `schemas/response.py`, `agents/executor.py`, `agents/router.py`, `agents/generator.py`, `agents/hr_labor.py`, `agents/legal.py`, `agents/startup_funding.py`, `routes/documents.py`, `utils/shared_actions.py`): `DocumentResponse.document_type` → `doc_type_id` 전환, `domain_*` 분류 잔재 코드 제거
 
 ## [2026-03-05] - Redis 멀티턴 개선 + 세션 재접속 Sources 복원
 

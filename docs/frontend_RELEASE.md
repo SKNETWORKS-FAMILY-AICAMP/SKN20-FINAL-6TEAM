@@ -1,10 +1,13 @@
 # Release Notes
 
-## [2026-03-06] - 지원공고 신청서 다운로드 링크 + 가이드 페이지 온보딩 리디자인
+## [2026-03-06] - DB 스키마 동기화 + 지원공고 신청서 다운로드 링크 + 가이드 페이지 온보딩 리디자인
 
 ### Features
 - **지원공고 신청서 다운로드 링크 추가** (`components/chat/SourceReferences.tsx`): 답변 출처(Sources) 참조에 신청서 다운로드 링크 표시 기능 추가
 - **가이드 페이지 스텝 바이 스텝 온보딩 플로우 리디자인** (`pages/UsageGuidePage.tsx`): 사용 설명서 온보딩 플로우 전면 재설계
+
+### Bug Fixes
+- **DB 스키마 동기화** (`lib/documentApi.ts`, `pages/MainPage.tsx`, `components/chat/ActionButtons.tsx`, `components/chat/DocumentFormModal.tsx`, `components/chat/ApplicationFormModal.tsx`): API 응답 필드명 `document_type` → `doc_type_id` 전환
 
 ## [2026-03-05] - 채팅 세션 오염 방지 + 알림 저장버튼 수정 + Sources 복원
 
