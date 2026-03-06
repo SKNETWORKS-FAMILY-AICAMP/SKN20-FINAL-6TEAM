@@ -47,7 +47,7 @@ python -m scripts.vectordb --dry-run
 
 ```bash
 docker compose --profile build up vectordb-builder
-docker compose -f docker-compose.local.yaml --profile build up vectordb-builder
+docker compose -f docker-compose.e2e-test.yaml --profile build up vectordb-builder
 ```
 
 ## 컬렉션 목록

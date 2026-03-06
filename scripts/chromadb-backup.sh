@@ -17,8 +17,8 @@ CHROMA_CONTAINER="bizi-chromadb"
 # compose 파일 자동 감지 (prod > local > default)
 if [ -f "docker-compose.prod.yaml" ]; then
     COMPOSE_FILE="docker-compose.prod.yaml"
-elif [ -f "docker-compose.local.yaml" ]; then
-    COMPOSE_FILE="docker-compose.local.yaml"
+elif [ -f "docker-compose.e2e-test.yaml" ]; then
+    COMPOSE_FILE="docker-compose.e2e-test.yaml"
 else
     COMPOSE_FILE="docker-compose.yaml"
 fi
@@ -192,5 +192,5 @@ echo ""
 echo "=== 팀원 배포 가이드 ==="
 echo "1. 두 파일을 팀원에게 공유: ${BACKUP_FILE}, ${MANIFEST_FILE}"
 echo "2. 팀원은 프로젝트 루트에 파일을 놓고 실행:"
-echo "   docker compose -f docker-compose.local.yaml up -d chromadb"
+echo "   docker compose up -d chromadb"
 echo "   bash scripts/chromadb-restore.sh"

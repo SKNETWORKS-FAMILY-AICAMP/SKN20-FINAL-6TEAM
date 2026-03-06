@@ -3,8 +3,8 @@
 > RAG-based integrated business consulting chatbot. 4 expert domains: 창업/지원, 재무/세무, 인사/노무, 법률.
 
 ## Commands
-- Local dev: `docker compose -f docker-compose.local.yaml up --build` (ChromaDB + local model)
 - Deploy test: `docker compose up --build` (production-like environment)
+- E2E env: `docker compose -f docker-compose.e2e-test.yaml up --build` (로컬 MySQL + Mock RAG)
 - Backend test: `.venv/bin/pytest backend/tests/ -v` (Mac/Linux) / `.venv\Scripts\pytest backend/tests/ -v` (Windows)
 - Frontend test: `cd frontend && npm run test`
 - RAG test: `.venv/bin/pytest rag/tests/ -v` (Mac/Linux) / `.venv\Scripts\pytest rag/tests/ -v` (Windows)
@@ -33,7 +33,7 @@
 - DB requires SSH Tunnel running first: `ssh -L 3306:... bastion` before any DB access
 - Python `.venv` lives at project root only — no per-service venvs. Always use `.venv/bin/pytest`
 - `EMBEDDING_PROVIDER` env var: `local` uses local model, `runpod` uses RunPod Serverless — wrong value silently changes embedding behavior
-- `docker-compose.local.yaml` (ChromaDB + local model) vs `docker-compose.yaml` (production-like) — wrong file = wrong environment
+- `docker-compose.yaml` (production-like) vs `docker-compose.e2e-test.yaml` (E2E 테스트) — 용도에 맞는 파일 사용
 
 ## MUST NOT
 - No hardcoding: API keys, DB connections, ports → use env vars / config files
