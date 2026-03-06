@@ -7,7 +7,7 @@ from config.database import Base
 class TokenBlacklist(Base):
     __tablename__ = "token_blacklist"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    token_blacklist_id = Column(Integer, primary_key=True, autoincrement=True)
     jti = Column(String(36), unique=True, nullable=False)
     expires_at = Column(DateTime, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
@@ -32,7 +32,7 @@ class User(Base):
     user_id = Column(Integer, primary_key=True, autoincrement=True)
     google_email = Column(String(255), unique=True, nullable=False)
     google_sub = Column(String(255), unique=True, nullable=True, comment="Google 고유 사용자 ID")
-    profile_image = Column(String(500), nullable=True, comment="Google 프로필 이미지 URL")
+    profile_image = Column(String(255), nullable=True, comment="Google 프로필 이미지 URL")
     username = Column(String(100), nullable=False)
     birth = Column(DateTime, nullable=True)
     # 기존 DB에 컬럼 미반영인 환경에서도 기본 조회가 깨지지 않도록 지연 로딩합니다.
@@ -99,20 +99,16 @@ class File(Base):
     file_path = Column(String(500), nullable=False, default="")
     s3_key = Column(String(500), nullable=True, comment="S3 오브젝트 키")
     company_id = Column(Integer, ForeignKey("company.company_id", ondelete="SET NULL"), nullable=True)
-    user_id = Column(Integer, ForeignKey("user.user_id", ondelete="SET NULL"), nullable=True)
-    document_type = Column(String(50), nullable=True, comment="문서 유형 (labor_contract, nda 등)")
+    user_id = Column(Integer, nullable=True)
+    doc_type_id = Column(String(50), nullable=True, comment="문서 유형 (labor_contract, nda 등)")
     file_size = Column(Integer, nullable=True, comment="파일 크기 (bytes)")
     file_format = Column(String(10), nullable=True, comment="pdf 또는 docx")
     version = Column(Integer, nullable=False, default=1, comment="문서 버전")
-    parent_file_id = Column(Integer, ForeignKey("file.file_id", ondelete="SET NULL"), nullable=True, comment="수정 원본 파일 ID")
+    parent_file_id = Column(Integer, nullable=True, comment="수정 원본 파일 ID")
     file_metadata = Column("metadata", JSON, nullable=True, comment="생성 시 사용한 파라미터 등")
     create_date = Column(DateTime, default=datetime.now)
     update_date = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     use_yn = Column(Boolean, nullable=False, default=True, comment="0: 미사용, 1: 사용")
-
-    # Relationships
-    user = relationship("User", backref="files")
-    parent = relationship("File", remote_side=[file_id], backref="revisions")
 
 
 class Announce(Base):
@@ -134,7 +130,7 @@ class Announce(Base):
     form_s3_key = Column(String(500), default="", comment="신청양식 파일 S3 키")
     file_id = Column(Integer, ForeignKey("file.file_id", ondelete="SET NULL"), nullable=True, comment="공고 첨부파일")
     biz_code = Column(String(8), ForeignKey("code.code"), default="BA000000", comment="관련 업종코드")
-    host_gov_code = Column(String(8), nullable=True, comment="주관기관 코드 (향후 매핑)")
+    host_gov_code = Column(String(8), ForeignKey("code.code", onupdate="CASCADE"), nullable=True, comment="주관기관 코드 (향후 매핑)")
     create_date = Column(DateTime, default=datetime.now)
     update_date = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     use_yn = Column(Boolean, nullable=False, default=True, comment="0: 미사용, 1: 사용")

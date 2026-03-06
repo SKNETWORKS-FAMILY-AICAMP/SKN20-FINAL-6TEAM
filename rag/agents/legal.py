@@ -60,7 +60,7 @@ class LegalAgent(BaseAgent):
                 type="document_generation",
                 label="비밀유지계약서(NDA) 생성",
                 description="비밀유지계약서(NDA)를 생성합니다",
-                params={"document_type": "nda"},
+                params={"doc_type_id": "nda"},
             ),
         ),
         ActionRule(
@@ -69,7 +69,7 @@ class LegalAgent(BaseAgent):
                 type="document_generation",
                 label="주주간 계약서 생성",
                 description="주주간 계약서를 생성합니다",
-                params={"document_type": "shareholders_agreement"},
+                params={"doc_type_id": "shareholders_agreement"},
             ),
         ),
         SERVICE_AGREEMENT_RULE,

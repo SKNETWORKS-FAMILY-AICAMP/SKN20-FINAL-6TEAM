@@ -716,7 +716,7 @@ class TestStreamRewriteMeta:
             mock_settings.return_value = Mock(
                 enable_ragas_evaluation=False,
                 enable_llm_evaluation=False,
-                enable_legal_supplement=False,
+
                 total_timeout=30.0,
                 stream_hard_timeout=60.0,
                 fallback_message="fallback",
@@ -791,7 +791,7 @@ class TestTopicChangeFallbackGuard:
             mock_settings.return_value = Mock(
                 enable_ragas_evaluation=False,
                 enable_llm_evaluation=False,
-                enable_legal_supplement=False,
+
                 total_timeout=30.0,
                 stream_hard_timeout=60.0,
                 fallback_message="fallback",

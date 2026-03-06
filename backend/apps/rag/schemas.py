@@ -53,7 +53,7 @@ class ContractGenerateRequest(BaseModel):
 class GenerateDocumentProxyRequest(BaseModel):
     """범용 문서 생성 프록시 요청."""
 
-    document_type: str = Field(..., max_length=50)
+    doc_type_id: str = Field(..., max_length=50)
     params: dict = Field(default_factory=dict)
     format: str = Field(default="docx", pattern=r"^(pdf|docx)$")
 

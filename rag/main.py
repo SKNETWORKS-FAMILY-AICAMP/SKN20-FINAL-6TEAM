@@ -236,7 +236,6 @@ def _log_settings_summary(settings) -> None:
     logger.info("  도메인 거부   : %s", _flag(settings.enable_domain_rejection))
     logger.info("  LLM 평가     : %s", _flag(settings.enable_llm_evaluation))
     logger.info("  RAGAS 평가   : %s", _flag(settings.enable_ragas_evaluation))
-    logger.info("  법률 보충     : %s", f"ON (K={settings.legal_supplement_k})" if settings.enable_legal_supplement else "OFF")
     logger.info("  응답 캐시     : %s", _flag(settings.enable_response_cache))
     logger.info("  Rate Limit   : %s", f"ON (rate={settings.rate_limit_rate}/s, capacity={settings.rate_limit_capacity})" if settings.enable_rate_limit else "OFF")
     logger.info("  ChromaDB Warmup: %s", _flag(settings.enable_chromadb_warmup))

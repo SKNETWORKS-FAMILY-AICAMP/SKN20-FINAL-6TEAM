@@ -83,7 +83,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ actions }) => {
     }
 
     if (action.type === 'document_generation') {
-      const docType = action.params.document_type as string;
+      const docType = action.params.doc_type_id as string;
       if (docType === 'labor_contract') {
         setContractModalOpen(true);
       } else if (LLM_DOC_TYPES.has(docType)) {

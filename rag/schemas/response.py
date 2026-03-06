@@ -86,7 +86,7 @@ class ChatResponse(BaseModel):
 
 class DocumentResponse(BaseModel):
     success: bool = Field(description="success flag")
-    document_type: str = Field(description="document type")
+    doc_type_id: str = Field(description="document type")
     file_path: str | None = Field(default=None, description="server file path", exclude=True)
     file_name: str | None = Field(default=None, description="file name")
     file_content: str | None = Field(default=None, description="file content base64")

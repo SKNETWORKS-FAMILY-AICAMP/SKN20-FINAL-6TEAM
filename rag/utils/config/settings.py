@@ -54,10 +54,6 @@ class Settings(BaseSettings):
         default=True,
         description="복합 도메인 병합 후 Cross-Domain Reranking 활성화"
     )
-    enable_legal_supplement: bool = Field(
-        default=True, description="법률 보충 검색 활성화 (주 도메인 검색 후 법률 키워드 발견 시 법률DB 추가 검색)"
-    )
-
     # -- 도메인 분류 --
     enable_domain_rejection: bool = Field(
         default=True,
@@ -355,11 +351,6 @@ class Settings(BaseSettings):
         description="도메인별 LLM temperature (정밀도 요구 도메인은 낮게)"
     )
 
-    # -- 법률 보충 검색 --
-    legal_supplement_k: int = Field(
-        default=4, gt=0, description="법률 보충 검색 시 가져올 문서 수"
-    )
-
     # -- 쿼리 분석 임계값 (SearchStrategySelector) --
     query_analysis_thresholds: dict[str, float] = Field(
         default={
@@ -630,7 +621,6 @@ class Settings(BaseSettings):
         "enable_dynamic_k",
         "enable_fixed_doc_limit",
         "enable_cross_domain_rerank",
-        "enable_legal_supplement",
         "enable_domain_rejection",
         "domain_classification_max_retries",
         "enable_llm_evaluation",

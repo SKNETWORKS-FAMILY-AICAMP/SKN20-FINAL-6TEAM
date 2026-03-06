@@ -20,7 +20,6 @@ from langchain_core.documents import Document
 
 from agents.base import RetrievalResult, RetrievalStatus, RetrievalEvaluationResult
 from utils.config import get_settings
-from utils.legal_supplement import LEGAL_SUPPLEMENT_KEYWORDS, needs_legal_supplement
 from utils.score_normalizer import ScoreNormalizer
 
 if TYPE_CHECKING:
@@ -794,7 +793,7 @@ class DocumentMerger:
 class RetrievalAgent:
     """검색 파이프라인 오케스트레이터.
 
-    쿼리 분석 → 예산 할당 → 도메인별 검색 → 평가/재시도 → 법률 보충 → 문서 병합.
+    쿼리 분석 → 예산 할당 → 도메인별 검색 → 평가/재시도 → 문서 병합.
     """
 
     def __init__(
@@ -944,37 +943,18 @@ class RetrievalAgent:
                     elapsed,
                 )
 
-        # 4. 법률 보충 검색 (비동기)
-        await self._aperform_legal_supplement(
-            query=query,
-            documents=all_documents,
-            domains=domains,
-            retrieval_results=retrieval_results,
-            all_documents=all_documents,
-            agent_timings=agent_timings,
-            sub_queries=sub_queries,
-        )
-
-        # 5. 문서 병합 + 최종 rerank (단일/복합 도메인 공통)
-        main_results = {
-            d: r for d, r in retrieval_results.items()
-            if d != "law_common_supplement"
-        }
-
-        if len(main_results) > 1:
+        # 4. 문서 병합 + 최종 rerank (단일/복합 도메인 공통)
+        if len(retrieval_results) > 1:
             # 복합 도메인: cross-domain rerank
             merged = await self._amerge_with_optional_rerank(
                 query=query,
-                main_results=main_results,
+                retrieval_results=retrieval_results,
                 budgets=budgets,
             )
-            supplement = retrieval_results.get("law_common_supplement")
-            if supplement:
-                merged.extend(supplement.documents)
             all_documents = merged
-        elif len(main_results) == 1 and self.settings.enable_reranking:
+        elif len(retrieval_results) == 1 and self.settings.enable_reranking:
             # 단일 도메인: 문서 수 > retrieval_k이면 최종 rerank 1회
-            domain_key = next(iter(main_results))
+            domain_key = next(iter(retrieval_results))
             budget = budgets.get(domain_key)
             retrieval_k = budget.allocated_k if budget else self.settings.retrieval_k
             if len(all_documents) > retrieval_k:
@@ -989,7 +969,7 @@ class RetrievalAgent:
                         query, all_documents, top_k=retrieval_k,
                     )
                     # retrieval_results도 갱신
-                    main_results[domain_key].documents = all_documents
+                    retrieval_results[domain_key].documents = all_documents
 
         state["retrieval_results"] = retrieval_results
         state["documents"] = all_documents
@@ -1064,7 +1044,7 @@ class RetrievalAgent:
     async def _amerge_with_optional_rerank(
         self,
         query: str,
-        main_results: dict[str, RetrievalResult],
+        retrieval_results: dict[str, RetrievalResult],
         budgets: dict[str, DocumentBudget],
     ) -> list[Document]:
         """복합 도메인 병합 후 선택적 cross-domain reranking (비동기).
@@ -1074,7 +1054,7 @@ class RetrievalAgent:
 
         Args:
             query: 사용자 질문
-            main_results: supplement 제외 도메인별 검색 결과
+            retrieval_results: 도메인별 검색 결과
             budgets: 도메인별 문서 할당량
 
         Returns:
@@ -1083,15 +1063,15 @@ class RetrievalAgent:
         if self.settings.enable_cross_domain_rerank:
             candidate_total = sum(
                 b.allocated_k for b in budgets.values()
-                if b.domain in main_results
+                if b.domain in retrieval_results
             )
             merged = self.merger.merge_and_prioritize(
-                retrieval_results=main_results,
+                retrieval_results=retrieval_results,
                 budgets=budgets,
                 max_total=candidate_total,
             )
             # 복합 도메인: ratio 적용하여 실질적 필터링 (저품질 문서 제거)
-            if len(main_results) > 1:
+            if len(retrieval_results) > 1:
                 final_k = min(
                     max(5, int(candidate_total * self.settings.cross_domain_rerank_ratio)),
                     self.settings.max_retrieval_docs,
@@ -1102,11 +1082,11 @@ class RetrievalAgent:
             reranker = self.rag_chain.reranker
             if reranker and len(merged) > final_k:
                 # 3+ 도메인: 도메인별 최소 보장 후 나머지 reranking
-                if len(main_results) >= 3:
+                if len(retrieval_results) >= 3:
                     merged = await self._arerank_with_domain_guarantee(
                         query=query,
                         merged=merged,
-                        main_results=main_results,
+                        retrieval_results=retrieval_results,
                         final_k=final_k,
                         reranker=reranker,
                     )
@@ -1126,7 +1106,7 @@ class RetrievalAgent:
                 merged = merged[:final_k]
 
             # 복합 도메인 병합 후 품질 평가 (단일 도메인은 스킵)
-            if len(main_results) > 1:
+            if len(retrieval_results) > 1:
                 from utils.retrieval_evaluator import get_retrieval_evaluator
 
                 evaluator = get_retrieval_evaluator()
@@ -1147,7 +1127,7 @@ class RetrievalAgent:
                     )
                     if relaxed_k > final_k:
                         merged = self.merger.merge_and_prioritize(
-                            retrieval_results=main_results,
+                            retrieval_results=retrieval_results,
                             budgets=budgets,
                             max_total=candidate_total,
                         )
@@ -1164,7 +1144,7 @@ class RetrievalAgent:
             return merged
 
         return self.merger.merge_and_prioritize(
-            retrieval_results=main_results,
+            retrieval_results=retrieval_results,
             budgets=budgets,
             max_total=self.settings.max_retrieval_docs,
         )
@@ -1173,7 +1153,7 @@ class RetrievalAgent:
         self,
         query: str,
         merged: list[Document],
-        main_results: dict[str, RetrievalResult],
+        retrieval_results: dict[str, RetrievalResult],
         final_k: int,
         reranker: "BaseReranker",
     ) -> list[Document]:
@@ -1185,14 +1165,14 @@ class RetrievalAgent:
         Args:
             query: 사용자 질문
             merged: 병합된 전체 문서 리스트
-            main_results: 도메인별 검색 결과
+            retrieval_results: 도메인별 검색 결과
             final_k: 최종 문서 수
             reranker: Reranker 인스턴스
 
         Returns:
             도메인 균형이 보장된 reranked 문서 리스트
         """
-        num_domains = len(main_results)
+        num_domains = len(retrieval_results)
         # 동적 min_per_domain: 도메인 수가 많을수록 보장 슬롯을 줄여 리랭킹 슬롯 확보
         # 예: 3도메인 final_k=10 → min(2, max(1, 10//4)) = 2 (변화 없음)
         #     4도메인 final_k=10 → min(2, max(1, 10//5)) = 2 (변화 없음)
@@ -1203,7 +1183,7 @@ class RetrievalAgent:
         )
 
         # 도메인별 문서 분류 (metadata의 domain 또는 collection_name 활용)
-        domain_doc_map: dict[str, list[Document]] = {d: [] for d in main_results}
+        domain_doc_map: dict[str, list[Document]] = {d: [] for d in retrieval_results}
         for doc in merged:
             doc_domain = (
                 doc.metadata.get("domain")
@@ -1400,146 +1380,3 @@ class RetrievalAgent:
             agent, query, domain, k, query_chars,
         )
 
-    @staticmethod
-    def _select_legal_query(
-        query: str,
-        sub_queries: list["SubQuery"],
-    ) -> str:
-        """법률 보충 검색에 사용할 최적 쿼리를 선택합니다.
-
-        하위 질문 중 법률 키워드가 가장 많이 포함된 질문을 선택합니다.
-        복합 질문 전체가 아닌 법률 특화 하위 질문을 사용하여 검색 정밀도를 높입니다.
-
-        Args:
-            query: 원본 복합 질문
-            sub_queries: 분해된 하위 질문 리스트
-
-        Returns:
-            법률 보충 검색에 사용할 쿼리 문자열
-        """
-        if not sub_queries or len(sub_queries) <= 1:
-            return query
-
-        best_query = query
-        best_count = 0
-
-        for sq in sub_queries:
-            count = sum(1 for kw in LEGAL_SUPPLEMENT_KEYWORDS if kw in sq.query)
-            if count > best_count:
-                best_count = count
-                best_query = sq.query
-
-        if best_count > 0 and best_query != query:
-            logger.info(
-                "[법률 보충] 하위 질문 선택: '%s' (법률 키워드 %d개)",
-                best_query[:50],
-                best_count,
-            )
-
-        return best_query
-
-    def _perform_legal_supplement(
-        self,
-        query: str,
-        documents: list[Document],
-        domains: list[str],
-        retrieval_results: dict[str, RetrievalResult],
-        all_documents: list[Document],
-        agent_timings: list[dict],
-        sub_queries: list["SubQuery"] | None = None,
-    ) -> None:
-        """법률 보충 검색을 수행합니다 (동기).
-
-        Args:
-            query: 사용자 질문
-            documents: 도메인 에이전트가 검색한 전체 문서
-            domains: 분류된 도메인 리스트
-            retrieval_results: 검색 결과 딕셔너리 (in-place 수정)
-            all_documents: 전체 문서 리스트 (in-place 수정)
-            agent_timings: 에이전트 타이밍 리스트 (in-place 수정)
-            sub_queries: 분해된 하위 질문 리스트 (법률 특화 쿼리 선택용)
-        """
-        if not self.settings.enable_legal_supplement:
-            return
-
-        if not needs_legal_supplement(query, documents, domains):
-            return
-
-        logger.info("[법률 보충] 법률 보충 검색 시작")
-        legal_agent = self.agents.get("law_common")
-        if not legal_agent:
-            return
-
-        # 복합 질문 시 법률 특화 하위 질문 선택
-        search_query = self._select_legal_query(query, sub_queries or [])
-
-        agent_start = time.time()
-
-        try:
-            result = legal_agent.retrieve_only(search_query)
-            limit = min(
-                len(result.documents),
-                len(result.sources),
-                self.settings.legal_supplement_k,
-            )
-            if len(result.documents) > limit:
-                result.documents = result.documents[:limit]
-                result.sources = result.sources[:limit]
-
-            # 기존 문서와 중복 제거 (content hash 기반)
-            existing_hashes = {
-                self.merger._content_hash(doc) for doc in all_documents
-            }
-            unique_docs = []
-            unique_sources = []
-            for doc, src in zip(result.documents, result.sources):
-                h = self.merger._content_hash(doc)
-                if h not in existing_hashes:
-                    existing_hashes.add(h)
-                    unique_docs.append(doc)
-                    unique_sources.append(src)
-            dedup_removed = len(result.documents) - len(unique_docs)
-            if dedup_removed > 0:
-                logger.info("[법률 보충] 중복 제거: %d건 → %d건", len(result.documents), len(unique_docs))
-            result.documents = unique_docs
-            result.sources = unique_sources
-
-            retrieval_results["law_common_supplement"] = result
-            all_documents.extend(result.documents)
-            # H5: 법률 보충 추가 후 max_retrieval_docs 초과 시 슬라이싱
-            if len(all_documents) > self.settings.max_retrieval_docs:
-                all_documents[:] = all_documents[:self.settings.max_retrieval_docs]
-
-            agent_elapsed = time.time() - agent_start
-            agent_timings.append({
-                "domain": "law_common_supplement",
-                "retrieve_time": result.retrieve_time,
-                "doc_count": len(result.documents),
-                "total_time": agent_elapsed,
-            })
-
-            logger.info(
-                "[법률 보충] 완료: %d건 (%.3fs)",
-                len(result.documents),
-                agent_elapsed,
-            )
-        except Exception as e:
-            logger.warning("[법률 보충] 검색 실패: %s", e)
-
-    async def _aperform_legal_supplement(
-        self,
-        query: str,
-        documents: list[Document],
-        domains: list[str],
-        retrieval_results: dict[str, RetrievalResult],
-        all_documents: list[Document],
-        agent_timings: list[dict],
-        sub_queries: list["SubQuery"] | None = None,
-    ) -> None:
-        """법률 보충 검색을 비동기로 수행합니다 (동기 메서드에 위임)."""
-        await asyncio.to_thread(
-            self._perform_legal_supplement,
-            query, documents, domains,
-            retrieval_results, all_documents, agent_timings,
-            sub_queries,
-        )

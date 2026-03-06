@@ -205,7 +205,7 @@ const MainPage: React.FC = () => {
             documentAttachment: {
               fileContent: result.file_content,
               fileName: result.file_name,
-              documentType: result.document_type || 'modified_document',
+              documentType: result.doc_type_id || 'modified_document',
               downloadable: true,
             },
           });

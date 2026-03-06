@@ -108,7 +108,7 @@ class ActionExecutor:
             s3_client = get_s3_client()
             file_bytes = base64.b64decode(response.file_content)
             ext = (response.file_name or "doc").rsplit(".", 1)[-1]
-            s3_key = s3_client._generate_key(user_id, response.document_type, ext)
+            s3_key = s3_client._generate_key(user_id, response.doc_type_id, ext)
 
             content_type = "application/pdf" if ext == "pdf" else (
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -118,7 +118,7 @@ class ActionExecutor:
             file_id = self._save_file_metadata(
                 user_id=user_id,
                 company_id=company_id,
-                document_type=response.document_type,
+                doc_type_id=response.doc_type_id,
                 file_name=response.file_name or "",
                 s3_key=s3_key,
                 file_size=len(file_bytes),
@@ -137,7 +137,7 @@ class ActionExecutor:
         self,
         user_id: int,
         company_id: int | None,
-        document_type: str,
+        doc_type_id: str,
         file_name: str,
         s3_key: str,
         file_size: int,
@@ -149,7 +149,7 @@ class ActionExecutor:
         Args:
             user_id: 사용자 ID
             company_id: 회사 ID
-            document_type: 문서 유형
+            doc_type_id: 문서 유형
             file_name: 파일명
             s3_key: S3 오브젝트 키
             file_size: 파일 크기 (bytes)
@@ -164,7 +164,7 @@ class ActionExecutor:
         payload = {
             "user_id": user_id,
             "company_id": company_id,
-            "document_type": document_type,
+            "doc_type_id": doc_type_id,
             "file_name": file_name,
             "s3_key": s3_key,
             "file_size": file_size,
@@ -211,14 +211,14 @@ class ActionExecutor:
             else:
                 return DocumentResponse(
                     success=False,
-                    document_type="labor_contract",
+                    doc_type_id="labor_contract",
                     message=f"지원하지 않는 형식: {request.format} (pdf 또는 docx만 가능)",
                 )
             return self._upload_and_save(result, user_id, company_id)
         except Exception as e:
             return DocumentResponse(
                 success=False,
-                document_type="labor_contract",
+                doc_type_id="labor_contract",
                 message=f"근로계약서 생성 실패: {str(e)}",
             )
 
@@ -389,7 +389,7 @@ class ActionExecutor:
 
         return DocumentResponse(
             success=True,
-            document_type="labor_contract",
+            doc_type_id="labor_contract",
             file_path=str(file_path),
             file_name=file_name,
             file_content=file_content,
@@ -497,7 +497,7 @@ class ActionExecutor:
 
         return DocumentResponse(
             success=True,
-            document_type="labor_contract",
+            doc_type_id="labor_contract",
             file_path=str(file_path),
             file_name=file_name,
             file_content=file_content,
@@ -585,7 +585,7 @@ class ActionExecutor:
 
             result = DocumentResponse(
                 success=True,
-                document_type="business_plan",
+                doc_type_id="business_plan",
                 file_path=str(file_path),
                 file_name=file_name,
                 file_content=file_content,
@@ -596,7 +596,7 @@ class ActionExecutor:
         except Exception as e:
             return DocumentResponse(
                 success=False,
-                document_type="business_plan",
+                doc_type_id="business_plan",
                 message=f"사업계획서 템플릿 생성 실패: {str(e)}",
             )
 
@@ -633,7 +633,7 @@ class ActionExecutor:
         if not type_def:
             return DocumentResponse(
                 success=False,
-                document_type=document_type,
+                doc_type_id=document_type,
                 message=f"알 수 없는 문서 유형: {document_type}",
             )
 
@@ -672,7 +672,7 @@ class ActionExecutor:
             if not prompt_template:
                 return DocumentResponse(
                     success=False,
-                    document_type=type_def.type_key,
+                    doc_type_id=type_def.type_key,
                     message=f"프롬프트를 찾을 수 없습니다: {type_def.llm_prompt_key}",
                 )
 
@@ -697,7 +697,7 @@ class ActionExecutor:
             logger.error("LLM 문서 생성 실패 (%s): %s", type_def.type_key, e, exc_info=True)
             return DocumentResponse(
                 success=False,
-                document_type=type_def.type_key,
+                doc_type_id=type_def.type_key,
                 message=f"문서 생성 실패: {str(e)}",
             )
 
@@ -725,7 +725,7 @@ class ActionExecutor:
         if not form_key:
             return DocumentResponse(
                 success=False,
-                document_type="application_form",
+                doc_type_id="application_form",
                 message="양식 키(_form_key)가 전달되지 않았습니다.",
             )
 
@@ -761,7 +761,7 @@ class ActionExecutor:
             logger.error("신청서 생성 실패 (%s): %s", form_key, e, exc_info=True)
             return DocumentResponse(
                 success=False,
-                document_type="application_form",
+                doc_type_id="application_form",
                 message=f"신청서 생성 실패: {str(e)}",
             )
 
@@ -802,7 +802,7 @@ class ActionExecutor:
                 reason = relevance.get("reason", "비즈니스 관련 문서가 아닙니다.")
                 return DocumentResponse(
                     success=False,
-                    document_type="rejected",
+                    doc_type_id="rejected",
                     message=f"문서 수정이 거부되었습니다: {reason}",
                 )
 
@@ -839,7 +839,7 @@ class ActionExecutor:
                         file_id = self._save_file_metadata(
                             user_id=user_id,
                             company_id=company_id,
-                            document_type=type_key,
+                            doc_type_id=type_key,
                             file_name=result.file_name or "",
                             s3_key=s3_key,
                             file_size=len(file_bytes),
@@ -859,14 +859,14 @@ class ActionExecutor:
             logger.warning("문서 수정 입력 오류: %s", e)
             return DocumentResponse(
                 success=False,
-                document_type="modified_document",
+                doc_type_id="modified_document",
                 message=str(e),
             )
         except Exception as e:
             logger.error("문서 수정 실패: %s", e, exc_info=True)
             return DocumentResponse(
                 success=False,
-                document_type="modified_document",
+                doc_type_id="modified_document",
                 message=f"문서 수정 실패: {str(e)}",
             )
 
@@ -955,7 +955,7 @@ class ActionExecutor:
 
         return DocumentResponse(
             success=True,
-            document_type=type_key,
+            doc_type_id=type_key,
             file_path=str(file_path),
             file_name=file_name,
             file_content=file_content,
@@ -1052,7 +1052,7 @@ class ActionExecutor:
 
         return DocumentResponse(
             success=True,
-            document_type=type_key,
+            doc_type_id=type_key,
             file_path=str(file_path),
             file_name=file_name,
             file_content=file_content,
@@ -1074,7 +1074,7 @@ class ActionExecutor:
             실행 결과
         """
         if action_type == "document_generation":
-            doc_type = params.get("document_type")
+            doc_type = params.get("doc_type_id")
             if doc_type == "labor_contract":
                 request = ContractRequest(**params)
                 result = self.generate_labor_contract(request)

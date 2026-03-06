@@ -245,12 +245,12 @@ class DocumentRequest(BaseModel):
     """문서 생성 요청 기본 스키마.
 
     Attributes:
-        document_type: 문서 유형
+        doc_type_id: 문서 유형
         format: 출력 형식 (pdf, docx)
         user_context: 사용자 컨텍스트
     """
 
-    document_type: str = Field(description="문서 유형")
+    doc_type_id: str = Field(description="문서 유형")
     format: str = Field(default="pdf", description="출력 형식 (pdf, docx)")
     user_context: UserContext | None = Field(default=None, description="사용자 컨텍스트")
 
@@ -351,13 +351,13 @@ class GenerateDocumentRequest(BaseModel):
     """범용 문서 생성 요청 스키마.
 
     Attributes:
-        document_type: 문서 유형 키 (예: "nda", "service_agreement")
+        doc_type_id: 문서 유형 키 (예: "nda", "service_agreement")
         params: 문서 필드 값
         format: 출력 형식 (pdf, docx)
         company_context: 회사 정보 (인증 시 자동 주입)
     """
 
-    document_type: str = Field(description="문서 유형 키")
+    doc_type_id: str = Field(description="문서 유형 키")
     params: dict[str, Any] = Field(default_factory=dict, description="문서 필드 값")
     format: str = Field(default="docx", description="출력 형식", pattern=r"^(pdf|docx)$")
     company_context: CompanyContext | None = Field(default=None, description="회사 정보")

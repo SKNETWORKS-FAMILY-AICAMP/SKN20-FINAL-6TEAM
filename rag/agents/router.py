@@ -49,7 +49,6 @@ from schemas.response import (
 from utils.config import DOMAIN_LABELS, get_settings
 from utils.middleware import get_metrics_collector
 from utils.domain_classifier import DomainClassificationResult, get_domain_classifier
-from utils.legal_supplement import needs_legal_supplement
 from utils.prompts import (
     CHITCHAT_RESPONSES,
     DOCUMENT_GENERATION_SHORTCUT_RESPONSE,
@@ -554,7 +553,7 @@ class MainRouter:
         detected_doc_type = state.get("detected_document_type")
         if detected_doc_type:
             existing_doc_types = {
-                a.params.get("document_type")
+                a.params.get("doc_type_id")
                 for a in result.actions
                 if a.type == "document_generation"
             }
@@ -567,7 +566,7 @@ class MainRouter:
                         type="document_generation",
                         label=f"{label} 작성",
                         description=f"{label}을(를) 자동으로 생성합니다.",
-                        params={"document_type": detected_doc_type},
+                        params={"doc_type_id": detected_doc_type},
                     )
                 )
 
@@ -735,30 +734,6 @@ class MainRouter:
                     if not retrieval_results:
                         return None
 
-                    # 법률 보충 검색 (원본 파이프라인과 동일)
-                    all_documents = [
-                        doc
-                        for r in retrieval_results.values()
-                        for doc in r.documents
-                    ]
-                    if (
-                        self.settings.enable_legal_supplement
-                        and "law_common" not in domains
-                        and needs_legal_supplement(alt_query, all_documents, domains)
-                        and "law_common" in self.agents
-                    ):
-                        try:
-                            law_result = await self.agents["law_common"].aretrieve_only(alt_query)
-                            law_k = self.settings.legal_supplement_k
-                            law_result.documents = law_result.documents[:law_k]
-                            law_result.sources = law_result.sources[:law_k]
-                            retrieval_results["law_common_supplement"] = law_result
-                            logger.info(
-                                "[재시도] 법률 보충 검색: %d건",
-                                len(law_result.documents),
-                            )
-                        except Exception as e:
-                            logger.warning("[재시도] 법률 보충 검색 실패: %s", e)
                 else:
                     # 생성 품질 문제 → 기존 검색 결과 재활용 (재검색 스킵)
                     retrieval_results = existing_retrieval_results
@@ -1246,56 +1221,16 @@ class MainRouter:
             all_actions: list[ActionSuggestion] = []
             content = ""
 
-            # 법률 보충 검색 판단 (law_common이 아닌 경우만)
-            supplementary_documents: list[Document] | None = None
-            if (
-                domain != "law_common"
-                and self.settings.enable_legal_supplement
-                and needs_legal_supplement(query, [], domains)
-            ):
-                logger.info("[스트리밍] 쿼리 기반 법률 보충 검색 시작")
-                try:
-                    legal_agent = self.agents["law_common"]
-                    legal_result = await legal_agent.aretrieve_only(query)
-                    supplementary_documents = legal_result.documents[:self.settings.legal_supplement_k]
-                    all_sources.extend(
-                        legal_result.sources[:self.settings.legal_supplement_k]
-                    )
-                    logger.info(
-                        "[스트리밍] 법률 보충 검색 완료: %d건",
-                        len(supplementary_documents),
-                    )
-                except Exception as e:
-                    logger.warning("[스트리밍] 법률 보충 검색 실패: %s", e)
-
             # 통합 생성 에이전트 사용 스트리밍
             # 검색 수행
             retrieval_result = await agent.aretrieve_only(query)
             documents = retrieval_result.documents
             all_sources.extend(retrieval_result.sources)
 
-            if supplementary_documents:
-                documents = documents + supplementary_documents
-
             # 액션 사전 수집 (이미 검색된 결과 재사용)
             retrieval_results_map: dict[str, RetrievalResult] = {
                 domain: retrieval_result,
             }
-            if supplementary_documents:
-                legal_supp_sources = self.generator.rag_chain.documents_to_sources(
-                    supplementary_documents
-                )
-                retrieval_results_map["law_common_supplement"] = RetrievalResult(
-                    documents=supplementary_documents,
-                    scores=[],
-                    sources=legal_supp_sources,
-                    evaluation=RetrievalEvaluationResult(
-                        status=RetrievalStatus.SUCCESS,
-                        doc_count=len(supplementary_documents),
-                        keyword_match_ratio=0.0,
-                        avg_similarity_score=0.0,
-                    ),
-                )
 
             pre_actions = self.generator._collect_actions(
                 query, retrieval_results_map, [domain]
@@ -1338,8 +1273,6 @@ class MainRouter:
                 except Exception as e:
                     logger.warning("[스트리밍 평가] 단일 도메인 평가 실패: %s", e)
 
-            ragas_metrics_single = None
-
             yield {
                 "type": "done",
                 "content": content,
@@ -1348,7 +1281,7 @@ class MainRouter:
                 "sources": all_sources,
                 "actions": all_actions,
                 "evaluation": single_evaluation,
-                "ragas_metrics": ragas_metrics_single,
+                "ragas_metrics": None,
                 "retrieval_results": retrieval_results_map,
                 "query_rewrite_applied": rewrite_meta.rewritten,
                 "query_rewrite_reason": rewrite_meta.reason,
@@ -1381,9 +1314,6 @@ class MainRouter:
             for d in domains:
                 if d in retrieval_results:
                     all_sources_multi.extend(retrieval_results[d].sources)
-            legal_supp = retrieval_results.get("law_common_supplement")
-            if legal_supp:
-                all_sources_multi.extend(legal_supp.sources)
 
             content = ""
             async for chunk in self.generator.astream_generate_multi(
@@ -1429,8 +1359,6 @@ class MainRouter:
                 except Exception as e:
                     logger.warning("[스트리밍 평가] 복수 도메인 평가 실패: %s", e)
 
-            ragas_metrics_multi = None
-
             yield {
                 "type": "done",
                 "content": content,
@@ -1439,7 +1367,7 @@ class MainRouter:
                 "sources": all_sources_multi,
                 "actions": pre_actions,
                 "evaluation": evaluation,
-                "ragas_metrics": ragas_metrics_multi,
+                "ragas_metrics": None,
                 "retrieval_results": retrieval_results,
                 "query_rewrite_applied": rewrite_meta.rewritten,
                 "query_rewrite_reason": rewrite_meta.reason,

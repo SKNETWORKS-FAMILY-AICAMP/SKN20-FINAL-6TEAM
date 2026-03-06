@@ -34,7 +34,7 @@ interface DocumentResponse {
   success: boolean;
   file_content?: string;
   file_name?: string;
-  document_type?: string;
+  doc_type_id?: string;
   message?: string;
 }
 
@@ -78,7 +78,7 @@ export const generateDocument = async (
   format?: string,
 ): Promise<DocumentResponse> => {
   const response = await api.post('/rag/documents/generate', {
-    document_type: documentType,
+    doc_type_id: documentType,
     params,
     format: format || 'docx',
   });

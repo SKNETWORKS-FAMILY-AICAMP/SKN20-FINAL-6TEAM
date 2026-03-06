@@ -50,7 +50,6 @@ RESULTS_DIR = Path(__file__).parent / "results"
 TOGGLES_DEFAULT_ON: dict[str, str] = {
     "enable_fixed_doc_limit": "Fixed Doc Limit",
     "enable_cross_domain_rerank": "Cross-Domain Rerank",
-    "enable_legal_supplement": "Legal Supplement",
     "enable_adaptive_search": "Adaptive Search",
     "enable_dynamic_k": "Dynamic K",
     "enable_post_eval_retry": "Post-Eval Retry",

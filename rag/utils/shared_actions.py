@@ -9,6 +9,6 @@ SERVICE_AGREEMENT_RULE = ActionRule(
         type="document_generation",
         label="용역 계약서 생성",
         description="용역(외주) 계약서를 생성합니다",
-        params={"document_type": "service_agreement"},
+        params={"doc_type_id": "service_agreement"},
     ),
 )

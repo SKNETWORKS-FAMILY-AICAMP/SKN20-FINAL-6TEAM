@@ -76,7 +76,7 @@ export const DocumentFormModal: React.FC<DocumentFormModalProps> = ({
         documentAttachment: {
           fileContent: response.file_content,
           fileName: response.file_name,
-          documentType: response.document_type || documentType,
+          documentType: response.doc_type_id || documentType,
           downloadable: true,
         },
       });

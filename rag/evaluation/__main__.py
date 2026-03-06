@@ -91,7 +91,6 @@ async def run_batch_evaluation(
     settings = get_settings()
     original_ragas_flag = settings.enable_ragas_evaluation
     original_llm_eval_flag = settings.enable_llm_evaluation
-    original_legal_supp_flag = settings.enable_legal_supplement
     original_post_eval_flag = settings.enable_post_eval_retry
     original_graduated_retry_flag = settings.enable_graduated_retry
 
@@ -104,10 +103,9 @@ async def run_batch_evaluation(
 
     settings.enable_ragas_evaluation = False
     settings.enable_llm_evaluation = False
-    settings.enable_legal_supplement = False
     settings.enable_post_eval_retry = False
     settings.enable_graduated_retry = False
-    print("Batch mode: disabled in-pipeline eval/legal supplement/retry")
+    print("Batch mode: disabled in-pipeline eval/retry")
 
     if embedding_provider == "runpod":
         print("RunPod warmup...")
@@ -211,7 +209,6 @@ async def run_batch_evaluation(
         print("No valid responses. Skip RAGAS evaluation.")
         settings.enable_ragas_evaluation = original_ragas_flag
         settings.enable_llm_evaluation = original_llm_eval_flag
-        settings.enable_legal_supplement = original_legal_supp_flag
         settings.enable_post_eval_retry = original_post_eval_flag
         settings.enable_graduated_retry = original_graduated_retry_flag
         vector_store.close()
@@ -335,7 +332,6 @@ async def run_batch_evaluation(
 
     settings.enable_ragas_evaluation = original_ragas_flag
     settings.enable_llm_evaluation = original_llm_eval_flag
-    settings.enable_legal_supplement = original_legal_supp_flag
     settings.enable_post_eval_retry = original_post_eval_flag
     settings.enable_graduated_retry = original_graduated_retry_flag
     vector_store.close()

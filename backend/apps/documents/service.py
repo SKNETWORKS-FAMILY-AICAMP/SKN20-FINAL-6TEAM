@@ -24,7 +24,7 @@ class DocumentService:
         doc = File(
             user_id=data.user_id,
             company_id=data.company_id,
-            document_type=data.document_type,
+            doc_type_id=data.doc_type_id,
             file_name=data.file_name,
             file_path=data.file_path,
             s3_key=data.s3_key,

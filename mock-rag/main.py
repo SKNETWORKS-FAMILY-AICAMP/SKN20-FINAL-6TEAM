@@ -115,7 +115,7 @@ _MOCK_RESPONSES: dict[str, dict[str, Any]] = {
             {"title": "근로기준법", "source": "국가법령정보센터", "url": "https://www.law.go.kr/"},
         ],
         "actions": [
-            {"type": "document_generation", "label": "근로계약서 생성", "params": {"document_type": "labor_contract"}},
+            {"type": "document_generation", "label": "근로계약서 생성", "params": {"doc_type_id": "labor_contract"}},
         ],
     },
     "law": {
@@ -285,7 +285,7 @@ async def generate_contract(req: DocumentRequest) -> dict[str, Any]:
     ).decode()
     return {
         "success": True,
-        "document_type": "labor_contract",
+        "doc_type_id": "labor_contract",
         "file_path": "/tmp/mock_contract.docx",
         "file_name": "근로계약서_mock.docx",
         "file_content": dummy_content,
@@ -300,7 +300,7 @@ async def generate_business_plan(req: DocumentRequest) -> dict[str, Any]:
     ).decode()
     return {
         "success": True,
-        "document_type": "business_plan",
+        "doc_type_id": "business_plan",
         "file_path": "/tmp/mock_business_plan.docx",
         "file_name": "사업계획서_mock.docx",
         "file_content": dummy_content,

@@ -594,7 +594,7 @@ CREATE TABLE IF NOT EXISTS `user` (
     `user_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `google_email` VARCHAR(255) NOT NULL UNIQUE,
     `google_sub` VARCHAR(255) DEFAULT NULL COMMENT 'Google 고유 사용자 ID (불변)',
-    `profile_image` VARCHAR(500) DEFAULT NULL COMMENT 'Google 프로필 이미지 URL',
+    `profile_image` VARCHAR(255) DEFAULT NULL COMMENT 'Google 프로필 이미지 URL',
     `username` VARCHAR(100) NOT NULL,
     `birth` DATETIME DEFAULT NULL,
     `age` INT DEFAULT NULL COMMENT '사용자 나이',
@@ -688,7 +688,9 @@ CREATE TABLE IF NOT EXISTS `file` (
     `s3_key` VARCHAR(500) DEFAULT NULL COMMENT 'S3 오브젝트 키',
     `company_id` INT DEFAULT NULL,
     `user_id` INT DEFAULT NULL,
-    `document_type` VARCHAR(50) DEFAULT NULL COMMENT '문서 유형 (labor_contract, nda 등)',
+    `doc_type_id` VARCHAR(50) DEFAULT NULL COMMENT '문서 유형 (labor_contract, nda 등)',
+    `file_size` INT DEFAULT NULL COMMENT '파일 크기 (bytes)',
+    `file_format` VARCHAR(10) DEFAULT NULL COMMENT 'pdf 또는 docx',
     `version` INT NOT NULL DEFAULT 1 COMMENT '문서 버전 (수정 시 증가)',
     `parent_file_id` INT DEFAULT NULL COMMENT '수정 원본 파일 ID',
     `metadata` JSON DEFAULT NULL COMMENT '생성 시 사용한 파라미터 등',
@@ -697,11 +699,9 @@ CREATE TABLE IF NOT EXISTS `file` (
     `use_yn` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0: 미사용, 1: 사용',
 
     FOREIGN KEY (`company_id`) REFERENCES `company`(`company_id`) ON DELETE SET NULL,
-    FOREIGN KEY (`user_id`) REFERENCES `user`(`user_id`) ON DELETE SET NULL,
-    FOREIGN KEY (`parent_file_id`) REFERENCES `file`(`file_id`) ON DELETE SET NULL,
     INDEX `idx_file_company_id` (`company_id`),
     INDEX `idx_file_user_id` (`user_id`),
-    INDEX `idx_file_document_type` (`document_type`),
+    INDEX `idx_file_doc_type_id` (`doc_type_id`),
     INDEX `idx_file_use_yn` (`use_yn`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -732,6 +732,7 @@ CREATE TABLE IF NOT EXISTS `announce` (
 
     FOREIGN KEY (`file_id`) REFERENCES `file`(`file_id`) ON DELETE SET NULL,
     FOREIGN KEY (`biz_code`) REFERENCES `code`(`code`) ON UPDATE CASCADE,
+    FOREIGN KEY (`host_gov_code`) REFERENCES `code`(`code`) ON UPDATE CASCADE,
     UNIQUE KEY `uk_source` (`source_type`, `source_id`),
     INDEX `idx_announce_biz_code` (`biz_code`),
     INDEX `idx_announce_source_type` (`source_type`),
@@ -789,7 +790,7 @@ CREATE TABLE IF NOT EXISTS `schedule` (
 -- 8. Token Blacklist 테이블
 -- ============================================
 CREATE TABLE IF NOT EXISTS `token_blacklist` (
-    `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `token_blacklist_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `jti` VARCHAR(36) NOT NULL UNIQUE,
     `expires_at` DATETIME NOT NULL,
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -800,309 +801,20 @@ CREATE TABLE IF NOT EXISTS `token_blacklist` (
 
 
 -- ============================================
--- 9. Domain Keyword 테이블 (code 테이블의 에이전트 코드 참조)
--- domain 테이블 대신 code 테이블 PK(code_id)를 직접 참조합니다.
--- A0000002: 창업·지원, A0000003: 재무·세무, A0000004: 인사·노무, A0000007: 법률
+-- 9. Job Logs 테이블 (스케줄러 작업 이력)
 -- ============================================
-CREATE TABLE IF NOT EXISTS `domain_keyword` (
-    `keyword_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    `code_id` INT NOT NULL COMMENT 'code 테이블 PK (에이전트 코드 참조)',
-    `keyword` VARCHAR(100) NOT NULL COMMENT '키워드',
-    `keyword_type` VARCHAR(20) DEFAULT 'noun' COMMENT 'noun: 명사, verb: 동사',
-    `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
-    `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    `use_yn` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0: 미사용, 1: 사용',
-
-    FOREIGN KEY (`code_id`) REFERENCES `code`(`code_id`) ON DELETE CASCADE ON UPDATE CASCADE,
-    UNIQUE KEY `uq_code_keyword` (`code_id`, `keyword`),
-    INDEX `idx_domain_keyword_code_id` (`code_id`),
-    INDEX `idx_domain_keyword_use_yn` (`use_yn`)
+CREATE TABLE IF NOT EXISTS `job_logs` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `job_name` VARCHAR(100) NOT NULL COMMENT '작업명 (예: token_cleanup)',
+    `status` VARCHAR(20) NOT NULL COMMENT 'started | success | failed',
+    `started_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `finished_at` DATETIME DEFAULT NULL,
+    `duration_ms` INT DEFAULT NULL COMMENT '실행 시간(ms)',
+    `record_count` INT DEFAULT NULL COMMENT '처리된 레코드 수',
+    `error_msg` TEXT DEFAULT NULL COMMENT '실패 시 오류 메시지 (최대 2000자)',
+    `meta` JSON DEFAULT NULL COMMENT '추가 메타데이터',
+    INDEX `idx_job_logs_job_name` (`job_name`),
+    INDEX `idx_job_logs_status` (`status`),
+    INDEX `idx_job_logs_started_at` (`started_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ============================================
--- 10. Domain Compound Rule 테이블
--- ============================================
-CREATE TABLE IF NOT EXISTS `domain_compound_rule` (
-    `rule_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    `code_id` INT NOT NULL COMMENT 'code 테이블 PK (에이전트 코드 참조)',
-    `required_lemmas` JSON NOT NULL COMMENT '필수 lemma 목록 (JSON 배열)',
-    `description` VARCHAR(255) DEFAULT NULL COMMENT '규칙 설명',
-    `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
-    `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    `use_yn` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0: 미사용, 1: 사용',
-
-    FOREIGN KEY (`code_id`) REFERENCES `code`(`code_id`) ON DELETE CASCADE ON UPDATE CASCADE,
-    INDEX `idx_domain_compound_rule_code_id` (`code_id`),
-    INDEX `idx_domain_compound_rule_use_yn` (`use_yn`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ============================================
--- 11. Domain Representative Query 테이블
--- ============================================
-CREATE TABLE IF NOT EXISTS `domain_representative_query` (
-    `query_id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    `code_id` INT NOT NULL COMMENT 'code 테이블 PK (에이전트 코드 참조)',
-    `query_text` VARCHAR(500) NOT NULL COMMENT '대표 질문',
-    `create_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
-    `update_date` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    `use_yn` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0: 미사용, 1: 사용',
-
-    FOREIGN KEY (`code_id`) REFERENCES `code`(`code_id`) ON DELETE CASCADE ON UPDATE CASCADE,
-    INDEX `idx_domain_rep_query_code_id` (`code_id`),
-    INDEX `idx_domain_rep_query_use_yn` (`use_yn`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ============================================
--- Domain Keyword 초기 데이터 (테이블이 비어있을 때만)
--- ============================================
-INSERT INTO `domain_keyword` (`code_id`, `keyword`, `keyword_type`)
-SELECT c.code_id, kw.keyword, kw.keyword_type
-FROM `code` c
-CROSS JOIN (
-    SELECT '창업' AS keyword, 'noun' AS keyword_type
-    UNION ALL SELECT '사업자등록', 'noun'
-    UNION ALL SELECT '법인설립', 'noun'
-    UNION ALL SELECT '업종', 'noun'
-    UNION ALL SELECT '인허가', 'noun'
-    UNION ALL SELECT '지원사업', 'noun'
-    UNION ALL SELECT '보조금', 'noun'
-    UNION ALL SELECT '정책자금', 'noun'
-    UNION ALL SELECT '공고', 'noun'
-    UNION ALL SELECT '지원금', 'noun'
-    UNION ALL SELECT '마케팅', 'noun'
-    UNION ALL SELECT '광고', 'noun'
-    UNION ALL SELECT '홍보', 'noun'
-    UNION ALL SELECT '브랜딩', 'noun'
-    UNION ALL SELECT '스타트업', 'noun'
-    UNION ALL SELECT '개업', 'noun'
-    UNION ALL SELECT '가게', 'noun'
-    UNION ALL SELECT '매장', 'noun'
-    UNION ALL SELECT '점포', 'noun'
-    UNION ALL SELECT '프랜차이즈', 'noun'
-    UNION ALL SELECT '사업계획', 'noun'
-    UNION ALL SELECT '사업자', 'noun'
-    UNION ALL SELECT '폐업', 'noun'
-    UNION ALL SELECT '휴업', 'noun'
-    UNION ALL SELECT '업종변경', 'noun'
-    UNION ALL SELECT '차리다', 'verb'
-) kw
-WHERE c.code = 'A0000002' AND NOT EXISTS (SELECT 1 FROM `domain_keyword` LIMIT 1)
-UNION ALL
-SELECT c.code_id, kw.keyword, kw.keyword_type
-FROM `code` c
-CROSS JOIN (
-    SELECT '세금' AS keyword, 'noun' AS keyword_type
-    UNION ALL SELECT '부가세', 'noun'
-    UNION ALL SELECT '법인세', 'noun'
-    UNION ALL SELECT '소득세', 'noun'
-    UNION ALL SELECT '회계', 'noun'
-    UNION ALL SELECT '세무', 'noun'
-    UNION ALL SELECT '재무', 'noun'
-    UNION ALL SELECT '결산', 'noun'
-    UNION ALL SELECT '세무조정', 'noun'
-    UNION ALL SELECT '세액', 'noun'
-    UNION ALL SELECT '공제', 'noun'
-    UNION ALL SELECT '감면', 'noun'
-    UNION ALL SELECT '원천징수', 'noun'
-    UNION ALL SELECT '종소세', 'noun'
-    UNION ALL SELECT '종합소득', 'noun'
-    UNION ALL SELECT '양도세', 'noun'
-    UNION ALL SELECT '증여세', 'noun'
-    UNION ALL SELECT '상속세', 'noun'
-    UNION ALL SELECT '부가가치세', 'noun'
-    UNION ALL SELECT '세율', 'noun'
-    UNION ALL SELECT '세무사', 'noun'
-    UNION ALL SELECT '연말정산', 'noun'
-    UNION ALL SELECT '간이과세', 'noun'
-    UNION ALL SELECT '일반과세', 'noun'
-    UNION ALL SELECT '세금계산서', 'noun'
-    UNION ALL SELECT '신고하다', 'verb'
-    UNION ALL SELECT '납부하다', 'verb'
-    UNION ALL SELECT '절세하다', 'verb'
-) kw
-WHERE c.code = 'A0000003' AND NOT EXISTS (SELECT 1 FROM `domain_keyword` LIMIT 1)
-UNION ALL
-SELECT c.code_id, kw.keyword, kw.keyword_type
-FROM `code` c
-CROSS JOIN (
-    SELECT '근로' AS keyword, 'noun' AS keyword_type
-    UNION ALL SELECT '채용', 'noun'
-    UNION ALL SELECT '해고', 'noun'
-    UNION ALL SELECT '급여', 'noun'
-    UNION ALL SELECT '퇴직금', 'noun'
-    UNION ALL SELECT '연차', 'noun'
-    UNION ALL SELECT '인사', 'noun'
-    UNION ALL SELECT '노무', 'noun'
-    UNION ALL SELECT '4대보험', 'noun'
-    UNION ALL SELECT '근로계약', 'noun'
-    UNION ALL SELECT '취업규칙', 'noun'
-    UNION ALL SELECT '권고사직', 'noun'
-    UNION ALL SELECT '정리해고', 'noun'
-    UNION ALL SELECT '월급', 'noun'
-    UNION ALL SELECT '임금', 'noun'
-    UNION ALL SELECT '최저임금', 'noun'
-    UNION ALL SELECT '수당', 'noun'
-    UNION ALL SELECT '주휴', 'noun'
-    UNION ALL SELECT '짜르다', 'verb'
-    UNION ALL SELECT '짤리다', 'verb'
-) kw
-WHERE c.code = 'A0000004' AND NOT EXISTS (SELECT 1 FROM `domain_keyword` LIMIT 1)
-UNION ALL
-SELECT c.code_id, kw.keyword, kw.keyword_type
-FROM `code` c
-CROSS JOIN (
-    SELECT '법률' AS keyword, 'noun' AS keyword_type
-    UNION ALL SELECT '법령', 'noun'
-    UNION ALL SELECT '조문', 'noun'
-    UNION ALL SELECT '판례', 'noun'
-    UNION ALL SELECT '법규', 'noun'
-    UNION ALL SELECT '규정', 'noun'
-    UNION ALL SELECT '상법', 'noun'
-    UNION ALL SELECT '민법', 'noun'
-    UNION ALL SELECT '행정법', 'noun'
-    UNION ALL SELECT '공정거래법', 'noun'
-    UNION ALL SELECT '소송', 'noun'
-    UNION ALL SELECT '분쟁', 'noun'
-    UNION ALL SELECT '소장', 'noun'
-    UNION ALL SELECT '고소', 'noun'
-    UNION ALL SELECT '고발', 'noun'
-    UNION ALL SELECT '항소', 'noun'
-    UNION ALL SELECT '상고', 'noun'
-    UNION ALL SELECT '손해배상', 'noun'
-    UNION ALL SELECT '배상', 'noun'
-    UNION ALL SELECT '합의', 'noun'
-    UNION ALL SELECT '조정', 'noun'
-    UNION ALL SELECT '중재', 'noun'
-    UNION ALL SELECT '특허', 'noun'
-    UNION ALL SELECT '상표', 'noun'
-    UNION ALL SELECT '저작권', 'noun'
-    UNION ALL SELECT '지식재산', 'noun'
-    UNION ALL SELECT '출원', 'noun'
-    UNION ALL SELECT '침해', 'noun'
-    UNION ALL SELECT '변호사', 'noun'
-    UNION ALL SELECT '법무사', 'noun'
-    UNION ALL SELECT '변리사', 'noun'
-    UNION ALL SELECT '계약법', 'noun'
-    UNION ALL SELECT '약관', 'noun'
-    UNION ALL SELECT '채무불이행', 'noun'
-    UNION ALL SELECT '고소하다', 'verb'
-    UNION ALL SELECT '소송하다', 'verb'
-    UNION ALL SELECT '항소하다', 'verb'
-) kw
-WHERE c.code = 'A0000007' AND NOT EXISTS (SELECT 1 FROM `domain_keyword` LIMIT 1);
-
--- ============================================
--- Domain Compound Rule 초기 데이터
--- ============================================
-INSERT INTO `domain_compound_rule` (`code_id`, `required_lemmas`, `description`)
-SELECT c.code_id, cr.required_lemmas, cr.description
-FROM `code` c
-CROSS JOIN (
-    SELECT '["기업", "지원"]' AS required_lemmas, '지원+기업 → startup_funding' AS description
-    UNION ALL SELECT '["사업", "지원"]', '지원+사업 → startup_funding'
-    UNION ALL SELECT '["중소", "지원"]', '지원+중소 → startup_funding'
-    UNION ALL SELECT '["소상공인", "지원"]', '지원+소상공인 → startup_funding'
-    UNION ALL SELECT '["벤처", "지원"]', '지원+벤처 → startup_funding'
-    UNION ALL SELECT '["등록", "사업"]', '등록+사업 → startup_funding'
-    UNION ALL SELECT '["등록", "법인"]', '등록+법인 → startup_funding'
-) cr
-WHERE c.code = 'A0000002' AND NOT EXISTS (SELECT 1 FROM `domain_compound_rule` LIMIT 1)
-UNION ALL
-SELECT c.code_id, cr.required_lemmas, cr.description
-FROM `code` c
-CROSS JOIN (
-    SELECT '["법", "위반"]' AS required_lemmas, '법+위반 → law_common' AS description
-    UNION ALL SELECT '["법", "적용"]', '법+적용 → law_common'
-    UNION ALL SELECT '["법적", "절차"]', '법적+절차 → law_common'
-    UNION ALL SELECT '["법적", "문제"]', '법적+문제 → law_common'
-) cr
-WHERE c.code = 'A0000007' AND NOT EXISTS (SELECT 1 FROM `domain_compound_rule` LIMIT 1);
-
--- ============================================
--- Domain Representative Query 초기 데이터
--- ============================================
-INSERT INTO `domain_representative_query` (`code_id`, `query_text`)
-SELECT c.code_id, rq.query_text
-FROM `code` c
-CROSS JOIN (
-    SELECT '사업자등록 절차가 궁금합니다' AS query_text
-    UNION ALL SELECT '창업 지원사업 추천해주세요'
-    UNION ALL SELECT '법인 설립 방법을 알려주세요'
-    UNION ALL SELECT '정부 보조금 신청 방법'
-    UNION ALL SELECT '마케팅 전략 조언'
-    UNION ALL SELECT '스타트업 초기 자금 조달'
-    UNION ALL SELECT '업종별 인허가 필요한가요'
-    UNION ALL SELECT '창업 아이템 검증 방법'
-    UNION ALL SELECT '예비창업자 지원 프로그램'
-    UNION ALL SELECT '소상공인 지원정책'
-    UNION ALL SELECT '가게 어떻게 차려요'
-    UNION ALL SELECT '카페 창업 비용이 얼마나 드나요'
-    UNION ALL SELECT '음식점 개업 절차 알려주세요'
-    UNION ALL SELECT '프랜차이즈 가맹점 열고 싶어요'
-    UNION ALL SELECT '헬스장 차리려면 뭐가 필요해요'
-    UNION ALL SELECT '우리 지역에 기업 지원해주는 사업 있나요'
-    UNION ALL SELECT 'IT 기업 대상 정부 지원 프로그램 알려주세요'
-) rq
-WHERE c.code = 'A0000002' AND NOT EXISTS (SELECT 1 FROM `domain_representative_query` LIMIT 1)
-UNION ALL
-SELECT c.code_id, rq.query_text
-FROM `code` c
-CROSS JOIN (
-    SELECT '부가세 신고 방법' AS query_text
-    UNION ALL SELECT '법인세 계산 방법'
-    UNION ALL SELECT '세금 절세 방법'
-    UNION ALL SELECT '회계 처리 방법'
-    UNION ALL SELECT '재무제표 작성법'
-    UNION ALL SELECT '원천징수 신고 절차'
-    UNION ALL SELECT '세무조정 어떻게 하나요'
-    UNION ALL SELECT '종합소득세 신고 기한'
-    UNION ALL SELECT '매입세액 공제 조건'
-    UNION ALL SELECT '결산 절차가 궁금합니다'
-    UNION ALL SELECT '종소세 언제 내야 하나요'
-    UNION ALL SELECT '부가세 납부 기한이 언제예요'
-    UNION ALL SELECT '양도세 얼마나 나와요'
-    UNION ALL SELECT '연말정산 어떻게 해요'
-    UNION ALL SELECT '간이과세자 기준이 뭐예요'
-) rq
-WHERE c.code = 'A0000003' AND NOT EXISTS (SELECT 1 FROM `domain_representative_query` LIMIT 1)
-UNION ALL
-SELECT c.code_id, rq.query_text
-FROM `code` c
-CROSS JOIN (
-    SELECT '퇴직금 계산 방법' AS query_text
-    UNION ALL SELECT '근로계약서 작성법'
-    UNION ALL SELECT '4대보험 가입 방법'
-    UNION ALL SELECT '연차 계산 방법'
-    UNION ALL SELECT '해고 절차'
-    UNION ALL SELECT '최저임금 적용 기준'
-    UNION ALL SELECT '야근 수당 계산'
-    UNION ALL SELECT '취업규칙 작성 방법'
-    UNION ALL SELECT '근로시간 단축 제도'
-    UNION ALL SELECT '채용 공고 작성법'
-    UNION ALL SELECT '직원 짤랐는데 퇴직금 얼마 줘야 해요'
-    UNION ALL SELECT '월급에서 세금 얼마나 떼나요'
-    UNION ALL SELECT '주휴수당 계산법 알려주세요'
-    UNION ALL SELECT '권고사직 시 절차가 어떻게 되나요'
-    UNION ALL SELECT '알바 4대보험 가입해야 하나요'
-) rq
-WHERE c.code = 'A0000004' AND NOT EXISTS (SELECT 1 FROM `domain_representative_query` LIMIT 1)
-UNION ALL
-SELECT c.code_id, rq.query_text
-FROM `code` c
-CROSS JOIN (
-    SELECT '소송 절차가 어떻게 되나요' AS query_text
-    UNION ALL SELECT '분쟁 해결 방법 알려주세요'
-    UNION ALL SELECT '특허 출원 방법이 궁금합니다'
-    UNION ALL SELECT '상표 등록 절차 안내해주세요'
-    UNION ALL SELECT '저작권 침해 시 대응 방법'
-    UNION ALL SELECT '상법에서 이사의 의무는 무엇인가요'
-    UNION ALL SELECT '민법상 계약 해제 요건'
-    UNION ALL SELECT '손해배상 청구 방법'
-    UNION ALL SELECT '지식재산권 보호 방법'
-    UNION ALL SELECT '법인 이사의 책임에 대해 알려주세요'
-    UNION ALL SELECT '계약서 분쟁 시 어떻게 해야 하나요'
-    UNION ALL SELECT '특허 침해 소송 절차가 궁금합니다'
-    UNION ALL SELECT '회사 관련 법적 분쟁 해결'
-) rq
-WHERE c.code = 'A0000007' AND NOT EXISTS (SELECT 1 FROM `domain_representative_query` LIMIT 1);
 

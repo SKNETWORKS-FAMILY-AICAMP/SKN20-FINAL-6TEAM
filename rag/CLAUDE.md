@@ -58,7 +58,6 @@ Most RAG features are toggle-able via `ENABLE_*` env vars (hybrid search, rerank
 
 Key behaviors to know:
 - **Retry**: eval FAIL → alt queries generated → return highest LLM score. **1 retry only** (no loop).
-- **Legal supplement**: after main domain search, if legal keywords detected → supplemental search from `law_common_db`. Direct legal questions skip supplement. Logic: `utils/legal_supplement.py` (keyword matching, no LLM).
 - **Embedding**: `EMBEDDING_PROVIDER=local` (HuggingFace BAAI/bge-m3) vs `runpod` (RunPod Serverless — single endpoint handles both embed/rerank via `task` field)
 
 ## Session Memory (Multi-turn)

@@ -46,7 +46,6 @@ async def health_check() -> HealthResponse:
         "domain_rejection": settings.enable_domain_rejection,
         "llm_evaluation": settings.enable_llm_evaluation,
         "ragas_evaluation": settings.enable_ragas_evaluation,
-        "legal_supplement": settings.enable_legal_supplement,
         "fixed_doc_limit": settings.enable_fixed_doc_limit,
         "cross_domain_rerank": settings.enable_cross_domain_rerank,
         "embedding_provider": settings.embedding_provider,

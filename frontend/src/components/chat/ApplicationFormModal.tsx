@@ -91,7 +91,7 @@ export const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({ onCl
         documentAttachment: {
           fileContent: response.file_content,
           fileName: response.file_name,
-          documentType: response.document_type || 'application_form',
+          documentType: response.doc_type_id || 'application_form',
           downloadable: true,
         },
       });

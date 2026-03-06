@@ -8,7 +8,7 @@ class DocumentCreate(BaseModel):
 
     user_id: int | None = None
     company_id: int | None = None
-    document_type: str = Field(..., max_length=50)
+    doc_type_id: str = Field(..., max_length=50)
     file_name: str = Field(..., max_length=255)
     file_path: str = Field(default="", max_length=500)
     s3_key: str = Field(..., max_length=500)
@@ -27,7 +27,7 @@ class DocumentResponse(BaseModel):
     file_id: int
     user_id: int | None = None
     company_id: int | None = None
-    document_type: str | None = None
+    doc_type_id: str | None = None
     file_name: str
     file_path: str | None = None
     s3_key: str | None = None

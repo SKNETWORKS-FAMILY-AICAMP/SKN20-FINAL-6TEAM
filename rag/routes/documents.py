@@ -72,13 +72,13 @@ async def generate_document(request: GenerateDocumentRequest) -> DocumentRespons
 
     return await _exec_document(
         lambda: _state.executor.generate_document(
-            document_type=request.document_type,
+            document_type=request.doc_type_id,
             params=params,
             format=request.format,
             user_id=request.user_id,
             company_id=request.company_id,
         ),
-        request.document_type,
+        request.doc_type_id,
     )
 
 
