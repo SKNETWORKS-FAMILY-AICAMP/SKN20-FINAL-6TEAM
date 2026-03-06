@@ -49,6 +49,10 @@ body {
   color: #5b5b5b !important;
 }
 
+.usage-guide-black button.bg-blue-500 {
+  color: #ffffff !important;
+}
+
 /* FullCalendar style overrides */
 .fc {
   font-family: inherit;
