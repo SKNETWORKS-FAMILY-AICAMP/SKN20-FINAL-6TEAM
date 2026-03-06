@@ -8,6 +8,7 @@
 
 ### Bug Fixes
 - **DB 스키마 동기화** (`lib/documentApi.ts`, `pages/MainPage.tsx`, `components/chat/ActionButtons.tsx`, `components/chat/DocumentFormModal.tsx`, `components/chat/ApplicationFormModal.tsx`): API 응답 필드명 `document_type` → `doc_type_id` 전환
+- **가이드 페이지 UX 개선** (`pages/UsageGuidePage.tsx`): 텍스트 수직 중앙정렬, 이전 버튼 깜빡임 제거, 스텝 아이콘 전환 타이밍 지연 추가
 
 ## [2026-03-05] - 채팅 세션 오염 방지 + 알림 저장버튼 수정 + Sources 복원
 
