@@ -110,8 +110,8 @@ class RetryContext:
 
 ADJACENT_DOMAINS: dict[str, list[str]] = {
     "startup_funding": ["finance_tax"],
-    "finance_tax": ["startup_funding", "law_common"],
-    "hr_labor": ["law_common"],
+    "finance_tax": ["startup_funding"],  # law_common 세법 데이터가 finance_tax_db에 직접 포함됨
+    "hr_labor": [],  # law_common 노동법 데이터가 hr_labor_db에 직접 포함됨
     "law_common": ["hr_labor", "finance_tax"],
 }
 
@@ -132,6 +132,8 @@ _DOMAIN_KEYWORDS: dict[str, set[str]] = {
     "finance_tax": {
         "세금", "부가세", "법인세", "회계", "세무", "재무",
         "결산", "세무조정", "소득세", "원천징수",
+        "종소세", "양도세", "증여세", "연말정산", "간이과세",
+        "세금계산서", "감가상각", "가산세", "경비", "비용처리",
     },
     "hr_labor": {
         "근로", "채용", "해고", "급여", "퇴직금", "연차",

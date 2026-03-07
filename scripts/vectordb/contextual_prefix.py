@@ -98,6 +98,13 @@ def _prefix_startup_procedures(data: dict[str, Any]) -> str:
     return f"[창업절차 > {title}]" if title else ""
 
 
+def _prefix_law_or_interpretation(data: dict[str, Any]) -> str:
+    """법+해석례 병합 파일 (laws_finance_tax.jsonl 등) — type 필드로 분기."""
+    if data.get("type") == "interpretation":
+        return _prefix_interpretation(data)
+    return _prefix_law(data)
+
+
 _PREFIX_GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "laws_full.jsonl": _prefix_law,
     "laws_etc.jsonl": _prefix_law,
@@ -110,6 +117,12 @@ _PREFIX_GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "announcements.jsonl": _prefix_announcement,
     "industry_startup_guide_filtered.jsonl": _prefix_startup_guide,
     "startup_procedures_filtered.jsonl": _prefix_startup_procedures,
+    # law_common 분할 파일
+    "laws_finance_tax.jsonl": _prefix_law_or_interpretation,
+    "laws_hr_labor.jsonl": _prefix_law_or_interpretation,
+    "laws_startup.jsonl": _prefix_law_or_interpretation,
+    "laws_general.jsonl": _prefix_law,
+    "interpretations_general.jsonl": _prefix_interpretation,
 }
 
 

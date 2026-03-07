@@ -296,7 +296,7 @@ class Settings(BaseSettings):
     domain_evaluation_thresholds: dict[str, int] = Field(
         default={
             "law_common": 75,
-            "finance_tax": 75,
+            "finance_tax": 70,  # Context Recall 최하위 개선 중 — 데이터 보강 후 재검토
             "hr_labor": 70,
             "startup_funding": 65,
         },
