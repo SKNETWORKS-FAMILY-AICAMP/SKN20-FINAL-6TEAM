@@ -1,5 +1,16 @@
 # Release Notes
 
+## [2026-03-07] - finance_tax RAGAS Context Recall 개선 — law_common 도메인 분배
+
+### Features
+- **law_common 세법/노동법/창업법 도메인별 분배** (`rag/vectorstores/config.py`, `scripts/preprocessing/split_law_common.py`): laws_full.jsonl·interpretations.jsonl을 domain 필드 기준으로 분할 — finance_tax 1,551건·hr_labor 1,820건·startup_funding 4,096건을 각 도메인 컬렉션에 직접 적재, general 1,482건은 law_common_db 유지
+- **Contextual prefix 분기 함수 추가** (`scripts/vectordb/contextual_prefix.py`): 법+해석례 병합 파일용 `_prefix_law_or_interpretation` 추가 — type 필드(`law`/`interpretation`)로 분기하여 5개 신규 파일에 prefix 생성 적용
+
+### Refactoring
+- **ADJACENT_DOMAINS law_common 제거** (`rag/agents/retrieval_agent.py`): finance_tax·hr_labor의 인접 도메인에서 law_common 제거 — 법령 데이터가 각 도메인 컬렉션에 직접 포함되어 불필요한 cross-domain 검색 차단
+- **finance_tax 도메인 키워드 확장** (`rag/agents/retrieval_agent.py`): 10개 → 20개 (`종소세`, `양도세`, `증여세`, `연말정산`, `간이과세`, `세금계산서`, `감가상각`, `가산세`, `경비`, `비용처리` 추가)
+- **finance_tax 평가 threshold 하향** (`rag/utils/config/settings.py`): `domain_evaluation_thresholds["finance_tax"]` 75 → 70
+
 ## [2026-03-06] - DB 스키마 동기화 + gibberish 입력 거부 + 지원공고 신청서 다운로드 링크 추가
 
 ### Features

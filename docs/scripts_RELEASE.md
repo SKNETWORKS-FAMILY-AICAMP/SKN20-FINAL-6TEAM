@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-03-07] - law_common JSONL 도메인별 분할 스크립트 추가
+
+### Features
+- **split_law_common.py 신규 추가** (`scripts/preprocessing/split_law_common.py`): laws_full.jsonl·interpretations.jsonl을 domain 필드 기준으로 finance_tax·hr_labor·startup_support·law_common(general) 디렉토리에 분할 저장 — `--dry-run` 옵션 지원, 원본 파일 보존
+
 ## [2026-03-05] - ChromaDB 백업/복원 스크립트 프로덕션 환경 지원
 
 ### Bug Fixes
