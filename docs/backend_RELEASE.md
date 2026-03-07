@@ -1,5 +1,21 @@
 # Release Notes
 
+## [2026-03-07] - 보안 감사 CRITICAL+HIGH 16건 수정
+
+### Bug Fixes
+- **CRITICAL: test-login 관리자 type_code 탈취 차단** (`backend/apps/auth/router.py`): 화이트리스트 기반 type_code 검증 추가
+- **CRITICAL: RAG 세션 삭제 owner_key 소유권 검증 추가** (`backend/`): 세션 삭제 시 소유권 검증 강화
+- **CRITICAL: RAG 세션 조회 user_id 양수 검증 추가** (`backend/`): user_id 음수/0 입력 차단
+- **HIGH: documents/save API Key hmac.compare_digest 적용** (`backend/apps/documents/router.py`): 타이밍 공격 방지
+- **HIGH: RAG 관리자 키 hmac.compare_digest 적용** (`backend/config/settings.py`): 타이밍 공격 방지
+- **HIGH: PROTECTED_PREFIXES에 vectordb, evaluate 추가** (`backend/config/settings.py`): 보호 경로 확장
+- **HIGH: file_content max_length·format 검증 추가** (`backend/`): 업로드 파일 형식 제한
+- **HIGH: form_key 경로 순회 차단** (`backend/`): path traversal 취약점 수정
+- **HIGH: docker-compose.prod COOKIE_SECURE 기본값 true** (`docker-compose.prod.yaml`): HTTPS 전용 쿠키 강제
+- **HIGH: nginx 불필요한 HTTP 메서드 차단** (`nginx.conf`, `nginx.e2e.conf`): DELETE·PATCH 등 미사용 메서드 차단
+- **MEDIUM: CORS 프로덕션 빈 리스트 경고 로그** (`backend/`): 잘못된 CORS 설정 조기 감지
+- **MEDIUM: funding/search k 파라미터 상한(100) 추가** (`backend/`): 과도한 검색 요청 제한
+
 ## [2026-03-06] - DB 스키마 동기화 + 답변 출처에 지원공고 신청서 다운로드 링크 추가 + JobLogResponse PK 매핑 수정 + Redis 헬스체크 추가
 
 ### Features

@@ -1,5 +1,11 @@
 # Release Notes
 
+## [2026-03-07] - 보안 감사 HIGH 수정
+
+### Bug Fixes
+- **HIGH: SourceReferences URL javascript: 프로토콜 차단** (`frontend/src/components/chat/SourceReferences.tsx`): XSS 방지를 위해 javascript: 프로토콜 URL 렌더링 차단
+- **HIGH: Refresh 요청 X-Requested-With 헤더 추가** (`frontend/src/lib/api.ts`): CSRF 방어를 위한 커스텀 헤더 추가
+
 ## [2026-03-06] - DB 스키마 동기화 + 지원공고 신청서 다운로드 링크 + 가이드 페이지 온보딩 리디자인 + Redis 카드 레이아웃 대응
 
 ### Features
