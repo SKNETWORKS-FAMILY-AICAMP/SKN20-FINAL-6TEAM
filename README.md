@@ -241,7 +241,7 @@
 
 <div align="center">
 
-<img src="산출물/images/erd.png" width="85%" alt="ERD"/>
+<img src="docs/image/erd.png"/>
 
 </div>
 
