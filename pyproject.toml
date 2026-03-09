@@ -1,0 +1,8 @@
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+ignore = ["E712"]  # SQLAlchemy == True/False 호환 (ruff#4560)
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "E402"]  # re-export 및 패키지 초기화 import

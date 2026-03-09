@@ -1,7 +1,6 @@
 """MySQL → Redis 세션 복원 테스트."""
 
 import asyncio
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

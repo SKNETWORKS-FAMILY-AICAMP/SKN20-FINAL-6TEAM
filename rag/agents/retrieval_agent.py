@@ -3,8 +3,11 @@
 쿼리 특성 분석 → 검색 전략 결정 → 도메인별 검색 → 평가 → 재시도 → 문서 병합
 파이프라인의 3번 검색(retrieve) 파트를 전담합니다.
 
+
 핵심 원칙: LLM 호출 없이 규칙 기반으로 전략 결정 (비용 0, 지연 0)
 """
+
+from __future__ import annotations
 
 import asyncio
 import hashlib
@@ -18,7 +21,7 @@ from typing import TYPE_CHECKING, Any
 
 from langchain_core.documents import Document
 
-from agents.base import RetrievalResult, RetrievalStatus, RetrievalEvaluationResult
+from agents.base import RetrievalResult, RetrievalEvaluationResult
 from utils.config import get_settings
 from utils.score_normalizer import ScoreNormalizer
 
@@ -26,9 +29,8 @@ if TYPE_CHECKING:
     from agents.base import BaseAgent
     from chains.rag_chain import RAGChain
     from schemas.request import UserContext
-    from utils.query import MultiQueryRetriever
     from utils.question_decomposer import SubQuery
-    from utils.retrieval_evaluator import RuleBasedRetrievalEvaluator
+    from utils.reranker import BaseReranker
     from vectorstores.chroma import ChromaVectorStore
 
 logger = logging.getLogger(__name__)

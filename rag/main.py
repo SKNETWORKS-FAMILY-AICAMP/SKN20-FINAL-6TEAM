@@ -49,8 +49,8 @@ root_logger.addFilter(RequestIdFilter())
 root_logger.addFilter(SensitiveDataFilter())
 
 # 비동기 로깅 설정: QueueHandler → QueueListener(백그라운드 스레드)로 파일 I/O 분리
-from utils.async_logging import setup_async_logging, stop_async_logging
-from utils.json_file_logger import create_json_file_handler
+from utils.async_logging import setup_async_logging, stop_async_logging  # noqa: E402
+from utils.json_file_logger import create_json_file_handler  # noqa: E402
 
 _root_level = getattr(logging, get_settings().log_level, logging.INFO)
 
@@ -78,12 +78,12 @@ if _file_handler:
 setup_async_logging(handlers=_async_handlers, root_level=_root_level)
 logger = logging.getLogger(__name__)
 
-from agents import ActionExecutor, MainRouter
-from routes import all_routers
-import routes._state as state
-from utils.middleware import RateLimitMiddleware, MetricsMiddleware, get_metrics_collector
-from utils.reranker import get_reranker
-from vectorstores.chroma import ChromaVectorStore
+from agents import ActionExecutor, MainRouter  # noqa: E402
+from routes import all_routers  # noqa: E402
+import routes._state as state  # noqa: E402
+from utils.middleware import RateLimitMiddleware, MetricsMiddleware, get_metrics_collector  # noqa: E402
+from utils.reranker import get_reranker  # noqa: E402
+from vectorstores.chroma import ChromaVectorStore  # noqa: E402
 
 
 @asynccontextmanager

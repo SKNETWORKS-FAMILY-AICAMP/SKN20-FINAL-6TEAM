@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 _memory_store: dict[str, tuple[float, list[dict[str, str]] | dict]] = {}
 _memory_lock = Lock()
+_MEMORY_STORE_MAX_SIZE = 10_000
 _redis_client = None
 _redis_client_lock: asyncio.Lock | None = None
 
@@ -74,6 +75,13 @@ def _prune_expired(now: float) -> None:
     expired = [k for k, (ts, _) in _memory_store.items() if now - ts > ttl]
     for key in expired:
         _memory_store.pop(key, None)
+
+    # LRU 방식으로 최대 크기 초과 시 오래된 세션 제거
+    if len(_memory_store) > _MEMORY_STORE_MAX_SIZE:
+        sorted_keys = sorted(_memory_store.keys(), key=lambda k: _memory_store[k][0])
+        excess = len(_memory_store) - _MEMORY_STORE_MAX_SIZE
+        for key in sorted_keys[:excess]:
+            _memory_store.pop(key, None)
 
 
 async def _get_redis_client():

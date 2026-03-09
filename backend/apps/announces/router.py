@@ -2,12 +2,13 @@
 
 from typing import List
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from apps.announces.service import AnnounceService
 from apps.common.deps import get_current_user
 from apps.common.models import User
+from apps.documents.s3_utils import generate_presigned_url
 from config.database import get_db
 
 from .schemas import (
@@ -46,3 +47,26 @@ async def sync_announces(
         user=current_user,
         trigger=sync_request.trigger,
     )
+
+
+@router.get("/{announce_id}/download")
+async def download_announce_attachment(
+    announce_id: int,
+    type: str = Query(..., pattern="^(doc|form)$"),
+    service: AnnounceService = Depends(get_announce_service),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    """공고 첨부파일 presigned URL 반환."""
+    announce = service.get_announce_by_id(announce_id)
+    if not announce:
+        raise HTTPException(status_code=404, detail="공고를 찾을 수 없습니다")
+
+    s3_key = announce.doc_s3_key if type == "doc" else announce.form_s3_key
+    if not s3_key:
+        raise HTTPException(status_code=404, detail="첨부파일이 없습니다")
+
+    download_url = generate_presigned_url(s3_key)
+    if not download_url:
+        raise HTTPException(status_code=503, detail="다운로드 URL 생성에 실패했습니다")
+
+    return {"download_url": download_url}

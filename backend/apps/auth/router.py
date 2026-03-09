@@ -9,15 +9,15 @@ from jwt.exceptions import InvalidTokenError
 
 logger = logging.getLogger("auth")
 
-from apps.common.limiter import limiter
-from config.database import get_db
-from config.settings import settings
-from apps.common.models import User
-from apps.common.constants import USER_TYPE_PROSPECTIVE
-from apps.common.deps import get_current_user
-from .services import verify_google_token
-from .schemas import LoginResponse, TestLoginRequest, UserInfo, GoogleLoginRequest
-from .token_blacklist import blacklist_token, is_blacklisted
+from apps.common.limiter import limiter  # noqa: E402
+from config.database import get_db  # noqa: E402
+from config.settings import settings  # noqa: E402
+from apps.common.models import User  # noqa: E402
+from apps.common.constants import USER_TYPE_PROSPECTIVE  # noqa: E402
+from apps.common.deps import get_current_user  # noqa: E402
+from .services import verify_google_token  # noqa: E402
+from .schemas import LoginResponse, TestLoginRequest, UserInfo, GoogleLoginRequest  # noqa: E402
+from .token_blacklist import blacklist_token, is_blacklisted  # noqa: E402
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

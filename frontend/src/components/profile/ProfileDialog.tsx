@@ -446,13 +446,12 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({ open, onClose }) =
                   onChange={(val: string | undefined) =>
                     setFormData({
                       ...formData,
-                      type_code: (val || 'U0000001') as typeof formData.type_code,
+                      type_code: (val || 'U0000002') as typeof formData.type_code,
                     })
                   }
                   className="!border-gray-300"
                   labelProps={{ className: 'hidden' }}
                 >
-                  <Option value="U0000001">{USER_TYPE_NAMES['U0000001']}</Option>
                   <Option value="U0000002">{USER_TYPE_NAMES['U0000002']}</Option>
                   <Option value="U0000003">{USER_TYPE_NAMES['U0000003']}</Option>
                 </Select>
