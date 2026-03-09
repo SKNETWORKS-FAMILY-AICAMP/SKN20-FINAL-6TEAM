@@ -3,6 +3,10 @@ import { Typography } from '@material-tailwind/react';
 import { ArrowDownTrayIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { getDocumentDownloadUrl, deleteDocument } from '../../lib/documentApi';
 import { useToastStore } from '../../stores/toastStore';
+import { isHttpUrl } from '../../lib/utils';
+import type { DocumentItem } from '../../types';
+
+export type { DocumentItem };
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   labor_contract: '근로계약서',
@@ -11,15 +15,6 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   service_agreement: '용역계약서',
   other: '기타',
 };
-
-export interface DocumentItem {
-  file_id: number;
-  file_name: string;
-  doc_type?: string;
-  format?: string;
-  file_size?: number;
-  create_date?: string;
-}
 
 interface DocumentTableProps {
   items: DocumentItem[];
@@ -57,10 +52,7 @@ const DocumentTable: React.FC<DocumentTableProps> = ({
     setActionLoadingId(fileId);
     try {
       const url = await getDocumentDownloadUrl(fileId);
-      try {
-        const parsed = new URL(url);
-        if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('invalid protocol');
-      } catch {
+      if (!isHttpUrl(url)) {
         addToast({ type: 'error', message: '유효하지 않은 다운로드 URL입니다.' });
         return;
       }

@@ -8,6 +8,17 @@ export function stripSourcesSection(content: string): string {
 }
 
 /**
+ * 다운로드 URL이 안전한 http/https URL인지 검증합니다.
+ */
+export function isHttpUrl(url: string): boolean {
+  try {
+    return ['http:', 'https:'].includes(new URL(url).protocol);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * HTTP 환경(비보안 컨텍스트)에서도 동작하는 UUID 생성 함수
  * crypto.randomUUID()는 HTTPS/localhost에서만 사용 가능
  */

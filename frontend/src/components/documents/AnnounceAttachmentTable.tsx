@@ -3,6 +3,7 @@ import { Typography } from '@material-tailwind/react';
 import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { getAnnounceDownloadUrl } from '../../lib/documentApi';
 import { useToastStore } from '../../stores/toastStore';
+import { isHttpUrl } from '../../lib/utils';
 import type { Announce, Schedule } from '../../types';
 
 interface AnnounceWithSchedule {
@@ -39,10 +40,7 @@ const AnnounceAttachmentTable: React.FC<AnnounceAttachmentTableProps> = ({
     setDownloadingId(key);
     try {
       const url = await getAnnounceDownloadUrl(announceId, type);
-      try {
-        const parsed = new URL(url);
-        if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('invalid protocol');
-      } catch {
+      if (!isHttpUrl(url)) {
         addToast({ type: 'error', message: '유효하지 않은 다운로드 URL입니다.' });
         return;
       }

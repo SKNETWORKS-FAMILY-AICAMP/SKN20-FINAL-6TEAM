@@ -1,5 +1,5 @@
 import api from './api';
-import type { DocumentItem } from '../components/documents/DocumentTable';
+import type { DocumentItem } from '../types';
 
 export async function fetchUserDocuments(
   userId: number,

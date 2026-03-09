@@ -1,3 +1,13 @@
+// Document item type
+export interface DocumentItem {
+  file_id: number;
+  file_name: string;
+  doc_type?: string;
+  format?: string;
+  file_size?: number;
+  create_date?: string;
+}
+
 // User types
 export interface User {
   user_id: number;
