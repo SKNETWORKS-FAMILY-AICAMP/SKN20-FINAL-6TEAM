@@ -4,7 +4,6 @@
 
 ## Commands
 - Deploy test: `docker compose up --build` (production-like environment)
-- E2E env: `docker compose -f docker-compose.e2e-test.yaml up --build` (로컬 MySQL + Mock RAG)
 - Backend test: `.venv/bin/pytest backend/tests/ -v` (must use root .venv)
 - Frontend test: `cd frontend && npm run test`
 - RAG test: `.venv/bin/pytest rag/tests/ -v` (must use root .venv)
@@ -34,7 +33,7 @@
 - DB requires SSH Tunnel running first: `ssh -L 3306:... bastion` before any DB access
 - Python `.venv` lives at project root only — no per-service venvs. Always use `.venv/bin/pytest`
 - `EMBEDDING_PROVIDER` env var: `local` uses local model, `runpod` uses RunPod Serverless — wrong value silently changes embedding behavior
-- `docker-compose.yaml` (production-like) vs `docker-compose.e2e-test.yaml` (E2E 테스트) — 용도에 맞는 파일 사용
+- `docker-compose.yaml` (production-like) vs `docker-compose.prod.yaml` (프로덕션) — 용도에 맞는 파일 사용
 
 ## Test Exclusion
 `/test` directory is created for testing and is not part of the project
