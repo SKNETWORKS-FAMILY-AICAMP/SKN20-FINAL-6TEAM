@@ -176,7 +176,7 @@
 
 > AWS EC2 위에서 Docker Compose로 3개 서비스(Frontend · Backend · RAG)를 운영하는 MSA 구조
 
-<img src="산출물/images/system-architecture.png" width="80%" alt="시스템 아키텍처"/>
+<img src="docs/image/시스템 아키텍처.png"/>
 
 </div>
 
