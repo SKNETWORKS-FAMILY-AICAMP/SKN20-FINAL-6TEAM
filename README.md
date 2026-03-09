@@ -204,7 +204,7 @@
 | 단계 | 핵심 기술 | 설명 |
 |:---:|:---|:---|
 | **① CLASSIFY**  | LLM + Keyword Fallback | 4개 도메인 자동 분류, LLM 장애 시 키워드 fallback으로 서비스 연속성 확보 |
-| **② DECOMPOSE**  | Multi-Query | 복합 질문을 도메인별 서브쿼리로 분해, 검색 커버리지 확대 |
+| **②&nbsp;DECOMPOSE**  | Multi-Query | 복합 질문을 도메인별 서브쿼리로 분해, 검색 커버리지 확대 |
 | **③ RETRIEVE**  | BM25 + Vector + RRF | 하이브리드 검색 → RRF 융합 → Cross-Encoder 재순위화 → 컨텍스트 압축 |
 | **④ GENERATE**  | GPT-4o-mini | 기업 프로필 맥락 반영, 출처 명시, SSE 스트리밍 응답 |
 | **⑤ EVALUATE**  | LLM Self-Eval | 품질 미달 시 멀티쿼리 재시도 (Graduated Retry) |
