@@ -49,7 +49,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128M
+          memory: 64M
     networks:
       - backend
 
@@ -105,7 +105,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 384M
     networks:
       - backend
 
@@ -208,7 +208,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 3072M
+          memory: 2560M
     networks:
       - backend
 
