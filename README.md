@@ -255,9 +255,7 @@
 
 <div align="center">
 
-| 환경 | URL |
-|:---:|:---|
-| 🌐 **프로덕션** | [https://ezbz.kro.kr](https://ezbz.kro.kr) |
+[![Service](https://img.shields.io/badge/🌐_서비스_바로가기-ezbz.kro.kr-3B82F6?style=for-the-badge)](https://ezbz.kro.kr)
 
 > 도메인 제공: [내도메인.한국](https://내도메인.한국)
 
