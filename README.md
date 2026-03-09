@@ -207,7 +207,7 @@
 | **② DECOMPOSE** | Multi-Query | 복합 질문을 도메인별 서브쿼리로 분해, 검색 커버리지 확대 |
 | **③ RETRIEVE** | BM25 + Vector + RRF | 하이브리드 검색 → RRF 융합 → Cross-Encoder 재순위화 → 컨텍스트 압축 |
 | **④ GENERATE** | GPT-4o-mini | 기업 프로필 맥락 반영, 출처 명시, SSE 스트리밍 응답 |
-| **⑤ EVALUATE** | LLM Self-Eval | 품질 미달 시 L1~L4 파라미터 완화 후 자동 재시도 (Graduated Retry) |
+| **⑤ EVALUATE** | LLM Self-Eval | 품질 미달 시 멀티쿼리 재시도 (Graduated Retry) |
 
 **이런 흐름을 설계한 이유**
 
