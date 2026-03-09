@@ -13,7 +13,7 @@ from apps.common.limiter import limiter
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from config.settings import settings
-from config.database import Base, SessionLocal, engine
+from config.database import SessionLocal, engine
 from config.logging_utils import SensitiveDataFilter
 
 # 요청 ID 컨텍스트 변수 및 필터
@@ -33,8 +33,8 @@ logging.getLogger().addFilter(RequestIdFilter())
 logging.getLogger().addFilter(SensitiveDataFilter())
 
 # 비동기 로깅 설정: QueueHandler → QueueListener(백그라운드 스레드)로 파일 I/O 분리
-from config.async_logging import setup_async_logging, stop_async_logging
-from config.logging_config import create_json_file_handler
+from config.async_logging import setup_async_logging, stop_async_logging  # noqa: E402
+from config.logging_config import create_json_file_handler  # noqa: E402
 
 _root_level = getattr(logging, settings.LOG_LEVEL, logging.INFO)
 
@@ -62,7 +62,7 @@ if _file_handler:
 
 setup_async_logging(handlers=_async_handlers, root_level=_root_level)
 
-from apps.auth.token_blacklist import cleanup_expired
+from apps.auth.token_blacklist import cleanup_expired  # noqa: E402
 
 logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("audit")
@@ -102,15 +102,15 @@ async def lifespan(app: FastAPI):
     stop_async_logging()
 
 # Import routers
-from apps.auth.router import router as auth_router
-from apps.users.router import router as users_router
-from apps.companies.router import router as companies_router
-from apps.histories.router import router as histories_router
-from apps.schedules.router import router as schedules_router
-from apps.admin.router import router as admin_router
-from apps.rag.router import router as rag_router
-from apps.announces.router import router as announces_router
-from apps.documents.router import router as documents_router
+from apps.auth.router import router as auth_router  # noqa: E402
+from apps.users.router import router as users_router  # noqa: E402
+from apps.companies.router import router as companies_router  # noqa: E402
+from apps.histories.router import router as histories_router  # noqa: E402
+from apps.schedules.router import router as schedules_router  # noqa: E402
+from apps.admin.router import router as admin_router  # noqa: E402
+from apps.rag.router import router as rag_router  # noqa: E402
+from apps.announces.router import router as announces_router  # noqa: E402
+from apps.documents.router import router as documents_router  # noqa: E402
 
 _docs_url = "/docs" if settings.ENVIRONMENT != "production" else None
 _redoc_url = "/redoc" if settings.ENVIRONMENT != "production" else None

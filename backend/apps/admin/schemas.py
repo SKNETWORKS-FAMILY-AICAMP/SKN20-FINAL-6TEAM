@@ -1,6 +1,6 @@
 """관리자 API 스키마."""
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
 from typing import Any
 
