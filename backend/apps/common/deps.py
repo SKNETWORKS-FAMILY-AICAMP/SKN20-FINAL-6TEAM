@@ -10,14 +10,14 @@ def require_or_404(obj: _T | None, detail: str = "Not found") -> _T:
     if obj is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
     return obj
-from sqlalchemy import select
-from sqlalchemy.orm import Session, load_only
-import jwt
-from jwt.exceptions import InvalidTokenError
-from config.database import get_db
-from config.settings import settings
-from apps.auth.token_blacklist import is_blacklisted
-from .models import User
+from sqlalchemy import select  # noqa: E402
+from sqlalchemy.orm import Session, load_only  # noqa: E402
+import jwt  # noqa: E402
+from jwt.exceptions import InvalidTokenError  # noqa: E402
+from config.database import get_db  # noqa: E402
+from config.settings import settings  # noqa: E402
+from apps.auth.token_blacklist import is_blacklisted  # noqa: E402
+from .models import User  # noqa: E402
 
 
 def get_current_user(

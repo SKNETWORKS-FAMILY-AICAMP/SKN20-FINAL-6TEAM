@@ -6,12 +6,17 @@
 - 액션 선제안: 생성 전에 액션을 결정하여 답변에 반영
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, AsyncGenerator
+from typing import TYPE_CHECKING, Any, AsyncGenerator
+
+if TYPE_CHECKING:
+    from langchain_openai import ChatOpenAI
 
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser

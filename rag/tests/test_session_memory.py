@@ -1,5 +1,5 @@
 import time
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -137,7 +137,6 @@ async def test_invalid_roles_filtered(monkeypatch):
 def _make_mock_redis():
     """Redis 클라이언트 목을 생성합니다 (v2 Lua 스크립트 호환)."""
     import json as _json
-    from datetime import datetime, timezone
 
     store: dict[str, str] = {}
     mock_client = AsyncMock()
@@ -160,7 +159,7 @@ def _make_mock_redis():
         key = keys[0]
         new_msgs = _json.loads(args[0])
         max_msg = int(args[1])
-        ttl = int(args[2])
+        _ttl = int(args[2])  # noqa: F841
         turn_json = args[3]
         user_id_val = args[4]
         session_id_val = args[5]
@@ -510,7 +509,6 @@ async def test_redis_v2_evaluation_data_in_turns(monkeypatch):
 @pytest.mark.asyncio
 async def test_flush_memory_to_redis(monkeypatch):
     """Redis 장애 후 복구 시 메모리 데이터를 Redis로 동기화."""
-    import json as _json
 
     monkeypatch.setattr(sm, "_settings", lambda: _RedisSettings())
     sm._reset_for_test()

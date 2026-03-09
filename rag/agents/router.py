@@ -21,7 +21,7 @@ import threading
 from langchain_core.documents import Document
 from langgraph.graph import END, StateGraph
 
-from agents.base import RetrievalEvaluationResult, RetrievalResult, RetrievalStatus
+from agents.base import RetrievalResult
 from agents.document_tool import DocumentTool
 from agents.evaluator import EvaluatorAgent
 from agents.generator import (
@@ -1253,7 +1253,6 @@ class MainRouter:
             # 단일 도메인 스트리밍에서도 평가 수행 (fallback 메시지는 평가 스킵)
             _is_fallback = content in (FALLBACK_NO_DOCUMENTS, FALLBACK_NO_DOCUMENTS_WITH_ACTIONS)
             single_evaluation = None
-            single_ragas_metrics = None
 
             if self.settings.enable_llm_evaluation and content and not _is_fallback:
                 try:

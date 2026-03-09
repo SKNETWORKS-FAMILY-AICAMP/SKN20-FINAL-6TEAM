@@ -3,7 +3,6 @@
 응답 캐싱, TTL 관리 등의 기능을 제공합니다.
 """
 
-import asyncio
 import logging
 import threading
 import time

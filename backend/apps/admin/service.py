@@ -13,8 +13,8 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-from apps.common.models import Code, History, JobLog, User
-from apps.admin.schemas import (
+from apps.common.models import Code, History, JobLog, User  # noqa: E402
+from apps.admin.schemas import (  # noqa: E402
     HistoryListItem,
     HistoryListResponse,
     EvaluationStats,
@@ -25,11 +25,11 @@ from apps.admin.schemas import (
     ServiceStatus,
     ServerStatusResponse,
 )
-from apps.histories.schemas import HistoryDetailResponse, EvaluationData
+from apps.histories.schemas import HistoryDetailResponse, EvaluationData  # noqa: E402
 
 _START_TIME: float = time.time()
 
-from config.settings import settings as _app_settings
+from config.settings import settings as _app_settings  # noqa: E402
 
 RAG_SERVICE_URL = _app_settings.RAG_SERVICE_URL
 

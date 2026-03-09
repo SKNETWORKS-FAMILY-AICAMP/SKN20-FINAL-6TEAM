@@ -1,7 +1,7 @@
 """평가 에이전트 테스트."""
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from schemas.response import EvaluationResult
 
