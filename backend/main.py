@@ -81,7 +81,7 @@ async def _cleanup_blacklist_loop():
         db = SessionLocal()
         try:
             async with track_job(db, "token_cleanup") as job:
-                count = cleanup_expired(db)
+                count = await asyncio.to_thread(cleanup_expired, db)
                 job.record_count = count
                 if count > 0:
                     logger.info("Cleaned up %d expired blacklist entries", count)

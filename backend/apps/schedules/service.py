@@ -158,6 +158,13 @@ class ScheduleService:
             return None
 
         update_data = data.model_dump(exclude_unset=True)
+
+        # 부분 업데이트 시 DB 기존 값과 교차 검증
+        new_start = update_data.get("start_date", schedule.start_date)
+        new_end = update_data.get("end_date", schedule.end_date)
+        if new_end < new_start:
+            raise ValueError("종료일은 시작일 이후여야 합니다")
+
         for key, value in update_data.items():
             setattr(schedule, key, value)
 
