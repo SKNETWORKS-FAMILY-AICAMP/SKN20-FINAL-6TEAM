@@ -429,8 +429,21 @@ class Settings(BaseSettings):
         default="ragas.log", description="RAGAS 메트릭 로그 파일명"
     )
     ragas_llm_model: str = Field(default="gpt-4o-mini", description="RAGAS 평가용 LLM 모델")
-    ragas_embedding_model: str = Field(default="text-embedding-3-small", description="RAGAS 평가용 임베딩 모델")
+    ragas_embedding_model: str = Field(default="text-embedding-3-large", description="RAGAS 평가용 임베딩 모델 (한국어 AR 정확도를 위해 large 사용)")
     ragas_max_tokens: int = Field(default=8192, gt=0, description="RAGAS LLM max_tokens")
+    ragas_embedding_provider: str = Field(
+        default="openai",
+        description="RAGAS AR 임베딩 제공자: 'openai' 또는 'local' (bge-m3)"
+    )
+
+    @field_validator("ragas_embedding_provider")
+    @classmethod
+    def validate_ragas_embedding_provider(cls, v: str) -> str:
+        """RAGAS 임베딩 제공자 검증."""
+        allowed = {"openai", "local"}
+        if v not in allowed:
+            raise ValueError(f"ragas_embedding_provider는 {allowed} 중 하나여야 합니다 (입력: {v})")
+        return v
 
     # ================================================================
     # [4] Timeouts & Limits

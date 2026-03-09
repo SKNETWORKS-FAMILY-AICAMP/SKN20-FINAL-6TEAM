@@ -17,10 +17,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from evaluation import RAGAS_METRIC_KEYS
+
 logger = logging.getLogger(__name__)
 
 RESULTS_DIR = Path(__file__).parent / "results"
-METRIC_KEYS = ["faithfulness", "answer_relevancy", "context_precision", "context_recall"]
+METRIC_KEYS = RAGAS_METRIC_KEYS
 
 
 def load_result_file(path: Path) -> dict | None:

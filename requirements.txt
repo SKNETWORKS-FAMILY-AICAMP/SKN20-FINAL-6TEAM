@@ -77,5 +77,5 @@ tqdm>=4.66.0
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
 pytest-cov>=4.1.0
-ragas>=0.1.0
+ragas>=0.4.0,<1.0.0  # 한국어 프롬프트 커스터마이징이 v0.4.x private API에 의존, v1.0에서 breaking change 예정
 datasets>=2.14.0
