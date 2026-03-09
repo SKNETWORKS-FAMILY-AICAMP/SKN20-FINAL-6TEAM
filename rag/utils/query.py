@@ -145,7 +145,7 @@ class QueryProcessor:
             domain: 도메인 (선택)
 
         Returns:
-            캐시 키 (MD5 해시)
+            캐시 키 (SHA-256 해시)
         """
         # 정규화: 소문자, 공백 정리
         normalized = query.lower().strip()
@@ -154,7 +154,7 @@ class QueryProcessor:
         if domain:
             normalized = f"{domain}:{normalized}"
 
-        return hashlib.md5(normalized.encode()).hexdigest()
+        return hashlib.sha256(normalized.encode()).hexdigest()
 
     @staticmethod
     def extract_keywords(query: str) -> list[str]:
