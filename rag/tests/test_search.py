@@ -60,7 +60,7 @@ class TestBM25Index:
         index = BM25Index()
         index.fit(sample_docs)
 
-        results = index.search("완전히 관련없는 쿼리 xyz123", k=3)
+        index.search("완전히 관련없는 쿼리 xyz123", k=3)
 
         # 관련 없으면 빈 결과 또는 낮은 점수
         # BM25는 term이 없으면 점수가 0이므로 결과가 없을 수 있음

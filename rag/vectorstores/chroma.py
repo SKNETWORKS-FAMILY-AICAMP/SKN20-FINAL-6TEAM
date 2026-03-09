@@ -21,12 +21,12 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
-import chromadb
-from chromadb.config import Settings
-from langchain_chroma import Chroma
-from langchain_core.documents import Document
-from .config import COLLECTION_NAMES, VectorDBConfig
-from .embeddings import get_embeddings
+import chromadb  # noqa: E402
+from chromadb.config import Settings  # noqa: E402
+from langchain_chroma import Chroma  # noqa: E402
+from langchain_core.documents import Document  # noqa: E402
+from .config import COLLECTION_NAMES, VectorDBConfig  # noqa: E402
+from .embeddings import get_embeddings  # noqa: E402
 # 캐시 최대 크기 (도메인 개수보다 크게 설정)
 MAX_STORE_CACHE_SIZE = 10
 

@@ -1,6 +1,5 @@
 """RAGAS 평가 모듈 테스트."""
 
-import pytest
 from unittest.mock import patch, MagicMock
 
 from evaluation.ragas_evaluator import RagasMetrics, RagasEvaluator

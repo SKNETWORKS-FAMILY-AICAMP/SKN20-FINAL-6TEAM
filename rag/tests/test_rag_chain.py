@@ -1,7 +1,7 @@
 """RAG 체인 테스트."""
 
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, patch
 
 from langchain_core.documents import Document
 
@@ -76,7 +76,7 @@ class TestRAGChainRetrieve:
         # settings에서 hybrid search 비활성화
         rag_chain.settings.enable_hybrid_search = False
 
-        docs = rag_chain._retrieve_documents(
+        rag_chain._retrieve_documents(
             query="테스트 쿼리",
             domain="finance_tax",
             search_strategy=strategy,
@@ -91,7 +91,7 @@ class TestRAGChainRetrieve:
 
     def test_retrieve_no_mmr(self, rag_chain, mock_vector_store):
         """MMR 비활성화 검색 테스트."""
-        docs = rag_chain._retrieve_documents(
+        rag_chain._retrieve_documents(
             query="테스트 쿼리",
             domain="finance_tax",
             use_mmr=False,
@@ -102,7 +102,7 @@ class TestRAGChainRetrieve:
 
     def test_retrieve_include_common(self, rag_chain, mock_vector_store):
         """공통 법령 DB 포함 검색 테스트."""
-        docs = rag_chain._retrieve_documents(
+        rag_chain._retrieve_documents(
             query="테스트 쿼리",
             domain="finance_tax",
             include_common=True,

@@ -419,7 +419,7 @@ class SearchQualityEvaluator:
         noise_rate = noise_clean_count / noise_total if noise_total else 0
 
         # Part B: 필수 법령 포함 확인
-        self._print(f"\n  [Part B] 필수 법령 포함 검증")
+        self._print("\n  [Part B] 필수 법령 포함 검증")
         essential_found_count = 0
         essential_total = len(ESSENTIAL_LAW_TEST_CASES)
         essential_details: list[dict[str, Any]] = []
@@ -589,7 +589,7 @@ class SearchQualityEvaluator:
         self._print(f"\n  LLM 평균 점수: {avg_llm:.1f}/100 (기준: {self.LLM_SCORE_THRESHOLD})")
         for d, avg in domain_avg.items():
             self._print(f"    {d}: {avg:.1f}")
-        self._print(f"  RAGAS 평균:")
+        self._print("  RAGAS 평균:")
         for k, v in ragas_avg.items():
             self._print(f"    {k}: {v}")
 

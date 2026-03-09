@@ -1,7 +1,6 @@
 """MainRouter 테스트 코드."""
 
 from unittest.mock import AsyncMock, Mock, patch, MagicMock
-from typing import Any
 from types import SimpleNamespace
 
 import pytest
@@ -638,7 +637,7 @@ class TestMainRouterEdgeCases:
 
     def test_settings_loaded_from_get_settings(self, mock_all_dependencies):
         """settings가 get_settings()로 로드되는지 확인."""
-        router = MainRouter()
+        MainRouter()
 
         mock_all_dependencies["settings"].assert_called()
 
@@ -647,7 +646,6 @@ class TestRagasEvaluationInEvaluateNode:
     """_aevaluate_node에서 RAGAS 평가 수행 여부 테스트."""
 
     def _make_state(self) -> "RouterState":
-        from agents.router import RouterState
         from schemas.response import SourceDocument
         return {
             "query": "테스트 질문 예시",
