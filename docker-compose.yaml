@@ -96,6 +96,7 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - ENABLE_TEST_LOGIN=${ENABLE_TEST_LOGIN:-false}
       - RAG_API_KEY=${RAG_API_KEY:-}
+      - BIZNO_API_KEY=${BIZNO_API_KEY:-}
       - RAG_SERVICE_URL=http://rag:8001
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
