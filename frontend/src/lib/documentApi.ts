@@ -1,4 +1,32 @@
 import api from './api';
+import type { DocumentItem } from '../types';
+
+export async function fetchUserDocuments(
+  userId: number,
+  offset = 0,
+  limit = 20,
+): Promise<{ items: DocumentItem[]; total: number }> {
+  const res = await api.get<{ items: DocumentItem[]; total: number }>(
+    `/documents/user/${userId}`,
+    { params: { offset, limit } },
+  );
+  return res.data;
+}
+
+export async function getDocumentDownloadUrl(fileId: number): Promise<string> {
+  const res = await api.get(`/documents/${fileId}/download`);
+  return res.data.download_url;
+}
+
+export async function getAnnounceDownloadUrl(announceId: number, type: 'doc' | 'form'): Promise<string> {
+  const res = await api.get(`/announces/${announceId}/download`, { params: { type } });
+  return res.data.download_url;
+}
+
+export async function deleteDocument(fileId: number) {
+  const res = await api.delete(`/documents/${fileId}`);
+  return res.data;
+}
 
 export interface ContractFormData {
   employee_name: string;

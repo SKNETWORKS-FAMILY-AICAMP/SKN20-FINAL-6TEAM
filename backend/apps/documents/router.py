@@ -10,6 +10,7 @@ from apps.common.deps import get_current_user
 from apps.common.models import User
 from .schemas import DocumentCreate, DocumentResponse, DocumentListResponse
 from .service import DocumentService
+from .s3_utils import generate_presigned_url
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,26 @@ async def list_user_documents(
         items=[DocumentResponse.model_validate(doc) for doc in items],
         total=total,
     )
+
+
+@router.get("/{file_id}/download")
+async def download_document(
+    file_id: int,
+    current_user: User = Depends(get_current_user),
+    service: DocumentService = Depends(get_document_service),
+) -> dict[str, str]:
+    """파일 presigned URL 반환."""
+    file = service.get_document(file_id)
+    if not file:
+        raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다")
+    if file.user_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="접근 권한이 없습니다")
+
+    download_url = generate_presigned_url(file.s3_key)
+    if not download_url:
+        raise HTTPException(status_code=503, detail="다운로드 URL 생성에 실패했습니다")
+
+    return {"download_url": download_url}
 
 
 @router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)

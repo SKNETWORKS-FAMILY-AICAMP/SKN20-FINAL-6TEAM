@@ -20,6 +20,7 @@ import {
   ChevronRightIcon,
   UserCircleIcon,
   XMarkIcon,
+  FolderIcon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
@@ -30,7 +31,7 @@ import { APP_HEADER_HEIGHT_CLASS, APP_HEADER_HORIZONTAL_PADDING_CLASS } from './
 import { ProfileDialog } from '../profile/ProfileDialog';
 
 /** Routes that require authentication to access */
-const AUTH_REQUIRED_PATHS = new Set(['/company', '/schedule', '/admin', '/admin/log']);
+const AUTH_REQUIRED_PATHS = new Set(['/company', '/schedule', '/documents', '/admin', '/admin/log']);
 const MOBILE_SIDEBAR_WIDTH_CLASS = 'w-[min(85vw,20rem)]';
 const DESKTOP_SIDEBAR_EXPANDED_WIDTH_CLASS = 'w-64';
 const DESKTOP_SIDEBAR_COLLAPSED_WIDTH_CLASS = 'w-16';
@@ -42,6 +43,7 @@ const menuItems = [
   { path: '/', label: '채팅', icon: ChatBubbleLeftRightIcon },
   { path: '/company', label: '기업 정보', icon: BuildingOfficeIcon },
   { path: '/schedule', label: '일정 관리', icon: CalendarDaysIcon },
+  { path: '/documents', label: '자료실', icon: FolderIcon },
   { path: '/guide', label: '사용 설명서', icon: BookOpenIcon },
   { path: '/admin', label: '대시보드', icon: ChartBarIcon, adminOnly: true },
   { path: '/admin/log', label: '상담 로그', icon: ClipboardDocumentListIcon, adminOnly: true },
