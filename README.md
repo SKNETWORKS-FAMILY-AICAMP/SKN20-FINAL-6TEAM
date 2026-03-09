@@ -455,9 +455,8 @@ bizi/
 ├── 📂 data/                   # 전처리 데이터
 ├── 📂 docs/                   # 평가 보고서, 문서
 │
-├── 🐳 docker-compose.yaml           # 프로덕션 유사 환경
-├── 🐳 docker-compose.prod.yaml      # 프로덕션 환경
-├── 🐳 docker-compose.e2e-test.yaml  # E2E 테스트 환경 (로컬 MySQL + Mock RAG)
+├── 🐳 docker-compose.yaml        # 프로덕션 유사 환경
+├── 🐳 docker-compose.prod.yaml   # 프로덕션 환경
 ├── ⚙️  nginx.conf                # Nginx 리버스 프록시
 └── 📄 .env.example               # 환경 변수 템플릿
 ```
