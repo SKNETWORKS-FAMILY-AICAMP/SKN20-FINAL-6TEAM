@@ -299,6 +299,12 @@
       <br/><b>📝 기업 등록 폼</b>
     </td>
   </tr>
+    <tr>
+    <td align="center" colspan="2">
+      <img src="docs/image/대시보드.gif" width="80%" alt="관리자 대시보드 데모"/>
+      <br/><b>📊 관리자 대시보드 (데모)</b>
+    </td>
+  </tr>
 </table>
 
 ---
