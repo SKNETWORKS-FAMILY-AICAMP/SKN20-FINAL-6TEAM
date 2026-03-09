@@ -5,7 +5,8 @@ import logging
 import os
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status, Query
-from apps.common.limiter import limiter
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -25,6 +26,7 @@ from .schemas import (
 
 logger = logging.getLogger(__name__)
 
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/histories", tags=["histories"])
 
 

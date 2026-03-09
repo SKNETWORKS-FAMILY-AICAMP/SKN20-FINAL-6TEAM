@@ -159,7 +159,7 @@ def _make_mock_redis():
         key = keys[0]
         new_msgs = _json.loads(args[0])
         max_msg = int(args[1])
-        _ttl = int(args[2])  # noqa: F841
+        ttl = int(args[2])  # noqa: F841
         turn_json = args[3]
         user_id_val = args[4]
         session_id_val = args[5]

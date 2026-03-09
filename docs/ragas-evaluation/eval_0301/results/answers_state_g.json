@@ -1,0 +1,1117 @@
+{
+  "dataset": "../docs/ragas-evaluation/eval_0301/ragas_dataset_0301.jsonl",
+  "count": 80,
+  "has_ground_truth": true,
+  "embedding_provider": "runpod",
+  "question_timeout": 300,
+  "timeout_count": 0,
+  "reject_count": 10,
+  "ragas_evaluated_count": 70,
+  "valid_count": 80,
+  "reject_accuracy": 0.6,
+  "timeout_causes": {},
+  "results": [
+    {
+      "question": "한식당을 창업하려고 합니다. 식품위생교육을 받아야 한다고 들었는데, 누가 받아야 하고 몇 시간인가요? 교육을 받지 않으면 어떤 불이익이 있나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 10.29,
+      "metrics": {
+        "faithfulness": 0.2857,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.71,
+        "context_recall": 0.2
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "카페를 창업하려는데 일반과세자와 간이과세자 중 어느 것을 선택해야 하나요? 두 유형의 차이점과 선택 기준이 무엇인지 알려주세요.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 14.64,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.8496,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "의류를 온라인으로 판매하려고 합니다. 통신판매업 신고는 어디서, 어떻게 하나요? 신고하지 않으면 어떤 처벌이 있나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 6.26,
+      "metrics": {
+        "faithfulness": 0.5,
+        "answer_relevancy": 0.8887,
+        "context_precision": 1.0,
+        "context_recall": 0.4
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "소규모 식품 제조업체를 창업하려고 합니다. 식품 제조업 허가를 받으려면 어떤 절차를 거쳐야 하나요? 시설 기준과 필요 서류는 무엇인가요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 10.17,
+      "metrics": {
+        "faithfulness": 0.5,
+        "answer_relevancy": 0.7604,
+        "context_precision": 1.0,
+        "context_recall": 0.2
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "만 29세 청년 창업자입니다. 청년창업사관학교를 신청하고 싶은데, 지원 자격과 혜택이 무엇인지 알려주세요.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 17.49,
+      "metrics": {
+        "faithfulness": 0.8889,
+        "answer_relevancy": 0.719,
+        "context_precision": 1.0,
+        "context_recall": 0.2
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "편의점 프랜차이즈에 가맹하려고 합니다. 가맹계약 체결 전 반드시 확인해야 할 사항과 법적으로 보호받을 수 있는 내용은 무엇인가요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 25.37,
+      "metrics": {
+        "faithfulness": 0.6842,
+        "answer_relevancy": 0.903,
+        "context_precision": 0.3519,
+        "context_recall": 1.0
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "소상공인으로 카페를 운영 중입니다. 소상공인 정책자금을 신청하고 싶은데, 자격 요건과 신청 방법을 알려주세요.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 7.97,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.2,
+        "context_recall": 0.4
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "AI 기반 솔루션 스타트업을 창업했습니다. 벤처기업 인증을 받으려면 어떤 요건을 갖춰야 하고, 인증을 받으면 어떤 혜택이 있나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 7.23,
+      "metrics": {
+        "faithfulness": 0.3333,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "장애인 직업재활 서비스를 제공하는 사회적기업을 설립하려고 합니다. 사회적기업 인증 요건과 지원 혜택을 알려주세요.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 5.53,
+      "metrics": {
+        "faithfulness": 0.5,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "IT 솔루션 스타트업으로 해외 수출을 시작하려고 합니다. 수출바우처 지원사업을 신청할 수 있나요? 지원 내용과 신청 방법을 알려주세요.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 18.41,
+      "metrics": {
+        "faithfulness": 0.5833,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.2,
+        "context_recall": 0.6
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "개인사업자로 치킨집을 운영 중입니다. 일반과세자인데 부가가치세 신고는 언제, 어떻게 해야 하나요? 신고 기간을 놓치면 어떻게 되나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 6.27,
+      "metrics": {
+        "faithfulness": 0.1429,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "프리랜서 강사로 활동하면서 연간 수입이 5천만원입니다. 종합소득세는 어떻게 신고해야 하고, 절세 방법은 무엇인가요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 8.81,
+      "metrics": {
+        "faithfulness": 0.2143,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "수도권에서 소프트웨어 개발 중소기업을 운영하고 있습니다. 중소기업 특별세액감면을 받을 수 있나요? 감면율과 요건을 알려주세요.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 7.14,
+      "metrics": {
+        "faithfulness": 0.75,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.71,
+        "context_recall": 0.5
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "반도체 부품 제조 중소기업입니다. 올해 연구개발(R&D)에 2억원을 투자했습니다. 연구개발비 세액공제를 받을 수 있는지, 공제율은 얼마인지 알려주세요.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 6.83,
+      "metrics": {
+        "faithfulness": 0.4444,
+        "answer_relevancy": 0.0,
+        "context_precision": 1.0,
+        "context_recall": 0.6
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "법인 사업체를 운영 중인데 작년에 큰 결손이 발생했습니다. 결손금을 이후 연도에 공제받을 수 있나요? 이월 기간과 요건은 어떻게 되나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 7.15,
+      "metrics": {
+        "faithfulness": 0.8571,
+        "answer_relevancy": 0.734,
+        "context_precision": 0.5,
+        "context_recall": 0.0
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "프리랜서 디자이너에게 용역비 300만원을 지급하려고 합니다. 원천징수를 해야 하나요? 세율은 얼마이고 신고는 어떻게 하나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 17.02,
+      "metrics": {
+        "faithfulness": 0.125,
+        "answer_relevancy": 0.8198,
+        "context_precision": 0.3667,
+        "context_recall": 0.4
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "일반과세자 법인입니다. 접대비로 지출한 비용의 부가가치세 매입세액을 공제받을 수 있나요? 매입세액 불공제 항목은 무엇인가요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 5.71,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.7508,
+        "context_precision": 1.0,
+        "context_recall": 0.5
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "소규모 편의점을 운영하는 개인사업자입니다. 근로장려금을 신청할 수 있나요? 신청 자격과 방법을 알려주세요.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 6.46,
+      "metrics": {
+        "faithfulness": 0.2,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "연 매출 3억원인 법인입니다. 전자세금계산서 발급 의무가 있나요? 발급하지 않으면 어떤 불이익이 있나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 9.24,
+      "metrics": {
+        "faithfulness": 0.2,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.5,
+        "context_recall": 0.0
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "법인에서 대표이사가 업무용 차량을 구매했습니다. 구매 비용과 유지비를 법인 비용으로 처리할 수 있나요? 한도와 요건은 어떻게 되나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 11.06,
+      "metrics": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.769,
+        "context_precision": 1.0,
+        "context_recall": 0.6
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "카페를 창업하면서 직원을 수습으로 채용하려고 합니다. 수습 기간 3개월 동안 최저임금을 삭감할 수 있나요? 적용 기준이 궁금합니다.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 9.16,
+      "metrics": {
+        "faithfulness": 0.1111,
+        "answer_relevancy": 0.5903,
+        "context_precision": 0.7556,
+        "context_recall": 0.6
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "직원을 5개월 전 입사시켰습니다. 이 직원에게 연차휴가가 발생하나요? 1년 미만 근로자의 연차 계산 방법을 알려주세요.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 7.63,
+      "metrics": {
+        "faithfulness": 0.625,
+        "answer_relevancy": 0.6343,
+        "context_precision": 1.0,
+        "context_recall": 0.8
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "편의점 직원이 11개월 근무 후 퇴사합니다. 퇴직금을 지급해야 하나요? 1년 미만 퇴직자에 대한 퇴직금 지급 기준을 알려주세요.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 10.79,
+      "metrics": {
+        "faithfulness": 0.5,
+        "answer_relevancy": 0.7023,
+        "context_precision": 0.8056,
+        "context_recall": 0.4
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "직원의 배우자가 출산했습니다. 배우자 출산휴가를 주어야 하나요? 기간과 급여 지급 방법은 어떻게 되나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 8.76,
+      "metrics": {
+        "faithfulness": 0.3333,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "물류 창고 직원에게 야간근무(밤 10시~새벽 6시)를 시키고 있습니다. 야간수당은 어떻게 계산하나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 9.82,
+      "metrics": {
+        "faithfulness": 0.0909,
+        "answer_relevancy": 0.499,
+        "context_precision": 1.0,
+        "context_recall": 0.0
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "직원의 잦은 결근과 업무 태만으로 해고하려고 합니다. 해고 예고는 몇 일 전에 해야 하나요? 즉시 해고가 가능한 경우는 어떤 경우인가요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 8.12,
+      "metrics": {
+        "faithfulness": 0.5,
+        "answer_relevancy": 0.7924,
+        "context_precision": 1.0,
+        "context_recall": 0.4
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "직원 3명을 처음 채용하려고 합니다. 4대보험은 언제, 어떻게 가입해야 하나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 10.16,
+      "metrics": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.2
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "제조업체에서 주 40시간 근무하는 직원들에게 연장근로를 시키려고 합니다. 연장근로 한도와 추가 수당 계산 방법을 알려주세요.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 12.65,
+      "metrics": {
+        "faithfulness": 0.4545,
+        "answer_relevancy": 0.9097,
+        "context_precision": 1.0,
+        "context_recall": 0.0
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "직원이 육아휴직을 신청했습니다. 육아휴직 급여는 어떻게 되고, 회사는 어떤 의무가 있나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 10.84,
+      "metrics": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.807,
+        "context_precision": 1.0,
+        "context_recall": 0.4
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "상시 근로자 10인인 제조업체입니다. 취업규칙을 작성해야 하나요? 작성 의무와 신고 절차, 불이익 변경 시 주의사항을 알려주세요.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 9.05,
+      "metrics": {
+        "faithfulness": 0.7333,
+        "answer_relevancy": 0.913,
+        "context_precision": 1.0,
+        "context_recall": 0.2
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "근로계약서에 '회사 동의 없이 퇴사하면 3개월치 급여를 배상한다'는 특약을 넣으려고 합니다. 이 조항이 법적으로 효력이 있나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 21.84,
+      "metrics": {
+        "faithfulness": 0.8667,
+        "answer_relevancy": 0.949,
+        "context_precision": 0.6913,
+        "context_recall": 0.6
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "납품업체가 계약 기일보다 2주 늦게 납품하여 영업 손해가 발생했습니다. 손해배상을 청구할 수 있나요? 어떻게 진행해야 하나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 11.04,
+      "metrics": {
+        "faithfulness": 0.4667,
+        "answer_relevancy": 0.6576,
+        "context_precision": 0.8667,
+        "context_recall": 0.6
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "IT 회사 직원이 업무 중 개발한 소프트웨어의 저작권은 회사에 귀속되나요? 아니면 직원 개인에게 있나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 8.51,
+      "metrics": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.8056,
+        "context_recall": 0.8
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "대형 유통업체가 납품 단가를 일방적으로 10% 인하하겠다고 통보했습니다. 이것이 하도급법 위반인가요? 어떻게 대응할 수 있나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 17.54,
+      "metrics": {
+        "faithfulness": 0.3333,
+        "answer_relevancy": 0.779,
+        "context_precision": 1.0,
+        "context_recall": 0.6
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "온라인 쇼핑몰을 운영하면서 고객 이메일과 전화번호를 수집하고 있습니다. 개인정보 수집·이용 동의는 어떻게 받아야 하나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 12.32,
+      "metrics": {
+        "faithfulness": 0.125,
+        "answer_relevancy": 0.6195,
+        "context_precision": 0.5,
+        "context_recall": 0.4
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "카페 이름으로 상표 등록을 하고 싶습니다. 상표 등록 절차와 비용, 기간이 어떻게 되나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 10.09,
+      "metrics": {
+        "faithfulness": 0.2222,
+        "answer_relevancy": 0.0,
+        "context_precision": 1.0,
+        "context_recall": 0.8
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "상가 임대차 계약을 맺고 카페를 운영 중입니다. 5년 후 임대인이 계약 갱신을 거절하면 어떻게 되나요? 계약갱신청구권이 있나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 8.72,
+      "metrics": {
+        "faithfulness": 0.5,
+        "answer_relevancy": 0.0,
+        "context_precision": 1.0,
+        "context_recall": 0.0
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "온라인 쇼핑몰에서 고객이 옷을 구매한 후 단순 변심으로 환불을 요청했습니다. 거절할 수 있나요? 소비자 청약철회 기간은 얼마인가요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 7.53,
+      "metrics": {
+        "faithfulness": 0.6667,
+        "answer_relevancy": 0.7537,
+        "context_precision": 1.0,
+        "context_recall": 0.4
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "거래처와 계약을 맺으면서 상대방이 작성한 표준계약서를 사용하려고 합니다. 불공정 약관이 포함되어 있으면 어떻게 되나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 7.86,
+      "metrics": {
+        "faithfulness": 0.6667,
+        "answer_relevancy": 0.7753,
+        "context_precision": 1.0,
+        "context_recall": 0.4
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "거래처가 외상 대금 2천만원을 6개월째 갚지 않고 있습니다. 법적으로 채권을 회수할 수 있는 방법을 알려주세요.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 11.22,
+      "metrics": {
+        "faithfulness": 0.2941,
+        "answer_relevancy": 0.4039,
+        "context_precision": 0.0,
+        "context_recall": 0.8333
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "한식당을 창업하면서 주방 직원 2명을 처음 채용하려고 합니다. 영업신고와 사업자등록, 직원 4대보험 가입을 동시에 진행하려면 어떤 순서로 해야 하나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 14.39,
+      "metrics": {
+        "faithfulness": 0.7692,
+        "answer_relevancy": 0.8257,
+        "context_precision": 1.0,
+        "context_recall": 0.6
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "물류 스타트업을 운영하면서 올해 직원 5명을 신규 채용했습니다. 고용증대 세액공제와 사회보험료 세액공제를 동시에 받을 수 있나요? 신청 방법을 알려주세요.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 15.43,
+      "metrics": {
+        "faithfulness": 0.3077,
+        "answer_relevancy": 0.6906,
+        "context_precision": 1.0,
+        "context_recall": 0.5
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "커피 프랜차이즈에 가맹하려고 합니다. 가맹 계약서를 받았는데, 계약서를 검토할 때 특히 주의해야 할 법적 사항은 무엇인가요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 18.35,
+      "metrics": {
+        "faithfulness": 0.5238,
+        "answer_relevancy": 0.9069,
+        "context_precision": 0.3468,
+        "context_recall": 1.0
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "1인 개인사업자로 3년 운영하다가 법인으로 전환하려고 합니다. 법인 전환 시 세무 신고와 법적 절차는 어떻게 되나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 14.66,
+      "metrics": {
+        "faithfulness": 0.75,
+        "answer_relevancy": 0.5589,
+        "context_precision": 0.5304,
+        "context_recall": 0.3333
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "만 28세 청년 창업자로 수도권 밖에서 IT 스타트업을 창업하려고 합니다. 세액감면과 함께 받을 수 있는 창업 지원사업이 있나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 42.77,
+      "metrics": {
+        "faithfulness": 0.6316,
+        "answer_relevancy": 0.7709,
+        "context_precision": 0.2938,
+        "context_recall": 0.5
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "직원을 해고했는데, 직원이 부당해고라며 지방노동위원회에 구제신청을 했습니다. 어떻게 대응해야 하나요? 절차와 주의사항을 알려주세요.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 33.62,
+      "metrics": {
+        "faithfulness": 0.4211,
+        "answer_relevancy": 0.7772,
+        "context_precision": 0.7885,
+        "context_recall": 1.0
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "IT 스타트업을 창업하여 개발자 3명을 채용했습니다. 창업 세액감면과 고용 관련 세액공제, 사회보험료 세액공제를 모두 받으려면 어떤 조건을 갖춰야 하나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 35.35,
+      "metrics": {
+        "faithfulness": 0.5,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.6458,
+        "context_recall": 0.625
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "사업 확장을 위해 사무실 건물을 매입하려고 합니다. 취득세와 부동산 등기 절차, 매매 계약서 검토 시 주의사항을 알려주세요.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 24.03,
+      "metrics": {
+        "faithfulness": 0.0909,
+        "answer_relevancy": 0.786,
+        "context_precision": 0.5333,
+        "context_recall": 1.0
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "소상공인 정책자금을 신청하려고 합니다. 직원 최저임금을 제대로 지급하지 않으면 정책자금 신청에 불이익이 있나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 19.49,
+      "metrics": {
+        "faithfulness": 0.5714,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.2157,
+        "context_recall": 0.5
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "직원을 채용하면서 근로계약서에 '고객 개인정보를 업무 외 목적으로 사용하지 않는다'는 조항을 넣으려고 합니다. 이 조항의 법적 효력과 위반 시 처벌은 어떻게 되나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 19.75,
+      "metrics": {
+        "faithfulness": 0.2273,
+        "answer_relevancy": 0.8522,
+        "context_precision": 0.4446,
+        "context_recall": 0.6667
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "최근 두통이 자주 있고 눈이 침침합니다. 어떤 병원 진료과를 가야 하나요? 가까운 병원을 추천해주세요.",
+      "timeout": false,
+      "reject": true,
+      "timeout_cause": null,
+      "elapsed_seconds": 1.58,
+      "metrics": {
+        "error": "REJECT_EXCLUDED"
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "요즘 주식 시장이 불안정한데, 어떤 종목에 투자하면 좋을까요? 제 상황에 맞는 포트폴리오를 짜줄 수 있나요?",
+      "timeout": false,
+      "reject": true,
+      "timeout_cause": null,
+      "elapsed_seconds": 1.63,
+      "metrics": {
+        "error": "REJECT_EXCLUDED"
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "서울 강남구 아파트 가격이 많이 올랐는데, 지금 매수하는 것이 좋을까요? 향후 부동산 투자 전망을 알려주세요.",
+      "timeout": false,
+      "reject": true,
+      "timeout_cause": null,
+      "elapsed_seconds": 2.3,
+      "metrics": {
+        "error": "REJECT_EXCLUDED"
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "저는 요즘 직장 스트레스로 우울하고 무기력합니다. 어떻게 하면 극복할 수 있나요?",
+      "timeout": false,
+      "reject": true,
+      "timeout_cause": null,
+      "elapsed_seconds": 1.66,
+      "metrics": {
+        "error": "REJECT_EXCLUDED"
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "대학 수시 전형에서 자기소개서를 어떻게 써야 하나요? 합격하기 위한 팁을 알려주세요.",
+      "timeout": false,
+      "reject": true,
+      "timeout_cause": null,
+      "elapsed_seconds": 1.37,
+      "metrics": {
+        "error": "REJECT_EXCLUDED"
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "제주도로 가족 여행을 계획 중입니다. 3박 4일 일정으로 추천 관광지와 맛집을 알려주세요.",
+      "timeout": false,
+      "reject": true,
+      "timeout_cause": null,
+      "elapsed_seconds": 1.57,
+      "metrics": {
+        "error": "REJECT_EXCLUDED"
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "파스타 면을 직접 만들려고 하는데 레시피를 알려주세요. 재료 비율과 반죽 방법이 궁금합니다.",
+      "timeout": false,
+      "reject": true,
+      "timeout_cause": null,
+      "elapsed_seconds": 1.22,
+      "metrics": {
+        "error": "REJECT_EXCLUDED"
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "스마트폰 앱을 직접 개발하고 싶습니다. 프로그래밍을 전혀 모르는데 어디서부터 시작해야 하나요?",
+      "timeout": false,
+      "reject": true,
+      "timeout_cause": null,
+      "elapsed_seconds": 3.97,
+      "metrics": {
+        "error": "REJECT_EXCLUDED"
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "마라톤 대회를 처음 준비하는데, 훈련 계획과 영양 섭취 방법을 알려주세요.",
+      "timeout": false,
+      "reject": true,
+      "timeout_cause": null,
+      "elapsed_seconds": 1.81,
+      "metrics": {
+        "error": "REJECT_EXCLUDED"
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "반려견이 갑자기 밥을 먹지 않고 기운이 없습니다. 어떤 이유일까요? 집에서 할 수 있는 처치 방법이 있나요?",
+      "timeout": false,
+      "reject": true,
+      "timeout_cause": null,
+      "elapsed_seconds": 1.85,
+      "metrics": {
+        "error": "REJECT_EXCLUDED"
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "코딩 학원을 창업하면서 프로그래밍 강사 2명을 채용하려고 합니다. 학원 설립 등록 절차와 강사 근로계약서 작성 시 주의사항을 알려주세요.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 19.68,
+      "metrics": {
+        "faithfulness": 0.7619,
+        "answer_relevancy": 0.8089,
+        "context_precision": 1.0,
+        "context_recall": 1.0
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "직원이 육아휴직 중인데, 육아휴직 대체 인력을 채용하면 세금 혜택을 받을 수 있나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 13.4,
+      "metrics": {
+        "faithfulness": 0.5556,
+        "answer_relevancy": 0.8146,
+        "context_precision": 0.71,
+        "context_recall": 0.6
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "소상공인으로 상가에서 미용실을 운영하고 있습니다. 임대인이 재건축을 이유로 명도를 요구하는데, 법적으로 어떻게 대응하고 지원사업을 받을 수 있나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 13.24,
+      "metrics": {
+        "faithfulness": 0.5385,
+        "answer_relevancy": 0.5189,
+        "context_precision": 1.0,
+        "context_recall": 0.4
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "1인 개인사업자로 3년 운영하다가 법인으로 전환하려고 합니다. 법인 전환 시 세무 신고와 법적 절차는 어떻게 되나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 12.71,
+      "metrics": {
+        "faithfulness": 0.7692,
+        "answer_relevancy": 0.6112,
+        "context_precision": 0.6613,
+        "context_recall": 0.4
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "편의점 프랜차이즈를 운영하면서 직원 3명을 고용하고 있습니다. 최저임금 인상으로 인건비 부담이 커졌는데, 세금 절감이나 정부 지원을 받을 수 있나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 17.41,
+      "metrics": {
+        "faithfulness": 0.6471,
+        "answer_relevancy": 0.7412,
+        "context_precision": 0.6829,
+        "context_recall": 0.6
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "외국인 근로자를 고용하려고 합니다. 비자와 고용 허가 절차는 어떻게 되고, 내국인 근로자와 같은 노동법이 적용되나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 8.75,
+      "metrics": {
+        "faithfulness": 0.2222,
+        "answer_relevancy": 0.889,
+        "context_precision": 0.2,
+        "context_recall": 0.2
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "스타트업을 운영하면서 핵심 개발자에게 스톡옵션을 부여하고 싶습니다. 스톡옵션 부여 절차와 세금 처리는 어떻게 되나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 18.0,
+      "metrics": {
+        "faithfulness": 0.6,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.5286,
+        "context_recall": 0.25
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "연구개발 스타트업으로 특허를 출원하려고 합니다. 특허 출원 비용을 세금에서 공제받을 수 있나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 22.84,
+      "metrics": {
+        "faithfulness": 0.6364,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.9167,
+        "context_recall": 0.5
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "식품 가공 중소기업으로 해외 수출을 확대하면서 수출 매출이 전체의 60%를 넘었습니다. 영세율 적용과 수출 관련 세금 혜택을 알려주세요.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 10.69,
+      "metrics": {
+        "faithfulness": 0.7273,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.95,
+        "context_recall": 0.6
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "건설 현장에서 직원이 작업 중 부상을 입었습니다. 산업재해 처리 절차와 회사의 법적 책임은 어떻게 되나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 15.72,
+      "metrics": {
+        "faithfulness": 0.9333,
+        "answer_relevancy": 0.9363,
+        "context_precision": 0.9571,
+        "context_recall": 0.6
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "식품 제조업체를 운영하면서 파트타임 직원 5명을 고용하고 있습니다. 부가가치세 신고와 직원 원천세 신고를 언제, 어떻게 해야 하나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 18.04,
+      "metrics": {
+        "faithfulness": 0.1875,
+        "answer_relevancy": 0.6735,
+        "context_precision": 0.5,
+        "context_recall": 0.0
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "해외 바이어와 수출 계약을 맺었는데 대금을 받지 못하고 있습니다. 법적 회수 방법과 세금 처리는 어떻게 해야 하나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 16.95,
+      "metrics": {
+        "faithfulness": 0.6667,
+        "answer_relevancy": 0.9751,
+        "context_precision": 0.5988,
+        "context_recall": 0.4
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "소셜커머스 플랫폼에 입점하여 상품을 판매하려고 합니다. 입점 약관 검토 시 주의사항과 통신판매업 신고는 어떻게 해야 하나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 22.43,
+      "metrics": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9044,
+        "context_precision": 1.0,
+        "context_recall": 0.6
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "법인 대표이사에게 연봉 1억원을 지급하려고 합니다. 임원 보수의 세금 처리와 원천징수는 어떻게 하나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 15.93,
+      "metrics": {
+        "faithfulness": 0.6923,
+        "answer_relevancy": 0.9361,
+        "context_precision": 0.9821,
+        "context_recall": 1.0
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "공유오피스를 창업하여 임대업을 하면서 직원 2명을 고용하려고 합니다. 부동산 임대업 사업자등록과 직원 고용 시 주의사항은 무엇인가요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 19.46,
+      "metrics": {
+        "faithfulness": 0.6111,
+        "answer_relevancy": 0.9108,
+        "context_precision": 1.0,
+        "context_recall": 0.75
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "외국인 투자 법인(한국 자회사)으로 설립하여 국내에서 사업을 하려고 합니다. 국내 법인과 세금·노무 측면에서 다른 점이 있나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 15.89,
+      "metrics": {
+        "faithfulness": 0.8333,
+        "answer_relevancy": 0.731,
+        "context_precision": 0.8734,
+        "context_recall": 0.8
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "스타트업에서 대학생 인턴을 채용하려고 합니다. 인턴에게도 최저임금과 4대보험이 적용되나요? 인턴십 지원사업이 있나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 10.91,
+      "metrics": {
+        "faithfulness": 0.1111,
+        "answer_relevancy": 0.0,
+        "context_precision": 1.0,
+        "context_recall": 0.6
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "전 직원이 퇴사하면서 회사의 영업 비밀(고객 리스트)을 가지고 경쟁사에 취업했습니다. 법적으로 어떻게 대응하고 손해배상을 청구할 수 있나요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 12.31,
+      "metrics": {
+        "faithfulness": 0.6667,
+        "answer_relevancy": 0.7447,
+        "context_precision": 1.0,
+        "context_recall": 0.25
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "사회적협동조합을 설립하려고 합니다. 설립 절차와 직원 채용 시 공정거래 의무는 무엇인가요?",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 16.43,
+      "metrics": {
+        "faithfulness": 0.7391,
+        "answer_relevancy": 0.9429,
+        "context_precision": 0.0,
+        "context_recall": 0.25
+      },
+      "contextual_metrics": null
+    },
+    {
+      "question": "경영 악화로 직원 10명 중 5명을 정리해고하려고 합니다. 정리해고 절차, 실업급여 지원, 그리고 해고된 직원이 손해배상을 청구할 수 있는지 알려주세요.",
+      "timeout": false,
+      "reject": false,
+      "timeout_cause": null,
+      "elapsed_seconds": 21.77,
+      "metrics": {
+        "faithfulness": 0.6875,
+        "answer_relevancy": 0.6072,
+        "context_precision": 0.2758,
+        "context_recall": 0.5714
+      },
+      "contextual_metrics": null
+    }
+  ],
+  "averages": {
+    "faithfulness": 0.5011,
+    "answer_relevancy": 0.5271,
+    "context_precision": 0.6514,
+    "context_recall": 0.4447
+  },
+  "averages_contextual": {
+    "directive_coverage": null,
+    "context_adherence": null,
+    "conflict_free": null,
+    "score": null
+  }
+}

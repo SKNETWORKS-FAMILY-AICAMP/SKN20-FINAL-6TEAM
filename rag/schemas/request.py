@@ -4,9 +4,9 @@ API 요청에 사용되는 Pydantic 모델을 정의합니다.
 """
 
 import hashlib
-from typing import Any, Literal
+from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class CompanyContext(BaseModel):
@@ -23,13 +23,13 @@ class CompanyContext(BaseModel):
         annual_revenue: 연매출 (원)
     """
 
-    company_name: str | None = Field(default=None, description="회사명", max_length=100)
-    business_number: str | None = Field(default=None, description="사업자등록번호", max_length=20)
-    industry_code: str | None = Field(default=None, description="업종 코드", max_length=20)
-    industry_name: str | None = Field(default=None, description="업종명", max_length=100)
+    company_name: str | None = Field(default=None, description="회사명")
+    business_number: str | None = Field(default=None, description="사업자등록번호")
+    industry_code: str | None = Field(default=None, description="업종 코드")
+    industry_name: str | None = Field(default=None, description="업종명")
     employee_count: int | None = Field(default=None, description="직원 수")
     years_in_business: int | None = Field(default=None, description="업력 (년)")
-    region: str | None = Field(default=None, description="지역", max_length=50)
+    region: str | None = Field(default=None, description="지역")
 
     def to_context_string(self) -> str:
         """컨텍스트 문자열로 변환합니다."""
@@ -64,14 +64,6 @@ class UserContext(BaseModel):
     age: int | None = Field(default=None, description="사용자 나이")
     company: CompanyContext | None = Field(default=None, description="기업 정보")
     companies: list[CompanyContext] = Field(default_factory=list, description="모든 활성 기업 목록")
-
-    @field_validator("user_type")
-    @classmethod
-    def validate_user_type(cls, v: str) -> str:
-        allowed = {"prospective", "startup_ceo", "sme_owner"}
-        if v not in allowed:
-            raise ValueError(f"user_type은 {allowed} 중 하나여야 합니다")
-        return v
 
     def get_user_type_label(self) -> str:
         """사용자 유형 라벨을 반환합니다. 나이가 있으면 함께 표기합니다."""
@@ -208,7 +200,7 @@ class UserContext(BaseModel):
             return None
 
         parts = [",".join(regions), self.user_type or ""]
-        return hashlib.sha256(":".join(parts).encode()).hexdigest()[:8]
+        return hashlib.md5(":".join(parts).encode()).hexdigest()[:8]
 
 
 class ChatMessage(BaseModel):
@@ -219,8 +211,8 @@ class ChatMessage(BaseModel):
         content: 메시지 내용
     """
 
-    role: Literal["user", "assistant"] = Field(description="역할 (user, assistant)")
-    content: str = Field(description="메시지 내용", max_length=5000)
+    role: str = Field(description="역할 (user, assistant)")
+    content: str = Field(description="메시지 내용")
 
 
 class ChatRequest(BaseModel):
@@ -371,16 +363,6 @@ class GenerateDocumentRequest(BaseModel):
     company_context: CompanyContext | None = Field(default=None, description="회사 정보")
     user_id: int | None = Field(default=None, description="사용자 ID (S3/DB 저장용)")
     company_id: int | None = Field(default=None, description="회사 ID")
-
-    @field_validator("params")
-    @classmethod
-    def validate_params(cls, v: dict) -> dict:
-        if len(v) > 50:
-            raise ValueError("params은 최대 50개 키를 허용합니다")
-        for key, val in v.items():
-            if isinstance(val, str) and len(val) > 5000:
-                raise ValueError(f"params 값은 최대 5000자를 허용합니다 (키: {key})")
-        return v
 
 
 class ModifyDocumentRequest(BaseModel):

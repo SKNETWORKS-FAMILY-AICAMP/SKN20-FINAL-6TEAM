@@ -52,18 +52,13 @@ def _build_user_context(user: User, db: Session) -> dict:
     if not all_companies:
         return context
 
-    # 모든 biz_code를 한 번에 조회 (N+1 방지)
-    biz_codes = [comp.biz_code for comp in all_companies if comp.biz_code]
-    code_name_map: dict[str, str] = {}
-    if biz_codes:
-        code_rows = db.execute(
-            select(Code.code, Code.name).where(Code.code.in_(biz_codes), Code.use_yn == True)
-        ).all()
-        code_name_map = {row.code: row.name for row in code_rows}
-
     companies_list = []
     for comp in all_companies:
-        industry_name = code_name_map.get(comp.biz_code) if comp.biz_code else None
+        industry_name = None
+        if comp.biz_code:
+            industry_name = db.execute(
+                select(Code.name).where(Code.code == comp.biz_code, Code.use_yn == True)
+            ).scalar_one_or_none()
         years = None
         if comp.open_date:
             years = (datetime.now() - comp.open_date).days // 365

@@ -637,7 +637,7 @@ class TestMainRouterEdgeCases:
 
     def test_settings_loaded_from_get_settings(self, mock_all_dependencies):
         """settings가 get_settings()로 로드되는지 확인."""
-        MainRouter()
+        router = MainRouter()  # noqa: F841
 
         mock_all_dependencies["settings"].assert_called()
 

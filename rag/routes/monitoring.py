@@ -22,14 +22,9 @@ async def verify_admin_key(
 ) -> None:
     """관리자 API 키를 검증합니다."""
     settings = get_settings()
-    admin_key = settings.admin_api_key
-    if not admin_key or not admin_key.strip():
-        # 프로덕션에서 admin key 미설정 시 fail-closed
-        if settings.environment == "production":
+    if settings.admin_api_key and settings.admin_api_key.strip():
+        if not hmac.compare_digest(x_admin_key or "", settings.admin_api_key):
             raise HTTPException(status_code=403, detail="관리자 인증이 필요합니다")
-        return
-    if not hmac.compare_digest(x_admin_key or "", admin_key):
-        raise HTTPException(status_code=403, detail="관리자 인증이 필요합니다")
 
 
 # --- 메트릭 ---

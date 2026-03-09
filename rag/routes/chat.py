@@ -135,7 +135,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 await append_session_turn(
                     owner_key,
                     request.session_id,
-                    query,
+                    request.message,
                     cached_response.content,
                     user_id=_extract_user_id(request),
                     agent_code=_get_agent_code(cached_domains),
@@ -145,7 +145,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 schedule_write_through(
                     user_id=_extract_user_id(request),
                     session_id=request.session_id,
-                    question=query,
+                    question=request.message,
                     answer=cached_response.content,
                     agent_code=_get_agent_code(cached_domains),
                     evaluation_data=None,
@@ -191,7 +191,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         response_time = time.time() - start_time
 
         log_chat_interaction(
-            question=query,
+            question=request.message,
             answer=response.content,
             sources=response.sources,
             domains=response.domains,
@@ -254,7 +254,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         await append_session_turn(
             owner_key,
             request.session_id,
-            query,
+            request.message,
             response.content,
             user_id=_extract_user_id(request),
             agent_code=_get_agent_code(response.domains),
@@ -265,7 +265,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         schedule_write_through(
             user_id=_extract_user_id(request),
             session_id=request.session_id,
-            question=query,
+            question=request.message,
             answer=response.content,
             agent_code=_get_agent_code(response.domains),
             evaluation_data=eval_data_dict,
@@ -395,7 +395,7 @@ async def chat_stream(request: ChatRequest):
                     await append_session_turn(
                         owner_key,
                         request.session_id,
-                        stream_query,
+                        request.message,
                         cached_content,
                         user_id=_extract_user_id(request),
                         agent_code=_get_agent_code(cached_domains),
@@ -405,7 +405,7 @@ async def chat_stream(request: ChatRequest):
                     schedule_write_through(
                         user_id=_extract_user_id(request),
                         session_id=request.session_id,
-                        question=stream_query,
+                        question=request.message,
                         answer=cached_content,
                         agent_code=_get_agent_code(cached_domains),
                         evaluation_data=None,
@@ -525,21 +525,6 @@ async def chat_stream(request: ChatRequest):
                             )
                             yield f"data: {error_chunk.model_dump_json()}\n\n"
 
-                        # 부분 응답이라도 세션에 저장
-                        if streamed_so_far.strip():
-                            await append_session_turn(
-                                owner_key, request.session_id,
-                                stream_query, streamed_so_far,
-                                user_id=_extract_user_id(request),
-                                agent_code="A0000001",
-                            )
-                            schedule_write_through(
-                                user_id=_extract_user_id(request),
-                                session_id=request.session_id,
-                                question=stream_query,
-                                answer=streamed_so_far,
-                                agent_code="A0000001",
-                            )
                         return
                     try:
                         chunk = await asyncio.wait_for(
@@ -561,21 +546,6 @@ async def chat_stream(request: ChatRequest):
                             )
                             yield f"data: {error_chunk.model_dump_json()}\n\n"
 
-                        # 부분 응답이라도 세션에 저장
-                        if streamed_so_far.strip():
-                            await append_session_turn(
-                                owner_key, request.session_id,
-                                stream_query, streamed_so_far,
-                                user_id=_extract_user_id(request),
-                                agent_code="A0000001",
-                            )
-                            schedule_write_through(
-                                user_id=_extract_user_id(request),
-                                session_id=request.session_id,
-                                question=stream_query,
-                                answer=streamed_so_far,
-                                agent_code="A0000001",
-                            )
                         return
 
                     # 소프트 타임아웃 체크 (기존 호환)
@@ -590,21 +560,6 @@ async def chat_stream(request: ChatRequest):
                             )
                             yield f"data: {error_chunk.model_dump_json()}\n\n"
 
-                        # 부분 응답이라도 세션에 저장
-                        if streamed_so_far.strip():
-                            await append_session_turn(
-                                owner_key, request.session_id,
-                                stream_query, streamed_so_far,
-                                user_id=_extract_user_id(request),
-                                agent_code="A0000001",
-                            )
-                            schedule_write_through(
-                                user_id=_extract_user_id(request),
-                                session_id=request.session_id,
-                                question=stream_query,
-                                answer=streamed_so_far,
-                                agent_code="A0000001",
-                            )
                         return
 
                     if chunk["type"] == "token":
@@ -633,7 +588,7 @@ async def chat_stream(request: ChatRequest):
             response_time = time.time() - start_time
 
             log_chat_interaction(
-                question=stream_query,
+                question=request.message,
                 answer=final_content,
                 sources=final_sources,
                 domains=final_domains,
@@ -710,7 +665,7 @@ async def chat_stream(request: ChatRequest):
             await append_session_turn(
                 owner_key,
                 request.session_id,
-                stream_query,
+                request.message,
                 final_content,
                 user_id=_extract_user_id(request),
                 agent_code=_get_agent_code(final_domains),
@@ -721,7 +676,7 @@ async def chat_stream(request: ChatRequest):
             schedule_write_through(
                 user_id=_extract_user_id(request),
                 session_id=request.session_id,
-                question=stream_query,
+                question=request.message,
                 answer=final_content,
                 agent_code=_get_agent_code(final_domains),
                 evaluation_data=eval_data_dict,

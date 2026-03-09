@@ -1253,6 +1253,7 @@ class MainRouter:
             # 단일 도메인 스트리밍에서도 평가 수행 (fallback 메시지는 평가 스킵)
             _is_fallback = content in (FALLBACK_NO_DOCUMENTS, FALLBACK_NO_DOCUMENTS_WITH_ACTIONS)
             single_evaluation = None
+            single_ragas_metrics = None  # noqa: F841
 
             if self.settings.enable_llm_evaluation and content and not _is_fallback:
                 try:
