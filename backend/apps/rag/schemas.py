@@ -10,8 +10,14 @@ class RagChatMessage(BaseModel):
 
 class RagChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=MAX_MESSAGE_LENGTH)
-    history: list[RagChatMessage] = Field(default_factory=list, max_length=50)
-    session_id: str | None = Field(default=None, min_length=1, max_length=100)
+    history: list[RagChatMessage] = Field(default_factory=list, max_length=20)
+    session_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        pattern=r"^[a-zA-Z0-9_-]+$",
+    )
+    root_history_id: int | None = Field(default=None)
 
 
 class ContractGenerateRequest(BaseModel):
@@ -42,3 +48,21 @@ class ContractGenerateRequest(BaseModel):
     allowances: str | None = Field(default=None, max_length=200)
     payment_method: str = Field(default="계좌이체", max_length=50)
     format: str = Field(default="pdf", pattern=r"^(pdf|docx)$")
+
+
+class GenerateDocumentProxyRequest(BaseModel):
+    """범용 문서 생성 프록시 요청."""
+
+    doc_type_id: str = Field(..., max_length=50)
+    params: dict = Field(default_factory=dict)
+    format: str = Field(default="docx", pattern=r"^(pdf|docx)$")
+
+
+class ModifyDocumentProxyRequest(BaseModel):
+    """문서 수정 프록시 요청."""
+
+    file_content: str = Field(..., description="원본 파일 (base64)")
+    file_name: str = Field(..., max_length=255)
+    instructions: str = Field(..., min_length=1, max_length=5000)
+    format: str = Field(default="docx", pattern=r"^(pdf|docx)$")
+    document_id: int | None = Field(default=None)

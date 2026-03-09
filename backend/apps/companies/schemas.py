@@ -29,7 +29,6 @@ class CompanyUpdate(BaseModel):
     addr: str | None = Field(None, max_length=255)
     open_date: datetime | None = None
     biz_code: str | None = Field(None, pattern=r"^[A-Z]{1,2}\d{6}$")
-    main_yn: bool | None = None
 
     @field_validator("biz_num")
     @classmethod
@@ -40,6 +39,20 @@ class CompanyUpdate(BaseModel):
         if not re.match(r"^\d{3}-\d{2}-\d{5}$", v) and not re.match(r"^\d{10}$", v):
             raise ValueError("사업자등록번호는 XXX-XX-XXXXX 또는 숫자 10자리 형식이어야 합니다")
         return v
+
+
+class BiznoLookupResponse(BaseModel):
+    """bizno.net API 조회 결과"""
+    biz_num: str = ""
+    com_name: str = ""
+    ceo: str = ""
+    addr: str = ""
+    open_date: str = ""
+    biz_type: str = ""
+    biz_item: str = ""
+    status: str = ""
+    tax_type: str = ""
+    found: bool = False
 
 
 class CompanyResponse(BaseModel):

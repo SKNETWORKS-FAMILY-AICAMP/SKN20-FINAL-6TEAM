@@ -5,15 +5,11 @@ import {
   Typography,
   Input,
   Button,
-  Dialog,
-  DialogHeader,
-  DialogBody,
-  DialogFooter,
   Select,
   Option,
   IconButton,
-  Alert,
 } from '@material-tailwind/react';
+import { Modal } from '../common/Modal';
 import { useToastStore } from '../../stores/toastStore';
 import { PlusIcon, PencilIcon, TrashIcon, StarIcon as StarIconOutline } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
@@ -94,7 +90,7 @@ const INITIAL_FORM_DATA: CompanyFormData = {
   status: 'PREPARING',
   com_name: '',
   biz_num: '',
-  biz_code: 'BA000000',
+  biz_code: '',
   addr: '',
   region_code: '',
   open_date: '',
@@ -127,7 +123,9 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [dialogError, setDialogError] = useState<string | null>(null);
+  const [isLookingUp, setIsLookingUp] = useState(false);
+  const [bizVerified, setBizVerified] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
 
   const [formData, setFormData] = useState<CompanyFormData>(INITIAL_FORM_DATA);
 
@@ -157,6 +155,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
       }
     } catch (err) {
       console.error('Failed to fetch companies:', err);
+      addToast({ type: 'error', message: '기업 목록을 불러오는 데 실패했습니다.' });
     } finally {
       setIsLoading(false);
     }
@@ -168,11 +167,11 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
 
   const openCreateDialog = () => {
     setEditingCompany(null);
-    setDialogError(null);
     setFormData({
       ...INITIAL_FORM_DATA,
       open_date: new Date().toISOString().split('T')[0],
     });
+    setBizVerified(false);
     setIsDialogOpen(true);
   };
 
@@ -183,18 +182,18 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
   const openEditDialog = (company: Company) => {
     onSelectCompany?.(company);
     setEditingCompany(company);
-    setDialogError(null);
     const isOperating = Boolean(company.biz_num);
     const existingAddr = company.addr || '';
     setFormData({
       status: isOperating ? 'OPERATING' : 'PREPARING',
       com_name: company.com_name,
       biz_num: company.biz_num || '',
-      biz_code: company.biz_code || 'BA000000',
+      biz_code: company.biz_code || '',
       addr: existingAddr,
       region_code: displayNameToRegionCode(existingAddr),
       open_date: company.open_date ? company.open_date.split('T')[0] : new Date().toISOString().split('T')[0],
     });
+    setBizVerified(Boolean(company.biz_num));
     setIsDialogOpen(true);
   };
 
@@ -207,9 +206,45 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
     }));
   };
 
+  const handleBiznoLookup = async () => {
+    setIsLookingUp(true);
+    try {
+      const resp = await api.get('/companies/lookup', {
+        params: { biz_num: formData.biz_num },
+      });
+      const data = resp.data;
+
+      if (!data.found) {
+        addToast({ type: 'error', message: '해당 사업자등록번호로 조회된 정보가 없습니다.' });
+        return;
+      }
+
+      if (data.status && data.status.includes('폐업')) {
+        addToast({ type: 'error', message: '폐업된 사업자등록번호입니다. 등록할 수 없습니다.' });
+        setFormData((prev) => ({ ...prev, biz_num: '' }));
+        return;
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        com_name: data.com_name || prev.com_name,
+        addr: data.addr || prev.addr,
+        open_date: data.open_date
+          ? `${data.open_date.slice(0, 4)}-${data.open_date.slice(4, 6)}-${data.open_date.slice(6, 8)}`
+          : prev.open_date,
+      }));
+      setBizVerified(true);
+
+      addToast({ type: 'success', message: '기업 정보가 자동입력되었습니다.' });
+    } catch (err) {
+      addToast({ type: 'error', message: extractErrorMessage(err, '사업자번호 조회에 실패했습니다.') });
+    } finally {
+      setIsLookingUp(false);
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
-    setDialogError(null);
 
     try {
       const data = {
@@ -247,9 +282,9 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
       fetchCompanies();
     } catch (err: unknown) {
       if (isAdmin && axios.isAxiosError(err) && err.response?.data) {
-        setDialogError(JSON.stringify(err.response.data, null, 2));
+        addToast({ type: 'error', message: JSON.stringify(err.response.data, null, 2) });
       } else {
-        setDialogError(extractErrorMessage(err, '저장에 실패했습니다.'));
+        addToast({ type: 'error', message: extractErrorMessage(err, '저장에 실패했습니다.') });
       }
     } finally {
       setIsSaving(false);
@@ -265,8 +300,14 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
     }
   };
 
-  const handleDelete = async (companyId: number) => {
-    if (!window.confirm('정말 삭제하시겠습니까?')) return;
+  const handleDelete = (companyId: number) => {
+    setDeleteTargetId(companyId);
+  };
+
+  const confirmDelete = async () => {
+    if (deleteTargetId === null) return;
+    const companyId = deleteTargetId;
+    setDeleteTargetId(null);
 
     try {
       await api.delete(`/companies/${companyId}`);
@@ -457,21 +498,43 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
         </Card>
       )}
 
-      {/* Create/Edit Dialog */}
-      <Dialog open={isDialogOpen} handler={() => setIsDialogOpen(false)} size="md">
-        <DialogHeader>{editingCompany ? '기업 정보 수정' : '기업 등록'}</DialogHeader>
-        <DialogBody className="space-y-4">
-          {/* Dialog-level error message */}
-          {dialogError && (
-            <Alert color="red" onClose={() => setDialogError(null)}>
-              {isAdmin ? (
-                <pre className="text-xs whitespace-pre-wrap break-all">{dialogError}</pre>
-              ) : (
-                dialogError
-              )}
-            </Alert>
-          )}
+      {/* Delete Confirmation Modal */}
+      <Modal
+        open={deleteTargetId !== null}
+        onClose={() => setDeleteTargetId(null)}
+        title="기업 삭제"
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="text" onClick={() => setDeleteTargetId(null)}>
+              취소
+            </Button>
+            <Button color="red" onClick={confirmDelete}>
+              삭제
+            </Button>
+          </div>
+        }
+      >
+        <p>정말 삭제하시겠습니까?</p>
+      </Modal>
 
+      {/* Create/Edit Dialog */}
+      <Modal
+        open={isDialogOpen}
+        onClose={() => setIsDialogOpen(false)}
+        title={editingCompany ? '기업 정보 수정' : '기업 등록'}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="text" onClick={() => setIsDialogOpen(false)}>
+              취소
+            </Button>
+            <Button onClick={handleSave} disabled={!formData.com_name.trim() || (!isPreparing && formData.biz_num.replace(/[^0-9]/g, '').length !== 10) || isSaving}>
+              {isSaving ? '저장 중...' : '저장'}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
           {/* Company Status */}
           <div>
             <Typography variant="small" color="gray" className="mb-1 !text-gray-700">
@@ -500,7 +563,8 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
               value={formData.com_name}
               onChange={(e) => setFormData({ ...formData, com_name: e.target.value })}
               id="company-name-input"
-              placeholder={isPreparing ? '(예비) 창업 준비' : '회사명을 입력하세요'}
+              placeholder={isPreparing ? '(예비) 창업 준비' : '사업자등록번호를 조회하세요'}
+              disabled={!isPreparing}
               className="!border-gray-300"
               labelProps={{ className: 'hidden' }}
             />
@@ -511,14 +575,47 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
             <Typography variant="small" color="gray" className="mb-1 !text-gray-700">
               사업자등록번호
             </Typography>
-            <Input
-              value={formData.biz_num}
-              onChange={(e) => setFormData({ ...formData, biz_num: e.target.value })}
-              placeholder="000-00-00000"
-              disabled={isPreparing}
-              className="!border-gray-300"
-              labelProps={{ className: 'hidden' }}
-            />
+            <div className="flex gap-2">
+              <Input
+                value={
+                  formData.biz_num.length > 5
+                    ? `${formData.biz_num.slice(0, 3)}-${formData.biz_num.slice(3, 5)}-${formData.biz_num.slice(5)}`
+                    : formData.biz_num.length > 3
+                      ? `${formData.biz_num.slice(0, 3)}-${formData.biz_num.slice(3)}`
+                      : formData.biz_num
+                }
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
+                  setBizVerified(false);
+                  setFormData({ ...formData, biz_num: digits, com_name: '' });
+                }}
+                maxLength={12}
+                onKeyDown={(e) => {
+                  if (
+                    e.key.length === 1 &&
+                    !/[0-9]/.test(e.key) &&
+                    !e.ctrlKey && !e.metaKey
+                  ) {
+                    e.preventDefault();
+                  }
+                }}
+                inputMode="numeric"
+                placeholder={isPreparing ? '' : '000-00-00000'}
+                disabled={isPreparing || bizVerified}
+                className="!border-gray-300 placeholder:opacity-100"
+                label=""
+                labelProps={{ className: 'hidden' }}
+              />
+              <Button
+                size="sm"
+                variant="outlined"
+                disabled={isPreparing || !formData.biz_num.trim() || isLookingUp}
+                onClick={handleBiznoLookup}
+                className="flex-shrink-0 whitespace-nowrap"
+              >
+                {isLookingUp ? '조회 중...' : '조회'}
+              </Button>
+            </div>
           </div>
 
           {/* Industry - 2-tier (대분류 → 소분류) */}
@@ -528,6 +625,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
             </Typography>
             <Select
               value={(() => {
+                if (!formData.biz_code) return '';
                 // Find major code from current biz_code
                 for (const majorCode of Object.keys(INDUSTRY_MAJOR)) {
                   const minors = INDUSTRY_MINOR[majorCode] || {};
@@ -535,20 +633,23 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
                     return majorCode;
                   }
                 }
-                return 'BA000000';
+                return '';
               })()}
               onChange={(val) => {
-                const majorCode = val || 'BA000000';
-                setFormData({ ...formData, biz_code: majorCode });
+                setFormData({ ...formData, biz_code: val || '' });
               }}
               className="!border-gray-300"
               labelProps={{ className: 'hidden' }}
+              menuProps={{ className: 'max-h-48 !z-[80]' }}
             >
-              {Object.entries(INDUSTRY_MAJOR).map(([code, name]) => (
-                <Option key={code} value={code}>
-                  {name}
-                </Option>
-              ))}
+              {[
+                <Option key="__none__" value="">선택 안 함</Option>,
+                ...Object.entries(INDUSTRY_MAJOR).map(([code, name]) => (
+                  <Option key={code} value={code}>
+                    {name}
+                  </Option>
+                )),
+              ]}
             </Select>
           </div>
           <div>
@@ -557,15 +658,16 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
             </Typography>
             <Select
               key={(() => {
+                if (!formData.biz_code) return '__empty__';
                 for (const majorCode of Object.keys(INDUSTRY_MAJOR)) {
                   const minors = INDUSTRY_MINOR[majorCode] || {};
                   if (formData.biz_code === majorCode || formData.biz_code in minors) {
                     return majorCode;
                   }
                 }
-                return 'BA000000';
+                return '__empty__';
               })()}
-              value={formData.biz_code in INDUSTRY_MAJOR ? '' : formData.biz_code}
+              value={!formData.biz_code || formData.biz_code in INDUSTRY_MAJOR ? '' : formData.biz_code}
               onChange={(val) => {
                 if (val) {
                   setFormData({ ...formData, biz_code: val });
@@ -573,9 +675,11 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
               }}
               className="!border-gray-300"
               labelProps={{ className: 'hidden' }}
+              menuProps={{ className: 'max-h-48 !z-[80]' }}
             >
               {(() => {
-                let selectedMajor = 'BA000000';
+                if (!formData.biz_code) return [<Option key="__empty__" value="" disabled>대분류를 먼저 선택하세요</Option>];
+                let selectedMajor = '';
                 for (const majorCode of Object.keys(INDUSTRY_MAJOR)) {
                   const minors = INDUSTRY_MINOR[majorCode] || {};
                   if (formData.biz_code === majorCode || formData.biz_code in minors) {
@@ -583,6 +687,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
                     break;
                   }
                 }
+                if (!selectedMajor) return [<Option key="__empty__" value="" disabled>대분류를 먼저 선택하세요</Option>];
                 const minors = INDUSTRY_MINOR[selectedMajor] || {};
                 return Object.entries(minors).map(([code, name]) => (
                   <Option key={code} value={code}>
@@ -617,16 +722,8 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
               labelProps={{ className: 'hidden' }}
             />
           </div>
-        </DialogBody>
-        <DialogFooter>
-          <Button variant="text" onClick={() => setIsDialogOpen(false)}>
-            취소
-          </Button>
-          <Button onClick={handleSave} disabled={!formData.com_name.trim() || isSaving}>
-            {isSaving ? '저장 중...' : '저장'}
-          </Button>
-        </DialogFooter>
-      </Dialog>
+        </div>
+      </Modal>
     </>
   );
 });

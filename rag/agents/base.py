@@ -168,8 +168,7 @@ class BaseAgent(ABC):
         company_context = "정보 없음"
         if user_context:
             user_type = user_context.get_user_type_label()
-            if user_context.company:
-                company_context = user_context.company.to_context_string()
+            company_context = user_context.get_all_companies_context_string()
         return user_type, company_context
 
     @abstractmethod
@@ -272,7 +271,7 @@ class BaseAgent(ABC):
         return RetrievalResult(
             documents=documents,
             scores=scores,
-            sources=self.rag_chain.documents_to_sources(documents),
+            sources=self.rag_chain.documents_to_sources(documents, query=query),
             evaluation=evaluation,
             used_multi_query=False,
             retrieve_time=elapsed,

@@ -65,6 +65,7 @@ class EvaluationDataForDB(BaseModel):
     query_rewrite_applied: bool | None = Field(default=None, description="query rewrite applied")
     query_rewrite_reason: str | None = Field(default=None, description="query rewrite reason")
     query_rewrite_time: float | None = Field(default=None, description="query rewrite elapsed (sec)")
+    query_rewrite_topic_changed: bool | None = Field(default=None, description="topic changed detected")
     timeout_cause: str | None = Field(default=None, description="timeout cause")
     response_time: float | None = Field(default=None, description="response time in seconds")
 
@@ -85,11 +86,13 @@ class ChatResponse(BaseModel):
 
 class DocumentResponse(BaseModel):
     success: bool = Field(description="success flag")
-    document_type: str = Field(description="document type")
+    doc_type_id: str = Field(description="document type")
     file_path: str | None = Field(default=None, description="server file path", exclude=True)
     file_name: str | None = Field(default=None, description="file name")
     file_content: str | None = Field(default=None, description="file content base64")
     message: str | None = Field(default=None, description="message")
+    s3_key: str | None = Field(default=None, description="S3 object key")
+    file_id: int | None = Field(default=None, description="DB file ID")
 
 
 class StreamResponse(BaseModel):

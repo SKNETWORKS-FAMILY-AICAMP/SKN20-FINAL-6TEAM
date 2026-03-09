@@ -77,6 +77,12 @@ class ChunkingConfig:
         "labor_interpretation.jsonl",
         "hr_insurance_edu.jsonl",
         "tax_support.jsonl",
+        # law_common 분할 파일
+        "laws_finance_tax.jsonl",
+        "laws_hr_labor.jsonl",
+        "laws_startup.jsonl",
+        "laws_general.jsonl",
+        "interpretations_general.jsonl",
     ])
 
     # 필수 청킹 파일 목록
@@ -144,15 +150,20 @@ FILE_TO_COLLECTION_MAPPING = {
     # finance_tax_db 컬렉션 (finance_tax/)
     "tax_support.jsonl": "finance_tax",
     "court_cases_tax.jsonl": "finance_tax",
+    "laws_finance_tax.jsonl": "finance_tax",  # law_common 분할: 세법+해석례
 
     # hr_labor_db 컬렉션 (hr_labor/)
     "labor_interpretation.jsonl": "hr_labor",
     "hr_insurance_edu.jsonl": "hr_labor",
     "court_cases_labor.jsonl": "hr_labor",
+    "laws_hr_labor.jsonl": "hr_labor",  # law_common 분할: 노동법+해석례
 
-    # law_common_db 컬렉션 (law_common/)
-    "laws_full.jsonl": "law_common",
-    "interpretations.jsonl": "law_common",
+    # startup_funding_db 컬렉션 (startup_support/)
+    "laws_startup.jsonl": "startup_funding",  # law_common 분할: 창업법+해석례
+
+    # law_common_db 컬렉션 (general 데이터만 유지)
+    "laws_general.jsonl": "law_common",
+    "interpretations_general.jsonl": "law_common",
 }
 
 # 소스 디렉토리가 컬렉션 도메인과 다른 파일의 실제 위치
@@ -166,6 +177,9 @@ FILE_SOURCE_DIR: dict[str, str] = {
 EXCLUDED_FILES: list[str] = [
     "laws_etc.jsonl",
     "interpretations_etc.jsonl",
+    # 도메인별 분할 완료 — 원본은 도메인 컬렉션에 분배됨 (laws_*_domain.jsonl, laws_general.jsonl 등)
+    "laws_full.jsonl",
+    "interpretations.jsonl",
 ]
 
 # 파일별 청킹 설정
@@ -191,8 +205,25 @@ FILE_CHUNKING_CONFIG: dict[str, ChunkingConfig | None] = {
     # 필수 청킹
     "court_cases_tax.jsonl": ChunkingConfig(chunk_size=1500, chunk_overlap=150),
     "court_cases_labor.jsonl": ChunkingConfig(chunk_size=1500, chunk_overlap=150),
+
+    # law_common 분할 파일 — laws_full.jsonl/interpretations.jsonl과 동일한 설정
+    "laws_finance_tax.jsonl": ChunkingConfig(chunk_size=2000, chunk_overlap=200),
+    "laws_hr_labor.jsonl": ChunkingConfig(chunk_size=2000, chunk_overlap=200),
+    "laws_startup.jsonl": ChunkingConfig(chunk_size=2000, chunk_overlap=200),
+    "laws_general.jsonl": ChunkingConfig(chunk_size=2000, chunk_overlap=200),
+    "interpretations_general.jsonl": ChunkingConfig(chunk_size=2000, chunk_overlap=200),
 }
 
 # 조건부 청킹 임계값 (문자 수)
 # 전처리에서 조문 단위(MAX_ARTICLE_CHUNK=3000)로 제어하므로 안전망 상향
 OPTIONAL_CHUNK_THRESHOLD = 3500
+
+# P2-3: Parent-Child 검색용 자식 청크 설정
+# 작은 청크(child)로 정밀 검색 → 부모(parent) 청크의 넓은 맥락을 LLM에 전달
+CHILD_CHUNK_SIZE = 500
+CHILD_CHUNK_OVERLAP = 50
+
+# 공고 원문(_full_text) 전용 청킹 설정
+# content(구조화 필드)와 별도로 _full_text를 청킹하여 contextual retrieval 지원
+ANNOUNCEMENT_FULLTEXT_CHUNK_THRESHOLD = 1500
+ANNOUNCEMENT_CHUNKING_CONFIG = ChunkingConfig(chunk_size=1500, chunk_overlap=150)

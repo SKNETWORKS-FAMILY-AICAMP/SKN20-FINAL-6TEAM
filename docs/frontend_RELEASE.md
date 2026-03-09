@@ -1,5 +1,96 @@
 # Release Notes
 
+## [2026-03-07] - 보안 감사 HIGH 수정
+
+### Bug Fixes
+- **HIGH: SourceReferences URL javascript: 프로토콜 차단** (`frontend/src/components/chat/SourceReferences.tsx`): XSS 방지를 위해 javascript: 프로토콜 URL 렌더링 차단
+- **HIGH: Refresh 요청 X-Requested-With 헤더 추가** (`frontend/src/lib/api.ts`): CSRF 방어를 위한 커스텀 헤더 추가
+
+## [2026-03-06] - DB 스키마 동기화 + 지원공고 신청서 다운로드 링크 + 가이드 페이지 온보딩 리디자인 + Redis 카드 레이아웃 대응
+
+### Features
+- **지원공고 신청서 다운로드 링크 추가** (`components/chat/SourceReferences.tsx`): 답변 출처(Sources) 참조에 신청서 다운로드 링크 표시 기능 추가
+- **가이드 페이지 스텝 바이 스텝 온보딩 플로우 리디자인** (`pages/UsageGuidePage.tsx`): 사용 설명서 온보딩 플로우 전면 재설계
+
+### Bug Fixes
+- **서버 상태 그리드 레이아웃 수정** (`pages/AdminDashboardPage.tsx`): Redis 서비스 카드 추가로 4개 항목 대응 — `md:grid-cols-3` → `md:grid-cols-2 lg:grid-cols-4`
+- **DB 스키마 동기화** (`lib/documentApi.ts`, `pages/MainPage.tsx`, `components/chat/ActionButtons.tsx`, `components/chat/DocumentFormModal.tsx`, `components/chat/ApplicationFormModal.tsx`): API 응답 필드명 `document_type` → `doc_type_id` 전환
+- **가이드 페이지 UX 개선** (`pages/UsageGuidePage.tsx`): 텍스트 수직 중앙정렬, 이전 버튼 깜빡임 제거, 스텝 아이콘 전환 타이밍 지연 추가
+
+## [2026-03-05] - 채팅 세션 오염 방지 + 알림 저장버튼 수정 + Sources 복원
+
+### Features
+- **세션 재접속 시 참고 문서(Sources) 복원** (`stores/chatStore.ts`): 세션 재접속 시 이전 메시지의 참고 문서 목록 복원
+
+### Bug Fixes
+- **채팅 세션 오염 방지 및 히스토리 선택 중복 수정** (`stores/chatStore.ts`): 히스토리 선택 시 세션 오염 및 중복 로딩 버그 수정
+- **알림 설정 저장버튼 수정** (`components/` 관련): 알림 설정 저장버튼 동작 안정화
+- **탭 전환 시 스트리밍 백그라운드 계속 실행** (`hooks/useChat.ts`): 탭 전환 시에도 스트리밍 응답이 백그라운드에서 계속 실행되어 응답 소실 방지
+- **기업등록 사업자번호 입력 UX 개선** (`components/chat/ApplicationFormModal.tsx`): 기업 등록 사업자번호 입력 필드 UX 개선
+
+## [2026-03-04] - 토스트 시스템 통합 + 공고 패널 개선 + 폰트 수정 + 로그인 후 새 채팅 시작 + 지원 공고 상세 문서 다운로드 + 지원서 생성 + 세션 타임아웃 인프라
+
+### Features
+- **통합 토스트 시스템** (`components/common/ToastContainer.tsx`): 액션/알림 토스트를 단일 컨테이너로 통합
+- **관련 공고 패널 헤더 개선** (`pages/SchedulePage.tsx`): 정렬 드롭다운 추가 + 토스트 마이그레이션
+- **로그인 후 새 채팅 시작** (`stores/authStore.ts`): 로그인 완료 시 기존 히스토리 유지하면서 새 빈 채팅으로 자동 전환
+- **지원 공고 상세 문서 다운로드** (`components/chat/SourceReferences.tsx`, `hooks/useChat.ts`, `lib/rag.ts`, `types/index.ts`): 채팅 소스 참조에서 지원 공고 상세 문서 다운로드 기능 추가
+- **지원서 생성 양식 키 전달** (`components/chat/ApplicationFormModal.tsx`): `_form_key`, `_form_title` 파라미터를 문서 생성 API에 함께 전달 — executor가 S3 원본 양식을 참조하여 정확한 지원서 생성 가능
+- **세션 타임아웃 1시간 + 게스트 턴 쿼터 합산 인프라** (`hooks/useChat.ts`, `stores/authStore.ts`, `stores/chatStore.ts`): Frontend 인증 유저 쿼터 체크 프레임워크 구축 (현재 무제한), 로그아웃 시 게스트 카운트 유지
+
+### Bug Fixes
+- **세션 ID `db-{root_history_id}`로 안정화** (`src/stores/chatStore.ts`): 세션 ID 충돌 방지 및 write-through 파이프라인 연동
+- **전역 폰트 Nanum Gothic으로 수정** (`src/index.css`, `tailwind.config.js`): 전체 UI 폰트 일관성 확보
+
+## [2026-03-03] - 문서 생성 에이전트 UI + 비즈노 사업자 조회 연동 + 코드 정리
+
+### Features
+- **문서 자동 생성 에이전트 UI** (`components/chat/ActionButtons.tsx`, `ApplicationFormModal.tsx`, `ContractFormModal.tsx`, `DocumentFormModal.tsx`, `lib/documentApi.ts`, `pages/MainPage.tsx`, `stores/chatStore.ts`, `types/index.ts`): 채팅 액션 버튼에 문서 생성 기능 연동 — 근로계약서·사업계획서·범용 문서 생성 모달 추가
+- **비즈노 사업자등록번호 조회 UI 연동** (`components/company/CompanyForm.tsx`): 기업 등록 폼에서 비즈노 API 사업자등록번호 검증 연동
+
+### Refactoring
+- **`useDocumentForm` 커스텀 훅 추출** (`hooks/useDocumentForm.tsx` 신규): `ApplicationFormModal` / `DocumentFormModal` 공유 폼 로직(formValues, initFormValues, handleChange, isValid, renderField) 단일 훅으로 통합
+- **chatStore 중복 상태 제거** (`stores/chatStore.ts`): 중복 메시지 디버그 코드 및 불필요한 중간 상태 정리
+
+## [2026-02-28] - parent_history_id 플랫 루트 참조 구조 전환 + 멀티턴 안정성 개선 + chatStore 리팩토링
+
+### Refactoring
+- **historyItemToMessages 헬퍼 추출** (`stores/chatStore.ts`): DB/Redis 세션 메시지 변환 중복 로직 → 단일 헬퍼 함수로 통합
+- **Redis 세션 상세 조회 병렬화** (`stores/chatStore.ts`): `for...of` 순차 조회 → `Promise.all` 병렬 처리
+
+## [2026-02-28] - parent_history_id 플랫 루트 참조 구조 전환 + 멀티턴 안정성 개선
+
+### Features
+- **rootHistoryId 상태 추가** (`stores/chatStore.ts`, `types/index.ts`): `ChatSession`에 `rootHistoryId` 필드 추가, `syncGuestMessages` 플랫 구조 반영으로 guest → 로그인 동기화 정합성 향상
+- **isBootstrapping Zustand 상태 이전** (`stores/chatStore.ts`): 모듈 변수 → Zustand 상태로 이동하여 리액트 반응성 확보
+
+### Bug Fixes
+- **로그인 사용자 메시지 synced 플래그 설정** (`hooks/useChat.ts`): 로그인 상태에서 전송된 메시지에 `synced: true` 설정 — 재로그인 시 중복 동기화 방지
+
+## [2026-02-27] - Dialog → 공통 Modal 컴포넌트 전환 + 에러 toast 일원화 + 기업 삭제 confirm 제거
+
+### Bug Fixes
+- **기업 삭제 confirm → Modal 컴포넌트로 교체** (`components/company/CompanyForm.tsx`): `window.confirm()` 제거 → `deleteTargetId` state + 공통 Modal로 삭제 확인 UI 전환
+
+### Refactoring
+- **Dialog → 공통 Modal 컴포넌트 전환** (`components/admin/HistoryDetailModal.tsx`, `components/chat/ContractFormModal.tsx`, `components/chat/DocumentFormModal.tsx`, `components/company/CompanyForm.tsx`): material-tailwind Dialog 및 인라인 모달 구현 → 공통 Modal 컴포넌트로 일원화
+- **에러 표시 toast 일원화** (`components/chat/ContractFormModal.tsx`, `components/chat/DocumentFormModal.tsx`, `components/company/CompanyForm.tsx`): `error` state + `Alert` 제거 → `useToastStore().addToast()`로 통합
+- **api.ts refresh 실패 시 `/login` 리다이렉트 제거** (`lib/api.ts`): `window.location.href = '/login'` 제거 — 로그인 모달 state 전환 작업과 연동
+
+## [2026-02-27] - 로그인 모달 state 기반 전환 + 알림/멀티턴 연동
+
+### Features
+- **신규 공고 알림 설정 UI** (`types/index.ts`): 알림 설정 타입 추가
+- **Redis 기반 멀티턴 세션 메모리 연동** (`stores/chatStore.ts`, `lib/api.ts` 등): 채팅 세션 멀티턴 메모리 프론트엔드 연동
+
+### Bug Fixes
+- **모지바케(문자 깨짐) 수정** (`components/chat/`, `lib/api.ts` 등): 한글 인코딩 깨짐 현상 수정
+- **알림 설정 관리 + 생년월일 CRUD** (`lib/api.ts`, `types/index.ts`): 알림 설정·생년월일 API 연동 버그 수정
+- **chatStore placeholder 주석 정리** (`stores/chatStore.ts`): 불필요한 placeholder 주석 제거
+
+### Refactoring
+- **로그인 모달 URL 라우트 → Zustand state 기반 전환** (`stores/authStore.ts`, `App.tsx`, `pages/LoginPage.tsx`, `components/common/ProtectedRoute.tsx`, `components/layout/Sidebar.tsx`, `components/chat/LoginPromptModal.tsx`, `components/profile/ProfileDialog.tsx`, `components/common/Modal.tsx` 신규): `/login` URL 네비게이션 제거 — `authStore.isLoginModalOpen`으로 모달 open/close 제어. 새로고침 시 backgroundLocation 유실·히스토리 스택 오염 문제 해결
+
 ## [2026-02-27] - 어드민 대시보드 스피너 개선 및 스케줄러 limit 축소
 
 ### Bug Fixes

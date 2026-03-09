@@ -96,6 +96,7 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - ENABLE_TEST_LOGIN=${ENABLE_TEST_LOGIN:-false}
       - RAG_API_KEY=${RAG_API_KEY:-}
+      - BIZNO_API_KEY=${BIZNO_API_KEY:-}
       - RAG_SERVICE_URL=http://rag:8001
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
@@ -177,16 +178,26 @@ services:
       # RAG 고급 검색 설정
       - ENABLE_HYBRID_SEARCH=${ENABLE_HYBRID_SEARCH:-true}
       - ENABLE_RERANKING=${ENABLE_RERANKING:-true}
-      - ENABLE_VECTOR_DOMAIN_CLASSIFICATION=${ENABLE_VECTOR_DOMAIN_CLASSIFICATION:-true}
-      - ENABLE_LLM_DOMAIN_CLASSIFICATION=${ENABLE_LLM_DOMAIN_CLASSIFICATION:-false}
+      - DOMAIN_CLASSIFICATION_MAX_RETRIES=${DOMAIN_CLASSIFICATION_MAX_RETRIES:-2}
       # RunPod GPU Inference
       - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-runpod}
       - RUNPOD_API_KEY=${RUNPOD_API_KEY}
       - RUNPOD_ENDPOINT_ID=${RUNPOD_ENDPOINT_ID}
+      # AWS S3 (문서 저장)
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET:-}
+      - AWS_S3_APPLICATION_FORMS_PREFIX=${AWS_S3_APPLICATION_FORMS_PREFIX:-announcements/}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-ap-northeast-2}
+      # Redis 세션 메모리
+      - SESSION_MEMORY_BACKEND=redis
+      - REDIS_URL=redis://redis:6379
     depends_on:
       ssh-tunnel:
         condition: service_healthy
       chromadb:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
@@ -194,7 +205,26 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    command: uvicorn main:app --host 0.0.0.0 --port 8001
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+
+  # Redis (세션 메모리)
+  redis:
+    image: redis:7-alpine
+    container_name: bizi-redis
+    restart: unless-stopped
+    expose:
+      - "6379"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
 
   # ChromaDB (벡터 데이터베이스 서버)
   chromadb:

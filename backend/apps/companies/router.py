@@ -1,20 +1,19 @@
 """기업 API 라우터."""
 
 import os
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from typing import List
 
 from config.database import get_db
 from apps.common.models import User
-from apps.common.deps import get_current_user
+from apps.common.deps import get_current_user, require_or_404
+from apps.common.limiter import limiter
 from apps.companies.service import CompanyService, ALLOWED_EXTENSIONS, ALLOWED_CONTENT_TYPES, MAX_FILE_SIZE
-from .schemas import CompanyCreate, CompanyUpdate, CompanyResponse
+from .schemas import BiznoLookupResponse, CompanyCreate, CompanyUpdate, CompanyResponse
 
-limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 
@@ -42,7 +41,34 @@ async def create_company(
     current_user: User = Depends(get_current_user),
 ):
     """기업 정보 등록"""
+    if company_data.biz_num:
+        try:
+            result = await CompanyService.lookup_by_biz_num(company_data.biz_num)
+            if result.get("found") and "폐업" in result.get("status", ""):
+                raise HTTPException(400, "폐업된 사업자등록번호로는 기업을 등록할 수 없습니다.")
+        except ValueError:
+            pass  # API 키 미설정/만료 시 등록은 허용
     return service.create_company(company_data, current_user.user_id)
+
+
+@router.get("/lookup", response_model=BiznoLookupResponse)
+@limiter.limit("10/minute")
+async def lookup_business(
+    request: Request,
+    biz_num: str,
+    current_user: User = Depends(get_current_user),
+) -> BiznoLookupResponse:
+    """사업자등록번호로 기업정보 조회 (bizno.net API)"""
+    clean = biz_num.replace("-", "")
+    if not re.match(r"^\d{10}$", clean):
+        raise HTTPException(400, "사업자등록번호는 10자리 숫자여야 합니다")
+
+    try:
+        result = await CompanyService.lookup_by_biz_num(biz_num)
+    except ValueError as e:
+        raise HTTPException(502, str(e))
+
+    return BiznoLookupResponse(**result)
 
 
 @router.get("/{company_id}", response_model=CompanyResponse)
@@ -52,13 +78,7 @@ async def get_company(
     current_user: User = Depends(get_current_user),
 ):
     """기업 상세 정보 조회"""
-    company = service.get_company(company_id, current_user.user_id)
-    if not company:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Company not found",
-        )
-    return company
+    return require_or_404(service.get_company(company_id, current_user.user_id), "Company not found")
 
 
 @router.put("/{company_id}", response_model=CompanyResponse)
@@ -71,13 +91,7 @@ async def update_company(
     current_user: User = Depends(get_current_user),
 ):
     """기업 정보 수정"""
-    company = service.update_company(company_id, company_data, current_user.user_id)
-    if not company:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Company not found",
-        )
-    return company
+    return require_or_404(service.update_company(company_id, company_data, current_user.user_id), "Company not found")
 
 
 @router.delete("/{company_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -104,13 +118,7 @@ async def toggle_main_company(
     current_user: User = Depends(get_current_user),
 ):
     """대표 기업 토글"""
-    company = service.set_main_company(company_id, current_user.user_id)
-    if not company:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Company not found",
-        )
-    return company
+    return require_or_404(service.set_main_company(company_id, current_user.user_id), "Company not found")
 
 
 @router.post("/{company_id}/upload", response_model=CompanyResponse)
@@ -147,9 +155,4 @@ async def upload_business_registration(
     company = await service.upload_business_registration(
         company_id, current_user.user_id, content, file_ext
     )
-    if not company:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Company not found",
-        )
-    return company
+    return require_or_404(company, "Company not found")

@@ -4,11 +4,12 @@ ChromaDB에 직접 연결하여 벡터 데이터를 빌드합니다.
 RAG 런타임(ChromaVectorStore)과 독립적으로 동작합니다.
 """
 
+import asyncio
 import gc
 import logging
 import os
 from datetime import date, timedelta
-from typing import Any
+from typing import Any, Iterable, Iterator
 
 import chromadb
 from chromadb.config import Settings
@@ -18,6 +19,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from vectorstores.config import COLLECTION_NAMES, VectorDBConfig
 from vectorstores.embeddings import get_embeddings
+from .contextual_retrieval import ContextualRetriever
 from .loader import DataLoader
 
 logger = logging.getLogger(__name__)
@@ -129,6 +131,12 @@ class VectorDBBuilder:
         domain: str,
         force_rebuild: bool = False,
         resume: bool = False,
+        enable_prefix: bool = True,
+        enable_parent_child: bool = True,
+        enable_contextual_retrieval: bool = False,
+        cr_model: str = "gpt-4o-mini",
+        cr_max_concurrent: int = 5,
+        cr_max_doc_chars: int = 8000,
     ) -> int:
         """특정 도메인의 벡터 데이터베이스를 빌드합니다.
 
@@ -136,6 +144,12 @@ class VectorDBBuilder:
             domain: 빌드할 도메인 키
             force_rebuild: True이면 기존 데이터를 삭제하고 재빌드
             resume: True이면 기존 데이터를 유지하고 누락된 문서만 추가
+            enable_prefix: True이면 contextual prefix를 page_content에 추가
+            enable_parent_child: True이면 parent/child 2단계 분할 적용
+            enable_contextual_retrieval: True이면 LLM 기반 Contextual Retrieval 적용
+            cr_model: Contextual Retrieval에 사용할 OpenAI 모델
+            cr_max_concurrent: 최대 동시 LLM 호출 수
+            cr_max_doc_chars: 문서 전문 최대 문자 수 (LLM 컨텍스트 제한)
 
         Returns:
             추가된 문서 수
@@ -175,7 +189,29 @@ class VectorDBBuilder:
 
         store = self._get_store(domain)
 
-        # 스트리밍 배치 처리 (메모리 효율)
+        # 문서 로드 (Contextual Retrieval 적용 여부에 따라 분기)
+        if enable_contextual_retrieval:
+            retriever = ContextualRetriever(
+                model=cr_model,
+                max_concurrent=cr_max_concurrent,
+                max_doc_chars=cr_max_doc_chars,
+            )
+            raw_docs = self.loader.load_db_documents(
+                domain,
+                enable_prefix=enable_prefix,
+                enable_parent_child=enable_parent_child,
+                include_full_content=True,
+            )
+            logger.info("Contextual Retrieval 적용 중 (model=%s)...", cr_model)
+            docs_iter: Iterable[Document] = self._apply_contextual_retrieval(raw_docs, retriever)
+        else:
+            docs_iter = self.loader.load_db_documents(
+                domain,
+                enable_prefix=enable_prefix,
+                enable_parent_child=enable_parent_child,
+            )
+
+        # 스트리밍 배치 처리
         batch_size = self.config.batch_size
         total_added = 0
         skipped = 0
@@ -184,7 +220,7 @@ class VectorDBBuilder:
         duplicates = 0
         batch: list[Document] = []
 
-        for doc in self.loader.load_db_documents(domain):
+        for doc in docs_iter:
             sf = doc.metadata.get("source_file", "unknown")
             file_counts[sf] = file_counts.get(sf, 0) + 1
 
@@ -234,14 +270,118 @@ class VectorDBBuilder:
         logger.info("최종: %d건", final_count)
         return final_count
 
+    def _apply_contextual_retrieval(
+        self,
+        docs: Iterator[Document],
+        retriever: ContextualRetriever,
+    ) -> list[Document]:
+        """문서 스트림에 Contextual Retrieval을 적용합니다.
+
+        동일 원본 ID를 가진 청크들을 그룹핑하여 LLM으로 맥락을 생성합니다.
+        standalone 문서는 맥락 생성 없이 그대로 반환합니다.
+
+        Args:
+            docs: 문서 스트림 (load_db_documents 결과)
+            retriever: ContextualRetriever 인스턴스
+
+        Returns:
+            맥락이 추가된 문서 리스트
+        """
+        standalone_docs: list[Document] = []
+        groups: dict[str, list[Document]] = {}
+        full_contents: dict[str, str] = {}
+        group_order: list[str] = []
+
+        for doc in docs:
+            chunk_type = doc.metadata.get("chunk_type", "standalone")
+            original_id = doc.metadata.get("original_id", "")
+            full_content = doc.metadata.pop("_full_content", "")
+
+            if chunk_type == "standalone" or not original_id:
+                standalone_docs.append(doc)
+            else:
+                if original_id not in groups:
+                    groups[original_id] = []
+                    full_contents[original_id] = full_content
+                    group_order.append(original_id)
+                groups[original_id].append(doc)
+
+        logger.info(
+            "Contextual Retrieval: standalone %d건, 청크 그룹 %d개 (%d청크)",
+            len(standalone_docs),
+            len(group_order),
+            sum(len(v) for v in groups.values()),
+        )
+
+        if not group_order:
+            return standalone_docs
+
+        async def _enrich_all() -> list[Document]:
+            tasks = [
+                self._enrich_with_context(
+                    full_contents[oid], groups[oid], retriever
+                )
+                for oid in group_order
+            ]
+            results = await asyncio.gather(*tasks)
+            return [doc for group in results for doc in group]
+
+        enriched = asyncio.run(_enrich_all())
+        return standalone_docs + enriched
+
+    @staticmethod
+    async def _enrich_with_context(
+        full_content: str,
+        docs: list[Document],
+        retriever: ContextualRetriever,
+    ) -> list[Document]:
+        """한 원본 문서의 청크들에 LLM 맥락을 추가합니다.
+
+        Args:
+            full_content: 원본 문서 전문
+            docs: 해당 문서에서 파생된 청크 Document 리스트
+            retriever: ContextualRetriever 인스턴스
+
+        Returns:
+            맥락이 prepend된 Document 리스트
+        """
+        chunk_texts = [doc.page_content for doc in docs]
+        contexts = await retriever.generate_contexts_batch(full_content, chunk_texts)
+
+        for doc, context in zip(docs, contexts):
+            if context:
+                doc.page_content = context + "\n\n" + doc.page_content
+                doc.metadata["contextual_context"] = context
+
+        return docs
+
+    def _tokenize_for_bm25(self, text: str) -> list[str]:
+        """BM25용 한국어 토크나이징 (빌드 시 메타데이터 저장용).
+
+        Args:
+            text: 토크나이징할 텍스트
+
+        Returns:
+            토큰 리스트
+        """
+        from utils.bm25_tokenizer import tokenize_korean
+        return tokenize_korean(text)
+
     def _add_batch(self, store: Chroma, batch: list[Document], offset: int) -> None:
         """배치 단위로 문서를 벡터 스토어에 추가합니다.
+
+        bm25_tokens 메타데이터를 미리 저장하여 서비스 시작 시 토크나이징을 생략합니다.
 
         Args:
             store: Chroma 벡터 스토어 인스턴스
             batch: 추가할 문서 배치
             offset: 현재까지 추가된 문서 수 (ID 생성용)
         """
+        for doc in batch:
+            if "bm25_tokens" not in doc.metadata:
+                tokens = self._tokenize_for_bm25(doc.page_content)
+                doc.metadata["bm25_tokens"] = " ".join(tokens)
+
         texts = [doc.page_content for doc in batch]
         metadatas = [
             {k: ("" if v is None else v) for k, v in doc.metadata.items()}
@@ -268,12 +408,24 @@ class VectorDBBuilder:
         self,
         force_rebuild: bool = False,
         resume: bool = False,
+        enable_prefix: bool = True,
+        enable_parent_child: bool = True,
+        enable_contextual_retrieval: bool = False,
+        cr_model: str = "gpt-4o-mini",
+        cr_max_concurrent: int = 5,
+        cr_max_doc_chars: int = 8000,
     ) -> dict[str, int]:
         """모든 도메인의 벡터 데이터베이스를 빌드합니다.
 
         Args:
             force_rebuild: True이면 기존 데이터를 삭제하고 재빌드
             resume: True이면 기존 데이터를 유지하고 누락된 문서만 추가
+            enable_prefix: True이면 contextual prefix를 page_content에 추가
+            enable_parent_child: True이면 parent/child 2단계 분할 적용
+            enable_contextual_retrieval: True이면 LLM 기반 Contextual Retrieval 적용
+            cr_model: Contextual Retrieval에 사용할 OpenAI 모델
+            cr_max_concurrent: 최대 동시 LLM 호출 수
+            cr_max_doc_chars: 문서 전문 최대 문자 수
 
         Returns:
             도메인별 추가된 문서 수 딕셔너리
@@ -284,7 +436,15 @@ class VectorDBBuilder:
             logger.info("%s 빌드 중...", domain)
             logger.info("=" * 50)
             count = self.build_vectordb(
-                domain, force_rebuild=force_rebuild, resume=resume,
+                domain,
+                force_rebuild=force_rebuild,
+                resume=resume,
+                enable_prefix=enable_prefix,
+                enable_parent_child=enable_parent_child,
+                enable_contextual_retrieval=enable_contextual_retrieval,
+                cr_model=cr_model,
+                cr_max_concurrent=cr_max_concurrent,
+                cr_max_doc_chars=cr_max_doc_chars,
             )
             results[domain] = count
 

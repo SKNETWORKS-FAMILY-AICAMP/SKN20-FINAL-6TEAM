@@ -9,6 +9,7 @@ from routes.evaluate import router as evaluate_router
 from routes.funding import router as funding_router
 from routes.health import router as health_router
 from routes.monitoring import router as monitoring_router
+from routes.sessions import router as sessions_router
 from routes.vectordb import router as vectordb_router
 
 all_routers = [
@@ -19,4 +20,5 @@ all_routers = [
     funding_router,
     vectordb_router,
     monitoring_router,
+    sessions_router,
 ]

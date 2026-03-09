@@ -59,7 +59,7 @@ settings.local.json
 raw/
 data/origin/
 data/preprocessed
-
+chroma-data/
 # =============================================
 # VectorDB (데이터 파일만 무시, 소스 코드 제외)
 # =============================================
@@ -120,3 +120,11 @@ rag/reports/
 .claude/settings.json
 
 rag/data/preprocessed/law_common/laws_full.jsonl
+
+# =============================================
+# 테스트 산출물
+# =============================================
+frontend/test-results/
+rag/ragas_dataset_*.jsonl
+rag/evaluation/results_single.json
+*.pyc

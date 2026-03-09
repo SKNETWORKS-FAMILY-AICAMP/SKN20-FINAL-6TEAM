@@ -43,7 +43,7 @@ class StartupFundingAgent(BaseAgent):
                 type="document_generation",
                 label="사업계획서 템플릿",
                 description="사업계획서 작성 템플릿을 제공합니다",
-                params={"document_type": "business_plan"},
+                params={"doc_type_id": "business_plan"},
             ),
         ),
         ActionRule(
@@ -61,7 +61,7 @@ class StartupFundingAgent(BaseAgent):
                 type="document_generation",
                 label="공동 창업 계약서 생성",
                 description="공동 창업자 간 계약서를 생성합니다",
-                params={"document_type": "cofounder_agreement"},
+                params={"doc_type_id": "cofounder_agreement"},
             ),
         ),
         ActionRule(
@@ -70,7 +70,7 @@ class StartupFundingAgent(BaseAgent):
                 type="document_generation",
                 label="투자 의향서(LOI) 생성",
                 description="투자 의향서를 생성합니다",
-                params={"document_type": "investment_loi"},
+                params={"doc_type_id": "investment_loi"},
             ),
         ),
         ActionRule(
@@ -79,7 +79,7 @@ class StartupFundingAgent(BaseAgent):
                 type="document_generation",
                 label="업무 협약서(MOU) 생성",
                 description="업무 협약서(MOU)를 생성합니다",
-                params={"document_type": "mou"},
+                params={"doc_type_id": "mou"},
             ),
         ),
     ]

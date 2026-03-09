@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
+import { DEFAULT_NOTIFICATION_SETTINGS } from '../lib/constants';
 import { useNotificationStore } from '../stores/notificationStore';
-import type { Notification, Schedule } from '../types';
+import type { Notification, NotificationSettings, Schedule } from '../types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const D_7_MS = 7 * DAY_MS;
@@ -30,7 +31,8 @@ const buildCompanyLabel = (schedule: Schedule, companyNameById: CompanyNameById)
 
 const buildScheduleNotificationDrafts = (
   schedules: Schedule[],
-  companyNameById: CompanyNameById
+  companyNameById: CompanyNameById,
+  settings: NotificationSettings
 ): NotificationDraft[] => {
   const nowTime = Date.now();
   const drafts: NotificationDraft[] = [];
@@ -47,6 +49,10 @@ const buildScheduleNotificationDrafts = (
     const companyLabel = buildCompanyLabel(schedule, companyNameById);
 
     if (diffMs <= D_3_MS) {
+      if (!settings.schedule_d3) {
+        return;
+      }
+
       drafts.push({
         id: `${SCHEDULE_D3_PREFIX}${schedule.schedule_id}`,
         title: `\uAE34\uAE09 D-${daysLeft}: ${schedule.schedule_name}`,
@@ -59,6 +65,10 @@ const buildScheduleNotificationDrafts = (
     }
 
     if (diffMs <= D_7_MS) {
+      if (!settings.schedule_d7) {
+        return;
+      }
+
       drafts.push({
         id: `${SCHEDULE_D7_PREFIX}${schedule.schedule_id}`,
         title: `D-${daysLeft}: ${schedule.schedule_name}`,
@@ -75,7 +85,8 @@ const buildScheduleNotificationDrafts = (
 
 export const useNotifications = (
   schedules: Schedule[],
-  companyNameById: CompanyNameById = {}
+  companyNameById: CompanyNameById = {},
+  settings: NotificationSettings = DEFAULT_NOTIFICATION_SETTINGS
 ) => {
   const lastSignatureRef = useRef<string>('');
 
@@ -85,7 +96,7 @@ export const useNotifications = (
       return;
     }
 
-    const drafts = buildScheduleNotificationDrafts(schedules, companyNameById);
+    const drafts = buildScheduleNotificationDrafts(schedules, companyNameById, settings);
     if (drafts.length === 0) {
       lastSignatureRef.current = '';
       return;
@@ -157,5 +168,5 @@ export const useNotifications = (
         activeToastId: activeToastId ?? updatedQueue[0] ?? null,
       };
     });
-  }, [schedules, companyNameById]);
+  }, [schedules, companyNameById, settings]);
 };

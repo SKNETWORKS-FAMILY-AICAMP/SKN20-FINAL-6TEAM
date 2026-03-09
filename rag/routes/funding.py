@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/funding", tags=["Funding"])
 @router.get("/search")
 async def search_funding(
     query: str = Query(description="검색 키워드"),
-    k: int = Query(default=10, description="검색 결과 개수"),
+    k: int = Query(default=10, ge=1, le=100, description="검색 결과 개수"),
 ) -> dict[str, Any]:
     """VectorDB에서 지원사업 공고를 검색합니다."""
     if not _state.vector_store:

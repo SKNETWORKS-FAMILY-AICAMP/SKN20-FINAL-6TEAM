@@ -29,12 +29,17 @@ const normalizeNotifications = (value: unknown): Notification[] => {
 };
 
 interface NotificationState {
+  ownerUserId: number | null;
   notifications: Notification[];
   unreadCount: number;
   toastQueue: string[];
   activeToastId: string | null;
+  bindOwner: (userId: number) => void;
   addNotification: (
-    notification: Omit<Notification, 'id' | 'created_at' | 'is_read'> & { id?: string }
+    notification: Omit<Notification, 'id' | 'created_at' | 'is_read'> & {
+      id?: string;
+      created_at?: string;
+    }
   ) => void;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
@@ -47,10 +52,25 @@ interface NotificationState {
 export const useNotificationStore = create<NotificationState>()(
   persist(
     (set) => ({
+      ownerUserId: null,
       notifications: [],
       unreadCount: 0,
       toastQueue: [],
       activeToastId: null,
+      bindOwner: (userId) =>
+        set((state) => {
+          if (state.ownerUserId === userId) {
+            return state;
+          }
+
+          return {
+            ownerUserId: userId,
+            notifications: [],
+            unreadCount: 0,
+            toastQueue: [],
+            activeToastId: null,
+          };
+        }),
       addNotification: (notification) =>
         set((state) => {
           const safeNotifications = Array.isArray(state.notifications) ? state.notifications : [];
@@ -66,7 +86,10 @@ export const useNotificationStore = create<NotificationState>()(
           const newNotification: Notification = {
             ...notificationPayload,
             id: notificationId,
-            created_at: new Date().toISOString(),
+            created_at:
+              typeof notification.created_at === 'string'
+                ? notification.created_at
+                : new Date().toISOString(),
             is_read: false,
           };
           const updatedNotifications = [newNotification, ...safeNotifications];
@@ -160,6 +183,7 @@ export const useNotificationStore = create<NotificationState>()(
     {
       name: 'notification-storage',
       partialize: (state) => ({
+        ownerUserId: state.ownerUserId,
         notifications: state.notifications,
         unreadCount: state.unreadCount,
       }),
@@ -173,6 +197,7 @@ export const useNotificationStore = create<NotificationState>()(
 
         return {
           ...currentState,
+          ownerUserId: typeof persisted.ownerUserId === 'number' ? persisted.ownerUserId : null,
           notifications,
           unreadCount,
           toastQueue: Array.isArray(persisted.toastQueue) ? persisted.toastQueue : [],

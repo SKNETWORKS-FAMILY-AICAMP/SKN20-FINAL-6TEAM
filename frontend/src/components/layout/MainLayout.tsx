@@ -5,7 +5,6 @@ import { Bars3Icon } from '@heroicons/react/24/outline';
 import { Sidebar } from './Sidebar';
 import { ToastContainer } from '../common/ToastContainer';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
-
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'bizi.sidebar.collapsed.desktop';
 const MOBILE_BREAKPOINT_QUERY = '(max-width: 1023px)';
 
@@ -24,7 +23,6 @@ export const MainLayout: React.FC = () => {
     getInitialDesktopCollapseState
   );
   const [isSidebarOpenMobile, setIsSidebarOpenMobile] = useState(false);
-
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;

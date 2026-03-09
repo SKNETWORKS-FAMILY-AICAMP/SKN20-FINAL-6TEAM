@@ -6,6 +6,7 @@
 from agents.base import ActionRule, BaseAgent
 from schemas.response import ActionSuggestion
 from utils.prompts import LEGAL_PROMPT
+from utils.shared_actions import SERVICE_AGREEMENT_RULE
 
 
 class LegalAgent(BaseAgent):
@@ -59,7 +60,7 @@ class LegalAgent(BaseAgent):
                 type="document_generation",
                 label="비밀유지계약서(NDA) 생성",
                 description="비밀유지계약서(NDA)를 생성합니다",
-                params={"document_type": "nda"},
+                params={"doc_type_id": "nda"},
             ),
         ),
         ActionRule(
@@ -68,18 +69,10 @@ class LegalAgent(BaseAgent):
                 type="document_generation",
                 label="주주간 계약서 생성",
                 description="주주간 계약서를 생성합니다",
-                params={"document_type": "shareholders_agreement"},
+                params={"doc_type_id": "shareholders_agreement"},
             ),
         ),
-        ActionRule(
-            keywords=["용역", "용역계약", "외주", "아웃소싱", "프리랜서 계약"],
-            action=ActionSuggestion(
-                type="document_generation",
-                label="용역 계약서 생성",
-                description="용역(외주) 계약서를 생성합니다",
-                params={"document_type": "service_agreement"},
-            ),
-        ),
+        SERVICE_AGREEMENT_RULE,
     ]
 
     def get_system_prompt(self) -> str:

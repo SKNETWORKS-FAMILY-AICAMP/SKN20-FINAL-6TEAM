@@ -1,5 +1,110 @@
 # Release Notes
 
+## [2026-03-07] - finance_tax RAGAS Context Recall 개선 — law_common 도메인 분배
+
+### Features
+- **law_common 세법/노동법/창업법 도메인별 분배** (`rag/vectorstores/config.py`, `scripts/preprocessing/split_law_common.py`): laws_full.jsonl·interpretations.jsonl을 domain 필드 기준으로 분할 — finance_tax 1,551건·hr_labor 1,820건·startup_funding 4,096건을 각 도메인 컬렉션에 직접 적재, general 1,482건은 law_common_db 유지
+- **Contextual prefix 분기 함수 추가** (`scripts/vectordb/contextual_prefix.py`): 법+해석례 병합 파일용 `_prefix_law_or_interpretation` 추가 — type 필드(`law`/`interpretation`)로 분기하여 5개 신규 파일에 prefix 생성 적용
+
+### Refactoring
+- **ADJACENT_DOMAINS law_common 제거** (`rag/agents/retrieval_agent.py`): finance_tax·hr_labor의 인접 도메인에서 law_common 제거 — 법령 데이터가 각 도메인 컬렉션에 직접 포함되어 불필요한 cross-domain 검색 차단
+- **finance_tax 도메인 키워드 확장** (`rag/agents/retrieval_agent.py`): 10개 → 20개 (`종소세`, `양도세`, `증여세`, `연말정산`, `간이과세`, `세금계산서`, `감가상각`, `가산세`, `경비`, `비용처리` 추가)
+- **finance_tax 평가 threshold 하향** (`rag/utils/config/settings.py`): `domain_evaluation_thresholds["finance_tax"]` 75 → 70
+
+## [2026-03-06] - DB 스키마 동기화 + gibberish 입력 거부 + 지원공고 신청서 다운로드 링크 추가
+
+### Features
+- **의미 없는 입력(gibberish) LLM 분류 및 응답 템플릿 추가** (`agents/router.py`, `schemas/response.py`): 의미 없는 입력에 대한 LLM 기반 분류 및 전용 거부 응답 템플릿 추가
+- **지원공고 신청서 다운로드 링크 추가** (`routes/chat.py`, `schemas/response.py`): 답변 출처(Sources)에 신청서 다운로드 링크 필드 추가
+
+### Bug Fixes
+- **DB 스키마 동기화** (`schemas/request.py`, `schemas/response.py`, `agents/executor.py`, `agents/router.py`, `agents/generator.py`, `agents/hr_labor.py`, `agents/legal.py`, `agents/startup_funding.py`, `routes/documents.py`, `utils/shared_actions.py`): `DocumentResponse.document_type` → `doc_type_id` 전환, `domain_*` 분류 잔재 코드 제거
+
+## [2026-03-05] - Redis 멀티턴 개선 + 세션 재접속 Sources 복원
+
+### Features
+- **세션 재접속 시 Sources 복원** (`routes/_write_through.py`, `routes/chat.py`): write-through 응답에 `sources` 포함 — 세션 재접속 시 Frontend가 참고 문서 목록 복원 가능
+
+### Bug Fixes
+- **Redis 멀티턴 이벤트루프 블로킹 수정** (`routes/_session_memory.py`): 동기 Redis 호출로 인한 이벤트루프 블로킹 제거, TLS 연결 토글(`SESSION_MEMORY_TLS`) 환경변수 추가
+
+### Tests
+- **Redis 멀티턴 테스트 강화** (`tests/`): Redis 세션 메모리 관련 테스트 커버리지 강화
+
+### Features (추가)
+- **공고 원문(_full_text) 청킹 파이프라인 + 동일 출처 중복 제거** (`scripts/vectordb/`): 공고 원문 전문 청킹 파이프라인 추가 및 동일 출처 청크 중복 제거 처리
+
+### Refactoring
+- **도메인 분류를 LLM 단일 경로로 전환** (`agents/router.py`, `utils/domain_classifier.py`): 키워드/DB 기반 도메인 분류 제거 — LLM 단일 경로로 통합
+
+## [2026-03-04] - AWS ElastiCache Redis TLS 연결 수정 + 복수 기업 지원 + 후속 질문 폴백 + 참고 자료 꼬리말 제거 + ChromaDB/BM25 Cold Start 최적화 + VectorDB 빌드 코드 분리 + 벡터 도메인 분류 삭제 + LLM 재시도 설정
+
+### Features
+- **복수 기업 컨텍스트 지원** (`schemas/request.py`, `agents/base.py`, `agents/retrieval_agent.py`): `UserContext.companies` 필드 추가 — `get_all_companies_context_string()`, `get_normalized_regions()` 메서드로 복수 기업 지역 OR 필터 지원
+- **후속 질문 도메인 폴백** (`agents/router.py`, `routes/chat.py`): `previous_domains` 상태 추가 — 후속 질문이 도메인 분류 거부될 때 이전 턴 도메인으로 폴백 처리 (chat/stream 양쪽 지원)
+- **`/health` BM25 준비 상태 표시** (`routes/health.py`): `rag_config.bm25_ready` 필드 추가 — 도메인별 BM25 인덱스 빌드 완료 여부 반환 (서비스 상태에 영향 없는 정보성 필드)
+
+### Bug Fixes
+- **`get_session_full()` 로컬 메모리 항상 None 반환** (`routes/_session_memory.py`): Redis 미사용 환경에서 `_memory_store` 데이터를 반환하지 않던 버그 수정
+- **ElastiCache TLS 인증서 검증 우회** (`routes/_session_memory.py`): `redis.from_url()`에 `ssl_cert_reqs=None` 추가 — AWS ElastiCache 자체 서명 인증서로 인한 `SSL_connect failed` 오류 수정
+- **"참고 자료:" 꼬리말 제거** (`utils/prompts.py`, `agents/generator.py`): 답변 본문 끝에 중복 출력되던 `참고 자료: [1]` 형식의 꼬리말 제거 — 프롬프트 지시 삭제 + `_audit_citations()` 후처리 추가. 본문 내 `[번호]` 인라인 인용은 유지
+
+### Performance
+- **ChromaDB/BM25 Non-blocking Cold Start** (`main.py`, `utils/chromadb_warmup.py`): lifespan을 Phase 1(컬렉션 생성, blocking ~2-5초) + Phase 2(BM25 빌드, background ~5-30초)로 분리 — cold start 70-230초 → 35-125초. `warmup_collections_only()`, `warmup_bm25_background()` 공개 함수 추가
+- **BM25 토크나이징 공통 모듈** (`utils/bm25_tokenizer.py` 신규): kiwipiepy Kiwi 모듈 수준 싱글톤 + `tokenize_korean()` 공통 함수 추출 — `BM25Index._tokenize()` 위임, 빌더와 런타임 공유
+- **BM25 metadata 캐시 활용** (`utils/search.py`): `BM25Index.fit()`에서 `doc.metadata["bm25_tokens"]` 존재 시 토크나이징 생략 — vectordb 재빌드 후 BM25 빌드 30-90초 → 5-10초
+
+### Refactoring
+- **벡터 도메인 분류 삭제 + LLM 재시도 설정** (`utils/domain_classifier.py`, `utils/config/settings.py`, `utils/config/llm.py`, `main.py`, `routes/monitoring.py`): `VectorDomainClassifier` → `DomainClassifier` 리네임, numpy/threading/Embeddings 의존성 제거, `_precompute_vectors`/`_vector_classify` 삭제. `classify()` LLM 재시도를 하드코딩 1회 → `settings.llm_max_retries` 루프로 변경, LLM 최종 실패 시 키워드 fallback 추가. `enable_vector_domain_classification`/`domain_classification_threshold`/`multi_domain_gap_threshold` 설정 제거, `llm_max_retries` 추가. `ChatOpenAI(max_retries=settings.llm_max_retries)` 적용
+- **VectorDB 빌드 코드 rag/ 외부 분리** (`rag/vectorstores/build_vectordb.py` 삭제, `rag/utils/prompts.py`): `scripts/vectordb/`로 이관 완료된 빌드 thin-wrapper(`build_vectordb.py`) 삭제 — rag/ 런타임 미사용 확인 후 제거. `CONTEXTUAL_RETRIEVAL_PROMPT` 빌드 전용 프롬프트를 `prompts.py`에서 제거하고 `scripts/vectordb/contextual_retrieval.py`로 이전. `rag/README.md` VectorDB 빌드 명령어를 `python -m scripts.vectordb`로 업데이트
+
+### Chores
+- **프로덕션 Docker Compose Redis 환경변수 추가** (`docker-compose.prod.yaml`): RAG 서비스에 `SESSION_MEMORY_BACKEND`, `REDIS_URL` 환경변수 추가. 메모리 한도 재조정 (rag: 2304M→3072M, chromadb: 1024M→1536M, t3.medium→t3.large, RAG `start_period` 30s→15s)
+- **세션 TTL 조정** (`utils/config/settings.py`): 세션 TTL 90000 → 4500(75분), 마이그레이션 간격 5분/임계값 15분으로 조정
+
+## [2026-03-03] - 프롬프트 리팩토링 + 문서 생성 에이전트 + 멀티턴 개선 + 코드 정리
+
+### Features
+- **문서 자동 생성 에이전트** (`agents/document_tool.py`, `agents/executor.py`, `agents/router.py`, `routes/documents.py`, `schemas/request.py`, `schemas/response.py`, `utils/s3_client.py`, `utils/file_parser.py`, `utils/search.py`, `utils/config/settings.py`, `vectorstores/build_vectordb.py`, `fonts/`): 근로계약서·사업계획서·범용 문서·신청 양식 자동 생성 에이전트 추가 — S3 저장, PDF/DOCX 출력, 파일 파싱 지원
+- **멀티턴 P1-P3 개선 + Redis Docker 통합** (`routes/chat.py`, `main.py`, `agents/router.py`): 멀티턴 세션 안정성 3단계 개선, Redis 컨테이너 Docker Compose 통합
+
+### Refactoring
+- **프롬프트 구조 리팩토링** (`utils/prompts.py`, `schemas/request.py`): `_BASE_PROMPT_TEMPLATE` 추출로 4개 도메인 프롬프트 통합 관리 — Instruction Dilution 해소(grounding 5→2회), `{context}` 끝 배치로 faithfulness 개선, 중복 53% 제거. `UserContext`에 `age` 추가, `annual_revenue` 제거
+- **`shared_actions.py` 공유 ActionRule 추출** (`utils/shared_actions.py` 신규): legal/hr_labor 에이전트의 중복 용역계약서 ActionRule → 공유 모듈로 통합
+- **`_exec_document` 헬퍼 추출** (`routes/documents.py`): generate/modify/contract/business_plan 4개 엔드포인트의 중복 실행 패턴 → 단일 내부 헬퍼로 통합
+
+### Tests
+- **멀티턴 컨텍스트 E2E 테스트** (`tests/test_multiturn_context.py`, `tests/test_prompts_format_history.py`, `tests/test_router.py`): 멀티턴 시나리오 통합 테스트 추가
+
+## [2026-03-01] - RAGAS 평가 파일 통합 정리 + prompts.py 수정
+
+### Documentation
+- **RAGAS 평가 파일 docs/ragas-evaluation/으로 일괄 정리** (`rag/ragas_dataset_v5.jsonl` 이동): qa_test/·docs/ 루트 산재 파일을 버전별(v2~v4, v5, eval_0301)로 통합 — docs/reports/ 중복 보고서 삭제 포함
+
+### Bug Fixes
+- **prompts.py 수정** (`utils/prompts.py`): 프롬프트 내용 업데이트
+
+## [2026-02-28] - Redis 세션 안정성 강화 + 공개 Redis 접근자 추가
+
+### Features
+- **get_session_redis_client 공개 접근자 추가** (`routes/_session_memory.py`): 헬스체크·배치 잡용 공개 Redis 클라이언트 접근자 분리
+
+### Bug Fixes
+- **Redis 세션 turns OOM 방지 + flush 경쟁조건 해소** (`routes/_session_memory.py`): 세션 메모리 크기 제한 및 flush 경쟁조건 수정
+- **session_migrator TTL 재확인 파이프라인 배치 처리** (`jobs/session_migrator.py`): N번 개별 TTL 조회 → 파이프라인 1회 일괄 처리
+
+## [2026-02-27] - Redis 멀티턴 세션 메모리 보안/안정성 강화 + 모지바케 수정
+
+### Features
+- **Redis 기반 멀티턴 세션 메모리 완성**: 세션별 대화 컨텍스트 Redis 저장·조회 안정화
+
+### Bug Fixes
+- **Redis 멀티턴 보안/안정성 강화** (`routes/chat.py`, `utils/session.py` 등): asyncio.Lock DCL로 레이스 컨디션 수정, Lua 스크립트로 append 원자성 보장, session_id 입력 검증(패턴+길이 제한), SHA256 해시 익명 세션 격리, 세션 삭제 API(`DELETE /api/chat/sessions/{session_id}`) 추가
+- **모지바케(문자 깨짐) 수정** (`routes/chat.py`, `utils/domain_classifier.py`): RAG 응답 한글 인코딩 깨짐 현상 수정
+
+### Documentation
+- **문서 대명사/지시어 보강**: RAG 관련 문서 내 대명사·지시어 표현 개선
+
 ## [2026-02-27] - 비동기 로깅 + 프롬프트 강화 + RAG 평가 보고서
 
 ### Features

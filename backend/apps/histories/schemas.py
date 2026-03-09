@@ -14,6 +14,17 @@ class RetrievalEvaluationData(BaseModel):
     used_multi_query: bool = Field(default=False, description="whether multi-query was used")
 
 
+class SourceReferenceData(BaseModel):
+    """Source reference metadata stored in evaluation_data.sources."""
+
+    title: str = ""
+    source: str = ""
+    url: str = ""
+    doc_download_url: str = ""
+    form_download_url: str = ""
+    form_s3_key: str = ""
+
+
 class EvaluationData(BaseModel):
     """Evaluation payload stored in history.evaluation_data."""
 
@@ -24,6 +35,7 @@ class EvaluationData(BaseModel):
     llm_score: int | None = Field(default=None, description="LLM score (0-100)")
     llm_passed: bool | None = Field(default=None, description="LLM pass/fail")
     contexts: list[str] = Field(default_factory=list, description="retrieved context snippets")
+    sources: list[SourceReferenceData] = Field(default_factory=list, description="source references")
     domains: list[str] = Field(default_factory=list, description="detected domains")
     retrieval_evaluation: RetrievalEvaluationData | None = Field(
         default=None, description="rule-based retrieval evaluation"
@@ -33,6 +45,14 @@ class EvaluationData(BaseModel):
     query_rewrite_reason: str | None = Field(default=None, description="query rewrite reason")
     query_rewrite_time: float | None = Field(default=None, description="query rewrite elapsed (sec)")
     timeout_cause: str | None = Field(default=None, description="timeout cause")
+
+
+class MessageQuotaResponse(BaseModel):
+    """메시지 쿼터 응답 (ORM 매핑 아님, ConfigDict 불필요)."""
+
+    today_count: int
+    daily_limit: int | None = None  # None = 무제한
+    remaining: int | None = None
 
 
 class HistoryCreate(BaseModel):
@@ -83,6 +103,8 @@ class HistoryThreadSummaryResponse(BaseModel):
     message_count: int
     first_create_date: datetime | None = None
     last_create_date: datetime | None = None
+    source: str = "db"  # "db" or "redis"
+    session_id: str | None = None  # Redis session ID (source="redis" 일 때)
 
 
 class HistoryThreadDetailResponse(BaseModel):

@@ -1,19 +1,17 @@
 """일정 관리 API 라우터."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
 
 from config.database import get_db
 from apps.common.models import User
-from apps.common.deps import get_current_user
+from apps.common.deps import get_current_user, require_or_404
+from apps.common.limiter import limiter
 from apps.schedules.service import ScheduleService
 from .schemas import ScheduleCreate, ScheduleUpdate, ScheduleResponse
 
-limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/schedules", tags=["schedules"])
 
 
@@ -70,13 +68,7 @@ async def get_schedule(
     current_user: User = Depends(get_current_user),
 ):
     """일정 상세 조회"""
-    schedule = service.get_schedule(schedule_id, current_user.user_id)
-    if not schedule:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Schedule not found",
-        )
-    return schedule
+    return require_or_404(service.get_schedule(schedule_id, current_user.user_id), "Schedule not found")
 
 
 @router.put("/{schedule_id}", response_model=ScheduleResponse)
@@ -89,13 +81,13 @@ async def update_schedule(
     current_user: User = Depends(get_current_user),
 ):
     """일정 수정"""
-    schedule = service.update_schedule(schedule_id, schedule_data, current_user.user_id)
-    if not schedule:
+    try:
+        return require_or_404(service.update_schedule(schedule_id, schedule_data, current_user.user_id), "Schedule not found")
+    except ValueError as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Schedule not found",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
         )
-    return schedule
 
 
 @router.delete("/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)

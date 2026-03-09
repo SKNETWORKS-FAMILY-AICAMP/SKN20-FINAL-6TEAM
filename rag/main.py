@@ -81,7 +81,6 @@ logger = logging.getLogger(__name__)
 from agents import ActionExecutor, MainRouter
 from routes import all_routers
 import routes._state as state
-from utils.config import init_db, load_domain_config
 from utils.middleware import RateLimitMiddleware, MetricsMiddleware, get_metrics_collector
 from utils.reranker import get_reranker
 from vectorstores.chroma import ChromaVectorStore
@@ -91,11 +90,6 @@ from vectorstores.chroma import ChromaVectorStore
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """애플리케이션 라이프사이클 관리."""
     logger.info("RAG 서비스 초기화 중...")
-
-    # 도메인 설정 DB 초기화 + 로드
-    init_db()
-    load_domain_config()
-    logger.info("도메인 설정 DB 초기화 완료")
 
     # 공유 벡터 스토어 생성 후 ChromaDB 연결 확인
     state.vector_store = ChromaVectorStore()
@@ -110,9 +104,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     state.router_agent = MainRouter(vector_store=state.vector_store)
     state.executor = ActionExecutor()
 
+    # Write-through httpx 클라이언트 초기화
+    from routes._write_through import init_http_client
+    init_http_client()
+
+    # Redis 연결 확인 (session_memory_backend=redis인 경우)
+    settings = get_settings()
+    if settings.session_memory_backend == "redis" and settings.redis_url:
+        try:
+            from routes._session_memory import get_session_redis_client
+            redis_client = await get_session_redis_client()
+            await redis_client.ping()
+            logger.info("Redis 연결 성공 (%s)", settings.redis_url.split("@")[-1] if "@" in settings.redis_url else settings.redis_url)
+        except Exception as exc:
+            logger.error("Redis 연결 실패: %s (세션 메모리가 in-memory 폴백으로 동작합니다)", exc)
+
     # CrossEncoder 모델 사전 로딩 / RunPod warmup / ChromaDB warmup
     settings = get_settings()
     warmup_task: asyncio.Task | None = None
+    background_tasks: list[asyncio.Task] = []
 
     if settings.enable_reranking and settings.embedding_provider == "local":
         logger.info("CrossEncoder 모델 사전 로딩 시작...")
@@ -134,38 +144,60 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 run_periodic_warmup(settings.runpod_warmup_interval)
             )
 
-    # ChromaDB 컬렉션 및 BM25 인덱스 사전 로딩
+    # ChromaDB Phase 1 (컬렉션 생성): blocking (~2-5초, 빠름)
     if health["status"] == "ok" and settings.enable_chromadb_warmup:
-        from utils.chromadb_warmup import warmup_chromadb
-        chroma_ok = await warmup_chromadb(state.vector_store)
-        if chroma_ok:
-            logger.info("ChromaDB 초기 warmup 성공")
-        else:
-            logger.warning("ChromaDB 초기 warmup 실패 (서비스는 정상 시작)")
+        from utils.chromadb_warmup import warmup_bm25_background, warmup_collections_only
+        phase1_ok = await warmup_collections_only(state.vector_store)
+        if not phase1_ok:
+            logger.warning("ChromaDB Phase 1 일부 실패 (서비스는 정상 시작)")
 
-    # 도메인 벡터 사전 계산 (첫 요청 시 이벤트 루프 블로킹 방지)
-    if settings.enable_vector_domain_classification:
-        try:
-            from utils.domain_classifier import get_domain_classifier
-            classifier = get_domain_classifier()
-            await classifier._aprecompute_vectors()
-            logger.info("도메인 벡터 사전 계산 완료")
-        except Exception as e:
-            logger.warning("도메인 벡터 사전 계산 실패 (서비스는 정상 시작): %s", e)
+        # Phase 2 (BM25 빌드): background (~5-30초, bm25_tokens 메타데이터로 가속)
+        background_tasks.append(
+            asyncio.create_task(
+                warmup_bm25_background(state.vector_store),
+                name="bm25_warmup",
+            )
+        )
+
+    # 세션 마이그레이션 백그라운드 태스크
+    migration_task: asyncio.Task | None = None
+    if settings.enable_session_migration and settings.session_memory_backend == "redis":
+        from jobs.session_migrator import session_migration_loop
+        migration_task = asyncio.create_task(session_migration_loop())
+        logger.info("세션 마이그레이션 루프 시작 (interval=%ds, threshold=%ds)",
+                     settings.session_migrate_interval, settings.session_migrate_ttl_threshold)
 
     _log_settings_summary(settings)
-    logger.info("RAG 서비스 초기화 완료")
+    logger.info("RAG 서비스 초기화 완료 — 요청 수신 가능 (BM25/도메인벡터는 백그라운드 완료 중)")
 
     yield
 
     # 종료 시 정리
     logger.info("RAG 서비스 종료 중...")
+    for task in background_tasks:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    if migration_task:
+        migration_task.cancel()
+        try:
+            await migration_task
+        except asyncio.CancelledError:
+            pass
     if warmup_task:
         warmup_task.cancel()
         try:
             await warmup_task
         except asyncio.CancelledError:
             pass
+    # Redis 세션 클라이언트 정리
+    from routes._session_memory import close_redis_client
+    await close_redis_client()
+    # Write-through httpx 클라이언트 정리
+    from routes._write_through import close_http_client
+    await close_http_client()
     if state.vector_store:
         state.vector_store.close()
     logger.info("RAG 서비스 종료 완료")
@@ -193,12 +225,7 @@ def _log_settings_summary(settings) -> None:
     else:
         rerank_info = f"CrossEncoder ({settings.cross_encoder_model})"
 
-    if settings.enable_llm_domain_classification:
-        classify_info = "LLM 기반"
-    elif settings.enable_vector_domain_classification:
-        classify_info = "벡터 기반"
-    else:
-        classify_info = "키워드만"
+    classify_info = "LLM 기반"
 
     logger.info("=" * 60)
     logger.info("[RAG 설정 요약]")
@@ -209,7 +236,6 @@ def _log_settings_summary(settings) -> None:
     logger.info("  도메인 거부   : %s", _flag(settings.enable_domain_rejection))
     logger.info("  LLM 평가     : %s", _flag(settings.enable_llm_evaluation))
     logger.info("  RAGAS 평가   : %s", _flag(settings.enable_ragas_evaluation))
-    logger.info("  법률 보충     : %s", f"ON (K={settings.legal_supplement_k})" if settings.enable_legal_supplement else "OFF")
     logger.info("  응답 캐시     : %s", _flag(settings.enable_response_cache))
     logger.info("  Rate Limit   : %s", f"ON (rate={settings.rate_limit_rate}/s, capacity={settings.rate_limit_capacity})" if settings.enable_rate_limit else "OFF")
     logger.info("  ChromaDB Warmup: %s", _flag(settings.enable_chromadb_warmup))
@@ -256,7 +282,7 @@ app.add_middleware(
 class APIKeyMiddleware:
     """RAG API Key 인증 미들웨어 (순수 ASGI)."""
 
-    PROTECTED_PREFIXES = ("/api/chat", "/api/documents", "/api/funding")
+    PROTECTED_PREFIXES = ("/api/chat", "/api/documents", "/api/funding", "/api/sessions", "/api/vectordb", "/api/evaluate")
 
     def __init__(self, app: _ASGIApp):
         self.app = app

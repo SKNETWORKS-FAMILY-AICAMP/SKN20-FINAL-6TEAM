@@ -149,7 +149,7 @@ class ResponseGeneratorAgent:
             Returns:
                 "type:document_type" 형태의 고유 키
             """
-            doc_type: str = action.params.get("document_type", "")
+            doc_type: str = action.params.get("doc_type_id", "")
             return f"{action.type}:{doc_type}" if doc_type else action.type
 
         # 모든 에이전트의 ACTION_RULES를 쿼리 기반으로 검사
@@ -198,6 +198,8 @@ class ResponseGeneratorAgent:
         Returns:
             (필요 시 주의 문구가 추가된) 답변 텍스트
         """
+        # "참고 자료: [번호들]" 꼬리말 제거 (UI 하단 "답변 근거" 섹션에서 별도 표시)
+        content = re.sub(r"\n*참고\s*자료\s*:\s*\[[\d,\s]+\]\s*$", "", content).rstrip()
         if doc_count > 0 and not re.search(r"\[\d+\]", content):
             logger.warning(
                 "[생성기] 인용 누락: 문서 %d건 제공, [번호] 인용 0건", doc_count
@@ -234,19 +236,11 @@ class ResponseGeneratorAgent:
         actions = self._collect_actions(query, retrieval_results, domains)
         actions_context = self._format_actions_context(actions)
 
-        # 법률 보충 문서
-        legal_supplement_result = retrieval_results.get("law_common_supplement")
-        legal_supplement_docs = (
-            legal_supplement_result.documents if legal_supplement_result else []
-        )
-
         # 전체 소스 수집
         all_sources: list[SourceDocument] = []
         for domain in domains:
             if domain in retrieval_results:
                 all_sources.extend(retrieval_results[domain].sources)
-        if legal_supplement_result:
-            all_sources.extend(legal_supplement_result.sources)
 
         # 단일 도메인 vs 복수 도메인
         # 에이전트가 존재하고 검색 결과가 있는 도메인만 활성
@@ -286,7 +280,6 @@ class ResponseGeneratorAgent:
                     query=query,
                     domain=target_domain,
                     retrieval_results=retrieval_results,
-                    legal_supplement_docs=legal_supplement_docs,
                     user_type=user_type,
                     company_context=company_context,
                     actions_context=actions_context,
@@ -300,7 +293,6 @@ class ResponseGeneratorAgent:
                     query=query,
                     domain=target_domain,
                     retrieval_results=retrieval_results,
-                    legal_supplement_docs=legal_supplement_docs,
                     user_type=user_type,
                     company_context=company_context,
                     actions_context=actions_context,
@@ -312,7 +304,6 @@ class ResponseGeneratorAgent:
                     query=query,
                     sub_queries=sub_queries,
                     retrieval_results=retrieval_results,
-                    legal_supplement_docs=legal_supplement_docs,
                     domains=effective_domains,
                     user_type=user_type,
                     company_context=company_context,
@@ -400,14 +391,29 @@ class ResponseGeneratorAgent:
         chain = prompt | llm | StrOutputParser()
 
         content_buffer = ""
-        async for token in chain.astream({
+        llm_timeout = getattr(self.settings, 'llm_timeout', 120.0)
+        stream_iter = chain.astream({
             "query": query,
             "context": context,
             "user_type": user_type,
             "company_context": company_context,
-        }):
-            content_buffer += token
-            yield {"type": "token", "content": token}
+        }).__aiter__()
+        deadline = time.time() + llm_timeout
+        try:
+            while True:
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    raise asyncio.TimeoutError()
+                token = await asyncio.wait_for(stream_iter.__anext__(), timeout=remaining)
+                content_buffer += token
+                yield {"type": "token", "content": token}
+        except StopAsyncIteration:
+            pass
+        except asyncio.TimeoutError:
+            logger.warning("[생성기 스트리밍] LLM 타임아웃: domain=%s", domain)
+            if not content_buffer:
+                yield {"type": "token", "content": FALLBACK_TIMEOUT}
+                content_buffer = FALLBACK_TIMEOUT
 
         content_buffer = self._audit_citations(content_buffer, len(documents))
         yield {"type": "generation_done", "content": content_buffer}
@@ -454,9 +460,6 @@ class ResponseGeneratorAgent:
         for domain in effective_domains:
             if domain in retrieval_results:
                 all_documents.extend(retrieval_results[domain].documents)
-        legal_supplement = retrieval_results.get("law_common_supplement")
-        if legal_supplement:
-            all_documents.extend(legal_supplement.documents)
 
         if not all_documents:
             msg = FALLBACK_NO_DOCUMENTS_WITH_ACTIONS if actions else FALLBACK_NO_DOCUMENTS
@@ -511,7 +514,6 @@ class ResponseGeneratorAgent:
         query: str,
         domain: str,
         retrieval_results: dict[str, RetrievalResult],
-        legal_supplement_docs: list[Document],
         user_type: str,
         company_context: str,
         actions_context: str,
@@ -523,7 +525,6 @@ class ResponseGeneratorAgent:
             query: 사용자 질문
             domain: 도메인
             retrieval_results: 검색 결과
-            legal_supplement_docs: 법률 보충 문서
             user_type: 사용자 유형
             company_context: 기업 컨텍스트
             actions_context: 액션 컨텍스트 문자열
@@ -536,8 +537,6 @@ class ResponseGeneratorAgent:
         result = retrieval_results[domain]
 
         documents = result.documents
-        if legal_supplement_docs and domain != "law_common":
-            documents = result.documents + legal_supplement_docs
 
         if not documents:
             return FALLBACK_NO_DOCUMENTS
@@ -587,7 +586,6 @@ class ResponseGeneratorAgent:
         query: str,
         sub_queries: list[SubQuery],
         retrieval_results: dict[str, RetrievalResult],
-        legal_supplement_docs: list[Document],
         domains: list[str],
         user_type: str,
         company_context: str,
@@ -600,7 +598,6 @@ class ResponseGeneratorAgent:
             query: 사용자 질문
             sub_queries: 하위 질문 리스트
             retrieval_results: 검색 결과
-            legal_supplement_docs: 법률 보충 문서
             domains: 도메인 리스트
             user_type: 사용자 유형
             company_context: 기업 컨텍스트
@@ -614,8 +611,6 @@ class ResponseGeneratorAgent:
         for domain in domains:
             if domain in retrieval_results:
                 all_documents.extend(retrieval_results[domain].documents)
-        if legal_supplement_docs:
-            all_documents.extend(legal_supplement_docs)
 
         if not all_documents:
             return FALLBACK_NO_DOCUMENTS

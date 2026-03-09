@@ -1,20 +1,19 @@
 import logging
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import insert, select
+from sqlalchemy.orm import Session, load_only
 from datetime import datetime, timedelta, timezone
 import jwt
 from jwt.exceptions import InvalidTokenError
 
 logger = logging.getLogger("auth")
-limiter = Limiter(key_func=get_remote_address)
 
+from apps.common.limiter import limiter
 from config.database import get_db
 from config.settings import settings
 from apps.common.models import User
+from apps.common.constants import USER_TYPE_PROSPECTIVE
 from apps.common.deps import get_current_user
 from .services import verify_google_token
 from .schemas import LoginResponse, TestLoginRequest, UserInfo, GoogleLoginRequest
@@ -91,6 +90,7 @@ def _build_user_info(user: User) -> UserInfo:
         google_email=user.google_email,
         username=user.username,
         type_code=user.type_code,
+        profile_image=user.profile_image,
     )
 
 
@@ -110,6 +110,8 @@ async def login_google(
     id_info = verify_google_token(body.id_token)
     email = id_info.get("email")
     name = id_info.get("name", "Google User")
+    sub = id_info.get("sub")
+    picture = id_info.get("picture")
 
     if not email:
         raise HTTPException(
@@ -123,23 +125,71 @@ async def login_google(
             detail="Google에서 이메일 인증이 완료되지 않았습니다",
         )
 
-    user = db.execute(select(User).where(User.google_email == email)).scalar_one_or_none()
+    user_stmt = (
+        select(User)
+        .options(
+            load_only(
+                User.user_id,
+                User.google_email,
+                User.username,
+                User.type_code,
+                User.use_yn,
+                User.google_sub,
+                User.profile_image,
+            )
+        )
+        .where(User.google_email == email)
+    )
+    user = db.execute(user_stmt).scalar_one_or_none()
     if user and not user.use_yn:
-        logger.warning("LOGIN_BLOCKED email=%s reason=deactivated", email)
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="비활성화된 계정입니다",
-        )
-    if not user:
-        user = User(
-            google_email=email,
-            username=name,
-            type_code="U0000002",
-            birth=None,
-        )
-        db.add(user)
+        logger.info("REACTIVATE email=%s user_id=%d", email, user.user_id)
+        user.use_yn = True
+        if sub:
+            user.google_sub = sub
+        if name:
+            user.username = name
+        if picture is not None:
+            user.profile_image = picture
         db.commit()
-        db.refresh(user)
+    if not user:
+        result = db.execute(
+            insert(User).values(
+                google_email=email,
+                username=name,
+                type_code=USER_TYPE_PROSPECTIVE,
+                birth=None,
+                google_sub=sub,
+                profile_image=picture,
+            )
+        )
+        db.commit()
+        inserted_user_id_raw = result.lastrowid
+        if inserted_user_id_raw is None:
+            inserted_user_id_raw = db.execute(
+                select(User.user_id).where(User.google_email == email)
+            ).scalar_one()
+        inserted_user_id = int(inserted_user_id_raw)
+        user = User(
+            user_id=inserted_user_id,
+            google_email=email,
+            google_sub=sub,
+            profile_image=picture,
+            username=name,
+            type_code=USER_TYPE_PROSPECTIVE,
+        )
+    else:
+        updated = False
+        if user.google_sub is None and sub:
+            user.google_sub = sub
+            updated = True
+        if name:
+            user.username = name
+            updated = True
+        if picture is not None:
+            user.profile_image = picture
+            updated = True
+        if updated:
+            db.commit()
 
     access_token = create_access_token(data={"sub": user.google_email})
     refresh_token = create_refresh_token(data={"sub": user.google_email})
@@ -165,17 +215,51 @@ async def test_login(
     test_username = body.username if body and body.username else "테스트 사용자"
     test_type_code = body.type_code if body and body.type_code else "U0000002"
 
-    user = db.execute(select(User).where(User.google_email == test_email)).scalar_one_or_none()
+    ALLOWED_TEST_TYPE_CODES = {"U0000002", "U0000003"}
+    if test_type_code not in ALLOWED_TEST_TYPE_CODES:
+        test_type_code = "U0000002"
+
+    user_stmt = (
+        select(User)
+        .options(
+            load_only(
+                User.user_id,
+                User.google_email,
+                User.username,
+                User.type_code,
+                User.use_yn,
+            )
+        )
+        .where(User.google_email == test_email)
+    )
+    user = db.execute(user_stmt).scalar_one_or_none()
+    if user and not user.use_yn:
+        logger.info("REACTIVATE(test) email=%s user_id=%d", test_email, user.user_id)
+        user.use_yn = True
+        user.username = test_username
+        db.commit()
     if not user:
+        result = db.execute(
+            insert(User).values(
+                google_email=test_email,
+                username=test_username,
+                type_code=test_type_code,
+                birth=datetime(1990, 1, 1),
+            )
+        )
+        db.commit()
+        inserted_user_id_raw = result.lastrowid
+        if inserted_user_id_raw is None:
+            inserted_user_id_raw = db.execute(
+                select(User.user_id).where(User.google_email == test_email)
+            ).scalar_one()
+        inserted_user_id = int(inserted_user_id_raw)
         user = User(
+            user_id=inserted_user_id,
             google_email=test_email,
             username=test_username,
             type_code=test_type_code,
-            birth=datetime(1990, 1, 1),
         )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
 
     access_token = create_access_token(data={"sub": user.google_email})
     refresh_token = create_refresh_token(data={"sub": user.google_email})
@@ -252,7 +336,20 @@ async def refresh(
     if not email:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 토큰 정보입니다")
 
-    user = db.execute(select(User).where(User.google_email == email, User.use_yn == True)).scalar_one_or_none()
+    user_stmt = (
+        select(User)
+        .options(
+            load_only(
+                User.user_id,
+                User.google_email,
+                User.username,
+                User.type_code,
+                User.use_yn,
+            )
+        )
+        .where(User.google_email == email, User.use_yn == True)
+    )
+    user = db.execute(user_stmt).scalar_one_or_none()
     if not user:
         clear_auth_cookies(response)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="사용자를 찾을 수 없습니다")

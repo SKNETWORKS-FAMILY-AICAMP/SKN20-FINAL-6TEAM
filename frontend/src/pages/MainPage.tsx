@@ -13,22 +13,18 @@ import { PaperClipIcon, XMarkIcon, DocumentArrowDownIcon } from '@heroicons/reac
 import api from '../lib/api';
 import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
-import { useNotificationStore } from '../stores/notificationStore';
 import { useChat } from '../hooks/useChat';
 import { useDisplayUserType } from '../hooks/useDisplayUserType';
 import { useNotifications } from '../hooks/useNotifications';
 import { AGENT_NAMES, AGENT_COLORS, type Company, type Schedule } from '../types';
-import { USER_QUICK_QUESTIONS } from '../lib/constants';
+import { USER_QUICK_QUESTIONS, MAX_PARALLEL_CHAT_RESPONSES } from '../lib/constants';
 import { getSeasonalQuestions } from '../lib/seasonalQuestions';
 import { ResponseProgress } from '../components/chat/ResponseProgress';
 import { SourceReferences } from '../components/chat/SourceReferences';
 import { ActionButtons } from '../components/chat/ActionButtons';
-import { NotificationToast } from '../components/layout/NotificationToast';
 import { PageHeader } from '../components/common/PageHeader';
 import { stripSourcesSection, generateId } from '../lib/utils';
 import { modifyDocument, fileToBase64, downloadDocumentResponse } from '../lib/documentApi';
-
-const MAX_VISIBLE_TOASTS = 5;
 
 const normalizeNotificationSchedules = (value: unknown): Schedule[] => {
   if (!Array.isArray(value)) {
@@ -60,12 +56,13 @@ const normalizeNotificationCompanies = (value: unknown): Company[] => {
   );
 };
 
+const PARALLEL_LIMIT_MESSAGE = '\uB3D9\uC2DC \uC0DD\uC131 \uD55C\uB3C4 \uCD08\uACFC\uB418\uC5C8\uC2B5\uB2C8\uB2E4';
+
 const MainPage: React.FC = () => {
-  const { isAuthenticated, user } = useAuthStore();
-  const { notifications, toastQueue, dismissToast } = useNotificationStore();
+  const { isAuthenticated, user, notificationSettings, notificationSettingsLoaded } = useAuthStore();
   const displayUserType = useDisplayUserType();
-  const { sessions, currentSessionId, createSession, isStreaming, addMessage } = useChatStore();
-  const { sendMessage, isLoading, stopStreaming } = useChat();
+  const { sessions, currentSessionId, createSession, addMessageToSession, responsePhaseBySessionId } = useChatStore();
+  const { sendMessage, stopStreaming } = useChat();
   const [inputValue, setInputValue] = useState('');
   const [notificationSchedules, setNotificationSchedules] = useState<Schedule[]>([]);
   const [notificationCompanyNameById, setNotificationCompanyNameById] = useState<
@@ -80,12 +77,18 @@ const MainPage: React.FC = () => {
 
   const currentSession = sessions.find((s) => s.id === currentSessionId);
   const messages = currentSession?.messages || [];
-  const visibleToastNotifications = toastQueue
-    .slice(0, MAX_VISIBLE_TOASTS)
-    .map((toastId) => notifications.find((notification) => notification.id === toastId) ?? null)
-    .filter((notification): notification is NonNullable<typeof notification> => notification !== null);
+  const isCurrentSessionGenerating = Boolean(currentSessionId && responsePhaseBySessionId[currentSessionId]);
+  const isCurrentSessionStreaming = Boolean(currentSessionId && responsePhaseBySessionId[currentSessionId] === 'streaming');
+  const isParallelLimitReached = Object.keys(responsePhaseBySessionId).length >= MAX_PARALLEL_CHAT_RESPONSES;
+  const isInputBlockedByParallelLimit = !isCurrentSessionGenerating && isParallelLimitReached;
+  const isInputDisabled = isCurrentSessionGenerating || isFileProcessing || isInputBlockedByParallelLimit;
+  const showStopButton = isCurrentSessionGenerating;
 
-  useNotifications(notificationSchedules, notificationCompanyNameById);
+  useNotifications(
+    !isAuthenticated || notificationSettingsLoaded ? notificationSchedules : [],
+    !isAuthenticated || notificationSettingsLoaded ? notificationCompanyNameById : {},
+    notificationSettings
+  );
 
   const prevSessionIdRef = useRef<string | null>(null);
   const prevMessagesLengthRef = useRef<number>(0);
@@ -111,11 +114,11 @@ const MainPage: React.FC = () => {
 
   // 스트리밍 중 스크롤 따라가기
   useEffect(() => {
-    if (isStreaming) {
+    if (isCurrentSessionStreaming) {
       const interval = setInterval(() => scrollToBottom(false), 100);
       return () => clearInterval(interval);
     }
-  }, [isStreaming]);
+  }, [isCurrentSessionStreaming]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -167,7 +170,7 @@ const MainPage: React.FC = () => {
   }, [isAuthenticated]);
 
   const handleSendMessage = async (message: string) => {
-    if (!message.trim() || isLoading || isStreaming || isFileProcessing) return;
+    if (!message.trim() || isInputDisabled) return;
 
     // 파일 첨부 + 수정 지시 → 문서 수정 플로우
     if (attachedFile) {
@@ -176,6 +179,7 @@ const MainPage: React.FC = () => {
       setAttachedFile(null);
       setFileError(null);
       setIsFileProcessing(true);
+      const targetSessionId = useChatStore.getState().ensureCurrentSession();
 
       // 사용자 메시지 표시
       const userMsg = {
@@ -184,24 +188,29 @@ const MainPage: React.FC = () => {
         content: `[${file.name}] ${message}`,
         timestamp: new Date(),
       };
-      addMessage(userMsg);
+      addMessageToSession(targetSessionId, userMsg);
 
       try {
         const base64 = await fileToBase64(file);
         const ext = file.name.split('.').pop()?.toLowerCase() || 'docx';
-        const result = await modifyDocument(base64, file.name, message, ext === 'pdf' ? 'pdf' : 'docx');
+        const result = await modifyDocument(base64, file.name, message, ext === 'pdf' ? 'pdf' : 'docx', user?.user_id);
 
-        if (result.success) {
-          downloadDocumentResponse(result);
-          addMessage({
+        if (result.success && result.file_content && result.file_name) {
+          addMessageToSession(targetSessionId, {
             id: generateId(),
             type: 'assistant',
-            content: `문서가 수정되었습니다. **${result.file_name}** 파일이 다운로드됩니다.`,
+            content: '문서가 수정되었습니다.',
             agent_code: 'A0000008',
             timestamp: new Date(),
+            documentAttachment: {
+              fileContent: result.file_content,
+              fileName: result.file_name,
+              documentType: result.doc_type_id || 'modified_document',
+              downloadable: true,
+            },
           });
         } else {
-          addMessage({
+          addMessageToSession(targetSessionId, {
             id: generateId(),
             type: 'assistant',
             content: result.message || '문서 수정에 실패했습니다.',
@@ -210,7 +219,7 @@ const MainPage: React.FC = () => {
           });
         }
       } catch {
-        addMessage({
+        addMessageToSession(targetSessionId, {
           id: generateId(),
           type: 'assistant',
           content: '문서 수정 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
@@ -273,16 +282,6 @@ const MainPage: React.FC = () => {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {isAuthenticated &&
-        visibleToastNotifications.map((notification, index) => (
-          <NotificationToast
-            key={notification.id}
-            notification={notification}
-            onClose={() => dismissToast(notification.id)}
-            placement="bell-side"
-            stackIndex={index}
-          />
-        ))}
       {/* Header */}
       <PageHeader
         title={'\u0041\u0049 \uC0C1\uB2F4'}
@@ -299,7 +298,8 @@ const MainPage: React.FC = () => {
             <button
               key={index}
               onClick={() => handleSendMessage(item.question)}
-              className="px-3 py-1.5 text-sm bg-white border rounded-full hover:bg-blue-50 hover:border-blue-300 transition-colors"
+              disabled={isInputDisabled}
+              className="px-3 py-1.5 text-sm bg-white border rounded-full hover:bg-blue-50 hover:border-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {item.label}
             </button>
@@ -379,6 +379,31 @@ const MainPage: React.FC = () => {
                         {msg.actions && msg.actions.length > 0 && (
                           <ActionButtons actions={msg.actions} />
                         )}
+                        {msg.documentAttachment && (
+                          <div className="mt-3 pt-2 border-t border-gray-200">
+                            <button
+                              onClick={() => {
+                                if (msg.documentAttachment?.downloadable && msg.documentAttachment.fileContent) {
+                                  downloadDocumentResponse({
+                                    success: true,
+                                    file_content: msg.documentAttachment.fileContent,
+                                    file_name: msg.documentAttachment.fileName,
+                                  });
+                                }
+                              }}
+                              disabled={!msg.documentAttachment.downloadable}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                                msg.documentAttachment.downloadable
+                                  ? 'border-green-200 text-green-600 hover:bg-green-50 hover:border-green-300'
+                                  : 'border-gray-200 text-gray-400 cursor-not-allowed bg-gray-50 opacity-50'
+                              }`}
+                              title={msg.documentAttachment.downloadable ? msg.documentAttachment.fileName : '최신 문서만 다운로드할 수 있습니다'}
+                            >
+                              <DocumentArrowDownIcon className="h-4 w-4" />
+                              {msg.documentAttachment.fileName}
+                            </button>
+                          </div>
+                        )}
                       </>
                     ) : (
                       <Typography variant="small" className="text-white">
@@ -410,7 +435,11 @@ const MainPage: React.FC = () => {
             );
           })
         )}
-        <ResponseProgress isLoading={isLoading} isStreaming={isStreaming} isFileProcessing={isFileProcessing} />
+        <ResponseProgress
+          isLoading={isCurrentSessionGenerating}
+          isStreaming={isCurrentSessionStreaming}
+          isFileProcessing={isFileProcessing}
+        />
         <div ref={messagesEndRef} />
       </div>
 
@@ -451,7 +480,7 @@ const MainPage: React.FC = () => {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading || isStreaming || isFileProcessing}
+              disabled={isInputDisabled}
               className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title="파일 첨부 (DOCX, PDF)"
             >
@@ -461,18 +490,25 @@ const MainPage: React.FC = () => {
               <input
                 ref={inputRef}
                 type="text"
-                placeholder={attachedFile ? '수정할 내용을 입력하세요...' : '메시지를 입력하세요...'}
+                placeholder={
+                  isInputBlockedByParallelLimit
+                    ? PARALLEL_LIMIT_MESSAGE
+                    : attachedFile
+                      ? '\uC218\uC815\uD560 \uB0B4\uC6A9\uC744 \uC785\uB825\uD558\uC138\uC694...'
+                      : '\uBA54\uC2DC\uC9C0\uB97C \uC785\uB825\uD558\uC138\uC694...'
+                }
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
+                disabled={isInputDisabled}
                 className="w-full px-3 py-2 text-sm border-0 focus:outline-none focus:ring-0 bg-transparent placeholder-gray-400"
               />
             </div>
-            {isLoading || isStreaming || isFileProcessing ? (
+            {showStopButton ? (
               <IconButton
                 type="button"
                 color="blue"
-                onClick={stopStreaming}
+                onClick={() => stopStreaming(currentSessionId ?? undefined)}
                 className="rounded-xl !bg-gray-400 hover:!bg-gray-500"
               >
                 <StopIcon className="h-5 w-5" />
@@ -481,13 +517,18 @@ const MainPage: React.FC = () => {
               <IconButton
                 type="submit"
                 color="blue"
-                disabled={!inputValue.trim()}
+                disabled={isInputDisabled || !inputValue.trim()}
                 className="rounded-xl"
               >
                 <PaperAirplaneIcon className="h-5 w-5" />
               </IconButton>
             )}
           </form>
+          {isInputBlockedByParallelLimit && (
+            <Typography variant="small" color="gray" className="mt-2 px-2 text-xs !text-gray-400">
+              {PARALLEL_LIMIT_MESSAGE}
+            </Typography>
+          )}
           <Typography variant="small" color="gray" className="text-center mt-3 mb-2 text-xs !text-gray-600">
             Bizi는 AI 기반 상담 서비스로, 법적 조언이 아닙니다. 중요한 결정은 전문가와 상담하세요.
           </Typography>

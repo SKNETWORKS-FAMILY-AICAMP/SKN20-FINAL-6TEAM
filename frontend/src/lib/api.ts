@@ -51,7 +51,10 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        await axios.post(`${API_URL}/auth/refresh`, {}, { withCredentials: true });
+        await axios.post(`${API_URL}/auth/refresh`, {}, {
+          withCredentials: true,
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
         processQueue(null);
         return api(originalRequest);
       } catch (refreshError) {
@@ -59,7 +62,6 @@ api.interceptors.response.use(
         // refresh 실패 → 로그아웃 (동적 import로 순환 의존 방지)
         const { useAuthStore } = await import('../stores/authStore');
         useAuthStore.getState().clearAuth();
-        window.location.href = '/login';
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

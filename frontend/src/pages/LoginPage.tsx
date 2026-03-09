@@ -1,15 +1,10 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate, type Location } from 'react-router-dom';
+﻿import React, { useEffect, useState } from 'react';
 import { Card, CardBody, Typography } from '@material-tailwind/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { GoogleLogin, CredentialResponse } from '@react-oauth/google';
 import { useAuthStore } from '../stores/authStore';
 import api from '../lib/api';
 import { extractErrorMessage } from '../lib/errorHandler';
-
-interface LoginRouteState {
-  backgroundLocation?: Location;
-}
 
 const FEATURE_ITEMS = [
   '.',
@@ -23,43 +18,23 @@ const FEATURE_ITEMS = [
 ];
 
 const LoginPage: React.FC = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { login } = useAuthStore();
+  const { login, closeLoginModal } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
 
-  const hasBackgroundLocation = useMemo(() => {
-    const state = location.state as LoginRouteState | null;
-    return Boolean(state?.backgroundLocation);
-  }, [location.state]);
-
-  const closeModal = () => {
-    if (hasBackgroundLocation) {
-      navigate(-1);
-      return;
-    }
-    navigate('/', { replace: true });
-  };
+  const closeModal = () => closeLoginModal();
 
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') {
-        return;
+      if (event.key === 'Escape') {
+        closeLoginModal();
       }
-
-      if (hasBackgroundLocation) {
-        navigate(-1);
-        return;
-      }
-
-      navigate('/', { replace: true });
     };
 
     window.addEventListener('keydown', handleKeydown);
     return () => {
       window.removeEventListener('keydown', handleKeydown);
     };
-  }, [hasBackgroundLocation, navigate]);
+  }, [closeLoginModal]);
 
   const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
     setError(null);
@@ -71,7 +46,6 @@ const LoginPage: React.FC = () => {
       const { user } = response.data;
 
       await login(user);
-      closeModal();
     } catch (err: unknown) {
       console.error('Login error:', err);
       setError(extractErrorMessage(err, '로그인에 실패했습니다.'));
@@ -98,7 +72,7 @@ const LoginPage: React.FC = () => {
         >
           <button
             type="button"
-            aria-label="濡쒓렇??紐⑤떖 ?リ린"
+            aria-label="로그인 모달 닫기"
             className="absolute right-5 top-5 z-20 rounded-full border border-gray-200 bg-white p-1.5 text-gray-400 transition-colors hover:text-gray-700"
             onClick={closeModal}
           >
@@ -121,19 +95,19 @@ const LoginPage: React.FC = () => {
               </div>
 
               <Typography variant="paragraph" className="login-welcome-font -mt-6 !text-gray-600">
-                ?듯빀 李쎌뾽/寃쎌쁺 ?곷떞 梨쀫큸??
+                통합 창업/경영 상담 챗봇이
                 <br />
-                ?ㅼ떊 寃껋쓣 ?섏쁺?⑸땲??
+                당신 곁을 환영합니다
               </Typography>
 
               <ul className="ml-auto mt-10 w-full max-w-[19rem] space-y-2 text-right text-[10pt] font-normal leading-[1.4] text-[#6BB3F2]">
-                {FEATURE_ITEMS.map((item) => (
-                  <li key={item}>{item}</li>
+                {FEATURE_ITEMS.map((item, index) => (
+                  <li key={`${index}-${item}`}>{item}</li>
                 ))}
               </ul>
 
               <Typography variant="paragraph" className="mt-10 text-center !text-gray-600">
-                臾댁젣?쒖쑝濡?理쒖쟻?붾맂 ?곷떞 湲곕뒫???댁슜?대낫?몄슂
+                무료로 최적화된 상담 기능을 이용해보세요
               </Typography>
 
               {error && (

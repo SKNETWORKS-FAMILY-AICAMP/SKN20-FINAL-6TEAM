@@ -22,6 +22,7 @@ from langchain_core.documents import Document
 from langgraph.graph import END, StateGraph
 
 from agents.base import RetrievalEvaluationResult, RetrievalResult, RetrievalStatus
+from agents.document_tool import DocumentTool
 from agents.evaluator import EvaluatorAgent
 from agents.generator import (
     FALLBACK_NO_DOCUMENTS,
@@ -48,8 +49,8 @@ from schemas.response import (
 from utils.config import DOMAIN_LABELS, get_settings
 from utils.middleware import get_metrics_collector
 from utils.domain_classifier import DomainClassificationResult, get_domain_classifier
-from utils.legal_supplement import needs_legal_supplement
 from utils.prompts import (
+    CHITCHAT_RESPONSES,
     DOCUMENT_GENERATION_SHORTCUT_RESPONSE,
     LLM_CLASSIFICATION_FAILURE_RESPONSE,
     REJECTION_RESPONSE,
@@ -83,6 +84,8 @@ class RouterState(TypedDict):
     ragas_metrics: dict[str, float | None] | None
     retry_count: int
     timing_metrics: dict[str, Any]
+    detected_document_type: str | None
+    previous_domains: list[str] | None
 
 
 class MainRouter:
@@ -122,6 +125,9 @@ class MainRouter:
             agents=self.agents,
             rag_chain=shared_rag_chain,
         )
+
+        # 문서 생성 툴
+        self.document_tool = DocumentTool()
 
         # 검색 에이전트 (3번 retrieve 파트 전담)
         self.retrieval_agent = RetrievalAgent(
@@ -200,6 +206,7 @@ class MainRouter:
         workflow.add_node("generate", self._agenerate_node)
         workflow.add_node("evaluate", self._aevaluate_node)
         workflow.add_node("retry_with_alternatives", self._aretry_with_alternatives_node)
+        workflow.add_node("chitchat_respond", self._achitchat_node)
 
         # 엣지 정의
         workflow.set_entry_point("classify")
@@ -209,10 +216,12 @@ class MainRouter:
             self._should_continue_after_classify,
             {
                 "continue": "decompose",
+                "chitchat": "chitchat_respond",
                 "document_shortcut": END,
                 "reject": END,
             },
         )
+        workflow.add_edge("chitchat_respond", END)
 
         workflow.add_edge("decompose", "retrieve")
         workflow.add_edge("retrieve", "generate")
@@ -239,6 +248,8 @@ class MainRouter:
         """
         classification = state.get("classification_result")
         if classification and not classification.is_relevant:
+            if classification.intent and classification.intent.startswith("chitchat"):
+                return "chitchat"
             return "reject"
         # actions가 이미 설정되어 있으면 document shortcut (_aclassify_node에서 설정)
         if state.get("actions"):
@@ -287,34 +298,6 @@ class MainRouter:
             )
 
         return "__end__"
-
-    def _augment_query_with_history(self, query: str, history: list[dict]) -> str:
-        """대명사/지시어 질문을 history로 보강합니다.
-
-        짧은 후속 질문("그럼 세금은요?")에 이전 사용자 메시지를 접두사로 붙여
-        분류·검색·생성·평가 전체 파이프라인의 정확도를 높입니다.
-        LLM 호출 없이 휴리스틱으로 동작합니다.
-
-        Args:
-            query: 현재 사용자 질문
-            history: 대화 이력 (role/content dict 리스트)
-
-        Returns:
-            보강된 쿼리 (조건 불충족 시 원본 그대로 반환)
-        """
-        if not history or len(query) > 30:
-            return query
-
-        pronouns = ["그럼", "그거", "그건", "그러면", "이거", "저거", "거기", "이건"]
-        if not any(p in query for p in pronouns):
-            return query
-
-        for msg in reversed(history):
-            if msg.get("role") == "user":
-                logger.info("[쿼리 보강] '%s' → '%s %s'", query, msg["content"][:30], query)
-                return f"{msg['content']} {query}"
-
-        return query
 
     def _is_document_shortcut(self, query: str) -> list[ActionSuggestion] | None:
         """문서 생성만 요청하는 질문인지 판별합니다.
@@ -371,62 +354,148 @@ class MainRouter:
         state["timing_metrics"]["query_rewrite_time"] = rewrite_meta.elapsed
         state["timing_metrics"]["query_rewrite_reason"] = rewrite_meta.reason
         state["timing_metrics"]["query_rewrite_applied"] = was_rewritten
+        state["timing_metrics"]["query_rewrite_topic_changed"] = rewrite_meta.topic_changed
 
-        # 벡터 유사도 기반 도메인 분류 (CPU-bound → 스레드 위임)
+        # LLM 도메인 분류 — 원본+재작성 쿼리 동시 전달
         classify_query = rewritten_query if was_rewritten else query
         classification = await asyncio.to_thread(
-            self.domain_classifier.classify, classify_query
+            self.domain_classifier.classify,
+            classify_query,
+            query if was_rewritten else None,
         )
         state["classification_result"] = classification
         state["domains"] = classification.domains
 
-        if not classification.is_relevant:
-            # 거부 시에도 키워드 기반 액션 수집 (문서 생성 버튼 등)
-            fallback_actions = self.generator._collect_actions(
-                augmented_query, {}, []
-            )
+        logger.info(
+            "[분류] 원본='%s' | 재작성=%s('%s') | 도메인=%s(%.2f) | relevant=%s | method=%s",
+            query[:30],
+            was_rewritten,
+            rewritten_query[:30] if was_rewritten else "-",
+            classification.domains,
+            classification.confidence,
+            classification.is_relevant,
+            classification.method,
+        )
 
-            # LLM 재시도 실패 vs 도메인 외 질문 분기
-            if classification.method == "llm_retry_failed":
-                state["final_response"] = LLM_CLASSIFICATION_FAILURE_RESPONSE
-            else:
-                if fallback_actions:
-                    state["domains"] = ["document"]
-                    state["final_response"] = DOCUMENT_GENERATION_SHORTCUT_RESPONSE
-                else:
-                    state["final_response"] = REJECTION_RESPONSE
-            state["sources"] = []
-            state["actions"] = fallback_actions
-            logger.info(
-                "[분류] 도메인 외 질문 거부 (방법: %s, 신뢰도: %.2f, 액션: %d건)",
-                classification.method,
-                classification.confidence,
-                len(fallback_actions),
-            )
-        else:
-            # 문서 생성 shortcut 판별: document_generation 액션만 매칭되면 검색 파이프라인 스킵
-            doc_actions = self._is_document_shortcut(augmented_query)
-            if doc_actions:
-                state["domains"] = ["document"]
-                state["final_response"] = DOCUMENT_GENERATION_SHORTCUT_RESPONSE
-                state["sources"] = []
-                state["actions"] = doc_actions
+        if not classification.is_relevant:
+            # 후속 질문 도메인 폴백: 두 가지 조건
+            # 1) 재작성 성공 + classifier 거부 → cold start 등으로 재작성된 쿼리가 거부된 경우
+            # 2) 재작성 실패(timeout/exception) + history 존재 + previous_domains → 후속 질문 가능성
+            previous_domains = state.get("previous_domains")
+            should_fallback = False
+            if was_rewritten and previous_domains and not rewrite_meta.topic_changed:
+                should_fallback = True
+            elif not was_rewritten and previous_domains and state.get("history"):
+                fallback_reasons = {"fallback_timeout", "fallback_exception"}
+                if rewrite_meta.reason in fallback_reasons:
+                    should_fallback = True
+
+            if should_fallback:
                 logger.info(
-                    "[분류→단축] 문서 생성 shortcut (원본 도메인=%s, 액션=%d건)",
-                    classification.domains,
-                    len(doc_actions),
+                    "[분류] 후속 질문 도메인 폴백: rewrite=%s(reason=%s), 분류 거부(%.2f) -> 이전 도메인 %s",
+                    was_rewritten,
+                    rewrite_meta.reason,
+                    classification.confidence,
+                    previous_domains,
                 )
+                classification = DomainClassificationResult(
+                    domains=previous_domains,
+                    confidence=max(classification.confidence, 0.5),
+                    is_relevant=True,
+                    method="followup_fallback",
+                )
+                state["classification_result"] = classification
+                state["domains"] = classification.domains
+
             else:
+                # chitchat인 경우
+                if classification.intent and classification.intent.startswith("chitchat"):
+                    state["final_response"] = CHITCHAT_RESPONSES.get(
+                        classification.intent, CHITCHAT_RESPONSES["chitchat_greeting"]
+                    )
+                    state["sources"] = []
+                    state["actions"] = []
+                    logger.info(
+                        "[분류] chitchat 감지 (intent: %s, 방법: %s)",
+                        classification.intent,
+                        classification.method,
+                    )
+                else:
+                    # 거부 시에도 키워드 기반 액션 수집 (문서 생성 버튼 등)
+                    fallback_actions = self.generator._collect_actions(
+                        classify_query, {}, []
+                    )
+
+                    # LLM 재시도 실패 vs 도메인 외 질문 분기
+                    if classification.method == "llm_retry_failed":
+                        state["final_response"] = LLM_CLASSIFICATION_FAILURE_RESPONSE
+                    else:
+                        if fallback_actions:
+                            state["final_response"] = DOCUMENT_GENERATION_SHORTCUT_RESPONSE
+                        else:
+                            state["final_response"] = REJECTION_RESPONSE
+                    state["sources"] = []
+                    state["actions"] = fallback_actions
+                    logger.info(
+                        "[분류] 도메인 외 질문 거부 (방법: %s, 신뢰도: %.2f, 액션: %d건)",
+                        classification.method,
+                        classification.confidence,
+                        len(fallback_actions),
+                    )
+        else:
+            # 문서 생성 shortcut 판별: LLM intent 우선, fallback으로 키워드 매칭
+            # 도메인은 원래 분류 결과를 유지 (hr_labor, startup_funding 등)
+            is_doc_gen = classification.intent == "document_generation"
+            if not is_doc_gen:
+                # LLM intent 없으면 (non-LLM 분류 등) 기존 키워드 방식 fallback
+                is_doc_gen = classification.intent is None and self._is_document_shortcut(classify_query) is not None
+
+            shortcut_done = False
+            if is_doc_gen:
+                doc_actions = self._is_document_shortcut(classify_query) or self.generator._collect_actions(classify_query, {}, [])
+                doc_actions = [a for a in doc_actions if a.type == "document_generation"] if doc_actions else []
+                if doc_actions:
+                    state["final_response"] = DOCUMENT_GENERATION_SHORTCUT_RESPONSE
+                    state["sources"] = []
+                    state["actions"] = doc_actions
+                    logger.info(
+                        "[분류→단축] 문서 생성 shortcut (intent=%s, 도메인=%s, 액션=%d건)",
+                        classification.intent,
+                        classification.domains,
+                        len(doc_actions),
+                    )
+                    shortcut_done = True
+
+            if not shortcut_done:
+                # document_tool LLM 의도 분류로 문서 생성 감지
+                # (shortcut 아닌 경우: 도메인 응답 + 문서 생성 액션 병행)
+                should_doc, detected_doc_type = self.document_tool.should_invoke(
+                    classify_query,
+                    classification.domains[0] if classification.domains else "",
+                )
+                if should_doc and detected_doc_type:
+                    state["detected_document_type"] = detected_doc_type
+                    logger.info(
+                        "[분류] 문서 생성 의도 감지: type=%s (도메인=%s)",
+                        detected_doc_type,
+                        classification.domains,
+                    )
+
                 logger.info(
-                    "[분류] 도메인=%s (방법: %s, 신뢰도: %.2f)",
+                    "[분류] 도메인=%s (방법: %s, 신뢰도: %.2f, intent=%s)",
                     classification.domains,
                     classification.method,
                     classification.confidence,
+                    classification.intent,
                 )
 
         classify_time = time.time() - start
         state["timing_metrics"]["classify_time"] = classify_time
 
+        return state
+
+    async def _achitchat_node(self, state: RouterState) -> RouterState:
+        """chitchat 응답 노드. _aclassify_node에서 이미 final_response 설정됨."""
         return state
 
     async def _adecompose_node(self, state: RouterState) -> RouterState:
@@ -467,17 +536,39 @@ class MainRouter:
         """비동기 생성 노드: 통합 생성 에이전트 사용."""
         start = time.time()
 
+        topic_changed = state.get("timing_metrics", {}).get("query_rewrite_topic_changed", False)
         result = await self.generator.agenerate(
             query=state.get("original_query", state["query"]),
             sub_queries=state["sub_queries"],
             retrieval_results=state["retrieval_results"],
             user_context=state.get("user_context"),
             domains=state["domains"],
-            history=state.get("history"),
+            history=None if topic_changed else state.get("history"),
         )
         state["final_response"] = result.content
         state["actions"] = result.actions
         state["sources"] = result.sources
+
+        # document_tool이 GENERATE 의도를 감지했으면 해당 문서 액션 추가
+        detected_doc_type = state.get("detected_document_type")
+        if detected_doc_type:
+            existing_doc_types = {
+                a.params.get("doc_type_id")
+                for a in result.actions
+                if a.type == "document_generation"
+            }
+            if detected_doc_type not in existing_doc_types:
+                from agents.document_tool import _DOC_TYPE_LABELS
+
+                label = _DOC_TYPE_LABELS.get(detected_doc_type, detected_doc_type)
+                state["actions"].append(
+                    ActionSuggestion(
+                        type="document_generation",
+                        label=f"{label} 작성",
+                        description=f"{label}을(를) 자동으로 생성합니다.",
+                        params={"doc_type_id": detected_doc_type},
+                    )
+                )
 
         generate_time = time.time() - start
         state["timing_metrics"]["generate_time"] = generate_time
@@ -643,30 +734,6 @@ class MainRouter:
                     if not retrieval_results:
                         return None
 
-                    # 법률 보충 검색 (원본 파이프라인과 동일)
-                    all_documents = [
-                        doc
-                        for r in retrieval_results.values()
-                        for doc in r.documents
-                    ]
-                    if (
-                        self.settings.enable_legal_supplement
-                        and "law_common" not in domains
-                        and needs_legal_supplement(alt_query, all_documents, domains)
-                        and "law_common" in self.agents
-                    ):
-                        try:
-                            law_result = await self.agents["law_common"].aretrieve_only(alt_query)
-                            law_k = self.settings.legal_supplement_k
-                            law_result.documents = law_result.documents[:law_k]
-                            law_result.sources = law_result.sources[:law_k]
-                            retrieval_results["law_common_supplement"] = law_result
-                            logger.info(
-                                "[재시도] 법률 보충 검색: %d건",
-                                len(law_result.documents),
-                            )
-                        except Exception as e:
-                            logger.warning("[재시도] 법률 보충 검색 실패: %s", e)
                 else:
                     # 생성 품질 문제 → 기존 검색 결과 재활용 (재검색 스킵)
                     retrieval_results = existing_retrieval_results
@@ -760,6 +827,7 @@ class MainRouter:
         query: str,
         user_context: UserContext | None,
         history: list[dict] | None = None,
+        previous_domains: list[str] | None = None,
     ) -> RouterState:
         """초기 상태를 생성합니다."""
         return {
@@ -780,6 +848,8 @@ class MainRouter:
             "ragas_metrics": None,
             "retry_count": 0,
             "timing_metrics": {},
+            "detected_document_type": None,
+            "previous_domains": previous_domains,
         }
 
     def _create_response(
@@ -889,6 +959,7 @@ class MainRouter:
             query_rewrite_applied=timing_data.get("query_rewrite_applied"),
             query_rewrite_reason=timing_data.get("query_rewrite_reason"),
             query_rewrite_time=timing_data.get("query_rewrite_time"),
+            query_rewrite_topic_changed=timing_data.get("query_rewrite_topic_changed"),
             timeout_cause=timing_data.get("timeout_cause"),
             response_time=total_time,
         )
@@ -898,6 +969,7 @@ class MainRouter:
         query: str,
         user_context: UserContext | None = None,
         history: list[dict] | None = None,
+        previous_domains: list[str] | None = None,
     ) -> ChatResponse:
         """질문을 비동기로 처리합니다.
 
@@ -905,12 +977,13 @@ class MainRouter:
             query: 사용자 질문
             user_context: 사용자 컨텍스트
             history: 대화 이력
+            previous_domains: 이전 턴 도메인 (후속 질문 폴백용)
 
         Returns:
             채팅 응답
         """
         total_start = time.time()
-        initial_state = self._create_initial_state(query, user_context, history)
+        initial_state = self._create_initial_state(query, user_context, history, previous_domains)
 
         # 비동기 그래프 실행 (전체 타임아웃 적용)
         try:
@@ -959,6 +1032,7 @@ class MainRouter:
         query: str,
         user_context: UserContext | None = None,
         history: list[dict] | None = None,
+        previous_domains: list[str] | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """질문을 스트리밍으로 처리합니다.
 
@@ -969,6 +1043,7 @@ class MainRouter:
             query: 사용자 질문
             user_context: 사용자 컨텍스트
             history: 대화 이력
+            previous_domains: 이전 턴 도메인 (후속 질문 폴백용)
 
         Yields:
             스트리밍 응답 딕셔너리
@@ -992,15 +1067,80 @@ class MainRouter:
         if was_rewritten:
             query = rewritten_query
 
-        # 도메인 분류
-        classification = self.domain_classifier.classify(query)
+        # LLM 도메인 분류 — 원본+재작성 쿼리 동시 전달
+        classification = await asyncio.to_thread(
+            self.domain_classifier.classify,
+            query,
+            original_query if was_rewritten else None,
+        )
+
+        logger.info(
+            "[스트리밍/분류] 원본='%s' | 재작성=%s('%s') | 도메인=%s(%.2f) | relevant=%s | method=%s",
+            original_query[:30],
+            was_rewritten,
+            rewritten_query[:30] if was_rewritten else "-",
+            classification.domains,
+            classification.confidence,
+            classification.is_relevant,
+            classification.method,
+        )
 
         # 도메인 외 질문 거부 (LLM 토큰 스트리밍과 동일한 방식)
         if not classification.is_relevant:
-            # 거부 시에도 키워드 기반 액션은 수집 (문서 생성 버튼 등)
-            fallback_actions = self.generator._collect_actions(
-                augmented_query, {}, []
-            )
+            # 후속 질문 도메인 폴백 (astream 경로)
+            should_fallback = False
+            if was_rewritten and previous_domains and not rewrite_meta.topic_changed:
+                should_fallback = True
+            elif not was_rewritten and previous_domains and history:
+                fallback_reasons = {"fallback_timeout", "fallback_exception"}
+                if rewrite_meta.reason in fallback_reasons:
+                    should_fallback = True
+
+            if should_fallback:
+                logger.info(
+                    "[스트리밍/분류] 후속 질문 도메인 폴백: rewrite=%s(reason=%s), 분류 거부(%.2f) -> 이전 도메인 %s",
+                    was_rewritten,
+                    rewrite_meta.reason,
+                    classification.confidence,
+                    previous_domains,
+                )
+                classification = DomainClassificationResult(
+                    domains=previous_domains,
+                    confidence=max(classification.confidence, 0.5),
+                    is_relevant=True,
+                    method="followup_fallback",
+                )
+            else:
+                # 거부 시에도 키워드 기반 액션은 수집 (문서 생성 버튼 등)
+                fallback_actions = self.generator._collect_actions(
+                    query, {}, []
+                )
+
+        if not classification.is_relevant:
+            # chitchat 처리
+            if classification.intent and classification.intent.startswith("chitchat"):
+                chitchat_msg = CHITCHAT_RESPONSES.get(
+                    classification.intent, CHITCHAT_RESPONSES["chitchat_greeting"]
+                )
+                logger.info(
+                    "[스트리밍] chitchat 감지 (intent: %s)", classification.intent,
+                )
+                for char in chitchat_msg:
+                    yield {"type": "token", "content": char}
+                    await asyncio.sleep(0.02)
+                yield {
+                    "type": "done",
+                    "content": chitchat_msg,
+                    "domain": "general",
+                    "domains": [],
+                    "sources": [],
+                    "actions": [],
+                    "query_rewrite_applied": rewrite_meta.rewritten,
+                    "query_rewrite_reason": rewrite_meta.reason,
+                    "query_rewrite_time": rewrite_meta.elapsed,
+                    "query_rewrite_topic_changed": rewrite_meta.topic_changed,
+                }
+                return
 
             if classification.method == "llm_retry_failed":
                 reject_msg = LLM_CLASSIFICATION_FAILURE_RESPONSE
@@ -1016,9 +1156,9 @@ class MainRouter:
                     reject_msg = REJECTION_RESPONSE
                     logger.info("[스트리밍] 도메인 외 질문 - 거부 응답 반환")
 
-            # fallback 액션이 있으면 domain을 "document"로 설정
-            done_domain = "document" if fallback_actions else "general"
-            done_domains = ["document"] if fallback_actions else []
+            # fallback 액션이 있으면 분류된 도메인 유지, 없으면 general
+            done_domain = classification.domains[0] if fallback_actions and classification.domains else "general"
+            done_domains = classification.domains if fallback_actions else []
 
             for char in reject_msg:
                 yield {"type": "token", "content": char}
@@ -1030,15 +1170,27 @@ class MainRouter:
                 "domains": done_domains,
                 "sources": [],
                 "actions": fallback_actions,
+                "query_rewrite_applied": rewrite_meta.rewritten,
+                "query_rewrite_reason": rewrite_meta.reason,
+                "query_rewrite_time": rewrite_meta.elapsed,
+                "query_rewrite_topic_changed": rewrite_meta.topic_changed,
             }
             return
 
-        # 문서 생성 shortcut (스트리밍 경로)
+        # 문서 생성 shortcut (스트리밍 경로): LLM intent 우선, fallback으로 키워드
         if classification.is_relevant:
-            doc_actions = self._is_document_shortcut(augmented_query)
+            is_doc_gen = classification.intent == "document_generation"
+            if not is_doc_gen:
+                is_doc_gen = classification.intent is None and self._is_document_shortcut(query) is not None
+            doc_actions = self._is_document_shortcut(query) if is_doc_gen else None
+            if is_doc_gen and not doc_actions:
+                # intent는 document_generation이지만 매칭 액션이 없으면 수집 시도
+                all_actions = self.generator._collect_actions(query, {}, [])
+                doc_actions = [a for a in all_actions if a.type == "document_generation"] if all_actions else None
             if doc_actions:
                 logger.info(
-                    "[스트리밍→단축] 문서 생성 shortcut (원본 도메인=%s, 액션=%d건)",
+                    "[스트리밍→단축] 문서 생성 shortcut (intent=%s, 원본 도메인=%s, 액션=%d건)",
+                    classification.intent,
                     classification.domains,
                     len(doc_actions),
                 )
@@ -1049,10 +1201,13 @@ class MainRouter:
                 yield {
                     "type": "done",
                     "content": msg,
-                    "domain": "document",
-                    "domains": ["document"],
+                    "domain": classification.domains[0] if classification.domains else "general",
+                    "domains": classification.domains,
                     "sources": [],
                     "actions": doc_actions,
+                    "query_rewrite_applied": rewrite_meta.rewritten,
+                    "query_rewrite_reason": rewrite_meta.reason,
+                    "query_rewrite_time": rewrite_meta.elapsed,
                 }
                 return
 
@@ -1066,56 +1221,16 @@ class MainRouter:
             all_actions: list[ActionSuggestion] = []
             content = ""
 
-            # 법률 보충 검색 판단 (law_common이 아닌 경우만)
-            supplementary_documents: list[Document] | None = None
-            if (
-                domain != "law_common"
-                and self.settings.enable_legal_supplement
-                and needs_legal_supplement(query, [], domains)
-            ):
-                logger.info("[스트리밍] 쿼리 기반 법률 보충 검색 시작")
-                try:
-                    legal_agent = self.agents["law_common"]
-                    legal_result = await legal_agent.aretrieve_only(query)
-                    supplementary_documents = legal_result.documents[:self.settings.legal_supplement_k]
-                    all_sources.extend(
-                        legal_result.sources[:self.settings.legal_supplement_k]
-                    )
-                    logger.info(
-                        "[스트리밍] 법률 보충 검색 완료: %d건",
-                        len(supplementary_documents),
-                    )
-                except Exception as e:
-                    logger.warning("[스트리밍] 법률 보충 검색 실패: %s", e)
-
             # 통합 생성 에이전트 사용 스트리밍
             # 검색 수행
             retrieval_result = await agent.aretrieve_only(query)
             documents = retrieval_result.documents
             all_sources.extend(retrieval_result.sources)
 
-            if supplementary_documents:
-                documents = documents + supplementary_documents
-
             # 액션 사전 수집 (이미 검색된 결과 재사용)
             retrieval_results_map: dict[str, RetrievalResult] = {
                 domain: retrieval_result,
             }
-            if supplementary_documents:
-                legal_supp_sources = self.generator.rag_chain.documents_to_sources(
-                    supplementary_documents
-                )
-                retrieval_results_map["law_common_supplement"] = RetrievalResult(
-                    documents=supplementary_documents,
-                    scores=[],
-                    sources=legal_supp_sources,
-                    evaluation=RetrievalEvaluationResult(
-                        status=RetrievalStatus.SUCCESS,
-                        doc_count=len(supplementary_documents),
-                        keyword_match_ratio=0.0,
-                        avg_similarity_score=0.0,
-                    ),
-                )
 
             pre_actions = self.generator._collect_actions(
                 query, retrieval_results_map, [domain]
@@ -1127,7 +1242,7 @@ class MainRouter:
                 user_context=user_context,
                 domain=domain,
                 actions=pre_actions,
-                history=history,
+                history=None if rewrite_meta.topic_changed else history,
             ):
                 if chunk["type"] == "token":
                     yield {"type": "token", "content": chunk["content"]}
@@ -1158,8 +1273,6 @@ class MainRouter:
                 except Exception as e:
                     logger.warning("[스트리밍 평가] 단일 도메인 평가 실패: %s", e)
 
-            ragas_metrics_single = None
-
             yield {
                 "type": "done",
                 "content": content,
@@ -1168,8 +1281,12 @@ class MainRouter:
                 "sources": all_sources,
                 "actions": all_actions,
                 "evaluation": single_evaluation,
-                "ragas_metrics": ragas_metrics_single,
+                "ragas_metrics": None,
                 "retrieval_results": retrieval_results_map,
+                "query_rewrite_applied": rewrite_meta.rewritten,
+                "query_rewrite_reason": rewrite_meta.reason,
+                "query_rewrite_time": rewrite_meta.elapsed,
+                "query_rewrite_topic_changed": rewrite_meta.topic_changed,
             }
         else:
             # 복수 도메인: 통합 생성 에이전트로 LLM 토큰 스트리밍
@@ -1197,9 +1314,6 @@ class MainRouter:
             for d in domains:
                 if d in retrieval_results:
                     all_sources_multi.extend(retrieval_results[d].sources)
-            legal_supp = retrieval_results.get("law_common_supplement")
-            if legal_supp:
-                all_sources_multi.extend(legal_supp.sources)
 
             content = ""
             async for chunk in self.generator.astream_generate_multi(
@@ -1209,7 +1323,7 @@ class MainRouter:
                 user_context=user_context,
                 domains=domains,
                 actions=pre_actions,
-                history=history,
+                history=None if rewrite_meta.topic_changed else history,
             ):
                 if chunk["type"] == "token":
                     yield {"type": "token", "content": chunk["content"]}
@@ -1245,8 +1359,6 @@ class MainRouter:
                 except Exception as e:
                     logger.warning("[스트리밍 평가] 복수 도메인 평가 실패: %s", e)
 
-            ragas_metrics_multi = None
-
             yield {
                 "type": "done",
                 "content": content,
@@ -1255,6 +1367,10 @@ class MainRouter:
                 "sources": all_sources_multi,
                 "actions": pre_actions,
                 "evaluation": evaluation,
-                "ragas_metrics": ragas_metrics_multi,
+                "ragas_metrics": None,
                 "retrieval_results": retrieval_results,
+                "query_rewrite_applied": rewrite_meta.rewritten,
+                "query_rewrite_reason": rewrite_meta.reason,
+                "query_rewrite_time": rewrite_meta.elapsed,
+                "query_rewrite_topic_changed": rewrite_meta.topic_changed,
             }

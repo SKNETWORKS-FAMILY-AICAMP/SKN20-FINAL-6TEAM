@@ -6,6 +6,7 @@
 from agents.base import ActionRule, BaseAgent
 from schemas.response import ActionSuggestion
 from utils.prompts import HR_LABOR_PROMPT
+from utils.shared_actions import SERVICE_AGREEMENT_RULE
 
 
 class HRLaborAgent(BaseAgent):
@@ -33,7 +34,7 @@ class HRLaborAgent(BaseAgent):
                 type="document_generation",
                 label="근로계약서 생성",
                 description="표준 근로계약서를 생성합니다",
-                params={"document_type": "labor_contract"},
+                params={"doc_type_id": "labor_contract"},
             ),
         ),
         ActionRule(
@@ -42,7 +43,7 @@ class HRLaborAgent(BaseAgent):
                 type="document_generation",
                 label="취업규칙 템플릿",
                 description="취업규칙 작성 템플릿을 제공합니다",
-                params={"document_type": "employment_rules"},
+                params={"doc_type_id": "employment_rules"},
             ),
         ),
         ActionRule(
@@ -72,22 +73,14 @@ class HRLaborAgent(BaseAgent):
                 params={"url": "https://www.4insure.or.kr"},
             ),
         ),
-        ActionRule(
-            keywords=["용역", "용역계약", "외주", "아웃소싱", "프리랜서 계약"],
-            action=ActionSuggestion(
-                type="document_generation",
-                label="용역 계약서 생성",
-                description="용역(외주) 계약서를 생성합니다",
-                params={"document_type": "service_agreement"},
-            ),
-        ),
+        SERVICE_AGREEMENT_RULE,
         ActionRule(
             keywords=["개인정보", "개인정보동의", "개인정보 수집", "개인정보 처리"],
             action=ActionSuggestion(
                 type="document_generation",
                 label="개인정보 동의서 생성",
                 description="개인정보 수집·이용 동의서를 생성합니다",
-                params={"document_type": "privacy_consent"},
+                params={"doc_type_id": "privacy_consent"},
             ),
         ),
     ]

@@ -5,7 +5,16 @@ export interface User {
   username: string;
   type_code: 'U0000001' | 'U0000002' | 'U0000003'; // U0000001: 관리자, U0000002: 예비창업자, U0000003: 사업자
   birth?: string;
+  age?: number;
   create_date?: string;
+  profile_image?: string | null;
+}
+
+export interface NotificationSettings {
+  schedule_d7: boolean;
+  schedule_d3: boolean;
+  new_announce: boolean;
+  answer_complete: boolean;
 }
 
 // Company types
@@ -95,6 +104,17 @@ export interface SourceReference {
   title: string;
   source: string;
   url: string;
+  docDownloadUrl?: string;
+  formDownloadUrl?: string;
+  formS3Key?: string;
+}
+
+// 문서 다운로드 첨부 정보
+export interface DocumentAttachment {
+  fileContent: string;    // base64
+  fileName: string;
+  documentType: string;
+  downloadable: boolean;  // 활성/비활성 상태
 }
 
 // Chat message
@@ -108,6 +128,8 @@ export interface ChatMessage {
   synced?: boolean; // true이면 이미 backend에 저장된 메시지 (재로그인 시 중복 저장 방지)
   sources?: SourceReference[];
   actions?: RagActionSuggestion[];
+  evaluation_data?: EvaluationData | null;
+  documentAttachment?: DocumentAttachment;
 }
 
 // Chat session
@@ -118,6 +140,7 @@ export interface ChatSession {
   created_at: string;
   updated_at: string;
   lastHistoryId?: number | null;
+  rootHistoryId?: number | null;  // 스레드 root history ID
 }
 
 // Notification
@@ -130,6 +153,26 @@ export interface Notification {
   is_read: boolean;
   created_at: string;
   link?: string;
+}
+
+export type AnnounceSyncTrigger = 'login' | 'logout';
+
+export interface AnnounceSyncItem {
+  id: string;
+  title: string;
+  message: string;
+  company_label: string;
+  type: 'info';
+  created_at: string;
+  link: string;
+}
+
+export interface AnnounceSyncResponse {
+  trigger: AnnounceSyncTrigger;
+  cursor_from: string | null;
+  cursor_to: string;
+  synced_at: string;
+  items: AnnounceSyncItem[];
 }
 
 // RAG Chat Response (matches rag/schemas/response.py ChatResponse)
@@ -155,6 +198,9 @@ export interface RagStreamResponse {
     title?: string;
     source?: string;
     url?: string;
+    doc_download_url?: string;
+    form_download_url?: string;
+    form_s3_key?: string;
     type?: string;
     params?: Record<string, unknown>;
     domain?: string;

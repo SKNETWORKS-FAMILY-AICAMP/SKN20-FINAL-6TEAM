@@ -18,6 +18,7 @@ class UserInfo(BaseModel):
     google_email: str
     username: str
     type_code: str
+    profile_image: str | None = None
 
 
 class LoginResponse(BaseModel):

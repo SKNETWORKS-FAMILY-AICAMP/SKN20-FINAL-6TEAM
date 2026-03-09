@@ -54,22 +54,17 @@ class Settings(BaseSettings):
         default=True,
         description="복합 도메인 병합 후 Cross-Domain Reranking 활성화"
     )
-    enable_legal_supplement: bool = Field(
-        default=True, description="법률 보충 검색 활성화 (주 도메인 검색 후 법률 키워드 발견 시 법률DB 추가 검색)"
-    )
-
     # -- 도메인 분류 --
     enable_domain_rejection: bool = Field(
         default=True,
         description="도메인 외 질문 거부 기능 활성화"
     )
-    enable_vector_domain_classification: bool = Field(
-        default=True, description="벡터 유사도 기반 도메인 분류 활성화"
+    domain_classification_max_retries: int = Field(
+        default=2,
+        ge=0,
+        description="LLM 도메인 분류 실패 시 최대 재시도 횟수"
     )
-    enable_llm_domain_classification: bool = Field(
-        default=False,
-        description="LLM 기반 도메인 분류 활성화 (true 시 LLM이 1차 분류기, 추가 비용 발생)"
-    )
+    llm_max_retries: int = Field(default=1, description="LLM API 호출 재시도 횟수 (API 연결 실패 대비)")
 
     # -- 평가 & 재시도 --
     enable_llm_evaluation: bool = Field(
@@ -211,6 +206,12 @@ class Settings(BaseSettings):
         default="", description="관리자 API 키 (모니터링 엔드포인트 인증용, 비어있으면 인증 비활성화)"
     )
 
+    # -- AWS S3 --
+    aws_s3_bucket: str = Field(default="bizi-documents", description="S3 버킷명")
+    aws_s3_application_forms_prefix: str = Field(
+        default="application-forms/", description="S3 신청양식 prefix"
+    )
+
     # ================================================================
     # [3] RAG Pipeline Parameters (검색/평가 튜닝)
     # ================================================================
@@ -266,11 +267,6 @@ class Settings(BaseSettings):
     )
     rerank_top_k: int = Field(default=5, description="Re-ranking 후 반환할 문서 수")
 
-    # -- 도메인 분류 파라미터 --
-    domain_classification_threshold: float = Field(
-        default=0.6, ge=0.0, le=1.0, description="벡터 유사도 기반 도메인 분류 임계값"
-    )
-
     # -- 검색 평가 (규칙 기반) --
     min_retrieval_doc_count: int = Field(
         default=2, description="최소 검색 문서 수"
@@ -300,7 +296,7 @@ class Settings(BaseSettings):
     domain_evaluation_thresholds: dict[str, int] = Field(
         default={
             "law_common": 75,
-            "finance_tax": 75,
+            "finance_tax": 70,  # Context Recall 최하위 개선 중 — 데이터 보강 후 재검토
             "hr_labor": 70,
             "startup_funding": 65,
         },
@@ -355,11 +351,6 @@ class Settings(BaseSettings):
         description="도메인별 LLM temperature (정밀도 요구 도메인은 낮게)"
     )
 
-    # -- 법률 보충 검색 --
-    legal_supplement_k: int = Field(
-        default=4, gt=0, description="법률 보충 검색 시 가져올 문서 수"
-    )
-
     # -- 쿼리 분석 임계값 (SearchStrategySelector) --
     query_analysis_thresholds: dict[str, float] = Field(
         default={
@@ -385,10 +376,6 @@ class Settings(BaseSettings):
     )
 
     # -- RetrievalAgent / 동적 K / 재시도 --
-    multi_domain_gap_threshold: float = Field(
-        default=0.08, ge=0.0, le=1.0,
-        description="벡터 유사도 복합 도메인 탐지 갭 임계값 (best_score - score < 이 값이면 추가 도메인 포함)"
-    )
     dynamic_k_min: int = Field(
         default=3, gt=0, description="동적 K 최소값"
     )
@@ -487,6 +474,70 @@ class Settings(BaseSettings):
     )
 
     # ================================================================
+    # [4.5] Session Memory (멀티턴 대화)
+    # ================================================================
+
+    session_memory_backend: str = Field(
+        default="memory",
+        description="세션 메모리 백엔드 ('memory' 또는 'redis')"
+    )
+    redis_url: str = Field(
+        default="",
+        description="Redis 접속 URL (예: redis://localhost:6379). session_memory_backend=redis 시 필수"
+    )
+    redis_ssl_verify: bool = Field(
+        default=False,
+        description="rediss:// TLS 인증서 검증 활성화 (False: 검증 비활성화, True: 시스템 CA로 검증)"
+    )
+    session_memory_max_messages: int = Field(
+        default=20, gt=0,
+        description="세션당 최대 저장 메시지 수 (user+assistant 합산)"
+    )
+    session_memory_max_turns: int = Field(
+        default=50, gt=0,
+        description="세션당 최대 턴 메타데이터 수 (evaluation_data 포함, ~5KB/턴)"
+    )
+    session_memory_ttl_seconds: int = Field(
+        default=4500, gt=0,
+        description="세션 메모리 TTL (초). 기본 75분 (1시간 비활동 만료 + 15분 마이그레이션 버퍼)"
+    )
+
+    # -- 세션 마이그레이션 (Redis → DB 배치 이관) --
+    enable_session_migration: bool = Field(
+        default=True,
+        description="세션 마이그레이션 활성화 (Redis → DB 배치 이관)"
+    )
+    session_migrate_interval: int = Field(
+        default=300, gt=0,
+        description="마이그레이션 배치 체크 간격 (초). 기본 5분 (15분 윈도우에서 최소 3번 체크)"
+    )
+    session_migrate_ttl_threshold: int = Field(
+        default=900, gt=0,
+        description="마이그레이션 대상 TTL 임계값 (초). 이 값 이하인 세션을 이관 (기본 15분)"
+    )
+    backend_internal_url: str = Field(
+        default="http://backend:8000",
+        description="Backend 내부 통신 URL (배치 마이그레이션 → Backend API)"
+    )
+
+    # -- 세션 복원 (MySQL → Redis lazy restore) --
+    session_restore_enabled: bool = Field(
+        default=True, description="MySQL 세션 복원 활성화"
+    )
+    session_restore_timeout: float = Field(
+        default=5.0, gt=0, description="복원 요청 타임아웃 (초)"
+    )
+
+    @field_validator("session_memory_backend")
+    @classmethod
+    def validate_session_memory_backend(cls, v: str) -> str:
+        """세션 메모리 백엔드 검증."""
+        allowed = {"memory", "redis"}
+        if v not in allowed:
+            raise ValueError(f"session_memory_backend는 {allowed} 중 하나여야 합니다 (입력: {v})")
+        return v
+
+    # ================================================================
     # [5] Server & Logging
     # ================================================================
 
@@ -528,6 +579,16 @@ class Settings(BaseSettings):
                     "프로덕션 환경에서 OPENAI_API_KEY가 설정되지 않았습니다."
                 )
             # 프로덕션에서 CORS localhost 자동 제거
+        # 세션 마이그레이션 threshold < ttl 검증 (환경 무관)
+        if self.session_migrate_ttl_threshold >= self.session_memory_ttl_seconds:
+            old_threshold = self.session_migrate_ttl_threshold
+            self.session_migrate_ttl_threshold = self.session_memory_ttl_seconds // 3
+            logger.warning(
+                "session_migrate_ttl_threshold(%d) >= session_memory_ttl_seconds(%d) "
+                "— threshold를 %d로 자동 조정합니다.",
+                old_threshold, self.session_memory_ttl_seconds,
+                self.session_migrate_ttl_threshold,
+            )
         # 타임아웃 상호 검증 (환경 무관)
         if self.total_timeout < self.llm_timeout:
             logger.warning(
@@ -560,10 +621,8 @@ class Settings(BaseSettings):
         "enable_dynamic_k",
         "enable_fixed_doc_limit",
         "enable_cross_domain_rerank",
-        "enable_legal_supplement",
         "enable_domain_rejection",
-        "enable_vector_domain_classification",
-        "enable_llm_domain_classification",
+        "domain_classification_max_retries",
         "enable_llm_evaluation",
         "enable_ragas_evaluation",
         "enable_post_eval_retry",

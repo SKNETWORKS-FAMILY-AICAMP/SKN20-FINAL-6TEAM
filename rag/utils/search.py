@@ -6,7 +6,6 @@ Hybrid Search, Re-ranking 등 고급 검색 기능을 제공합니다.
 import asyncio
 import logging
 import math
-import re
 from collections import Counter
 from dataclasses import dataclass
 from typing import Any
@@ -39,51 +38,25 @@ class BM25Index:
         b: BM25 파라미터 (기본 0.75)
     """
 
-    def __init__(self, k1: float = 1.5, b: float = 0.75, use_kiwi: bool = True):
+    def __init__(self, k1: float = 1.5, b: float = 0.75):
         """BM25Index를 초기화합니다.
 
         Args:
             k1: term frequency saturation 파라미터
             b: document length normalization 파라미터
-            use_kiwi: kiwipiepy 형태소 분석기 사용 여부
         """
         self.k1 = k1
         self.b = b
-        self._use_kiwi = use_kiwi
-        self._kiwi = None
         self.documents: list[Document] = []
         self.doc_freqs: list[Counter] = []
         self.idf: dict[str, float] = {}
         self.avg_doc_len: float = 0
         self.doc_count: int = 0
 
-    def _get_kiwi(self):
-        """Kiwi 인스턴스를 지연 로딩합니다."""
-        if self._kiwi is None:
-            try:
-                from kiwipiepy import Kiwi
-                self._kiwi = Kiwi()
-            except ImportError:
-                logger.warning("[BM25] kiwipiepy 미설치, 정규식 토크나이저로 fallback")
-                self._use_kiwi = False
-        return self._kiwi
-
     def _tokenize(self, text: str) -> list[str]:
         """텍스트를 토큰화합니다."""
-        if self._use_kiwi:
-            kiwi = self._get_kiwi()
-            if kiwi:
-                tokens = kiwi.tokenize(text)
-                result = []
-                for token in tokens:
-                    if token.tag.startswith("NN") or token.tag == "SL":
-                        result.append(token.form)
-                    elif token.tag.startswith("VV") or token.tag.startswith("VA"):
-                        result.append(token.form + "다")
-                return [t for t in result if len(t) >= 2]
-        # fallback: 기존 정규식
-        tokens = re.findall(r'[가-힣]+|[a-zA-Z]+|[0-9]+', text.lower())
-        return [t for t in tokens if len(t) >= 2]
+        from utils.bm25_tokenizer import tokenize_korean
+        return tokenize_korean(text)
 
     def fit(self, documents: list[Document]) -> None:
         """문서 컬렉션으로 인덱스를 빌드합니다.
@@ -99,7 +72,11 @@ class BM25Index:
         total_len = 0
 
         for doc in documents:
-            tokens = self._tokenize(doc.page_content)
+            cached = doc.metadata.get("bm25_tokens")
+            if cached:
+                tokens = cached.split()  # 빌드 시 저장된 토큰 재사용 (토크나이징 생략)
+            else:
+                tokens = self._tokenize(doc.page_content)
             self.doc_freqs.append(Counter(tokens))
             total_len += len(tokens)
 
@@ -316,12 +293,17 @@ class HybridSearcher:
         except Exception as e:
             logger.error(f"BM25 인덱스 빌드 실패: {domain} - {e}")
 
+    # BM25 형태소 분석 시 메모리 초과로 프로세스가 죽는 대규모 도메인 제외
+    _BM25_SKIP_DOMAINS = {"law_common"}
+
     def _ensure_bm25_index(self, domain: str) -> None:
         """도메인 BM25 인덱스를 필요 시 지연 초기화합니다.
 
         런타임 경로에서 `build_bm25_index`가 호출되지 않아 BM25가 비활성처럼
         동작하는 문제를 방지하기 위해, 최초 검색 시 1회 자동 빌드를 시도합니다.
         """
+        if domain in self._BM25_SKIP_DOMAINS:
+            return
         if domain in self.bm25_indices:
             return
         if domain in self._bm25_init_attempted:

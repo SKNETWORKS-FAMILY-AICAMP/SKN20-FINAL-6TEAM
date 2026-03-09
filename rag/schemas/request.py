@@ -4,7 +4,7 @@ API 요청에 사용되는 Pydantic 모델을 정의합니다.
 """
 
 import hashlib
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -30,7 +30,6 @@ class CompanyContext(BaseModel):
     employee_count: int | None = Field(default=None, description="직원 수")
     years_in_business: int | None = Field(default=None, description="업력 (년)")
     region: str | None = Field(default=None, description="지역")
-    annual_revenue: int | None = Field(default=None, description="연매출 (원)")
 
     def to_context_string(self) -> str:
         """컨텍스트 문자열로 변환합니다."""
@@ -62,16 +61,21 @@ class UserContext(BaseModel):
         default="prospective",
         description="사용자 유형 (prospective: 예비창업자, startup_ceo: 스타트업 CEO, sme_owner: 중소기업 대표)",
     )
+    age: int | None = Field(default=None, description="사용자 나이")
     company: CompanyContext | None = Field(default=None, description="기업 정보")
+    companies: list[CompanyContext] = Field(default_factory=list, description="모든 활성 기업 목록")
 
     def get_user_type_label(self) -> str:
-        """사용자 유형 라벨을 반환합니다."""
+        """사용자 유형 라벨을 반환합니다. 나이가 있으면 함께 표기합니다."""
         labels = {
             "prospective": "예비 창업자",
             "startup_ceo": "스타트업 CEO",
             "sme_owner": "중소기업 대표",
         }
-        return labels.get(self.user_type, "일반 사용자")
+        label = labels.get(self.user_type, "일반 사용자")
+        if self.age is not None:
+            label += f" ({self.age}세)"
+        return label
 
     # -- 메타데이터 필터링 헬퍼 --
 
@@ -120,6 +124,54 @@ class UserContext(BaseModel):
 
         return None
 
+    def get_all_companies(self) -> list[CompanyContext]:
+        """모든 활성 기업 목록을 반환합니다.
+
+        Returns:
+            기업 목록 (companies 필드 우선, 없으면 company 필드 래핑)
+        """
+        if self.companies:
+            return self.companies
+        if self.company:
+            return [self.company]
+        return []
+
+    def get_all_companies_context_string(self) -> str:
+        """모든 기업의 컨텍스트 문자열을 반환합니다.
+
+        Returns:
+            단일 기업이면 단순 문자열, 복수이면 [기업 N] 형식으로 포맷팅
+        """
+        all_comp = self.get_all_companies()
+        if not all_comp:
+            return "정보 없음"
+        if len(all_comp) == 1:
+            return all_comp[0].to_context_string()
+        parts = []
+        for i, c in enumerate(all_comp, 1):
+            parts.append(f"[기업 {i}] {c.to_context_string()}")
+        return "\n".join(parts)
+
+    def get_normalized_regions(self) -> list[str]:
+        """모든 기업의 지역을 시도 레벨로 정규화하여 합집합을 반환합니다.
+
+        Returns:
+            정규화된 시도명 리스트 (중복 없음, 정렬됨)
+        """
+        regions: set[str] = set()
+        for c in self.get_all_companies():
+            if not c.region:
+                continue
+            region = c.region.strip()
+            if region in self._REGION_NORMALIZATION:
+                regions.add(self._REGION_NORMALIZATION[region])
+                continue
+            for key in sorted(self._REGION_NORMALIZATION.keys(), key=len, reverse=True):
+                if key in region:
+                    regions.add(self._REGION_NORMALIZATION[key])
+                    break
+        return sorted(regions)
+
     def get_target_types_for_filter(self) -> list[str] | None:
         """사용자 유형에 맞는 공고 대상 필터 태그를 반환합니다.
 
@@ -136,18 +188,18 @@ class UserContext(BaseModel):
     def get_filter_hash(self) -> str | None:
         """캐시 키용 필터 해시를 생성합니다.
 
-        region + user_type 조합의 해시를 반환합니다.
+        regions + user_type 조합의 해시를 반환합니다.
 
         Returns:
             해시 문자열 또는 None (필터링 대상 아님)
         """
-        region = self.get_normalized_region()
+        regions = self.get_normalized_regions()
         targets = self.get_target_types_for_filter()
 
-        if region is None and targets is None:
+        if not regions and targets is None:
             return None
 
-        parts = [region or "", self.user_type or ""]
+        parts = [",".join(regions), self.user_type or ""]
         return hashlib.md5(":".join(parts).encode()).hexdigest()[:8]
 
 
@@ -159,7 +211,7 @@ class ChatMessage(BaseModel):
         content: 메시지 내용
     """
 
-    role: str = Field(description="역할 (user, assistant)")
+    role: Literal["user", "assistant"] = Field(description="역할 (user, assistant)")
     content: str = Field(description="메시지 내용")
 
 
@@ -174,22 +226,32 @@ class ChatRequest(BaseModel):
     """
 
     message: str = Field(description="사용자 메시지", min_length=1, max_length=2000)
-    history: list[ChatMessage] = Field(default_factory=list, description="대화 이력", max_length=50)
+    history: list[ChatMessage] = Field(default_factory=list, description="대화 이력", max_length=20)
     user_context: UserContext | None = Field(default=None, description="사용자 컨텍스트")
-    session_id: str | None = Field(default=None, description="세션 ID")
+    session_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        pattern=r"^[a-zA-Z0-9_-]+$",
+        description="세션 ID (영숫자, 하이픈, 언더스코어만 허용)",
+    )
+    root_history_id: int | None = Field(
+        default=None,
+        description="MySQL 스레드 루트 ID (세션 복원용)",
+    )
 
 
 class DocumentRequest(BaseModel):
     """문서 생성 요청 기본 스키마.
 
     Attributes:
-        document_type: 문서 유형
+        doc_type_id: 문서 유형
         format: 출력 형식 (pdf, docx)
         user_context: 사용자 컨텍스트
     """
 
-    document_type: str = Field(description="문서 유형")
-    format: str = Field(default="pdf", description="출력 형식 (pdf, docx)")
+    doc_type_id: str = Field(description="문서 유형", max_length=50)
+    format: str = Field(default="pdf", description="출력 형식 (pdf, docx)", pattern=r"^(pdf|docx)$")
     user_context: UserContext | None = Field(default=None, description="사용자 컨텍스트")
 
 
@@ -281,22 +343,26 @@ class ContractRequest(BaseModel):
 
     company_context: CompanyContext | None = Field(default=None, description="회사 정보")
     format: str = Field(default="pdf", description="출력 형식", pattern=r"^(pdf|docx)$")
+    user_id: int | None = Field(default=None, description="사용자 ID (S3/DB 저장용)")
+    company_id: int | None = Field(default=None, description="회사 ID")
 
 
 class GenerateDocumentRequest(BaseModel):
     """범용 문서 생성 요청 스키마.
 
     Attributes:
-        document_type: 문서 유형 키 (예: "nda", "service_agreement")
+        doc_type_id: 문서 유형 키 (예: "nda", "service_agreement")
         params: 문서 필드 값
         format: 출력 형식 (pdf, docx)
         company_context: 회사 정보 (인증 시 자동 주입)
     """
 
-    document_type: str = Field(description="문서 유형 키")
+    doc_type_id: str = Field(description="문서 유형 키")
     params: dict[str, Any] = Field(default_factory=dict, description="문서 필드 값")
     format: str = Field(default="docx", description="출력 형식", pattern=r"^(pdf|docx)$")
     company_context: CompanyContext | None = Field(default=None, description="회사 정보")
+    user_id: int | None = Field(default=None, description="사용자 ID (S3/DB 저장용)")
+    company_id: int | None = Field(default=None, description="회사 ID")
 
 
 class ModifyDocumentRequest(BaseModel):
@@ -307,9 +373,13 @@ class ModifyDocumentRequest(BaseModel):
         file_name: 원본 파일명 (확장자 포함)
         instructions: 수정 지시사항
         format: 출력 형식 (pdf, docx)
+        user_id: 사용자 ID (있으면 S3/DB 저장)
+        document_id: 원본 문서 ID (버전관리)
     """
 
-    file_content: str = Field(description="원본 파일 (base64 인코딩)")
+    file_content: str = Field(description="원본 파일 (base64 인코딩)", max_length=67_108_864)
     file_name: str = Field(description="원본 파일명 (확장자 포함)")
     instructions: str = Field(description="수정 지시사항", min_length=1, max_length=5000)
     format: str = Field(default="docx", description="출력 형식", pattern=r"^(pdf|docx)$")
+    user_id: int | None = Field(default=None, description="사용자 ID (S3/DB 저장)")
+    document_id: int | None = Field(default=None, description="원본 문서 ID (버전관리)")

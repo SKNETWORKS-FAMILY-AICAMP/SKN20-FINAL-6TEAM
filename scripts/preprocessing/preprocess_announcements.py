@@ -55,6 +55,7 @@ class AnnouncementMetadata:
     amount: str  # 지원금액
     hashtags: List[str] = field(default_factory=list)
     original_id: str = ""  # 원본 ID
+    doc_s3_key: str = ""  # S3 원본 공고문 키
     # 정규화 필드 (ChromaDB 메타데이터 필터링용)
     normalized_region: str = ""
     target_예비창업자: str = "false"
@@ -82,10 +83,11 @@ class AnnouncementDocument:
     source: Source
     effective_date: str  # "YYYY-MM-DD ~ YYYY-MM-DD" 형태
     metadata: AnnouncementMetadata
+    full_text: str = ""  # 공고 원문 전체 텍스트 (HWP/PDF/DOCX 추출)
 
     def to_dict(self) -> Dict[str, Any]:
         """JSONL 출력용 딕셔너리 변환"""
-        return {
+        d = {
             "id": self.id,
             "type": self.type,
             "domain": self.domain,
@@ -93,8 +95,11 @@ class AnnouncementDocument:
             "content": self.content,
             "source": asdict(self.source),
             "effective_date": self.effective_date,
-            "metadata": asdict(self.metadata)
+            "metadata": asdict(self.metadata),
         }
+        if self.full_text:
+            d["_full_text"] = self.full_text
+        return d
 
 
 # ============================================================
@@ -444,6 +449,7 @@ class BizinfoProcessor:
             amount=amount,
             hashtags=hashtags,
             original_id=original_id,
+            doc_s3_key=clean_value(item.get("_doc_s3_key", "")),
             normalized_region=normalized_region,
             **target_flags,
         )
@@ -464,6 +470,9 @@ class BizinfoProcessor:
         item["title"] = title
         content = build_rag_content(item, "bizinfo")
 
+        # 공고 원문 전체 텍스트
+        full_text = clean_value(item.get("_full_text", ""))
+
         return AnnouncementDocument(
             id=doc_id,
             type="startup_funding",
@@ -472,7 +481,8 @@ class BizinfoProcessor:
             content=content,
             source=source,
             effective_date=effective_date,
-            metadata=metadata
+            metadata=metadata,
+            full_text=full_text,
         )
 
 
@@ -560,6 +570,7 @@ class KstartupProcessor:
             amount=amount,
             hashtags=[],
             original_id=str(original_id),
+            doc_s3_key=clean_value(item.get("_doc_s3_key", "")),
             normalized_region=normalized_region,
             **target_flags,
         )
@@ -580,6 +591,9 @@ class KstartupProcessor:
         item["title"] = title
         content = build_rag_content(item, "kstartup")
 
+        # 공고 원문 전체 텍스트
+        full_text = clean_value(item.get("_full_text", ""))
+
         return AnnouncementDocument(
             id=doc_id,
             type="startup_funding",
@@ -588,7 +602,8 @@ class KstartupProcessor:
             content=content,
             source=source,
             effective_date=effective_date,
-            metadata=metadata
+            metadata=metadata,
+            full_text=full_text,
         )
 
 

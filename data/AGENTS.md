@@ -69,7 +69,6 @@ Full schema definition with examples: [docs/DATA_SCHEMA.md](../docs/DATA_SCHEMA.
 - **Storage**: origin ~500MB, preprocessed ~300MB
 - **Announcements**: `content` must include region/target/amount for vector search to find them
 - **No chunking**: announcements and startup guides stored as whole documents (configured in `rag/vectorstores/config.py`)
-- **No missing required schema fields**, no duplicate IDs (format: `{TYPE}_{ID}`)
 
 ## References
 

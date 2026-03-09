@@ -1,5 +1,77 @@
 # Release Notes
 
+## [2026-03-07] - 보안 감사 CRITICAL+HIGH 16건 수정
+
+### Bug Fixes
+- **CRITICAL: test-login 관리자 type_code 탈취 차단** (`backend/apps/auth/router.py`): 화이트리스트 기반 type_code 검증 추가
+- **CRITICAL: RAG 세션 삭제 owner_key 소유권 검증 추가** (`backend/`): 세션 삭제 시 소유권 검증 강화
+- **CRITICAL: RAG 세션 조회 user_id 양수 검증 추가** (`backend/`): user_id 음수/0 입력 차단
+- **HIGH: documents/save API Key hmac.compare_digest 적용** (`backend/apps/documents/router.py`): 타이밍 공격 방지
+- **HIGH: RAG 관리자 키 hmac.compare_digest 적용** (`backend/config/settings.py`): 타이밍 공격 방지
+- **HIGH: PROTECTED_PREFIXES에 vectordb, evaluate 추가** (`backend/config/settings.py`): 보호 경로 확장
+- **HIGH: file_content max_length·format 검증 추가** (`backend/`): 업로드 파일 형식 제한
+- **HIGH: form_key 경로 순회 차단** (`backend/`): path traversal 취약점 수정
+- **HIGH: docker-compose.prod COOKIE_SECURE 기본값 true** (`docker-compose.prod.yaml`): HTTPS 전용 쿠키 강제
+- **HIGH: nginx 불필요한 HTTP 메서드 차단** (`nginx.conf`, `nginx.e2e.conf`): DELETE·PATCH 등 미사용 메서드 차단
+- **MEDIUM: CORS 프로덕션 빈 리스트 경고 로그** (`backend/`): 잘못된 CORS 설정 조기 감지
+- **MEDIUM: funding/search k 파라미터 상한(100) 추가** (`backend/`): 과도한 검색 요청 제한
+
+## [2026-03-06] - DB 스키마 동기화 + 답변 출처에 지원공고 신청서 다운로드 링크 추가 + JobLogResponse PK 매핑 수정 + Redis 헬스체크 추가
+
+### Features
+- **지원공고 신청서 다운로드 링크 추가** (`apps/histories/schemas.py`): 답변 출처(Sources) 참조에 신청서 다운로드 링크 표시 기능 추가
+- **Redis(ElastiCache) 헬스체크 추가** (`apps/admin/service.py`, `config/settings.py`, `requirements.txt`): `/admin` 대시보드 서버 상태에 Redis 항목 추가 — `REDIS_URL` 환경변수 기반 ping 체크, TLS(`rediss://`) 지원, 미설정 시 degraded 반환
+
+### Bug Fixes
+- **DB 스키마 동기화** (`apps/common/models.py`, `apps/documents/schemas.py`, `apps/documents/service.py`, `apps/rag/schemas.py`, `database.sql`): 프로덕션 DB 덤프 기준으로 코드·스키마 불일치 해소 — `file.document_type` → `doc_type_id`, `token_blacklist.id` → `token_blacklist_id`, `user.profile_image` VARCHAR 255, `file` FK 제거, `announce.host_gov_code` FK 추가, `job_logs` DDL 추가, `domain_*` 테이블 제거
+- **job_logs PK 컬럼명 수정** (`apps/common/models.py`, `database.sql`): `job_logs.id` → `job_logs_id` 프로덕션 DB와 동기화
+- **JobLogResponse PK 매핑 수정** (`apps/admin/schemas.py`): `id` 필드에 `validation_alias="job_logs_id"` 추가 — ORM `job_logs_id` 컬럼을 Pydantic `id`로 올바르게 매핑하여 스케줄러 상태 조회 500 오류 해소
+
+## [2026-03-05] - 세션 재접속 시 참고 문서(Sources) 복원
+
+### Features
+- **세션 재접속 Sources 복원** (`apps/histories/router.py`, `apps/histories/schemas.py`): `GET /histories/thread/{id}/restore` 응답에 `sources` 필드 추가 — 세션 재접속 시 Frontend가 이전 메시지의 참고 문서 목록을 복원
+
+## [2026-03-04] - Write-through DB 저장 + 복수 기업 지원 + 품질 개선 + MySQL→Redis 세션 역복원 + 세션 타임아웃 인프라
+
+### Features
+- **Write-through 파이프라인** (`apps/histories/service.py`): RAG 응답 시 Backend로 즉시 턴 저장 — 멱등키 session 범위 축소, 빈 입력 가드, 중복 설정 제거
+- **복수 기업 컨텍스트 지원** (`apps/rag/router.py`): `_build_user_context()`에 `companies` 필드 추가 — main_yn 단일 기업 조회에서 모든 활성 기업 목록 조회로 변경, 하위 호환 `company` 필드 유지
+- **MySQL → Redis 세션 역복원** (`apps/histories/router.py`, `apps/histories/service.py`, `apps/rag/router.py`, `apps/rag/schemas.py`): Redis TTL 만료 후 멀티턴 대화 연속성 유지를 위해 `GET /histories/thread/{id}/restore` 내부 엔드포인트 추가 — Frontend가 `root_history_id`를 전달하면 Backend가 MySQL 스레드 이력을 반환하고 RAG가 Redis 세션을 lazy 복원
+- **세션 타임아웃 1시간 + 게스트 턴 쿼터 합산 인프라** (`apps/histories/router.py`, `apps/histories/schemas.py`, `apps/histories/service.py`): `GET /histories/quota` API 추가 (일일 메시지 카운트), 로그아웃 시 게스트 카운트 유지로 순환 악용 방지
+
+### Bug Fixes
+- **회원탈퇴 해결** (`apps/auth/router.py`): 회원탈퇴 처리 오류 수정
+
+## [2026-03-03] - 문서 생성 에이전트 API + 비즈노 사업자 조회 + age 컨텍스트 전달 + 코드 정리
+
+### Features
+- **범용 문서 생성 에이전트 API** (`apps/documents/router.py`, `apps/documents/service.py`, `apps/documents/schemas.py`, `apps/common/models.py`, `apps/rag/router.py`, `apps/rag/schemas.py`, `database.sql`, `main.py`): 문서 자동 생성 에이전트 엔드포인트 신규 추가 — generate/modify/contract/business-plan 프록시 및 문서 이력 저장
+- **비즈노 API 사업자등록번호 조회** (`apps/companies/service.py`, `apps/companies/router.py`, `apps/companies/schemas.py`, `config/settings.py`): 기업 등록 시 비즈노 API로 사업자등록번호 유효성 검증
+- **사용자 나이(age) RAG 컨텍스트 전달** (`apps/rag/router.py`): `_build_user_context()`에 `age` 필드 추가 — 연령 맞춤 답변 지원, `annual_revenue` 미사용 필드 제거
+
+### Refactoring
+- **Limiter 중앙화** (`apps/common/limiter.py` 신규): slowapi Limiter 인스턴스를 단일 공유 모듈로 분리 — 5개 라우터의 중복 선언 제거
+- **`require_or_404` 제네릭 헬퍼** (`apps/common/deps.py`): TypeVar 기반 공통 404 조회 헬퍼 추가 — companies/schedules 라우터의 반복 조회 패턴 통합
+- **UserTypeCode 상수 모듈** (`apps/common/constants.py` 신규): auth 라우터 하드코딩 문자열 → `USER_TYPE_PROSPECTIVE` 등 상수로 교체
+
+## [2026-02-28] - parent_history_id 플랫 루트 참조 구조 전환 + Redis 멀티턴 이슈 수정
+
+### Features
+- **parent_history_id 플랫 루트 참조 구조 전환** (`apps/histories/service.py`): 체인 탐색 메서드(`_resolve_root_history_id`, `_get_parent_map`) 제거, 모든 메시지가 root를 직접 참조하도록 변경 — 쿼리 단순화 및 성능 개선
+
+### Bug Fixes
+- **Redis 멀티턴 미해결 이슈 수정** (`apps/histories/service.py`): `create_history_batch` parent_id → root_id 패턴으로 정합성 보완
+
+## [2026-02-27] - 알림 설정 관리 + 생년월일 CRUD + 신규 공고 알림 + 첫 기업 main_yn 자동 설정
+
+### Features
+- **신규 공고 알림 기능** (`apps/auth/router.py`, `apps/auth/schemas.py`, `apps/common/models.py`, `database.sql`): 신규 지원사업 공고 알림 설정 및 조회 API 추가
+
+### Bug Fixes
+- **첫 기업 등록 시 main_yn 자동 설정** (`apps/companies/service.py`): 사용자의 첫 번째 기업 생성 시 `main_yn=True` 자동 부여 — 기존에는 수동 설정 필요
+- **알림 설정 관리 + 생년월일 CRUD 안정화** (`apps/auth/router.py`, `apps/auth/schemas.py`, `apps/common/models.py`): 알림 설정 저장·조회 버그 수정, 생년월일 CRUD 엔드포인트 안정화
+
 ## [2026-02-27] - 비동기 로깅 전환 + nginx rewrite
 
 ### Features

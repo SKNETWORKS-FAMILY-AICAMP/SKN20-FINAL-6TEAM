@@ -7,9 +7,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from apps.common.limiter import limiter
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from config.settings import settings
@@ -67,7 +67,6 @@ from apps.auth.token_blacklist import cleanup_expired
 logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("audit")
 
-limiter = Limiter(key_func=get_remote_address)
 
 
 async def _cleanup_blacklist_loop():
@@ -82,7 +81,7 @@ async def _cleanup_blacklist_loop():
         db = SessionLocal()
         try:
             async with track_job(db, "token_cleanup") as job:
-                count = cleanup_expired(db)
+                count = await asyncio.to_thread(cleanup_expired, db)
                 job.record_count = count
                 if count > 0:
                     logger.info("Cleaned up %d expired blacklist entries", count)
@@ -111,6 +110,7 @@ from apps.schedules.router import router as schedules_router
 from apps.admin.router import router as admin_router
 from apps.rag.router import router as rag_router
 from apps.announces.router import router as announces_router
+from apps.documents.router import router as documents_router
 
 _docs_url = "/docs" if settings.ENVIRONMENT != "production" else None
 _redoc_url = "/redoc" if settings.ENVIRONMENT != "production" else None
@@ -218,6 +218,7 @@ app.include_router(schedules_router)
 app.include_router(admin_router)
 app.include_router(rag_router)
 app.include_router(announces_router)
+app.include_router(documents_router)
 
 
 @app.get("/")

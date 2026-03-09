@@ -1,4 +1,4 @@
-﻿"""梨꾪똿 ?붾뱶?ъ씤??(?쇰컲 + ?ㅽ듃由щ컢)."""
+"""채팅 엔드포인트 (일반 + 스트리밍)."""
 
 import asyncio
 import hashlib
@@ -12,21 +12,26 @@ from fastapi.responses import StreamingResponse
 
 from routes import _state
 from routes._session_memory import (
+    _sanitize_history,
     append_session_turn,
+    delete_session,
+    get_session_full,
     get_session_history,
+    restore_session_from_db,
     upsert_session_history,
 )
+from routes._write_through import schedule_write_through
 from schemas import ChatRequest, ChatResponse
 from schemas.response import StreamResponse
 from utils.cache import get_response_cache
 from utils.chat_logger import log_chat_interaction
-from utils.config import get_settings
+from utils.config import DOMAIN_TO_AGENT_CODE, get_settings
 from utils.sanitizer import sanitize_query
 from utils.token_tracker import RequestTokenTracker
 
 logger = logging.getLogger(__name__)
 
-# ?ш컖 ?⑦꽩 ???꾧퀎媛? ???댁긽 ?먯??섎㈃ HTTP 400 諛섑솚
+# 감지 패턴 수가 임계값 이상이면 HTTP 400 반환
 _SEVERE_INJECTION_THRESHOLD = 3
 
 router = APIRouter(prefix="/api", tags=["Chat"])
@@ -40,7 +45,22 @@ def _build_owner_key(request: ChatRequest) -> str:
     user_id = request.user_context.user_id if request.user_context else None
     if user_id:
         return f"user:{user_id}"
+    # 익명: session_id가 Redis key에 포함되어 세션 격리 보장
     return "anon"
+
+
+def _extract_user_id(request: ChatRequest) -> int | None:
+    """Extract user_id as int from request user_context."""
+    if request.user_context and request.user_context.user_id:
+        try:
+            return int(request.user_context.user_id)
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
+def _get_agent_code(domains: list[str] | None) -> str:
+    return DOMAIN_TO_AGENT_CODE.get(domains[0], "A0000001") if domains else "A0000001"
 
 
 def _build_cache_query(query: str, history: list[dict[str, str]]) -> str:
@@ -61,43 +81,100 @@ def _build_cache_query(query: str, history: list[dict[str, str]]) -> str:
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
-    """?ъ슜??硫붿떆吏瑜?泥섎━?섍퀬 AI ?묐떟??諛섑솚?⑸땲??"""
+    """사용자 메시지를 처리하고 AI 응답을 반환합니다."""
     if not _state.router_agent:
         raise HTTPException(status_code=503, detail="Service not initialized.")
 
-    # ?꾨＼?꾪듃 ?몄젥??諛⑹뼱
+    # 프롬프트 인젝션 방어
     sanitize_result = sanitize_query(request.message)
     if len(sanitize_result.detected_patterns) >= _SEVERE_INJECTION_THRESHOLD:
-        raise HTTPException(status_code=400, detail="?붿껌??蹂댁븞 ?뺤콉???섑빐 李⑤떒?섏뿀?듬땲??")
+        raise HTTPException(status_code=400, detail="요청이 보안 정책에 의해 차단되었습니다.")
     query = sanitize_result.sanitized_query
     owner_key = _build_owner_key(request)
+    if not request.session_id:
+        logger.debug("No session_id — session memory disabled for this request")
     request_history = _build_effective_history(request)
     effective_history = request_history
     if request.session_id:
-        if request_history:
-            await upsert_session_history(owner_key, request.session_id, request_history)
+        # 세션 메모리가 truth의 소유자: 세션에서 먼저 로드
+        session_history = await get_session_history(owner_key, request.session_id)
+        if session_history:
+            effective_history = session_history
         else:
-            effective_history = await get_session_history(owner_key, request.session_id)
+            # MySQL 복원 시도 (인증 사용자 + root_history_id 있을 때만)
+            user_id = _extract_user_id(request)
+            if user_id and request.root_history_id:
+                restored = await restore_session_from_db(
+                    owner_key, request.session_id, user_id, request.root_history_id
+                )
+                if restored:
+                    effective_history = _sanitize_history(restored.get("messages", []))
+                    logger.info(
+                        "[chat] MySQL 세션 복원: session=%s, root=%d",
+                        request.session_id, request.root_history_id,
+                    )
+            if effective_history is request_history and request_history:
+                # 세션이 비어있고 프론트엔드가 히스토리를 보낸 경우 → 초기 seed
+                await upsert_session_history(owner_key, request.session_id, request_history)
     cache_query = _build_cache_query(query, effective_history)
 
     try:
-        # 罹먯떆 議고쉶 (user_context ?댁떆 ?ы븿)
+        # 캐시 조회 (user_context 해시 포함)
         settings = get_settings()
         cache = get_response_cache() if settings.enable_response_cache else None
         uc_hash = request.user_context.get_filter_hash() if request.user_context else None
         if cache:
             cached = cache.get(cache_query, user_context_hash=uc_hash)
             if cached:
-                logger.info("[chat] 罹먯떆 ?덊듃: '%s...'", query[:30])
+                logger.info("[chat] 캐시 히트: '%s...'", query[:30])
                 cached_response = ChatResponse(**cached)
                 cached_response.session_id = request.session_id
+                cached_domains = cached_response.domains or []
+                cached_sources = cached_response.sources or []
+                cached_src_meta = [{"title": s.title, "source": s.source, "url": s.url} for s in cached_sources[:5]]
                 await append_session_turn(
                     owner_key,
                     request.session_id,
-                    request.message,
+                    query,
                     cached_response.content,
+                    user_id=_extract_user_id(request),
+                    agent_code=_get_agent_code(cached_domains),
+                    domains=cached_domains,
+                    sources=cached_src_meta,
+                )
+                schedule_write_through(
+                    user_id=_extract_user_id(request),
+                    session_id=request.session_id,
+                    question=query,
+                    answer=cached_response.content,
+                    agent_code=_get_agent_code(cached_domains),
+                    evaluation_data=None,
+                    sources=cached_src_meta,
                 )
                 return cached_response
+
+        # 이전 도메인 추출 (후속 질문 폴백용)
+        previous_domains: list[str] | None = None
+        if request.session_id:
+            session_data = await get_session_full(owner_key, request.session_id)
+            if session_data and isinstance(session_data, dict):
+                turns = session_data.get("turns", [])
+                for turn in reversed(turns):
+                    prev = turn.get("domains")
+                    if prev:
+                        previous_domains = prev
+                        break
+
+        if request.user_context:
+            companies_count = len(request.user_context.companies) if request.user_context.companies else (1 if request.user_context.company else 0)
+            logger.info(
+                "[chat] user_id=%s, type=%s, companies=%d, session=%s, prev_domains=%s",
+                request.user_context.user_id,
+                request.user_context.user_type,
+                companies_count,
+                request.session_id,
+                previous_domains,
+            )
 
         start_time = time.time()
 
@@ -106,21 +183,15 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 query=query,
                 user_context=request.user_context,
                 history=effective_history,
+                previous_domains=previous_domains,
             )
             response.session_id = request.session_id
             token_usage = tracker.get_usage()
 
-        await append_session_turn(
-            owner_key,
-            request.session_id,
-            request.message,
-            response.content,
-        )
-
         response_time = time.time() - start_time
 
         log_chat_interaction(
-            question=request.message,
+            question=query,
             answer=response.content,
             sources=response.sources,
             domains=response.domains,
@@ -129,7 +200,8 @@ async def chat(request: ChatRequest) -> ChatResponse:
             token_usage=token_usage,
         )
 
-        # evaluation_data ?앹꽦
+        # evaluation_data 생성 (append_session_turn 이전에 계산)
+        eval_data_dict: dict | None = None
         try:
             from schemas.response import EvaluationDataForDB
 
@@ -174,54 +246,93 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 response_time=response_time,
             )
             response.evaluation_data = eval_data
+            eval_data_dict = eval_data.model_dump()
         except Exception as e:
-            logger.warning("鍮꾩뒪?몃━諛?evaluation_data ?앹꽦 ?ㅽ뙣: %s", e)
+            logger.warning("일반 응답 evaluation_data 생성 실패: %s", e)
 
-        # 罹먯떆 ???
+        resp_src_meta = [{"title": s.title, "source": s.source, "url": s.url} for s in (response.sources or [])[:5]]
+        await append_session_turn(
+            owner_key,
+            request.session_id,
+            query,
+            response.content,
+            user_id=_extract_user_id(request),
+            agent_code=_get_agent_code(response.domains),
+            domains=response.domains,
+            sources=resp_src_meta,
+            evaluation_data=eval_data_dict,
+        )
+        schedule_write_through(
+            user_id=_extract_user_id(request),
+            session_id=request.session_id,
+            question=query,
+            answer=response.content,
+            agent_code=_get_agent_code(response.domains),
+            evaluation_data=eval_data_dict,
+            sources=resp_src_meta,
+        )
+
+        # 캐시 저장
         if cache and response.content != settings.fallback_message:
             domain = response.domains[0] if response.domains else None
             cache.set(cache_query, response.model_dump(mode="json"), domain, user_context_hash=uc_hash)
 
         return response
     except Exception as e:
-        logger.error("梨꾪똿 泥섎━ ?ㅽ뙣: %s", e, exc_info=True)
+        logger.error("채팅 처리 실패: %s", e, exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail="梨꾪똿 泥섎━ 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎. ?좎떆 ???ㅼ떆 ?쒕룄?댁＜?몄슂."
+            detail="채팅 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
         )
 
 
 @router.post("/chat/stream")
 async def chat_stream(request: ChatRequest):
-    """SSE ?ㅽ듃由щ컢 梨꾪똿 ?붾뱶?ъ씤??"""
+    """SSE 스트리밍 채팅 엔드포인트."""
     if not _state.router_agent:
         raise HTTPException(status_code=503, detail="Service not initialized.")
 
-    # ?꾨＼?꾪듃 ?몄젥??諛⑹뼱
+    # 프롬프트 인젝션 방어
     sanitize_result = sanitize_query(request.message)
     if len(sanitize_result.detected_patterns) >= _SEVERE_INJECTION_THRESHOLD:
-        raise HTTPException(status_code=400, detail="?붿껌??蹂댁븞 ?뺤콉???섑빐 李⑤떒?섏뿀?듬땲??")
+        raise HTTPException(status_code=400, detail="요청이 보안 정책에 의해 차단되었습니다.")
     stream_query = sanitize_result.sanitized_query
     owner_key = _build_owner_key(request)
+    if not request.session_id:
+        logger.debug("No session_id — session memory disabled for this request")
     request_history = _build_effective_history(request)
     effective_history = request_history
     if request.session_id:
-        if request_history:
-            await upsert_session_history(owner_key, request.session_id, request_history)
+        session_history = await get_session_history(owner_key, request.session_id)
+        if session_history:
+            effective_history = session_history
         else:
-            effective_history = await get_session_history(owner_key, request.session_id)
+            # MySQL 복원 시도 (인증 사용자 + root_history_id 있을 때만)
+            user_id = _extract_user_id(request)
+            if user_id and request.root_history_id:
+                restored = await restore_session_from_db(
+                    owner_key, request.session_id, user_id, request.root_history_id
+                )
+                if restored:
+                    effective_history = _sanitize_history(restored.get("messages", []))
+                    logger.info(
+                        "[stream] MySQL 세션 복원: session=%s, root=%d",
+                        request.session_id, request.root_history_id,
+                    )
+            if effective_history is request_history and request_history:
+                await upsert_session_history(owner_key, request.session_id, request_history)
     cache_query = _build_cache_query(stream_query, effective_history)
 
     async def generate():
         try:
-            # 罹먯떆 議고쉶 (user_context ?댁떆 ?ы븿)
+            # 캐시 조회 (user_context 해시 포함)
             settings = get_settings()
             cache = get_response_cache() if settings.enable_response_cache else None
             stream_uc_hash = request.user_context.get_filter_hash() if request.user_context else None
             if cache:
                 cached = cache.get(cache_query, user_context_hash=stream_uc_hash)
                 if cached:
-                    logger.info("[stream] 罹먯떆 ?덊듃: '%s...'", stream_query[:30])
+                    logger.info("[stream] 캐시 히트: '%s...'", stream_query[:30])
                     cached_content = cached.get("content", "")
                     chunk_size = 4
                     token_index = 0
@@ -243,6 +354,9 @@ async def chat_stream(request: ChatRequest):
                                 "title": src.get("title", ""),
                                 "source": src.get("source", ""),
                                 "url": src.get("url", ""),
+                                "doc_download_url": src.get("metadata", {}).get("doc_download_url", ""),
+                                "form_download_url": src.get("metadata", {}).get("form_download_url", ""),
+                                "form_s3_key": src.get("metadata", {}).get("form_s3_key", ""),
                             },
                         )
                         yield f"data: {source_chunk.model_dump_json()}\n\n"
@@ -273,13 +387,54 @@ async def chat_stream(request: ChatRequest):
                         },
                     )
                     yield f"data: {done_chunk.model_dump_json()}\n\n"
+                    cached_src_list = cached.get("sources", [])
+                    stream_cached_src_meta = [
+                        {"title": s.get("title", ""), "source": s.get("source", ""), "url": s.get("url", "")}
+                        for s in cached_src_list[:5]
+                    ]
                     await append_session_turn(
                         owner_key,
                         request.session_id,
-                        request.message,
+                        stream_query,
                         cached_content,
+                        user_id=_extract_user_id(request),
+                        agent_code=_get_agent_code(cached_domains),
+                        domains=cached_domains,
+                        sources=stream_cached_src_meta,
+                    )
+                    schedule_write_through(
+                        user_id=_extract_user_id(request),
+                        session_id=request.session_id,
+                        question=stream_query,
+                        answer=cached_content,
+                        agent_code=_get_agent_code(cached_domains),
+                        evaluation_data=None,
+                        sources=stream_cached_src_meta,
                     )
                     return
+
+            # 이전 도메인 추출 (후속 질문 폴백용)
+            stream_previous_domains: list[str] | None = None
+            if request.session_id:
+                stream_session_data = await get_session_full(owner_key, request.session_id)
+                if stream_session_data and isinstance(stream_session_data, dict):
+                    stream_turns = stream_session_data.get("turns", [])
+                    for turn in reversed(stream_turns):
+                        prev = turn.get("domains")
+                        if prev:
+                            stream_previous_domains = prev
+                            break
+
+            if request.user_context:
+                stream_companies_count = len(request.user_context.companies) if request.user_context.companies else (1 if request.user_context.company else 0)
+                logger.info(
+                    "[stream] user_id=%s, type=%s, companies=%d, session=%s, prev_domains=%s",
+                    request.user_context.user_id,
+                    request.user_context.user_type,
+                    stream_companies_count,
+                    request.session_id,
+                    stream_previous_domains,
+                )
 
             start_time = time.time()
             stream_timeout = settings.total_timeout
@@ -297,6 +452,9 @@ async def chat_stream(request: ChatRequest):
             done_evaluation = None
             done_ragas_metrics = None
             done_retrieval_results = None
+            done_query_rewrite_applied = None
+            done_query_rewrite_reason = None
+            done_query_rewrite_time = None
 
             async with RequestTokenTracker() as tracker:
                 token_index = 0
@@ -304,6 +462,7 @@ async def chat_stream(request: ChatRequest):
                     query=stream_query,
                     user_context=request.user_context,
                     history=effective_history,
+                    previous_domains=stream_previous_domains,
                 ).__aiter__()
                 hard_deadline = time.time() + hard_timeout
 
@@ -354,7 +513,7 @@ async def chat_stream(request: ChatRequest):
                     remaining = hard_deadline - time.time()
                     if remaining <= 0:
                         logger.warning(
-                            "[stream] hard timeout 珥덇낵 (%.1fs)", hard_timeout,
+                            "[stream] hard timeout 초과 (%.1fs)", hard_timeout,
                         )
                         timeout_msg = "응답 생성 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."
                         if pre_collected_actions:
@@ -366,6 +525,21 @@ async def chat_stream(request: ChatRequest):
                             )
                             yield f"data: {error_chunk.model_dump_json()}\n\n"
 
+                        # 부분 응답이라도 세션에 저장
+                        if streamed_so_far.strip():
+                            await append_session_turn(
+                                owner_key, request.session_id,
+                                stream_query, streamed_so_far,
+                                user_id=_extract_user_id(request),
+                                agent_code="A0000001",
+                            )
+                            schedule_write_through(
+                                user_id=_extract_user_id(request),
+                                session_id=request.session_id,
+                                question=stream_query,
+                                answer=streamed_so_far,
+                                agent_code="A0000001",
+                            )
                         return
                     try:
                         chunk = await asyncio.wait_for(
@@ -375,7 +549,7 @@ async def chat_stream(request: ChatRequest):
                         break
                     except asyncio.TimeoutError:
                         logger.warning(
-                            "[stream] hard timeout 珥덇낵 (%.1fs)", hard_timeout,
+                            "[stream] hard timeout 초과 (%.1fs)", hard_timeout,
                         )
                         timeout_msg = "응답 생성 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."
                         if pre_collected_actions:
@@ -387,9 +561,24 @@ async def chat_stream(request: ChatRequest):
                             )
                             yield f"data: {error_chunk.model_dump_json()}\n\n"
 
+                        # 부분 응답이라도 세션에 저장
+                        if streamed_so_far.strip():
+                            await append_session_turn(
+                                owner_key, request.session_id,
+                                stream_query, streamed_so_far,
+                                user_id=_extract_user_id(request),
+                                agent_code="A0000001",
+                            )
+                            schedule_write_through(
+                                user_id=_extract_user_id(request),
+                                session_id=request.session_id,
+                                question=stream_query,
+                                answer=streamed_so_far,
+                                agent_code="A0000001",
+                            )
                         return
 
-                    # ?뚰봽????꾩븘??泥댄겕 (湲곗〈 ?명솚)
+                    # 소프트 타임아웃 체크 (기존 호환)
                     if time.time() - start_time > stream_timeout:
                         timeout_msg = "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."
                         if pre_collected_actions:
@@ -401,6 +590,21 @@ async def chat_stream(request: ChatRequest):
                             )
                             yield f"data: {error_chunk.model_dump_json()}\n\n"
 
+                        # 부분 응답이라도 세션에 저장
+                        if streamed_so_far.strip():
+                            await append_session_turn(
+                                owner_key, request.session_id,
+                                stream_query, streamed_so_far,
+                                user_id=_extract_user_id(request),
+                                agent_code="A0000001",
+                            )
+                            schedule_write_through(
+                                user_id=_extract_user_id(request),
+                                session_id=request.session_id,
+                                question=stream_query,
+                                answer=streamed_so_far,
+                                agent_code="A0000001",
+                            )
                         return
 
                     if chunk["type"] == "token":
@@ -420,13 +624,16 @@ async def chat_stream(request: ChatRequest):
                         done_evaluation = chunk.get("evaluation")
                         done_ragas_metrics = chunk.get("ragas_metrics")
                         done_retrieval_results = chunk.get("retrieval_results")
+                        done_query_rewrite_applied = chunk.get("query_rewrite_applied")
+                        done_query_rewrite_reason = chunk.get("query_rewrite_reason")
+                        done_query_rewrite_time = chunk.get("query_rewrite_time")
 
                 token_usage = tracker.get_usage()
 
             response_time = time.time() - start_time
 
             log_chat_interaction(
-                question=request.message,
+                question=stream_query,
                 answer=final_content,
                 sources=final_sources,
                 domains=final_domains,
@@ -434,57 +641,8 @@ async def chat_stream(request: ChatRequest):
                 evaluation=done_evaluation,
                 token_usage=token_usage,
             )
-            await append_session_turn(
-                owner_key,
-                request.session_id,
-                request.message,
-                final_content,
-            )
 
-            # 異쒖쿂 ?뺣낫
-            for source in final_sources:
-                source_chunk = StreamResponse(
-                    type="source",
-                    content=source.content[:100] if hasattr(source, 'content') else "",
-                    metadata={
-                        "title": source.title if hasattr(source, 'title') else "",
-                        "source": source.source if hasattr(source, 'source') else "",
-                        "url": source.url if hasattr(source, 'url') else "",
-                    },
-                )
-                yield f"data: {source_chunk.model_dump_json()}\n\n"
-
-            # ?≪뀡 ?뺣낫
-            for action in final_actions:
-                action_chunk = StreamResponse(
-                    type="action",
-                    content=action.label if hasattr(action, 'label') else "",
-                    metadata={
-                        "type": action.type if hasattr(action, 'type') else "",
-                        "params": action.params if hasattr(action, 'params') else {},
-                    },
-                )
-                yield f"data: {action_chunk.model_dump_json()}\n\n"
-
-            # 罹먯떆 ???
-            if cache and final_content and final_content != settings.fallback_message:
-                cache_domain = final_domains[0] if final_domains else None
-                cache_data = {
-                    "content": final_content,
-                    "domains": final_domains,
-                    "sources": [
-                        {
-                            "content": s.content if hasattr(s, 'content') else "",
-                            "title": s.title if hasattr(s, 'title') else "",
-                            "source": s.source if hasattr(s, 'source') else "",
-                            "url": s.url if hasattr(s, 'url') else "",
-                        }
-                        for s in final_sources
-                    ],
-                }
-                cache.set(cache_query, cache_data, cache_domain, user_context_hash=stream_uc_hash)
-
-            # evaluation_data ?앹꽦
+            # evaluation_data 생성 (append_session_turn 이전에 계산)
             eval_data_dict = None
             try:
                 from schemas.response import EvaluationDataForDB, RetrievalEvaluationData
@@ -536,11 +694,90 @@ async def chat_stream(request: ChatRequest):
                     contexts=contexts,
                     domains=final_domains,
                     retrieval_evaluation=retrieval_eval,
+                    query_rewrite_applied=done_query_rewrite_applied,
+                    query_rewrite_reason=done_query_rewrite_reason,
+                    query_rewrite_time=done_query_rewrite_time,
                     response_time=response_time,
                 )
                 eval_data_dict = eval_data.model_dump()
             except Exception as e:
-                logger.warning("?ㅽ듃由щ컢 evaluation_data ?앹꽦 ?ㅽ뙣: %s", e)
+                logger.warning("스트리밍 evaluation_data 생성 실패: %s", e)
+
+            stream_src_meta = [
+                {"title": s.title if hasattr(s, 'title') else "", "source": s.source if hasattr(s, 'source') else "", "url": s.url if hasattr(s, 'url') else ""}
+                for s in (final_sources or [])[:5]
+            ]
+            await append_session_turn(
+                owner_key,
+                request.session_id,
+                stream_query,
+                final_content,
+                user_id=_extract_user_id(request),
+                agent_code=_get_agent_code(final_domains),
+                domains=final_domains,
+                sources=stream_src_meta,
+                evaluation_data=eval_data_dict,
+            )
+            schedule_write_through(
+                user_id=_extract_user_id(request),
+                session_id=request.session_id,
+                question=stream_query,
+                answer=final_content,
+                agent_code=_get_agent_code(final_domains),
+                evaluation_data=eval_data_dict,
+                sources=stream_src_meta,
+            )
+
+            # 출처 정보
+            for source in final_sources:
+                source_chunk = StreamResponse(
+                    type="source",
+                    content=source.content[:100] if hasattr(source, 'content') else "",
+                    metadata={
+                        "title": source.title if hasattr(source, 'title') else "",
+                        "source": source.source if hasattr(source, 'source') else "",
+                        "url": source.url if hasattr(source, 'url') else "",
+                        "doc_download_url": source.metadata.get("doc_download_url", "") if hasattr(source, 'metadata') else "",
+                        "form_download_url": source.metadata.get("form_download_url", "") if hasattr(source, 'metadata') else "",
+                        "form_s3_key": source.metadata.get("form_s3_key", "") if hasattr(source, 'metadata') else "",
+                    },
+                )
+                yield f"data: {source_chunk.model_dump_json()}\n\n"
+
+            # 액션 정보
+            for action in final_actions:
+                action_chunk = StreamResponse(
+                    type="action",
+                    content=action.label if hasattr(action, 'label') else "",
+                    metadata={
+                        "type": action.type if hasattr(action, 'type') else "",
+                        "params": action.params if hasattr(action, 'params') else {},
+                    },
+                )
+                yield f"data: {action_chunk.model_dump_json()}\n\n"
+
+            # 캐시 저장
+            if cache and final_content and final_content != settings.fallback_message:
+                cache_domain = final_domains[0] if final_domains else None
+                cache_data = {
+                    "content": final_content,
+                    "domains": final_domains,
+                    "sources": [
+                        {
+                            "content": s.content if hasattr(s, 'content') else "",
+                            "title": s.title if hasattr(s, 'title') else "",
+                            "source": s.source if hasattr(s, 'source') else "",
+                            "url": s.url if hasattr(s, 'url') else "",
+                            "metadata": {
+                                "doc_download_url": s.metadata.get("doc_download_url", ""),
+                                "form_download_url": s.metadata.get("form_download_url", ""),
+                                "form_s3_key": s.metadata.get("form_s3_key", ""),
+                            } if hasattr(s, 'metadata') else {},
+                        }
+                        for s in final_sources
+                    ],
+                }
+                cache.set(cache_query, cache_data, cache_domain, user_context_hash=stream_uc_hash)
 
             done_chunk = StreamResponse(
                 type="done",
@@ -554,10 +791,10 @@ async def chat_stream(request: ChatRequest):
             yield f"data: {done_chunk.model_dump_json()}\n\n"
 
         except Exception as e:
-            logger.error("?ㅽ듃由щ컢 梨꾪똿 ?ㅻ쪟: %s", e, exc_info=True)
+            logger.error("스트리밍 채팅 오류: %s", e, exc_info=True)
             error_chunk = StreamResponse(
                 type="error",
-                content="二꾩넚?⑸땲?? ?붿껌 泥섎━ 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎. ?좎떆 ???ㅼ떆 ?쒕룄?댁＜?몄슂.",
+                content="죄송합니다. 요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
             )
             yield f"data: {error_chunk.model_dump_json()}\n\n"
 
@@ -570,4 +807,31 @@ async def chat_stream(request: ChatRequest):
             "Connection": "keep-alive",
         },
     )
+
+
+@router.delete("/chat/sessions/{session_id}")
+async def delete_chat_session(
+    session_id: str,
+    user_id: int | None = None,
+):
+    """세션 삭제 (대화 초기화).
+
+    user_id가 제공되면 인증 사용자 세션을, 없으면 익명 세션을 삭제합니다.
+    owner_key를 구성하여 해당 소유자의 세션만 삭제할 수 있습니다.
+    """
+    if user_id is not None:
+        if user_id <= 0:
+            raise HTTPException(status_code=400, detail="user_id는 양수여야 합니다.")
+        owner_key = f"user:{user_id}"
+    else:
+        owner_key = "anon"
+
+    # owner_key + session_id 조합으로 키를 구성하므로,
+    # 해당 owner_key로 생성된 세션만 삭제 가능 (소유권 검증)
+    session_data = await get_session_full(owner_key, session_id)
+    if session_data is None:
+        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+
+    deleted = await delete_session(owner_key, session_id)
+    return {"deleted": deleted}
 

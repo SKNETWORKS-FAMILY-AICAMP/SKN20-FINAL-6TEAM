@@ -52,9 +52,15 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/auth/google/callback"
 
+    # External API
+    BIZNO_API_KEY: str = ""
+
     # RAG Service
     RAG_SERVICE_URL: str = "http://rag:8001"
     RAG_API_KEY: str = ""
+
+    # Redis (AWS ElastiCache)
+    REDIS_URL: str = ""  # rediss://:<auth_token>@<host>:6379 (TLS) 또는 redis://<host>:6379
 
     # AWS SES 이메일 알림 (EC2 Instance Role로 자동 인증)
     AWS_REGION: str = "ap-northeast-2"
@@ -107,6 +113,10 @@ class Settings(BaseSettings):
                     [o for o in self.CORS_ORIGINS if o not in filtered],
                 )
                 self.CORS_ORIGINS = filtered if filtered else self.CORS_ORIGINS
+                if not filtered:
+                    _settings_logger.warning(
+                        "CORS_ORIGINS에 프로덕션 도메인이 없습니다. localhost가 허용됩니다."
+                    )
         return self
 
     class Config:

@@ -3,10 +3,11 @@
 from datetime import datetime
 from typing import Any, TypedDict
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from apps.common.models import History
+from apps.histories.batch_schemas import BatchHistoryCreate
 from apps.histories.schemas import (
     HistoryCreate,
     HistoryResponse,
@@ -44,37 +45,6 @@ class HistoryService:
         return list(self.db.execute(stmt).scalars().all())
 
     @staticmethod
-    def _resolve_root_history_id(
-        history_id: int,
-        parent_map: dict[int, int | None],
-        cache: dict[int, int],
-    ) -> int:
-        """parent 체인을 따라 root history_id를 찾습니다."""
-        if history_id in cache:
-            return cache[history_id]
-
-        current = history_id
-        visited: set[int] = set()
-        while True:
-            if current in cache:
-                root_id = cache[current]
-                break
-            if current in visited:
-                root_id = history_id
-                break
-            visited.add(current)
-
-            parent_id = parent_map.get(current)
-            if parent_id is None or parent_id not in parent_map:
-                root_id = current
-                break
-            current = parent_id
-
-        for hid in visited:
-            cache[hid] = root_id
-        return root_id
-
-    @staticmethod
     def _build_thread_title(histories: list[History], root_id: int) -> str:
         """thread 제목(첫 user 질문 기반)을 생성합니다."""
         root = next((h for h in histories if h.history_id == root_id), None)
@@ -85,17 +55,17 @@ class HistoryService:
         return title_source[:30] + ("..." if len(title_source) > 30 else "")
 
     def _build_thread_summaries(self, user_id: int) -> list[_ThreadSummary]:
-        """사용자 이력을 root chain 기준으로 thread summary로 그룹핑합니다."""
+        """사용자 이력을 parent_history_id 기준으로 thread summary로 그룹핑합니다."""
         histories = self._get_all_user_histories(user_id)
         if not histories:
             return []
 
-        parent_map = {h.history_id: h.parent_history_id for h in histories}
-        cache: dict[int, int] = {}
         groups: dict[int, list[History]] = {}
-
         for history in histories:
-            root_id = self._resolve_root_history_id(history.history_id, parent_map, cache)
+            # root: parent_history_id == history_id (자기 참조)
+            # non-root: parent_history_id == root_id
+            # 미마이그레이션(NULL): history_id를 root로 취급
+            root_id = int(history.parent_history_id or history.history_id)
             groups.setdefault(root_id, []).append(history)
 
         summaries: list[_ThreadSummary] = []
@@ -112,11 +82,11 @@ class HistoryService:
             summaries.append(
                 {
                     "root_history_id": root_id,
-                    "last_history_id": last_item.history_id,
+                    "last_history_id": int(last_item.history_id),
                     "title": self._build_thread_title(items_sorted, root_id),
                     "message_count": len(items_sorted),
-                    "first_create_date": first_item.create_date,
-                    "last_create_date": last_item.create_date,
+                    "first_create_date": first_item.create_date,  # type: ignore[typeddict-item]
+                    "last_create_date": last_item.create_date,  # type: ignore[typeddict-item]
                 }
             )
 
@@ -173,42 +143,36 @@ class HistoryService:
         window = summaries[offset: offset + limit]
         return [HistoryThreadSummaryResponse(**item) for item in window]
 
+    def get_thread_histories(self, user_id: int, root_history_id: int) -> list[History]:
+        """복원용: 특정 스레드의 전체 이력을 시간순 반환."""
+        stmt = (
+            select(History)
+            .where(
+                History.user_id == user_id,
+                History.parent_history_id == root_history_id,
+                History.use_yn == True,
+            )
+            .order_by(History.create_date.asc(), History.history_id.asc())
+        )
+        return list(self.db.execute(stmt).scalars().all())
+
     def get_history_thread_detail(
         self,
         user_id: int,
         root_history_id: int,
     ) -> HistoryThreadDetailResponse | None:
         """특정 thread(root 기준)의 전체 이력을 반환합니다."""
-        summaries = self._build_thread_summaries(user_id)
-        target_summary = next(
-            (item for item in summaries if item["root_history_id"] == root_history_id),
-            None,
-        )
-        if target_summary is None:
+        thread_histories = self.get_thread_histories(user_id, root_history_id)
+        if not thread_histories:
             return None
 
-        histories = self._get_all_user_histories(user_id)
-        parent_map = {h.history_id: h.parent_history_id for h in histories}
-        cache: dict[int, int] = {}
-        thread_histories = [
-            h
-            for h in histories
-            if self._resolve_root_history_id(h.history_id, parent_map, cache) == root_history_id
-        ]
-        thread_histories.sort(
-            key=lambda h: (
-                h.create_date or datetime.min,
-                h.history_id,
-            )
-        )
-
         return HistoryThreadDetailResponse(
-            root_history_id=target_summary["root_history_id"],
-            last_history_id=target_summary["last_history_id"],
-            title=target_summary["title"],
-            message_count=target_summary["message_count"],
-            first_create_date=target_summary["first_create_date"],
-            last_create_date=target_summary["last_create_date"],
+            root_history_id=root_history_id,
+            last_history_id=int(thread_histories[-1].history_id),
+            title=self._build_thread_title(thread_histories, root_history_id),
+            message_count=len(thread_histories),
+            first_create_date=thread_histories[0].create_date,  # type: ignore[arg-type]
+            last_create_date=thread_histories[-1].create_date,  # type: ignore[arg-type]
             histories=[HistoryResponse.model_validate(h) for h in thread_histories],
         )
 
@@ -232,6 +196,9 @@ class HistoryService:
     def create_history(self, data: HistoryCreate, user_id: int) -> History:
         """상담 이력을 저장합니다.
 
+        parent_history_id가 None이면 첫 메시지(root)로 간주하여 자기 참조를 설정합니다.
+        parent_history_id가 제공되면 해당 값이 root ID임을 가정하고 그대로 사용합니다.
+
         Args:
             data: 상담 이력 생성 요청 데이터
             user_id: 사용자 ID
@@ -253,6 +220,12 @@ class HistoryService:
             evaluation_data=data.evaluation_data.model_dump() if data.evaluation_data else None,
         )
         self.db.add(history)
+
+        if data.parent_history_id is None:
+            # 첫 메시지: flush로 ID 확보 후 자기 참조 설정
+            self.db.flush()
+            history.parent_history_id = history.history_id
+
         self.db.commit()
         self.db.refresh(history)
         return history
@@ -281,6 +254,89 @@ class HistoryService:
         history.evaluation_data = {**existing, **ragas_data}
         self.db.commit()
         return True
+
+    def create_history_batch(
+        self, data: BatchHistoryCreate,
+    ) -> tuple[int, int, list[int]]:
+        """배치로 히스토리를 저장합니다 (RAG 마이그레이션용).
+
+        첫 턴은 자기 참조(root), 이후 턴은 모두 root_id를 직접 참조합니다.
+
+        Args:
+            data: 배치 저장 요청 (user_id, session_id, turns)
+
+        Returns:
+            (saved_count, skipped_count, history_ids) 튜플
+        """
+        saved_count = 0
+        skipped_count = 0
+        history_ids: list[int] = []
+        root_id: int | None = None
+
+        for turn in data.turns:
+            # 멱등성: question + answer 앞 200자로 중복 체크
+            answer_prefix = turn.answer[:200]
+            dup_stmt = (
+                select(History)
+                .where(
+                    History.user_id == data.user_id,
+                    History.question == turn.question,
+                    History.answer.startswith(answer_prefix),
+                    History.use_yn == True,
+                )
+                .limit(1)
+            )
+            # root_id 확보 후에는 같은 스레드 내로 중복 체크 범위 축소
+            if root_id is not None:
+                dup_stmt = dup_stmt.where(
+                    History.parent_history_id == root_id,
+                )
+            existing = self.db.execute(dup_stmt).scalar_one_or_none()
+            if existing:
+                history_ids.append(existing.history_id)
+                skipped_count += 1
+                if root_id is None:
+                    root_id = int(existing.history_id)
+                continue
+
+            history = History(
+                user_id=data.user_id,
+                agent_code=turn.agent_code,
+                question=turn.question,
+                answer=turn.answer,
+                parent_history_id=root_id,  # 첫 턴은 flush 후 자기 참조로 덮어씀
+                evaluation_data=turn.evaluation_data,
+            )
+            self.db.add(history)
+            self.db.flush()  # history_id 할당
+
+            if root_id is None:
+                # 첫 턴: 자기 참조 설정
+                history.parent_history_id = history.history_id
+                root_id = int(history.history_id)
+
+            history_ids.append(history.history_id)
+            saved_count += 1
+
+        self.db.commit()
+        return saved_count, skipped_count, history_ids
+
+    def get_message_count_today(self, user_id: int) -> int:
+        """오늘 자정부터 현재까지 사용자의 메시지 수를 반환합니다.
+
+        DB의 create_date가 datetime.now() 로컬 타임 기준이므로 동일하게 맞춤.
+        """
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        stmt = (
+            select(func.count())
+            .select_from(History)
+            .where(
+                History.user_id == user_id,
+                History.use_yn == True,
+                History.create_date >= today_start,
+            )
+        )
+        return self.db.execute(stmt).scalar_one()
 
     def delete_history(self, history_id: int, user_id: int) -> bool:
         """상담 이력을 소프트 삭제합니다.

@@ -4,6 +4,7 @@ import type { RagStreamResponse, SourceReference, RagActionSuggestion } from '..
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const RAG_ENABLED = import.meta.env.VITE_RAG_ENABLED !== 'false';
 const RAG_STREAMING = import.meta.env.VITE_RAG_STREAMING !== 'false';
+const STREAM_TIMEOUT_MS = 120_000;
 
 const ragApi = axios.create({
   baseURL: API_URL,
@@ -37,6 +38,25 @@ export interface StreamCallbacks {
 }
 
 /**
+ * 토큰 갱신 시도 (fetch 기반, axios 인터셉터 우회 보완)
+ */
+const tryRefreshToken = async (): Promise<boolean> => {
+  try {
+    const resp = await fetch(`${API_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      credentials: 'include',
+    });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+};
+
+/**
  * RAG 스트리밍 채팅 API 호출 (SSE) — Backend 프록시 경유
  */
 export const streamChat = async (
@@ -45,21 +65,47 @@ export const streamChat = async (
   signal?: AbortSignal,
   history?: Array<{ role: string; content: string }>,
   sessionId?: string,
+  rootHistoryId?: number | null,
 ): Promise<void> => {
-  const response = await fetch(`${API_URL}/rag/chat/stream`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Requested-With': 'XMLHttpRequest',
-    },
-    credentials: 'include',
-    body: JSON.stringify({
-      message,
-      ...(history?.length ? { history } : {}),
-      ...(sessionId ? { session_id: sessionId } : {}),
-    }),
-    signal,
-  });
+  const timeoutController = new AbortController();
+  const timeoutId = setTimeout(() => timeoutController.abort(), STREAM_TIMEOUT_MS);
+
+  // 외부 signal과 타임아웃 signal을 결합
+  const combinedSignal = signal
+    ? (() => {
+        const combined = new AbortController();
+        signal.addEventListener('abort', () => combined.abort());
+        timeoutController.signal.addEventListener('abort', () => combined.abort());
+        return combined.signal;
+      })()
+    : timeoutController.signal;
+
+  const doFetch = () =>
+    fetch(`${API_URL}/rag/chat/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        message,
+        ...(history?.length ? { history } : {}),
+        ...(sessionId ? { session_id: sessionId } : {}),
+        ...(rootHistoryId ? { root_history_id: rootHistoryId } : {}),
+      }),
+      signal: combinedSignal,
+    });
+
+  let response = await doFetch();
+
+  // 401 시 토큰 갱신 후 1회 재시도
+  if (response.status === 401) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) {
+      response = await doFetch();
+    }
+  }
 
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
@@ -102,6 +148,9 @@ export const streamChat = async (
                     title: event.metadata.title || '',
                     source: event.metadata.source || '',
                     url: event.metadata.url || '',
+                    docDownloadUrl: event.metadata.doc_download_url || '',
+                    formDownloadUrl: event.metadata.form_download_url || '',
+                    formS3Key: event.metadata.form_s3_key || '',
                   });
                 }
                 break;
@@ -129,6 +178,7 @@ export const streamChat = async (
       }
     }
   } finally {
+    clearTimeout(timeoutId);
     reader.releaseLock();
   }
 };

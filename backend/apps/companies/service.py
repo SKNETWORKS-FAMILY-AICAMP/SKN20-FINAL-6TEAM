@@ -18,6 +18,57 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 class CompanyService:
     """기업 서비스 클래스."""
 
+    @staticmethod
+    async def lookup_by_biz_num(biz_num: str) -> dict:
+        """bizno.net 무료 API로 사업자등록번호 조회."""
+        import logging
+
+        import httpx
+        from config.settings import settings
+
+        logger = logging.getLogger(__name__)
+        clean_num = biz_num.replace("-", "")
+
+        if not settings.BIZNO_API_KEY:
+            raise ValueError("BIZNO_API_KEY가 설정되지 않았습니다.")
+
+        url = "https://bizno.net/api/fapi"
+        params = {
+            "key": settings.BIZNO_API_KEY,
+            "gb": "1",
+            "q": clean_num,
+            "type": "json",
+        }
+
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
+            resp = await client.get(url, params=params)
+
+        # 302 → /login: API 키 만료 또는 무효
+        if resp.status_code in (301, 302, 403):
+            logger.warning("bizno.net API 인증 실패 (HTTP %s)", resp.status_code)
+            raise ValueError("bizno.net API 키가 유효하지 않습니다. 키를 갱신해주세요.")
+
+        resp.raise_for_status()
+
+        data = resp.json()
+        items = [i for i in data.get("items", []) if i]
+        if not items:
+            return {"found": False}
+
+        item = items[0]
+        return {
+            "found": True,
+            "biz_num": item.get("bno", ""),
+            "com_name": item.get("company", ""),
+            "ceo": item.get("ceo", ""),
+            "addr": item.get("addr", ""),
+            "open_date": item.get("est_dt", ""),
+            "biz_type": item.get("btype", ""),
+            "biz_item": item.get("bitem", ""),
+            "status": item.get("bstt", ""),
+            "tax_type": item.get("taxtype", ""),
+        }
+
     def __init__(self, db: Session):
         self.db = db
 
@@ -65,6 +116,9 @@ class CompanyService:
         Returns:
             생성된 기업 객체
         """
+        existing = self.get_companies_by_user(user_id)
+        is_first = len(existing) == 0
+
         company = Company(
             user_id=user_id,
             com_name=data.com_name,
@@ -72,6 +126,7 @@ class CompanyService:
             addr=data.addr,
             open_date=data.open_date,
             biz_code=data.biz_code,
+            main_yn=is_first,
         )
         self.db.add(company)
         self.db.commit()

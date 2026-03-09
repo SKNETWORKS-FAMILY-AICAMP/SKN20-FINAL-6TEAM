@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ReactDOM from 'react-dom';
 import {
   Alert,
   Button,
@@ -25,11 +26,13 @@ import {
 } from '@heroicons/react/24/outline';
 import api from '../lib/api';
 import { extractErrorMessage } from '../lib/errorHandler';
+import { useToastStore } from '../stores/toastStore';
 import { formatDateLong } from '../lib/dateUtils';
 import { CalendarView } from '../components/schedule/CalendarView';
 import { CalendarErrorBoundary } from '../components/schedule/CalendarErrorBoundary';
 import { ScheduleDetailDialog } from '../components/schedule/ScheduleDetailDialog';
 import type { ScheduleFormData } from '../components/schedule/ScheduleDetailDialog';
+import { useAuthStore } from '../stores/authStore';
 import { useNotifications } from '../hooks/useNotifications';
 import { PageHeader } from '../components/common/PageHeader';
 import type { Announce, Company, Schedule } from '../types';
@@ -181,6 +184,7 @@ const buildAnnounceSchedulePayload = (announce: Announce, companyId: number, mem
 };
 
 const SchedulePage: React.FC = () => {
+  const { notificationSettings, notificationSettingsLoaded } = useAuthStore();
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [relatedAnnounces, setRelatedAnnounces] = useState<Announce[]>([]);
@@ -194,8 +198,31 @@ const SchedulePage: React.FC = () => {
   const [announceAdditionalMemo, setAnnounceAdditionalMemo] = useState('');
   const [defaultDate, setDefaultDate] = useState<string>('');
   const [processingAnnounceId, setProcessingAnnounceId] = useState<number | null>(null);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const addToast = useToastStore((s) => s.addToast);
   const [viewMode, setViewMode] = useState<ViewMode>('calendar');
+  const [announceSortMode, setAnnounceSortMode] = useState<'deadline' | 'latest'>('deadline');
+  const [sortSelected, setSortSelected] = useState(false);
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const sortBtnRef = useRef<HTMLButtonElement>(null);
+  const [sortMenuPos, setSortMenuPos] = useState({ top: 0, left: 0, width: 0 });
+
+  const openSortMenu = useCallback(() => {
+    if (sortBtnRef.current) {
+      const rect = sortBtnRef.current.getBoundingClientRect();
+      setSortMenuPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    }
+    setIsSortMenuOpen(prev => !prev);
+  }, []);
+
+  const sortedAnnounces = useMemo(() => {
+    const list = [...relatedAnnounces];
+    if (announceSortMode === 'deadline') {
+      list.sort((a, b) => (a.apply_end ?? '').localeCompare(b.apply_end ?? ''));
+    } else {
+      list.sort((a, b) => (b.create_date ?? '').localeCompare(a.create_date ?? ''));
+    }
+    return list;
+  }, [relatedAnnounces, announceSortMode]);
 
   const notificationCompanyNameById = useMemo(
     () =>
@@ -206,7 +233,11 @@ const SchedulePage: React.FC = () => {
     [companies]
   );
 
-  useNotifications(schedules, notificationCompanyNameById);
+  useNotifications(
+    notificationSettingsLoaded ? schedules : [],
+    notificationSettingsLoaded ? notificationCompanyNameById : {},
+    notificationSettings
+  );
 
   const selectedCompany = useMemo(
     () => companies.find((company) => company.company_id === selectedCompanyId) ?? null,
@@ -249,20 +280,6 @@ const SchedulePage: React.FC = () => {
   useEffect(() => {
     void fetchData();
   }, []);
-
-  useEffect(() => {
-    if (!message) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setMessage(null);
-    }, 5000);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [message]);
 
   useEffect(() => {
     if (companies.length === 0) {
@@ -353,18 +370,18 @@ const SchedulePage: React.FC = () => {
 
       if (editingSchedule) {
         await api.put(`/schedules/${editingSchedule.schedule_id}`, data);
-        setMessage({ type: 'success', text: '일정이 수정되었습니다.' });
+        addToast({ type: 'success', message: '일정이 수정되었습니다.' });
       } else {
         await api.post('/schedules', data);
-        setMessage({ type: 'success', text: '일정이 등록되었습니다.' });
+        addToast({ type: 'success', message: '일정이 등록되었습니다.' });
       }
 
       setIsDialogOpen(false);
       await fetchData();
     } catch (err: unknown) {
-      setMessage({
+      addToast({
         type: 'error',
-        text: extractErrorMessage(err, '저장에 실패했습니다.'),
+        message: extractErrorMessage(err, '저장에 실패했습니다.'),
       });
     }
   };
@@ -374,13 +391,13 @@ const SchedulePage: React.FC = () => {
 
     try {
       await api.delete(`/schedules/${scheduleId}`);
-      setMessage({ type: 'success', text: '일정이 삭제되었습니다.' });
+      addToast({ type: 'success', message: '일정이 삭제되었습니다.' });
       setIsDialogOpen(false);
       await fetchData();
     } catch (err: unknown) {
-      setMessage({
+      addToast({
         type: 'error',
-        text: extractErrorMessage(err, '삭제에 실패했습니다.'),
+        message: extractErrorMessage(err, '삭제에 실패했습니다.'),
       });
     }
   };
@@ -403,9 +420,9 @@ const SchedulePage: React.FC = () => {
 
   const handleCalendarError = () => {
     setViewMode('list');
-    setMessage({
+    addToast({
       type: 'error',
-      text: '캘린더 렌더링 중 오류가 발생해 리스트 보기로 전환되었습니다.',
+      message: '캘린더 렌더링 중 오류가 발생해 리스트 보기로 전환되었습니다.',
     });
   };
 
@@ -435,9 +452,9 @@ const SchedulePage: React.FC = () => {
     }
 
     if (isAnnounceLinked(announce.announce_id)) {
-      setMessage({
+      addToast({
         type: 'error',
-        text: '해당 공고는 이미 일정에 등록되어 있습니다.',
+        message: '해당 공고는 이미 일정에 등록되어 있습니다.',
       });
       return;
     }
@@ -468,16 +485,16 @@ const SchedulePage: React.FC = () => {
     try {
       const payload = buildAnnounceSchedulePayload(announce, selectedCompanyId, finalMemo);
       await api.post('/schedules', payload);
-      setMessage({
+      addToast({
         type: 'success',
-        text: '공고 일정이 캘린더에 자동 등록되었습니다.',
+        message: '공고 일정이 캘린더에 자동 등록되었습니다.',
       });
       await fetchData();
       closeAnnounceDialog();
     } catch (err: unknown) {
-      setMessage({
+      addToast({
         type: 'error',
-        text: extractErrorMessage(err, '공고 일정 등록에 실패했습니다.'),
+        message: extractErrorMessage(err, '공고 일정 등록에 실패했습니다.'),
       });
     } finally {
       setProcessingAnnounceId(null);
@@ -493,15 +510,15 @@ const SchedulePage: React.FC = () => {
     setProcessingAnnounceId(announceId);
     try {
       await api.delete(`/schedules/${linkedSchedule.schedule_id}`);
-      setMessage({
+      addToast({
         type: 'success',
-        text: '공고 일정이 캘린더에서 제거되었습니다.',
+        message: '공고 일정이 캘린더에서 제거되었습니다.',
       });
       await fetchData();
     } catch (err: unknown) {
-      setMessage({
+      addToast({
         type: 'error',
-        text: extractErrorMessage(err, '공고 일정 제거에 실패했습니다.'),
+        message: extractErrorMessage(err, '공고 일정 제거에 실패했습니다.'),
       });
     } finally {
       setProcessingAnnounceId(null);
@@ -518,11 +535,46 @@ const SchedulePage: React.FC = () => {
       >
         <div className="flex items-center justify-between gap-2">
           <Typography variant="h6" color="blue-gray" className="!text-gray-900">
-            관련 공고
+            {selectedCompany ? (
+              <>{selectedCompany.com_name}&nbsp;&nbsp;관련 공고</>
+            ) : '관련 공고'}
           </Typography>
-          <Typography variant="small" color="gray" className="!text-gray-600">
-            {selectedCompany ? selectedCompany.com_name : '기업 선택 필요'}
-          </Typography>
+          <button
+            ref={sortBtnRef}
+            type="button"
+            onClick={openSortMenu}
+            onBlur={() => setTimeout(() => setIsSortMenuOpen(false), 150)}
+            className="shrink-0 inline-flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-200 hover:bg-blue-100 transition-colors"
+          >
+            {sortSelected ? (announceSortMode === 'deadline' ? '마감순' : '최신순') : '정렬'}
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="size-3">
+              <path fillRule="evenodd" d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+            </svg>
+          </button>
+          {isSortMenuOpen && ReactDOM.createPortal(
+            <div
+              style={{ position: 'fixed', top: sortMenuPos.top, left: sortMenuPos.left, width: sortMenuPos.width }}
+              className="z-[9999] rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+            >
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { setAnnounceSortMode('deadline'); setSortSelected(true); setIsSortMenuOpen(false); }}
+                className={`block w-full px-3 py-1.5 text-left text-xs transition-colors ${announceSortMode === 'deadline' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-600 hover:bg-gray-50'}`}
+              >
+                마감순
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { setAnnounceSortMode('latest'); setSortSelected(true); setIsSortMenuOpen(false); }}
+                className={`block w-full px-3 py-1.5 text-left text-xs transition-colors ${announceSortMode === 'latest' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-600 hover:bg-gray-50'}`}
+              >
+                최신순
+              </button>
+            </div>,
+            document.body,
+          )}
         </div>
       </CardHeader>
       <CardBody className="h-[calc(100%-57px)] overflow-y-auto p-3">
@@ -544,7 +596,7 @@ const SchedulePage: React.FC = () => {
           </Typography>
         ) : (
           <ul className="space-y-2">
-            {relatedAnnounces.map((announce) => {
+            {sortedAnnounces.map((announce) => {
               const linkedSchedule = getLinkedSchedule(announce.announce_id);
               const alreadyLinked = Boolean(linkedSchedule);
               const isProcessing = processingAnnounceId === announce.announce_id;
@@ -672,16 +724,6 @@ const SchedulePage: React.FC = () => {
       />
 
       <div className="min-h-0 flex-1 flex flex-col p-3 lg:p-4">
-      {message && (
-        <Alert
-          color={message.type === 'success' ? 'green' : 'red'}
-          className="mb-3"
-          onClose={() => setMessage(null)}
-        >
-          {message.text}
-        </Alert>
-      )}
-
       {companies.length === 0 && !isLoading && (
         <Alert color="amber" className="mb-3">
           먼저 기업 정보를 등록해주세요. 일정은 기업 단위로 관리됩니다.

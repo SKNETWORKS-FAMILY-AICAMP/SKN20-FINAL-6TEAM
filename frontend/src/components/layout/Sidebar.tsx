@@ -26,6 +26,7 @@ import { useChatStore } from '../../stores/chatStore';
 import { useDisplayUserType } from '../../hooks/useDisplayUserType';
 import { USER_TYPE_NAMES } from '../../types';
 import { ChatHistoryPanel } from './ChatHistoryPanel';
+import { APP_HEADER_HEIGHT_CLASS, APP_HEADER_HORIZONTAL_PADDING_CLASS } from './layoutConstants';
 import { ProfileDialog } from '../profile/ProfileDialog';
 
 /** Routes that require authentication to access */
@@ -63,7 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isAuthenticated, logout, user } = useAuthStore();
+  const { isAuthenticated, logout, user, openLoginModal } = useAuthStore();
   const { createSession } = useChatStore();
   const displayUserType = useDisplayUserType();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -116,7 +117,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const handleMenuClick = (event: React.MouseEvent<HTMLAnchorElement>, path: string) => {
     if (!isAuthenticated && AUTH_REQUIRED_PATHS.has(path)) {
       event.preventDefault();
-      navigate('/login', { state: { backgroundLocation: location } });
+      openLoginModal();
     }
 
     closeSidebar();
@@ -169,7 +170,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }`}
         >
           {/* Logo / Toggle */}
-          <div className="flex h-[81px] items-center border-b px-3">
+          <div className={`flex items-center border-b ${APP_HEADER_HEIGHT_CLASS} ${APP_HEADER_HORIZONTAL_PADDING_CLASS}`}>
             <div
               className={`min-w-0 overflow-hidden transition-[max-width] duration-180 ease-[cubic-bezier(0.2,0,0,1)] ${
                 !isMobile && effectiveCollapsed ? 'max-w-0 flex-1' : 'max-w-[13rem] flex-1'
@@ -254,7 +255,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="border-t" />
 
           {/* Navigation Menu */}
-          <div className="space-y-1 px-2 py-1">
+          <div className="sidebar-readable-font space-y-1 px-2 py-1">
             {visibleMenuItems.map((item) => {
               const isActive = location.pathname === item.path;
 
@@ -315,7 +316,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <>
                   <div className="mb-1 flex items-center rounded-lg px-2">
                     <span className="flex h-10 w-10 items-center justify-center">
-                      <UserCircleIcon className="h-5 w-5 text-gray-500" />
+                      {user.profile_image ? (
+                        <img
+                          src={user.profile_image}
+                          alt={user.username}
+                          className="h-7 w-7 rounded-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <UserCircleIcon className="h-5 w-5 text-gray-500" />
+                      )}
                     </span>
                     <div className="min-w-0 flex-1">
                       <Typography
@@ -357,7 +367,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  navigate('/login', { state: { backgroundLocation: location } });
+                  openLoginModal();
                   closeSidebar();
                 }}
                 title={effectiveCollapsed ? '로그인' : undefined}

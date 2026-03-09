@@ -296,7 +296,7 @@ const AdminDashboardPage: React.FC = () => {
             ) : statusError ? (
               <div className="text-center py-4 text-red-500">{statusError}</div>
             ) : serverStatus ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {serverStatus.services.map((service) => {
                   const config = STATUS_CONFIG[service.status] || STATUS_CONFIG.unhealthy;
                   const Icon = config.icon;

@@ -2,6 +2,10 @@ import React from 'react';
 import { Typography } from '@material-tailwind/react';
 import { NotificationBell } from '../layout/NotificationBell';
 import { useAuthStore } from '../../stores/authStore';
+import {
+  APP_HEADER_DESKTOP_HEIGHT_CLASS,
+  APP_HEADER_HORIZONTAL_PADDING_CLASS,
+} from '../layout/layoutConstants';
 
 interface PageHeaderProps {
   title: React.ReactNode;
@@ -24,7 +28,9 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   const hasActions = Boolean(rightSlot) || isAuthenticated;
 
   return (
-    <div className={`border-b bg-white p-4 ${className}`.trim()}>
+    <div
+      className={`border-b bg-white py-4 lg:py-0 ${APP_HEADER_HORIZONTAL_PADDING_CLASS} ${APP_HEADER_DESKTOP_HEIGHT_CLASS} ${className}`.trim()}
+    >
       {mobileNotificationOnTop ? (
         <>
           <div className={`flex flex-wrap items-start justify-between gap-2 lg:hidden ${contentClassName}`.trim()}>
@@ -51,7 +57,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
             {rightSlot ? <div className="w-full">{rightSlot}</div> : null}
           </div>
 
-          <div className={`hidden items-center justify-between gap-3 lg:flex ${contentClassName}`.trim()}>
+          <div className={`hidden items-center justify-between gap-3 lg:flex lg:h-full ${contentClassName}`.trim()}>
             <div className="min-w-0 pl-0">
               <Typography variant="h5" color="blue-gray" className="!text-gray-900">
                 {title}
@@ -75,7 +81,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
           </div>
         </>
       ) : (
-        <div className={`flex items-center justify-between gap-3 ${contentClassName}`.trim()}>
+        <div className={`flex items-center justify-between gap-3 lg:h-full ${contentClassName}`.trim()}>
           <div className="min-w-0 pl-12 lg:pl-0">
             <Typography variant="h5" color="blue-gray" className="!text-gray-900">
               {title}
