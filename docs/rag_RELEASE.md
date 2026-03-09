@@ -1,5 +1,20 @@
 # Release Notes
 
+## [2026-03-09] - 코드 품질 개선 + 공고 원문 청킹 제거 + 보안 강화
+
+### Security
+- **Nginx/CORS 보안 강화**: autoindex off, error_page, OPTIONS 메서드 제거
+
+### Bug Fixes
+- **Task 2 — 버그 수정 22건** (`agents/`, `routes/`): RAG 전반 버그 수정
+
+### Refactoring
+- **공고 원문(_full_text) 청킹 파이프라인 제거** (`vectorstores/config.py`, `agents/`): 불필요한 원문 청킹 처리 제거로 파이프라인 단순화
+- **rag 린트 수정** (`agents/`, `routes/`, `utils/`): F401, F541, F821, F841, E402, E741 등 ruff 위반 수정
+
+### Chores
+- **Task 1 정리**: 완료 문서 아카이브, .gitignore 보강
+
 ## [2026-03-07] - finance_tax RAGAS Context Recall 개선 — law_common 도메인 분배
 
 ### Features

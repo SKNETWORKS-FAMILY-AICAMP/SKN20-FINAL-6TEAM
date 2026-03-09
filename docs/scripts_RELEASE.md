@@ -1,5 +1,16 @@
 # Release Notes
 
+## [2026-03-09] - 파일 정리 + 공고 원문 청킹 제거 + E2E 설정 파일 삭제
+
+### Refactoring
+- **공고 원문(_full_text) 청킹 파이프라인 제거** (`scripts/vectordb/loader.py`): 불필요한 원문 청킹 처리 제거
+- **파일 재배치** (`scripts/vectordb/migrate_chroma_volume.sh`): migrate_chroma_volume.sh를 scripts/vectordb/로 이동
+
+### Chores
+- **docker-compose.e2e-test.yaml 삭제**: 미사용 E2E 테스트 compose 파일 및 참조 정리
+- **Dockerfile.batch·migrate 스크립트 이관**: nginx.e2e.conf 제거
+- **Task 1 보완**: 중복 파일 제거, 완료 문서 아카이브
+
 ## [2026-03-07] - law_common JSONL 도메인별 분할 스크립트 추가
 
 ### Features

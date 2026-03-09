@@ -1,5 +1,25 @@
 # Release Notes
 
+## [2026-03-09] - 자료실 기능 추가 + 보안 강화 + 코드 품질 개선
+
+### Features
+- **자료실 기능 구현** (`apps/documents/router.py`, `apps/documents/schemas.py`): 공지사항 첨부파일 및 문서 다운로드 API 추가
+- **첫 기업 등록 시 main_yn 자동 설정** (`apps/companies/service.py`): 첫 등록 기업에 main_yn=1 자동 지정
+
+### Security
+- **Nginx/CORS 보안 강화**: autoindex off, error_page 설정, proxy_send_timeout, OPTIONS 메서드 제거
+- **입력 검증 강화** (`apps/announces/schemas.py` 외): schemas max_length, Literal, validator 추가
+
+### Bug Fixes
+- **Task 2 — 버그 수정 22건** (`apps/*`): Frontend/Backend/RAG 전반 버그 수정
+- **자료실 코드 리뷰 보안/품질 수정** (`apps/documents/`): 보안 취약점 및 코드 품질 이슈 수정
+
+### Refactoring
+- **backend 린트 수정** (`apps/*`): F401, F541, E402 등 ruff 린트 위반 수정
+
+### Chores
+- **Task 1 최종 마무리**: AGENTS.md 동기화, 평가 보고서 통합, FORM.md 이관
+
 ## [2026-03-07] - 보안 감사 CRITICAL+HIGH 16건 수정
 
 ### Bug Fixes

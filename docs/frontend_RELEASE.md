@@ -1,5 +1,22 @@
 # Release Notes
 
+## [2026-03-09] - 자료실 기능 추가 + API 모듈 분리 + 코드 품질 개선
+
+### Features
+- **자료실 기능 구현** (`pages/`, `components/`): 공지사항 첨부파일 및 문서 다운로드 UI 추가
+
+### Bug Fixes
+- **Task 2 — 버그 수정 22건**: Frontend 전반 버그 수정
+- **자료실 코드 리뷰 보안/품질 수정**: 보안 취약점 및 코드 품질 이슈 수정
+
+### Refactoring
+- **scheduleApi 모듈 추출** (`src/lib/scheduleApi.ts`): SchedulePage 인라인 API 호출 분리
+- **companyApi 모듈 추출** (`src/lib/companyApi.ts`): CompanyForm 인라인 API 호출 분리
+- **URL 검증 유틸 추출, DocumentItem 타입 이동** (`src/lib/`): 공통 유틸 정리
+
+### Chores
+- **Task 1 정리**: 중복 파일 제거, 완료 문서 아카이브
+
 ## [2026-03-07] - 보안 감사 HIGH 수정
 
 ### Bug Fixes
