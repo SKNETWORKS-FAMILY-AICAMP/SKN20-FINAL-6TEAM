@@ -5,7 +5,6 @@
 
 import base64
 import logging
-import uuid
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
@@ -374,8 +373,7 @@ class ActionExecutor:
         doc.build(elements)
 
         # 파일 저장
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name = f"labor_contract_{timestamp}_{uuid.uuid4().hex[:6]}.pdf"
+        file_name = self._build_file_name("labor_contract", "pdf", company_name)
         file_path = self.output_dir / file_name
 
         buffer.seek(0)
@@ -483,8 +481,7 @@ class ActionExecutor:
         doc.add_paragraph("근로자(을):                    (인)")
 
         # 파일 저장
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name = f"labor_contract_{timestamp}_{uuid.uuid4().hex[:6]}.docx"
+        file_name = self._build_file_name("labor_contract", "docx", company_name)
         file_path = self.output_dir / file_name
 
         doc.save(file_path)
@@ -571,8 +568,7 @@ class ActionExecutor:
                     doc.add_paragraph()
 
             # 파일 저장
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            file_name = f"business_plan_template_{timestamp}_{uuid.uuid4().hex[:6]}.docx"
+            file_name = self._build_file_name("business_plan", "docx")
             file_path = self.output_dir / file_name
 
             doc.save(file_path)
@@ -686,10 +682,11 @@ class ActionExecutor:
             response = llm.invoke([{"role": "user", "content": full_prompt}])
             content = response.content
 
+            company_name = params.get("company_name") or params.get("party_a") or params.get("client")
             if format == "pdf":
-                return self._build_pdf_from_text(content, type_def.type_key, type_def.label)
+                return self._build_pdf_from_text(content, type_def.type_key, type_def.label, company_name)
             else:
-                return self._build_docx_from_text(content, type_def.type_key, type_def.label)
+                return self._build_docx_from_text(content, type_def.type_key, type_def.label, company_name)
 
         except Exception as e:
             logger.error("LLM 문서 생성 실패 (%s): %s", type_def.type_key, e, exc_info=True)
@@ -901,11 +898,30 @@ class ActionExecutor:
             logger.warning("문서 적합성 검증 파싱 실패, 기본 허용 처리")
             return {"is_relevant": True, "category": "unknown", "reason": "검증 실패 — 기본 허용"}
 
+    def _build_file_name(self, type_key: str, ext: str, company_name: str | None = None) -> str:
+        """사용자 친화적 파일명을 생성합니다.
+
+        형식: {회사이름}_{유형}_{날짜}_{순번:03d}.{ext}
+        회사이름이 없는 경우: {유형}_{날짜}_{순번:03d}.{ext}
+        """
+        date_str = datetime.now().strftime("%Y%m%d")
+        type_label = type_key.upper()
+        existing = list(self.output_dir.glob(f"*_{type_label}_{date_str}_*.{ext}"))
+        seq = len(existing) + 1
+        # 기본값 sentinel을 None으로 정규화
+        if company_name == "회사명 미기재":
+            company_name = None
+        if company_name:
+            safe_name = company_name.replace("/", "_").strip()
+            return f"{safe_name}_{type_label}_{date_str}_{seq:03d}.{ext}"
+        return f"{type_label}_{date_str}_{seq:03d}.{ext}"
+
     def _build_docx_from_text(
         self,
         text: str,
         type_key: str,
         title: str,
+        company_name: str | None = None,
     ) -> DocumentResponse:
         """LLM 생성 텍스트를 DOCX로 변환합니다.
 
@@ -943,8 +959,7 @@ class ActionExecutor:
                 doc.add_paragraph(stripped)
 
         # 파일 저장
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name = f"{type_key}_{timestamp}_{uuid.uuid4().hex[:6]}.docx"
+        file_name = self._build_file_name(type_key, "docx", company_name)
         file_path = self.output_dir / file_name
         doc.save(file_path)
 
@@ -965,6 +980,7 @@ class ActionExecutor:
         text: str,
         type_key: str,
         title: str,
+        company_name: str | None = None,
     ) -> DocumentResponse:
         """LLM 생성 텍스트를 PDF로 변환합니다.
 
@@ -1037,8 +1053,7 @@ class ActionExecutor:
 
         doc.build(elements)
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name = f"{type_key}_{timestamp}_{uuid.uuid4().hex[:6]}.pdf"
+        file_name = self._build_file_name(type_key, "pdf", company_name)
         file_path = self.output_dir / file_name
 
         buffer.seek(0)

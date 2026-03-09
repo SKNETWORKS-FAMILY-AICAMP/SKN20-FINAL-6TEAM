@@ -21,8 +21,8 @@ class AnnounceResponse(BaseModel):
     biz_code: str | None = None
     create_date: datetime | None = None
     # S3 키는 클라이언트에 노출하지 않고 존재 여부만 반환
-    doc_s3_key: str = Field(default="", exclude=True)
-    form_s3_key: str = Field(default="", exclude=True)
+    doc_s3_key: str | None = Field(default=None, exclude=True)
+    form_s3_key: str | None = Field(default=None, exclude=True)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
