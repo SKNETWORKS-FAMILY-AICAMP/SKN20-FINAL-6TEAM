@@ -60,7 +60,7 @@ Task 5 — Final Folder Cleanup
 - `mock-rag/` 디렉토리 전체 삭제 + 참조를 일반 rag로 수정
 - **유지**: `산출물/`, `test/`, `.gitignore`, `.git/info`
 
-### Task 2 — Bug Fixing
+### ✅ Task 2 — Bug Fixing (완료 2026-03-09)
 - Docker 환경 기동 → /chrome으로 실제 UI/UX 테스트
 - 채팅 플로우 (입력 → 스트리밍 → 출처 표시)
 - 인증 플로우 (Google OAuth → 로그인/로그아웃)
@@ -71,7 +71,7 @@ Task 5 — Final Folder Cleanup
 - Edge case: 빈 입력, 특수문자, 동시 요청, 네트워크 오류
 - **크로스 기능 통합 테스트**: 여러 페이지/기능을 교차 사용 시 발생하는 상태 충돌, 메모리 누수, 경쟁 조건 검증
 
-### Task 3 — Security Audit
+### ✅ Task 3 — Security Audit (완료 2026-03-09)
 - `.env` / `.ssh/` Git 추적 여부 확인
 - XSS: React dangerouslySetInnerHTML, markdown 렌더링
 - CSRF: 미들웨어 동작 검증
@@ -81,7 +81,7 @@ Task 5 — Final Folder Cleanup
 - CORS: 프로덕션 설정
 - 의존성: known vulnerabilities 스캔
 
-### Task 4 — Refactoring
+### ✅ Task 4 — Refactoring (완료 2026-03-09)
 - 중복 코드 제거
 - 컴포넌트 구조 개선 (530줄 CompanyForm 등)
 - 명명 일관성
