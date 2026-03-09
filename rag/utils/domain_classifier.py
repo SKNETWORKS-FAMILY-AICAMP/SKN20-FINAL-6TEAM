@@ -10,8 +10,11 @@ import logging
 import re
 from dataclasses import dataclass
 
-from utils.config import create_llm, get_settings
+from utils.config import create_llm, get_settings, DOMAIN_LABELS
 from utils.prompts import LLM_DOMAIN_CLASSIFICATION_PROMPT
+
+# LLM이 반환할 수 있는 허용된 도메인 목록
+_VALID_DOMAINS = set(DOMAIN_LABELS.keys())
 
 logger = logging.getLogger(__name__)
 
@@ -98,10 +101,16 @@ class DomainClassifier:
                     raise
                 result = json.loads(obj_match.group(0))
 
+            # 허용 도메인 목록과 대조, 미등록 도메인 필터링
+            raw_domains = result.get("domains", [])
+            validated_domains = [d for d in raw_domains if d in _VALID_DOMAINS]
+            if raw_domains and not validated_domains:
+                logger.warning("[도메인 분류] LLM이 미등록 도메인 반환: %s", raw_domains)
+
             return DomainClassificationResult(
-                domains=result.get("domains", []),
+                domains=validated_domains,
                 confidence=float(result.get("confidence", 0.5)),
-                is_relevant=result.get("is_relevant", True),
+                is_relevant=result.get("is_relevant", True) if validated_domains else False,
                 method="llm",
                 intent=result.get("intent", "consultation"),
             )

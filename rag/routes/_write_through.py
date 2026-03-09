@@ -14,6 +14,7 @@ from utils.config import get_settings
 logger = logging.getLogger(__name__)
 
 _http_client: httpx.AsyncClient | None = None
+_pending_tasks: set[asyncio.Task] = set()
 
 
 def init_http_client() -> None:
@@ -112,14 +113,33 @@ def schedule_write_through(
     if not question or not answer:
         return
 
-    asyncio.create_task(
-        save_turn_to_db(
-            user_id=user_id,
-            session_id=session_id,
-            question=question,
-            answer=answer,
-            agent_code=agent_code,
-            evaluation_data=evaluation_data,
-            sources=sources,
-        )
-    )
+    async def _save_with_retry():
+        try:
+            await save_turn_to_db(
+                user_id=user_id,
+                session_id=session_id,
+                question=question,
+                answer=answer,
+                agent_code=agent_code,
+                evaluation_data=evaluation_data,
+                sources=sources,
+            )
+        except Exception:
+            # 1회 재시도
+            try:
+                await asyncio.sleep(1.0)
+                await save_turn_to_db(
+                    user_id=user_id,
+                    session_id=session_id,
+                    question=question,
+                    answer=answer,
+                    agent_code=agent_code,
+                    evaluation_data=evaluation_data,
+                    sources=sources,
+                )
+            except Exception as retry_exc:
+                logger.warning("write-through retry failed: %s", retry_exc)
+
+    task = asyncio.create_task(_save_with_retry())
+    _pending_tasks.add(task)
+    task.add_done_callback(_pending_tasks.discard)

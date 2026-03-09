@@ -821,7 +821,7 @@ class RAGChain:
 
         result = {
             "content": response,
-            "sources": self.documents_to_sources(documents, query=query),
+            "sources": await asyncio.to_thread(self.documents_to_sources, documents, query),
             "documents": documents,
             "retrieve_time": retrieve_time,
             "generate_time": generate_time,

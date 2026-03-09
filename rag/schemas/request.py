@@ -4,7 +4,7 @@ API 요청에 사용되는 Pydantic 모델을 정의합니다.
 """
 
 import hashlib
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -211,7 +211,7 @@ class ChatMessage(BaseModel):
         content: 메시지 내용
     """
 
-    role: str = Field(description="역할 (user, assistant)")
+    role: Literal["user", "assistant"] = Field(description="역할 (user, assistant)")
     content: str = Field(description="메시지 내용")
 
 
