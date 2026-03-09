@@ -49,7 +49,7 @@ Task 5 — Final Folder Cleanup
 
 ## Task별 범위 요약
 
-### Task 1 — Initial Folder Cleanup
+### ✅ Task 1 — Initial Folder Cleanup (완료 2026-03-09)
 - Windows 아티팩트 (`nul` 파일 2개) 제거
 - 빈 파일 (`convert_log.txt`) 제거
 - 루트 잡 파일 (`package-lock.json` 102B) 제거
