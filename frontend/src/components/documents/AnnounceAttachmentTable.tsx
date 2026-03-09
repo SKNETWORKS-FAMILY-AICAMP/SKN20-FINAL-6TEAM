@@ -3,7 +3,7 @@ import { Typography } from '@material-tailwind/react';
 import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { getAnnounceDownloadUrl } from '../../lib/documentApi';
 import { useToastStore } from '../../stores/toastStore';
-import { isHttpUrl } from '../../lib/utils';
+import { isHttpUrl, formatDateShort } from '../../lib/utils';
 import type { Announce, Schedule } from '../../types';
 
 interface AnnounceWithSchedule {
@@ -16,10 +16,6 @@ interface AnnounceAttachmentTableProps {
   announces: Record<number, Announce>;
 }
 
-const formatDate = (dateStr?: string): string => {
-  if (!dateStr) return '-';
-  return dateStr.split('T')[0];
-};
 
 const AnnounceAttachmentTable: React.FC<AnnounceAttachmentTableProps> = ({
   schedules,
@@ -87,7 +83,7 @@ const AnnounceAttachmentTable: React.FC<AnnounceAttachmentTableProps> = ({
                   </Typography>
                 </td>
                 <td className="px-4 py-3 text-gray-700">
-                  {formatDate(schedule.start_date)}
+                  {formatDateShort(schedule.start_date)}
                 </td>
                 <td className="px-4 py-3">
                   {announce.has_doc ? (

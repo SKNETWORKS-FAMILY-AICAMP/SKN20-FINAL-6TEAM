@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from apps.announces.service import AnnounceService
 from apps.common.deps import get_current_user
 from apps.common.models import User
-from apps.documents.s3_utils import generate_presigned_url
+from apps.documents.s3_utils import get_presigned_url_or_raise
 from config.database import get_db
 
 from .schemas import (
@@ -65,8 +65,4 @@ async def download_announce_attachment(
     if not s3_key:
         raise HTTPException(status_code=404, detail="첨부파일이 없습니다")
 
-    download_url = generate_presigned_url(s3_key)
-    if not download_url:
-        raise HTTPException(status_code=503, detail="다운로드 URL 생성에 실패했습니다")
-
-    return {"download_url": download_url}
+    return {"download_url": get_presigned_url_or_raise(s3_key)}

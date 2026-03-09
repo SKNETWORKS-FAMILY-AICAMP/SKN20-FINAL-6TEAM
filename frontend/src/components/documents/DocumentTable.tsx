@@ -3,7 +3,7 @@ import { Typography } from '@material-tailwind/react';
 import { ArrowDownTrayIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { getDocumentDownloadUrl, deleteDocument } from '../../lib/documentApi';
 import { useToastStore } from '../../stores/toastStore';
-import { isHttpUrl } from '../../lib/utils';
+import { isHttpUrl, formatDateShort } from '../../lib/utils';
 import type { DocumentItem } from '../../types';
 
 export type { DocumentItem };
@@ -31,10 +31,6 @@ const formatFileSize = (bytes?: number): string => {
   return `${Math.ceil(bytes / 1024)} KB`;
 };
 
-const formatDate = (dateStr?: string): string => {
-  if (!dateStr) return '-';
-  return dateStr.split('T')[0];
-};
 
 const DocumentTable: React.FC<DocumentTableProps> = ({
   items,
@@ -123,7 +119,7 @@ const DocumentTable: React.FC<DocumentTableProps> = ({
                   {item.format ? item.format.toUpperCase() : '-'}
                 </td>
                 <td className="px-4 py-3 text-gray-700">{formatFileSize(item.file_size)}</td>
-                <td className="px-4 py-3 text-gray-700">{formatDate(item.create_date)}</td>
+                <td className="px-4 py-3 text-gray-700">{formatDateShort(item.create_date)}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1">
                     <button

@@ -10,7 +10,7 @@ from apps.common.deps import get_current_user
 from apps.common.models import User
 from .schemas import DocumentCreate, DocumentResponse, DocumentListResponse
 from .service import DocumentService
-from .s3_utils import generate_presigned_url
+from .s3_utils import get_presigned_url_or_raise
 
 logger = logging.getLogger(__name__)
 
@@ -84,11 +84,7 @@ async def download_document(
     if file.user_id != current_user.user_id:
         raise HTTPException(status_code=403, detail="접근 권한이 없습니다")
 
-    download_url = generate_presigned_url(file.s3_key)
-    if not download_url:
-        raise HTTPException(status_code=503, detail="다운로드 URL 생성에 실패했습니다")
-
-    return {"download_url": download_url}
+    return {"download_url": get_presigned_url_or_raise(file.s3_key)}
 
 
 @router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)

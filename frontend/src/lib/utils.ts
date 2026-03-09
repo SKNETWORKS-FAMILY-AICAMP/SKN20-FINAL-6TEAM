@@ -8,6 +8,14 @@ export function stripSourcesSection(content: string): string {
 }
 
 /**
+ * 날짜 문자열을 "YYYY-MM-DD" 형태로 포맷합니다. (ISO 8601 T 이후 제거)
+ */
+export function formatDateShort(dateStr?: string): string {
+  if (!dateStr) return '-';
+  return dateStr.split('T')[0];
+}
+
+/**
  * 다운로드 URL이 안전한 http/https URL인지 검증합니다.
  */
 export function isHttpUrl(url: string): boolean {

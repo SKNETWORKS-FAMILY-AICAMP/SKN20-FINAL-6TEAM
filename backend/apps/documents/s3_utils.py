@@ -32,3 +32,12 @@ def generate_presigned_url(s3_key: str, expires_in: int = 3600) -> str | None:
     except ClientError as e:
         logger.error(f"Presigned URL 생성 실패: {e}")
         return None
+
+
+def get_presigned_url_or_raise(s3_key: str | None) -> str:
+    """Presigned URL 반환. 생성 실패 시 HTTPException 발생."""
+    from fastapi import HTTPException
+    url = generate_presigned_url(s3_key or "")
+    if not url:
+        raise HTTPException(status_code=503, detail="다운로드 URL 생성에 실패했습니다")
+    return url

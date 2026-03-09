@@ -16,6 +16,11 @@ from apps.common.notification_settings import (
     is_notification_enabled,
 )
 
+def _biz_prefix(biz_code: str | None) -> str:
+    """업종코드 대분류 2자리 prefix를 반환합니다."""
+    return (biz_code or "")[:2]
+
+
 SYNC_ITEM_LINK = "/company"
 SYNC_ITEM_TITLE = "신규 공고"
 SYNC_ITEM_TYPE = "info"
@@ -45,8 +50,7 @@ class AnnounceService:
         stmt = select(Announce).where(Announce.use_yn == True)
 
         if biz_code:
-            prefix = biz_code[:2]
-            stmt = stmt.where(Announce.biz_code.like(f"{prefix}%"))
+            stmt = stmt.where(Announce.biz_code.like(f"{_biz_prefix(biz_code)}%"))
 
         stmt = stmt.order_by(Announce.create_date.desc()).limit(limit)
         return list(self.db.execute(stmt).scalars().all())
@@ -161,8 +165,7 @@ class AnnounceService:
         cursor_from: datetime,
         cursor_to: datetime,
     ) -> AnnounceSyncItem | None:
-        biz_code = company.biz_code or ""
-        biz_prefix = biz_code[:2]
+        biz_prefix = _biz_prefix(company.biz_code)
         if len(biz_prefix) < 2:
             return None
 
