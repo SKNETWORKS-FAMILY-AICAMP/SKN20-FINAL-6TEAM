@@ -21,6 +21,7 @@
 - [프로젝트 소개](#-프로젝트-소개)
 - [기술 스택](#-기술-스택)
 - [시스템 아키텍처](#-시스템-아키텍처)
+- [AWS 배포 & 보안 구성](#-aws-배포--보안-구성)
 - [RAG 파이프라인 (LangGraph)](#-rag-파이프라인-langgraph)
 - [ERD](#-erd)
 - [주요 기능](#-주요-기능)
@@ -187,6 +188,76 @@
 | **장애 격리** | RAG 서비스에 장애가 발생해도 인증, 기업관리 등 Backend 기능은 정상 작동 |
 
 > Docker Compose로 3개 서비스를 한 번에 관리 — 완전한 MSA보다 운영 복잡도를 낮추면서 개발 효율과 장애 격리라는 핵심 장점만 취했습니다.
+
+---
+
+## ☁️ AWS 배포 & 보안 구성
+
+### 사용 중인 AWS 서비스 6개
+
+<div align="center">
+
+| AWS 서비스 | 용도 | 세부 |
+|:---:|:---:|:---|
+| **EC2** | 메인 서버 | Docker Compose로 6개 컨테이너 운영 (Nginx, Backend, RAG, ChromaDB, Certbot, Batch Updater) |
+| **RDS** | 관계형 DB | MySQL 8.0, bizi_db, SSH Tunnel(Bastion) 경유 접속 |
+| **ElastiCache** | 세션 메모리 | Redis 7, TLS 암호화, 멀티턴 대화 맥락 저장 (TTL 75분) |
+| **S3** | 파일 저장소 | 지원사업 공고 신청 양식, 로그 파일 저장 |
+| **SES** | 이메일 알림 | 리소스 모니터링 알림 (CPU/메모리/디스크 > 90%), 배치 결과 알림 |
+| **IAM** | 인증/인가 | EC2 Instance Role (SES + S3 권한 자동 부여, 키 하드코딩 불필요) |
+
+</div>
+
+### EC2 내부 컨테이너 구성 (총 6개)
+
+<div align="center">
+
+> EC2 t3.large (8GB RAM, 서울 리전) 위에서 Docker Compose로 운영
+
+| 컨테이너 | 메모리 | 역할 |
+|:---:|:---:|:---|
+| **Nginx** | 128MB | 리버스 프록시, SSL, Rate Limiting, React SPA 서빙 |
+| **Backend** | 512MB | FastAPI + Gunicorn (2 workers), 인증/API |
+| **RAG** | 3072MB | LangGraph 5단계 파이프라인, RunPod GPU 호출 |
+| **ChromaDB** | 2048MB | 벡터DB 4개 컬렉션 (~21만 건), 토큰 인증 |
+| **Certbot** | — | Let's Encrypt SSL 인증서 자동 발급/갱신 |
+| **Batch Updater** | 512MB | systemd timer로 매일 18:30 공고 데이터 자동 갱신 |
+
+</div>
+
+### GPU 추론 (RunPod Serverless)
+
+- EC2에 GPU 없이 RunPod Serverless로 GPU 추론을 분리하여 비용 절감
+- CUDA 12.1 기반 Docker 이미지에 모델 프리로드하여 Cold Start 단축
+- 임베딩(BAAI/bge-m3, 1024차원)과 리랭킹(BAAI/bge-reranker-base)을 단일 엔드포인트에서 처리
+
+### 네트워크 보안
+
+| 항목 | 내용 |
+|:---|:---|
+| **HTTPS 강제** | TLS 1.2/1.3, Let's Encrypt SSL / HTTP → HTTPS 301 리다이렉트 |
+| **HSTS** | max-age 2년, preload 적용 |
+| **네트워크 격리** | RDS Private Subnet 배치, Bastion SSH Tunnel 외 접근 차단 |
+| **포트 제한** | Security Group으로 80/443 포트만 외부 개방 |
+
+### 애플리케이션 보안
+
+| 항목 | 내용 |
+|:---|:---|
+| **XSS 방어** | JWT를 HttpOnly Cookie에 저장하여 토큰 탈취 방지 |
+| **보안 헤더** | CSP, X-Frame-Options DENY, X-Content-Type-Options nosniff |
+| **Rate Limiting** | Nginx 10req/s + Backend slowapi 이중 적용 |
+| **CSRF** | 미들웨어로 POST/PUT/DELETE 요청 검증 |
+| **컨테이너 보안** | non-root 사용자(appuser:1001), no-new-privileges, read_only 파일시스템 |
+| **이미지 최적화** | 멀티스테이지 빌드로 빌드 도구를 런타임 이미지에서 제거 |
+
+### 배포 및 운영
+
+- `deploy.sh` 스크립트로 git pull → Secrets 갱신 → Docker 빌드 → 서비스 기동 → 헬스체크 자동화
+- `--service backend` 옵션으로 개별 서비스만 선택적 업데이트 가능
+- 컨테이너 헬스체크 실패 시 자동 재시작 (`restart: unless-stopped`)
+- 로그 json-file 드라이버 10MB 로테이션 적용, S3 백업
+- `.env` 파일 `chmod 600`으로 소유자만 접근 가능
 
 ---
 
