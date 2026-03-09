@@ -155,6 +155,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
       }
     } catch (err) {
       console.error('Failed to fetch companies:', err);
+      addToast({ type: 'error', message: '기업 목록을 불러오는 데 실패했습니다.' });
     } finally {
       setIsLoading(false);
     }
@@ -527,7 +528,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
             <Button variant="text" onClick={() => setIsDialogOpen(false)}>
               취소
             </Button>
-            <Button onClick={handleSave} disabled={!formData.com_name.trim() || formData.biz_num.replace(/[^0-9]/g, '').length !== 10 || isSaving}>
+            <Button onClick={handleSave} disabled={!formData.com_name.trim() || (!isPreparing && formData.biz_num.replace(/[^0-9]/g, '').length !== 10) || isSaving}>
               {isSaving ? '저장 중...' : '저장'}
             </Button>
           </div>

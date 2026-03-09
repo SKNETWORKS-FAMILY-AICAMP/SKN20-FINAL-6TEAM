@@ -15,8 +15,12 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ requiredTypeCode }) => 
     }
   }, [isAuthChecking, isAuthenticated, openLoginModal]);
 
-  if (isAuthChecking || !isAuthenticated) {
+  if (isAuthChecking) {
     return null;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/" replace />;
   }
 
   if (requiredTypeCode && user?.type_code !== requiredTypeCode) {
