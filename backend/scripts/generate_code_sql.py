@@ -196,7 +196,7 @@ def generate_sql(output_file: str | None = None) -> None:
         print(output)
 
     # Summary
-    print(f"\n-- 통계:", file=sys.stderr)
+    print("\n-- 통계:", file=sys.stderr)
     print(f"--   업종 대분류: {len(majors)}건", file=sys.stderr)
     print(f"--   업종 소분류: {len(minors)}건", file=sys.stderr)
     print(f"--   지역 시도: {len(sidos)}건", file=sys.stderr)
@@ -256,7 +256,7 @@ def generate_ts(output_file: str | None = None) -> None:
         print(output)
 
     # Summary
-    print(f"\n-- 통계:", file=sys.stderr)
+    print("\n-- 통계:", file=sys.stderr)
     print(f"--   업종 대분류: {len(majors)}건", file=sys.stderr)
     print(f"--   업종 소분류: {len(minors)}건", file=sys.stderr)
 

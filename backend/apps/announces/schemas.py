@@ -4,7 +4,7 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 class AnnounceResponse(BaseModel):
@@ -20,6 +20,19 @@ class AnnounceResponse(BaseModel):
     source_url: str
     biz_code: str | None = None
     create_date: datetime | None = None
+    # S3 키는 클라이언트에 노출하지 않고 존재 여부만 반환
+    doc_s3_key: str = Field(default="", exclude=True)
+    form_s3_key: str = Field(default="", exclude=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def has_doc(self) -> bool:
+        return bool(self.doc_s3_key)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def has_form(self) -> bool:
+        return bool(self.form_s3_key)
 
 
 class AnnounceSyncTrigger(str, Enum):

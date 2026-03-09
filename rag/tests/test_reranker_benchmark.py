@@ -15,7 +15,6 @@ from langchain_core.documents import Document
 from utils.reranker import (
     CrossEncoderReranker,
     LLMReranker,
-    get_reranker,
     reset_reranker,
 )
 
@@ -138,7 +137,7 @@ class TestCrossEncoderLatency:
         max_latency = max(latencies)
         min_latency = min(latencies)
 
-        print(f"\n[CrossEncoder] 배치 벤치마크 결과:")
+        print("\n[CrossEncoder] 배치 벤치마크 결과:")
         print(f"  - 평균 레이턴시: {avg_latency:.3f}초")
         print(f"  - 최소 레이턴시: {min_latency:.3f}초")
         print(f"  - 최대 레이턴시: {max_latency:.3f}초")
@@ -199,7 +198,7 @@ class TestRerankerComparison:
 
         speedup = llm_elapsed / ce_elapsed if ce_elapsed > 0 else float('inf')
 
-        print(f"\n[비교] 레이턴시 비교 결과:")
+        print("\n[비교] 레이턴시 비교 결과:")
         print(f"  - CrossEncoder: {ce_elapsed:.3f}초")
         print(f"  - LLM Reranker: {llm_elapsed:.3f}초")
         print(f"  - 속도 향상: {speedup:.1f}x")
@@ -230,7 +229,7 @@ class TestRerankerComparison:
         # 공통 상위 문서 확인
         common = set(ce_titles[:3]) & set(llm_titles[:3])
 
-        print(f"\n[일관성] 순위 비교:")
+        print("\n[일관성] 순위 비교:")
         print(f"  - CrossEncoder Top-3: {ce_titles[:3]}")
         print(f"  - LLM Top-3: {llm_titles[:3]}")
         print(f"  - 공통 문서: {common}")

@@ -46,9 +46,6 @@
 ### Tests
 - **Redis 멀티턴 테스트 강화** (`tests/`): Redis 세션 메모리 관련 테스트 커버리지 강화
 
-### Features (추가)
-- **공고 원문(_full_text) 청킹 파이프라인 + 동일 출처 중복 제거** (`scripts/vectordb/`): 공고 원문 전문 청킹 파이프라인 추가 및 동일 출처 청크 중복 제거 처리
-
 ### Refactoring
 - **도메인 분류를 LLM 단일 경로로 전환** (`agents/router.py`, `utils/domain_classifier.py`): 키워드/DB 기반 도메인 분류 제거 — LLM 단일 경로로 통합
 

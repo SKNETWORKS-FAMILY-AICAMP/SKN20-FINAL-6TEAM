@@ -1506,7 +1506,6 @@ class AnnouncementProcessor:
 
             # 파일들을 순회하면서 정보 추출
             file_count = 0
-            full_text_parts = []  # 처리된 파일의 텍스트만 수집 (정보 추출 완료 시 조기 종료될 수 있음)
             for file_path in iter_files_func(ann_id, ann, form_files):
                 if not file_path or not file_path.exists():
                     continue
@@ -1562,7 +1561,6 @@ class AnnouncementProcessor:
 
                 # 3단계: 텍스트 수집 및 LLM 정보 분석
                 if text:
-                    full_text_parts.append(text)
                     check_recruiting = is_ambiguous and file_count == 1
                     extracted_info = self.analyzer.analyze(
                         text,
@@ -1607,7 +1605,6 @@ class AnnouncementProcessor:
                 "지원대상": 지원대상,
                 "제외대상": 제외대상,
                 "지원금액": 지원금액,
-                "_full_text": "\n\n".join(full_text_parts) if full_text_parts else "",
                 "신청양식_파일": form_files,
             }
             results.append(result)

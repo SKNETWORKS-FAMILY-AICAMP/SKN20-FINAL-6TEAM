@@ -29,7 +29,6 @@ class CompanyUpdate(BaseModel):
     addr: str | None = Field(None, max_length=255)
     open_date: datetime | None = None
     biz_code: str | None = Field(None, pattern=r"^[A-Z]{1,2}\d{6}$")
-    main_yn: bool | None = None
 
     @field_validator("biz_num")
     @classmethod

@@ -86,7 +86,7 @@ class DomainClassifier:
             cleaned = response.strip()
             if cleaned.startswith("```"):
                 lines = cleaned.split("\n")
-                lines = [l for l in lines if not l.strip().startswith("```")]
+                lines = [ln for ln in lines if not ln.strip().startswith("```")]
                 cleaned = "\n".join(lines)
 
             # Robust JSON parse

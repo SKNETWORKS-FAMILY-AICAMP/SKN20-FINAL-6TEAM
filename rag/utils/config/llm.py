@@ -1,6 +1,13 @@
 """LLM 인스턴스 팩토리."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from utils.config.settings import get_settings
+
+if TYPE_CHECKING:
+    from langchain_openai import ChatOpenAI
 
 
 def create_llm(

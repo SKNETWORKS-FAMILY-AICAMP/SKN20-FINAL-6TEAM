@@ -3,7 +3,7 @@
 8개 문서 유형의 메타데이터(필드 정의, 생성 방식, 프롬프트 키)를 정의합니다.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass

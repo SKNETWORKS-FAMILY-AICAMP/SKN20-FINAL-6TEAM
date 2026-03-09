@@ -50,7 +50,7 @@ class TestQueryProcessor:
     def test_extract_keywords_only_stopwords(self):
         """불용어만 있는 쿼리."""
         query = "어떻게 하나요?"
-        keywords = QueryProcessor.extract_keywords(query)
+        QueryProcessor.extract_keywords(query)
         # 모두 불용어이므로 빈 리스트 또는 짧은 단어 제외
         # "어떻게", "하나요"는 불용어이므로 제외됨
 

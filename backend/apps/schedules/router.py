@@ -81,7 +81,13 @@ async def update_schedule(
     current_user: User = Depends(get_current_user),
 ):
     """일정 수정"""
-    return require_or_404(service.update_schedule(schedule_id, schedule_data, current_user.user_id), "Schedule not found")
+    try:
+        return require_or_404(service.update_schedule(schedule_id, schedule_data, current_user.user_id), "Schedule not found")
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
 
 
 @router.delete("/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)

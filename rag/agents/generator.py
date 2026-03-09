@@ -6,12 +6,17 @@
 - 액션 선제안: 생성 전에 액션을 결정하여 답변에 반영
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, AsyncGenerator
+from typing import TYPE_CHECKING, Any, AsyncGenerator
+
+if TYPE_CHECKING:
+    from langchain_openai import ChatOpenAI
 
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
@@ -391,14 +396,29 @@ class ResponseGeneratorAgent:
         chain = prompt | llm | StrOutputParser()
 
         content_buffer = ""
-        async for token in chain.astream({
+        llm_timeout = getattr(self.settings, 'llm_timeout', 120.0)
+        stream_iter = chain.astream({
             "query": query,
             "context": context,
             "user_type": user_type,
             "company_context": company_context,
-        }):
-            content_buffer += token
-            yield {"type": "token", "content": token}
+        }).__aiter__()
+        deadline = time.time() + llm_timeout
+        try:
+            while True:
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    raise asyncio.TimeoutError()
+                token = await asyncio.wait_for(stream_iter.__anext__(), timeout=remaining)
+                content_buffer += token
+                yield {"type": "token", "content": token}
+        except StopAsyncIteration:
+            pass
+        except asyncio.TimeoutError:
+            logger.warning("[생성기 스트리밍] LLM 타임아웃: domain=%s", domain)
+            if not content_buffer:
+                yield {"type": "token", "content": FALLBACK_TIMEOUT}
+                content_buffer = FALLBACK_TIMEOUT
 
         content_buffer = self._audit_citations(content_buffer, len(documents))
         yield {"type": "generation_done", "content": content_buffer}

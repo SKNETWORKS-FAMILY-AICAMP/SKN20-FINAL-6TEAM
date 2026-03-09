@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -13,7 +14,7 @@ class DocumentCreate(BaseModel):
     file_path: str = Field(default="", max_length=500)
     s3_key: str = Field(..., max_length=500)
     file_size: int | None = None
-    file_format: str = Field(default="docx", max_length=10)
+    file_format: Literal["pdf", "docx"] = Field(default="docx")
     version: int = Field(default=1, ge=1)
     parent_file_id: int | None = None
     metadata: dict | None = None
@@ -30,7 +31,7 @@ class DocumentResponse(BaseModel):
     doc_type_id: str | None = None
     file_name: str
     file_path: str | None = None
-    s3_key: str | None = None
+    s3_key: str | None = Field(default=None, exclude=True)
     file_size: int | None = None
     file_format: str | None = None
     version: int = 1

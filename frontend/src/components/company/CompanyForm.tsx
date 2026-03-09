@@ -18,6 +18,7 @@ import type { CompanyStatusKey } from '../../lib/constants';
 import { RegionSelect } from '../common/RegionSelect';
 import axios from 'axios';
 import api from '../../lib/api';
+import { fetchCompanies as fetchCompaniesApi, lookupBizNum, createCompany, updateCompany, deleteCompany as deleteCompanyApi, toggleMainCompany } from '../../lib/companyApi';
 import { extractErrorMessage } from '../../lib/errorHandler';
 import { formatDate } from '../../lib/dateUtils';
 import { useAuthStore } from '../../stores/authStore';
@@ -141,8 +142,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
 
   const fetchCompanies = async () => {
     try {
-      const response = await api.get('/companies');
-      const fetchedCompanies: Company[] = response.data;
+      const fetchedCompanies = await fetchCompaniesApi();
       setCompanies(fetchedCompanies);
 
       if (selectedCompanyId != null) {
@@ -155,6 +155,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
       }
     } catch (err) {
       console.error('Failed to fetch companies:', err);
+      addToast({ type: 'error', message: '기업 목록을 불러오는 데 실패했습니다.' });
     } finally {
       setIsLoading(false);
     }
@@ -208,10 +209,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
   const handleBiznoLookup = async () => {
     setIsLookingUp(true);
     try {
-      const resp = await api.get('/companies/lookup', {
-        params: { biz_num: formData.biz_num },
-      });
-      const data = resp.data;
+      const data = await lookupBizNum(formData.biz_num);
 
       if (!data.found) {
         addToast({ type: 'error', message: '해당 사업자등록번호로 조회된 정보가 없습니다.' });
@@ -254,7 +252,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
         open_date: formData.open_date ? new Date(formData.open_date).toISOString() : null,
       };
       if (editingCompany) {
-        await api.put(`/companies/${editingCompany.company_id}`, data);
+        await updateCompany(editingCompany.company_id, data);
         onSelectCompany?.({
           ...editingCompany,
           ...data,
@@ -262,7 +260,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
         } as Company);
         addToast({ type: 'success', message: '기업 정보가 수정되었습니다.' });
       } else {
-        await api.post('/companies', data);
+        await createCompany(data);
 
         // 사업자번호가 있으면 사용자 유형을 사업자로 변경 (관리자 보호는 백엔드에서 처리)
         if (formData.biz_num) {
@@ -292,7 +290,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
 
   const handleToggleMain = async (companyId: number) => {
     try {
-      await api.patch(`/companies/${companyId}/main`);
+      await toggleMainCompany(companyId);
       await fetchCompanies();
     } catch (err) {
       addToast({ type: 'error', message: extractErrorMessage(err, '대표 기업 설정에 실패했습니다.') });
@@ -309,11 +307,10 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
     setDeleteTargetId(null);
 
     try {
-      await api.delete(`/companies/${companyId}`);
+      await deleteCompanyApi(companyId);
       addToast({ type: 'success', message: '기업이 삭제되었습니다.' });
 
-      const response = await api.get('/companies');
-      const remaining: Company[] = response.data;
+      const remaining = await fetchCompaniesApi();
       setCompanies(remaining);
       if (selectedCompanyId === companyId) {
         onSelectCompany?.(null);
@@ -527,7 +524,7 @@ export const CompanyForm = forwardRef<CompanyFormHandle, CompanyFormProps>(({
             <Button variant="text" onClick={() => setIsDialogOpen(false)}>
               취소
             </Button>
-            <Button onClick={handleSave} disabled={!formData.com_name.trim() || formData.biz_num.replace(/[^0-9]/g, '').length !== 10 || isSaving}>
+            <Button onClick={handleSave} disabled={!formData.com_name.trim() || (!isPreparing && formData.biz_num.replace(/[^0-9]/g, '').length !== 10) || isSaving}>
               {isSaving ? '저장 중...' : '저장'}
             </Button>
           </div>

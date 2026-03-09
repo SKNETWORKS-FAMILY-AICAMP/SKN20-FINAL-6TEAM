@@ -14,7 +14,7 @@ from xml.sax.saxutils import escape as xml_escape
 
 import httpx
 
-from schemas.request import CompanyContext, ContractRequest
+from schemas.request import ContractRequest
 from schemas.response import DocumentResponse
 from utils.config import get_settings
 from utils.s3_client import get_s3_client
@@ -227,11 +227,10 @@ class ActionExecutor:
         request: ContractRequest,
     ) -> DocumentResponse:
         """근로계약서 PDF를 생성합니다."""
-        from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import cm
-        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
         _register_korean_font()
 
@@ -402,7 +401,6 @@ class ActionExecutor:
     ) -> DocumentResponse:
         """근로계약서 DOCX를 생성합니다."""
         from docx import Document
-        from docx.shared import Pt, Cm
         from docx.enum.text import WD_ALIGN_PARAGRAPH
 
         # 문서 생성

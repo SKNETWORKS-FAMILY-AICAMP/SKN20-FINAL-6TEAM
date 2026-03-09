@@ -25,8 +25,6 @@ fi
 # compose 파일 자동 감지 (prod > local > default)
 if [ -f "docker-compose.prod.yaml" ]; then
     COMPOSE_FILE="docker-compose.prod.yaml"
-elif [ -f "docker-compose.e2e-test.yaml" ]; then
-    COMPOSE_FILE="docker-compose.e2e-test.yaml"
 else
     COMPOSE_FILE="docker-compose.yaml"
 fi

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=3B82F6&height=200&section=header&text=Bizi%20(비지)&fontSize=60&fontColor=ffffff&fontAlignY=38&desc=RAG%20기반%20중소기업·스타트업%20통합%20경영%20컨설팅%20AI%20챗봇&descAlignY=62&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=3B82F6&height=200&section=header&text=Bizi%20&fontSize=60&fontColor=ffffff&fontAlignY=38&desc=RAG%20기반%20중소기업·스타트업%20통합%20경영%20컨설팅%20AI%20챗봇&descAlignY=62&descSize=18" width="100%"/>
 
 
 > **"예비 창업자·스타트업 CEO·중소기업 대표가 경영 의사결정을 할 때,**  
@@ -251,6 +251,18 @@
 | **컨테이너 보안** | non-root 사용자(appuser:1001), no-new-privileges, read_only 파일시스템 |
 | **이미지 최적화** | 멀티스테이지 빌드로 빌드 도구를 런타임 이미지에서 제거 |
 
+### 배포 주소
+
+<div align="center">
+
+<a href="https://ezbz.kro.kr">
+  <img src="https://capsule-render.vercel.app/api?type=rect&color=3B82F6&height=60&text=🌐%20https://ezbz.kro.kr&fontSize=20&fontColor=ffffff" width="100%"/>
+</a>
+
+> 도메인 제공: [내도메인.한국](https://내도메인.한국)
+
+</div>
+
 ### 배포 및 운영
 
 - `deploy.sh` 스크립트로 git pull → Secrets 갱신 → Docker 빌드 → 서비스 기동 → 헬스체크 자동화
@@ -258,6 +270,7 @@
 - 컨테이너 헬스체크 실패 시 자동 재시작 (`restart: unless-stopped`)
 - 로그 json-file 드라이버 10MB 로테이션 적용, S3 백업
 - `.env` 파일 `chmod 600`으로 소유자만 접근 가능
+- 본 서비스는 2026년 3월 11일 저녁까지 운영되며, 이후 접속이 중단됩니다.
 
 ---
 
@@ -666,13 +679,6 @@ VITE_API_URL=/api
 
 이 프로젝트는 [MIT License](LICENSE)를 따릅니다.
 
-<br/>
-
-> **⚠️ 면책 조항**  
-> Bizi가 제공하는 정보는 AI 기반 참고 자료이며, 법률·세무·노무 등 전문 분야의 공식 자문을 대체하지 않습니다.  
-> 중요한 의사결정 시 반드시 해당 분야 전문가와 상담하시기 바랍니다.
-
-<br/>
 
 <div align="center">
 
