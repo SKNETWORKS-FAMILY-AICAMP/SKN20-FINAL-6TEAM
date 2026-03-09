@@ -29,6 +29,15 @@ class AnnounceService:
     def __init__(self, db: Session):
         self.db = db
 
+    def get_announce_by_id(self, announce_id: int) -> Announce | None:
+        """공고 단건 조회 (삭제된 공고 제외)."""
+        return self.db.execute(
+            select(Announce).where(
+                Announce.announce_id == announce_id,
+                Announce.use_yn == True,
+            )
+        ).scalar_one_or_none()
+
     def get_announces_by_biz_code(
         self, biz_code: str | None = None, limit: int = 5
     ) -> list[Announce]:

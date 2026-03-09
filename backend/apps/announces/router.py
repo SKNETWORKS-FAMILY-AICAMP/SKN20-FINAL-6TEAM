@@ -3,12 +3,11 @@
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from apps.announces.service import AnnounceService
 from apps.common.deps import get_current_user
-from apps.common.models import Announce, User
+from apps.common.models import User
 from apps.documents.s3_utils import generate_presigned_url
 from config.database import get_db
 
@@ -54,14 +53,11 @@ async def sync_announces(
 async def download_announce_attachment(
     announce_id: int,
     type: str = Query(..., pattern="^(doc|form)$"),
-    db: Session = Depends(get_db),
+    service: AnnounceService = Depends(get_announce_service),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, str]:
     """공고 첨부파일 presigned URL 반환."""
-    result = db.execute(
-        select(Announce).where(Announce.announce_id == announce_id)
-    )
-    announce = result.scalar_one_or_none()
+    announce = service.get_announce_by_id(announce_id)
     if not announce:
         raise HTTPException(status_code=404, detail="공고를 찾을 수 없습니다")
 

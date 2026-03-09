@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Typography } from '@material-tailwind/react';
 import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { getAnnounceDownloadUrl } from '../../lib/documentApi';
+import { useToastStore } from '../../stores/toastStore';
 import type { Announce, Schedule } from '../../types';
 
 interface AnnounceWithSchedule {
@@ -24,6 +25,7 @@ const AnnounceAttachmentTable: React.FC<AnnounceAttachmentTableProps> = ({
   announces,
 }) => {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const addToast = useToastStore((s) => s.addToast);
 
   const linkedItems: AnnounceWithSchedule[] = schedules
     .filter((s) => s.announce_id != null && announces[s.announce_id] != null)
@@ -37,9 +39,16 @@ const AnnounceAttachmentTable: React.FC<AnnounceAttachmentTableProps> = ({
     setDownloadingId(key);
     try {
       const url = await getAnnounceDownloadUrl(announceId, type);
+      try {
+        const parsed = new URL(url);
+        if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('invalid protocol');
+      } catch {
+        addToast({ type: 'error', message: '유효하지 않은 다운로드 URL입니다.' });
+        return;
+      }
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (err) {
-      console.error('다운로드 실패:', err);
+      addToast({ type: 'error', message: '다운로드에 실패했습니다.' });
     } finally {
       setDownloadingId(null);
     }
@@ -83,7 +92,7 @@ const AnnounceAttachmentTable: React.FC<AnnounceAttachmentTableProps> = ({
                   {formatDate(schedule.start_date)}
                 </td>
                 <td className="px-4 py-3">
-                  {announce.doc_s3_key ? (
+                  {announce.has_doc ? (
                     <button
                       type="button"
                       onClick={() => void handleDownload(announce.announce_id, 'doc')}
@@ -99,7 +108,7 @@ const AnnounceAttachmentTable: React.FC<AnnounceAttachmentTableProps> = ({
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  {announce.form_s3_key ? (
+                  {announce.has_form ? (
                     <button
                       type="button"
                       onClick={() => void handleDownload(announce.announce_id, 'form')}

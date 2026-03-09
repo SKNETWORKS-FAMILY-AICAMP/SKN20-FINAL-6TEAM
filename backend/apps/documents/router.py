@@ -2,13 +2,12 @@ import hmac
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Query, status
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from config.database import get_db
 from config.settings import settings
 from apps.common.deps import get_current_user
-from apps.common.models import File, User
+from apps.common.models import User
 from .schemas import DocumentCreate, DocumentResponse, DocumentListResponse
 from .service import DocumentService
 from .s3_utils import generate_presigned_url
@@ -75,14 +74,11 @@ async def list_user_documents(
 @router.get("/{file_id}/download")
 async def download_document(
     file_id: int,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    service: DocumentService = Depends(get_document_service),
 ) -> dict[str, str]:
     """파일 presigned URL 반환."""
-    result = db.execute(
-        select(File).where(File.file_id == file_id, File.use_yn == True)
-    )
-    file = result.scalar_one_or_none()
+    file = service.get_document(file_id)
     if not file:
         raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다")
     if file.user_id != current_user.user_id:

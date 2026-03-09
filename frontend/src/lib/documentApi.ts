@@ -1,7 +1,15 @@
 import api from './api';
+import type { DocumentItem } from '../components/documents/DocumentTable';
 
-export async function fetchUserDocuments(userId: number, offset = 0, limit = 20) {
-  const res = await api.get(`/documents/user/${userId}`, { params: { offset, limit } });
+export async function fetchUserDocuments(
+  userId: number,
+  offset = 0,
+  limit = 20,
+): Promise<{ items: DocumentItem[]; total: number }> {
+  const res = await api.get<{ items: DocumentItem[]; total: number }>(
+    `/documents/user/${userId}`,
+    { params: { offset, limit } },
+  );
   return res.data;
 }
 

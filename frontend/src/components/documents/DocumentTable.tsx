@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Typography } from '@material-tailwind/react';
 import { ArrowDownTrayIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { getDocumentDownloadUrl, deleteDocument } from '../../lib/documentApi';
+import { useToastStore } from '../../stores/toastStore';
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   labor_contract: '근로계약서',
@@ -50,14 +51,22 @@ const DocumentTable: React.FC<DocumentTableProps> = ({
   onRefresh,
 }) => {
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
+  const addToast = useToastStore((s) => s.addToast);
 
   const handleDownload = async (fileId: number) => {
     setActionLoadingId(fileId);
     try {
       const url = await getDocumentDownloadUrl(fileId);
+      try {
+        const parsed = new URL(url);
+        if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('invalid protocol');
+      } catch {
+        addToast({ type: 'error', message: '유효하지 않은 다운로드 URL입니다.' });
+        return;
+      }
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (err) {
-      console.error('다운로드 실패:', err);
+      addToast({ type: 'error', message: '다운로드에 실패했습니다.' });
     } finally {
       setActionLoadingId(null);
     }
@@ -70,7 +79,7 @@ const DocumentTable: React.FC<DocumentTableProps> = ({
       await deleteDocument(fileId);
       onRefresh();
     } catch (err) {
-      console.error('삭제 실패:', err);
+      addToast({ type: 'error', message: '삭제에 실패했습니다.' });
     } finally {
       setActionLoadingId(null);
     }
