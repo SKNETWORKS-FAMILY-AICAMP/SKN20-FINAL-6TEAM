@@ -6,6 +6,7 @@
 - **자료실 기능 구현** (`pages/`, `components/`): 공지사항 첨부파일 및 문서 다운로드 UI 추가
 
 ### Bug Fixes
+- **자료실 내 문서 탭 미표시 수정** (`pages/DocumentLibraryPage.tsx`, `types/index.ts`, `components/documents/DocumentTable.tsx`): `DocumentItem.doc_type` → `doc_type_id` 필드명 통일, useEffect dependency `user?.user_id` 추가
 - **Task 2 — 버그 수정 22건**: Frontend 전반 버그 수정
 - **자료실 코드 리뷰 보안/품질 수정**: 보안 취약점 및 코드 품질 이슈 수정
 

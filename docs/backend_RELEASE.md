@@ -4,6 +4,7 @@
 
 ### Features
 - **자료실 기능 구현** (`apps/documents/router.py`, `apps/documents/schemas.py`): 공지사항 첨부파일 및 문서 다운로드 API 추가
+- **공고 단건 조회 API 추가** (`apps/announces/router.py`): `GET /announces/{id}` 엔드포인트 추가 — 자료실 공고 첨부파일 탭 표시 수정
 - **첫 기업 등록 시 main_yn 자동 설정** (`apps/companies/service.py`): 첫 등록 기업에 main_yn=1 자동 지정
 
 ### Security
@@ -15,9 +16,11 @@
 - **자료실 코드 리뷰 보안/품질 수정** (`apps/documents/`): 보안 취약점 및 코드 품질 이슈 수정
 
 ### Refactoring
+- **announces router require_or_404 통일** (`apps/announces/router.py`): 인라인 404 처리 → `require_or_404()` 헬퍼로 교체
 - **backend 린트 수정** (`apps/*`): F401, F541, E402 등 ruff 린트 위반 수정
 
 ### Chores
+- **프로덕션 AWS_S3_BUCKET 환경변수 추가** (`docker-compose.prod.yaml`): backend 서비스에 S3 버킷 주입 설정 추가
 - **Task 1 최종 마무리**: AGENTS.md 동기화, 평가 보고서 통합, FORM.md 이관
 
 ## [2026-03-07] - 보안 감사 CRITICAL+HIGH 16건 수정

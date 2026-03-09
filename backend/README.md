@@ -128,6 +128,23 @@ backend/
 | PUT | `/schedules/{id}` | 일정 수정 |
 | DELETE | `/schedules/{id}` | 일정 삭제 |
 
+### 공고
+
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| GET | `/announces` | 공고 목록 조회 (업종코드 필터) |
+| GET | `/announces/{id}` | 공고 단건 조회 |
+| GET | `/announces/{id}/download` | 공고 첨부파일 presigned URL |
+| POST | `/announces/sync` | 신규 공고 알림 동기화 |
+
+### 문서
+
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| GET | `/documents/user/{user_id}` | 내 문서 목록 (페이지네이션) |
+| GET | `/documents/{id}/download` | 문서 presigned URL |
+| DELETE | `/documents/{id}` | 문서 삭제 |
+
 ### RAG 프록시
 
 | Method | Endpoint | 설명 |

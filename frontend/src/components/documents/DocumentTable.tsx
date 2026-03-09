@@ -113,7 +113,7 @@ const DocumentTable: React.FC<DocumentTableProps> = ({
                   {item.file_name}
                 </td>
                 <td className="px-4 py-3 text-gray-700">
-                  {item.doc_type ? (DOC_TYPE_LABELS[item.doc_type] ?? item.doc_type) : '-'}
+                  {item.doc_type_id ? (DOC_TYPE_LABELS[item.doc_type_id] ?? item.doc_type_id) : '-'}
                 </td>
                 <td className="px-4 py-3 text-gray-700">
                   {item.format ? item.format.toUpperCase() : '-'}

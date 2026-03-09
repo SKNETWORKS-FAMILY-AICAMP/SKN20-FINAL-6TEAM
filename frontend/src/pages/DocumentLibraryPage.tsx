@@ -95,7 +95,7 @@ const DocumentLibraryPage: React.FC = () => {
     if (activeTab === 'my-docs') {
       void fetchDocs(docOffset);
     }
-  }, [activeTab, docOffset]);
+  }, [activeTab, docOffset, user?.user_id]);
 
   useEffect(() => {
     if (activeTab === 'announce-attachments') {

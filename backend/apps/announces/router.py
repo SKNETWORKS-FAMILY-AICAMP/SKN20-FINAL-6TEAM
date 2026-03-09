@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from apps.announces.service import AnnounceService
-from apps.common.deps import get_current_user
+from apps.common.deps import get_current_user, require_or_404
 from apps.common.models import User
 from apps.documents.s3_utils import get_presigned_url_or_raise
 from config.database import get_db
@@ -49,6 +49,16 @@ async def sync_announces(
     )
 
 
+@router.get("/{announce_id}", response_model=AnnounceResponse)
+async def get_announce(
+    announce_id: int,
+    service: AnnounceService = Depends(get_announce_service),
+    current_user: User = Depends(get_current_user),
+) -> AnnounceResponse:
+    """공고 단건 조회."""
+    return require_or_404(service.get_announce_by_id(announce_id), "공고를 찾을 수 없습니다")
+
+
 @router.get("/{announce_id}/download")
 async def download_announce_attachment(
     announce_id: int,
@@ -57,10 +67,7 @@ async def download_announce_attachment(
     current_user: User = Depends(get_current_user),
 ) -> dict[str, str]:
     """공고 첨부파일 presigned URL 반환."""
-    announce = service.get_announce_by_id(announce_id)
-    if not announce:
-        raise HTTPException(status_code=404, detail="공고를 찾을 수 없습니다")
-
+    announce = require_or_404(service.get_announce_by_id(announce_id), "공고를 찾을 수 없습니다")
     s3_key = announce.doc_s3_key if type == "doc" else announce.form_s3_key
     if not s3_key:
         raise HTTPException(status_code=404, detail="첨부파일이 없습니다")

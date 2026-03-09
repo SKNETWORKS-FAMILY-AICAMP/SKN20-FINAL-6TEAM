@@ -2,7 +2,7 @@
 export interface DocumentItem {
   file_id: number;
   file_name: string;
-  doc_type?: string;
+  doc_type_id?: string;
   format?: string;
   file_size?: number;
   create_date?: string;
