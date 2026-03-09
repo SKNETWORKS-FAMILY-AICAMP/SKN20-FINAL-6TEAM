@@ -101,8 +101,6 @@ class File(Base):
     company_id = Column(Integer, ForeignKey("company.company_id", ondelete="SET NULL"), nullable=True)
     user_id = Column(Integer, nullable=True)
     doc_type_id = Column(String(50), nullable=True, comment="문서 유형 (labor_contract, nda 등)")
-    file_size = Column(Integer, nullable=True, comment="파일 크기 (bytes)")
-    file_format = Column(String(10), nullable=True, comment="pdf 또는 docx")
     version = Column(Integer, nullable=False, default=1, comment="문서 버전")
     parent_file_id = Column(Integer, nullable=True, comment="수정 원본 파일 ID")
     file_metadata = Column("metadata", JSON, nullable=True, comment="생성 시 사용한 파라미터 등")

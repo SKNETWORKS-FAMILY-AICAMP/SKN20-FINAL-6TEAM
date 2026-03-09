@@ -28,8 +28,6 @@ class DocumentService:
             file_name=data.file_name,
             file_path=data.file_path,
             s3_key=data.s3_key,
-            file_size=data.file_size,
-            file_format=data.file_format,
             version=version,
             parent_file_id=data.parent_file_id,
             file_metadata=data.metadata,
