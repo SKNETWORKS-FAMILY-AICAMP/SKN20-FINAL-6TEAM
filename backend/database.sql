@@ -689,8 +689,6 @@ CREATE TABLE IF NOT EXISTS `file` (
     `company_id` INT DEFAULT NULL,
     `user_id` INT DEFAULT NULL,
     `doc_type_id` VARCHAR(50) DEFAULT NULL COMMENT '문서 유형 (labor_contract, nda 등)',
-    `file_size` INT DEFAULT NULL COMMENT '파일 크기 (bytes)',
-    `file_format` VARCHAR(10) DEFAULT NULL COMMENT 'pdf 또는 docx',
     `version` INT NOT NULL DEFAULT 1 COMMENT '문서 버전 (수정 시 증가)',
     `parent_file_id` INT DEFAULT NULL COMMENT '수정 원본 파일 ID',
     `metadata` JSON DEFAULT NULL COMMENT '생성 시 사용한 파라미터 등',
