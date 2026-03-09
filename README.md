@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=3B82F6&height=200&section=header&text=Bizi%20(비지)&fontSize=60&fontColor=ffffff&fontAlignY=38&desc=RAG%20기반%20중소기업·스타트업%20통합%20경영%20컨설팅%20AI%20챗봇&descAlignY=62&descSize=18" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=3B82F6&height=200&section=header&text=Bizi%20&fontSize=60&fontColor=ffffff&fontAlignY=38&desc=RAG%20기반%20중소기업·스타트업%20통합%20경영%20컨설팅%20AI%20챗봇&descAlignY=62&descSize=18" width="100%"/>
 
 
 > **"예비 창업자·스타트업 CEO·중소기업 대표가 경영 의사결정을 할 때,**  
