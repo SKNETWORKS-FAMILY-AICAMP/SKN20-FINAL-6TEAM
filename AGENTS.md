@@ -5,9 +5,9 @@
 ## Commands
 - Deploy test: `docker compose up --build` (production-like environment)
 - E2E env: `docker compose -f docker-compose.e2e-test.yaml up --build` (로컬 MySQL + Mock RAG)
-- Backend test: `.venv/bin/pytest backend/tests/ -v` (Mac/Linux) / `.venv\Scripts\pytest backend/tests/ -v` (Windows)
+- Backend test: `.venv/bin/pytest backend/tests/ -v` (must use root .venv)
 - Frontend test: `cd frontend && npm run test`
-- RAG test: `.venv/bin/pytest rag/tests/ -v` (Mac/Linux) / `.venv\Scripts\pytest rag/tests/ -v` (Windows)
+- RAG test: `.venv/bin/pytest rag/tests/ -v` (must use root .venv)
 - E2E test: `cd frontend && npm run test:e2e`
 - Lint: `ruff check . --fix` (Python) / `cd frontend && npx eslint --fix .` (TS)
 - Typecheck: `cd frontend && npx tsc --noEmit`
@@ -23,6 +23,7 @@
 ## Workflow
 - Record mistakes/corrections in `tasks/lessons.md`
 - Write feature plans in `docs/plans/<feature>.md`
+- Think in English, respond in Korean
 
 ## Preferences
 - Simplicity first: minimal changes, minimal code, don't touch surrounding code
@@ -34,13 +35,6 @@
 - Python `.venv` lives at project root only — no per-service venvs. Always use `.venv/bin/pytest`
 - `EMBEDDING_PROVIDER` env var: `local` uses local model, `runpod` uses RunPod Serverless — wrong value silently changes embedding behavior
 - `docker-compose.yaml` (production-like) vs `docker-compose.e2e-test.yaml` (E2E 테스트) — 용도에 맞는 파일 사용
-
-## MUST NOT
-- No hardcoding: API keys, DB connections, ports → use env vars / config files
-- No magic numbers/strings: define as constants
-- No duplicate code: extract to utility functions
-- No secret exposure: no passwords/tokens in code/logs
-- No raw SQL: use SQLAlchemy ORM
 
 ## Test Exclusion
 `/test` directory is created for testing and is not part of the project
