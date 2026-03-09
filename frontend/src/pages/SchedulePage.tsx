@@ -25,6 +25,8 @@ import {
   TrashIcon,
 } from '@heroicons/react/24/outline';
 import api from '../lib/api';
+import { fetchCompanies as fetchCompaniesApi } from '../lib/companyApi';
+import { fetchSchedules as fetchSchedulesApi, createSchedule, updateSchedule, deleteSchedule as deleteScheduleApi } from '../lib/scheduleApi';
 import { extractErrorMessage } from '../lib/errorHandler';
 import { useToastStore } from '../stores/toastStore';
 import { formatDateLong } from '../lib/dateUtils';
@@ -255,18 +257,18 @@ const SchedulePage: React.FC = () => {
   const fetchData = async () => {
     try {
       const [schedulesResult, companiesResult] = await Promise.allSettled([
-        api.get('/schedules'),
-        api.get('/companies'),
+        fetchSchedulesApi(),
+        fetchCompaniesApi(),
       ]);
 
       if (schedulesResult.status === 'fulfilled') {
-        setSchedules(normalizeSchedules(schedulesResult.value.data));
+        setSchedules(normalizeSchedules(schedulesResult.value));
       } else {
         console.error('Failed to fetch schedules:', schedulesResult.reason);
       }
 
       if (companiesResult.status === 'fulfilled') {
-        setCompanies(normalizeCompanies(companiesResult.value.data));
+        setCompanies(normalizeCompanies(companiesResult.value));
       } else {
         console.error('Failed to fetch companies:', companiesResult.reason);
       }
@@ -369,10 +371,10 @@ const SchedulePage: React.FC = () => {
       };
 
       if (editingSchedule) {
-        await api.put(`/schedules/${editingSchedule.schedule_id}`, data);
+        await updateSchedule(editingSchedule.schedule_id, data);
         addToast({ type: 'success', message: '일정이 수정되었습니다.' });
       } else {
-        await api.post('/schedules', data);
+        await createSchedule(data);
         addToast({ type: 'success', message: '일정이 등록되었습니다.' });
       }
 
@@ -390,7 +392,7 @@ const SchedulePage: React.FC = () => {
     if (!window.confirm('정말 삭제하시겠습니까?')) return;
 
     try {
-      await api.delete(`/schedules/${scheduleId}`);
+      await deleteScheduleApi(scheduleId);
       addToast({ type: 'success', message: '일정이 삭제되었습니다.' });
       setIsDialogOpen(false);
       await fetchData();
@@ -484,7 +486,7 @@ const SchedulePage: React.FC = () => {
     setProcessingAnnounceId(announce.announce_id);
     try {
       const payload = buildAnnounceSchedulePayload(announce, selectedCompanyId, finalMemo);
-      await api.post('/schedules', payload);
+      await createSchedule(payload);
       addToast({
         type: 'success',
         message: '공고 일정이 캘린더에 자동 등록되었습니다.',
@@ -509,7 +511,7 @@ const SchedulePage: React.FC = () => {
 
     setProcessingAnnounceId(announceId);
     try {
-      await api.delete(`/schedules/${linkedSchedule.schedule_id}`);
+      await deleteScheduleApi(linkedSchedule.schedule_id);
       addToast({
         type: 'success',
         message: '공고 일정이 캘린더에서 제거되었습니다.',
