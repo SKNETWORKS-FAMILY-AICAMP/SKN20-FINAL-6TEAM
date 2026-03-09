@@ -5,3 +5,4 @@ export { default as SchedulePage } from './SchedulePage';
 export { default as AdminDashboardPage } from './AdminDashboardPage';
 export { default as AdminLogPage } from './AdminLogPage';
 export { default as UsageGuidePage } from './UsageGuidePage';
+export { default as DocumentLibraryPage } from './DocumentLibraryPage';

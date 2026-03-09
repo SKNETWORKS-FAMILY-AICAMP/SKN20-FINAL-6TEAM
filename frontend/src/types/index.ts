@@ -54,6 +54,8 @@ export interface Announce {
   source_url: string;
   biz_code?: string;
   create_date?: string;
+  doc_s3_key?: string;
+  form_s3_key?: string;
 }
 
 // Schedule types

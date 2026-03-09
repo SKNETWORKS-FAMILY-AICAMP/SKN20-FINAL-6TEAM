@@ -19,6 +19,8 @@ class AnnounceResponse(BaseModel):
     organization: str
     source_url: str
     biz_code: str | None = None
+    doc_s3_key: str = ""
+    form_s3_key: str = ""
     create_date: datetime | None = None
 
 

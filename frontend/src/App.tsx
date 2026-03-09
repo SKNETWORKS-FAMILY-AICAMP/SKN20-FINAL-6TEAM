@@ -19,6 +19,7 @@ import {
   AdminDashboardPage,
   AdminLogPage,
   UsageGuidePage,
+  DocumentLibraryPage,
 } from './pages';
 import { useAuthStore } from './stores/authStore';
 
@@ -45,6 +46,7 @@ const AppRoutes: React.FC = () => {
           <Route element={<ProtectedRoute />}>
             <Route path="/company" element={<CompanyPage />} />
             <Route path="/schedule" element={<SchedulePage />} />
+            <Route path="/documents" element={<DocumentLibraryPage />} />
           </Route>
 
           <Route element={<ProtectedRoute requiredTypeCode="U0000001" />}>
