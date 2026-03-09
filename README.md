@@ -197,7 +197,7 @@
 
 <div align="center">
 
-<img src="산출물/images/langgraph-pipeline.png" width="75%" alt="LangGraph RAG 파이프라인"/>
+<img src="docs/image/langgraph.png"/>
 
 </div>
 
