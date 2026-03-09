@@ -32,7 +32,7 @@ class EvaluationData(BaseModel):
     answer_relevancy: float | None = Field(default=None, description="Answer Relevancy score (0-1)")
     context_precision: float | None = Field(default=None, description="Context Precision score (0-1)")
     context_recall: float | None = Field(default=None, description="Context Recall score (0-1)")
-    llm_score: int | None = Field(default=None, description="LLM score (0-100)")
+    llm_score: int | None = Field(default=None, description="LLM score (0-100)", ge=0, le=100)
     llm_passed: bool | None = Field(default=None, description="LLM pass/fail")
     contexts: list[str] = Field(default_factory=list, description="retrieved context snippets")
     sources: list[SourceReferenceData] = Field(default_factory=list, description="source references")
