@@ -223,7 +223,7 @@ services:
   batch-updater:
     build:
       context: .
-      dockerfile: Dockerfile.batch
+      dockerfile: scripts/batch/Dockerfile.batch
     container_name: bizi-batch-updater
     profiles: ["batch"]
     volumes:
