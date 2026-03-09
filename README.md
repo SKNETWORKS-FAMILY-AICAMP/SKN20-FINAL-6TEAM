@@ -251,6 +251,18 @@
 | **컨테이너 보안** | non-root 사용자(appuser:1001), no-new-privileges, read_only 파일시스템 |
 | **이미지 최적화** | 멀티스테이지 빌드로 빌드 도구를 런타임 이미지에서 제거 |
 
+### 배포 주소
+
+<div align="center">
+
+| 환경 | URL |
+|:---:|:---|
+| 🌐 **프로덕션** | [https://ezbz.kro.kr](https://ezbz.kro.kr) |
+
+> 도메인 제공: [내도메인.한국](https://내도메인.한국)
+
+</div>
+
 ### 배포 및 운영
 
 - `deploy.sh` 스크립트로 git pull → Secrets 갱신 → Docker 빌드 → 서비스 기동 → 헬스체크 자동화
