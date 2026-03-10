@@ -391,11 +391,11 @@
   </tr>
   <tr>
     <td align="center">
-      <img src="산출물/최종발표/document-library-my-docs.png" width="100%" alt="자료실 - 내 문서"/>
+      <img src="docs/image/document-library-my-docs.png" width="100%" alt="자료실 - 내 문서"/>
       <br/><b>📁 자료실 — 내 문서</b>
     </td>
     <td align="center">
-      <img src="산출물/최종발표/document-library-announce.png" width="100%" alt="자료실 - 공고 첨부파일"/>
+      <img src="docs/image/document-library-announce.png" width="100%" alt="자료실 - 공고 첨부파일"/>
       <br/><b>📎 자료실 — 공고 첨부파일</b>
     </td>
   </tr>
