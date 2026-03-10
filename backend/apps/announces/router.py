@@ -1,7 +1,5 @@
 """공고 API 라우터."""
 
-from typing import List
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -25,13 +23,13 @@ def get_announce_service(db: Session = Depends(get_db)) -> AnnounceService:
     return AnnounceService(db)
 
 
-@router.get("", response_model=List[AnnounceResponse])
+@router.get("", response_model=list[AnnounceResponse])
 async def get_announces(
     biz_code: str | None = Query(None, description="업종코드 (대분류 prefix 매칭)"),
     limit: int = Query(5, ge=1, le=20, description="최대 결과 수"),
     service: AnnounceService = Depends(get_announce_service),
     current_user: User = Depends(get_current_user),
-) -> List[AnnounceResponse]:
+) -> list[AnnounceResponse]:
     """공고 목록 조회."""
     return service.get_announces_by_biz_code(biz_code=biz_code, limit=limit)
 

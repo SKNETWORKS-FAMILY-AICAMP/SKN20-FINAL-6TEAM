@@ -126,9 +126,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     if settings.enable_reranking and settings.embedding_provider == "local":
         logger.info("CrossEncoder 모델 사전 로딩 시작...")
-        reranker = get_reranker()
-        await asyncio.to_thread(lambda: reranker.model)
-        logger.info("CrossEncoder 모델 사전 로딩 완료")
+        try:
+            reranker = get_reranker()
+            await asyncio.to_thread(lambda: reranker.model)
+            logger.info("CrossEncoder 모델 사전 로딩 완료")
+        except Exception as exc:
+            logger.warning("CrossEncoder 모델 사전 로딩 실패 (서비스는 정상 기동): %s", exc)
     elif settings.embedding_provider == "runpod":
         # 시작 시 1회 warmup (워커 깨우기)
         from utils.runpod_warmup import run_periodic_warmup, warmup_runpod

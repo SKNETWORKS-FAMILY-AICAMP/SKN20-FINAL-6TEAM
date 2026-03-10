@@ -506,6 +506,13 @@ async def chat_stream(request: ChatRequest):
                     events.append(f"data: {done.model_dump_json()}\n\n")
                     return events
 
+                def _emit_timeout(timeout_msg: str) -> list[str]:
+                    """타임아웃 메시지를 SSE 이벤트 목록으로 변환합니다."""
+                    if pre_collected_actions:
+                        return _build_timeout_events(timeout_msg, streamed_so_far)
+                    error_chunk = StreamResponse(type="error", content=timeout_msg)
+                    return [f"data: {error_chunk.model_dump_json()}\n\n"]
+
                 # 스트리밍 도중 누적된 토큰 (타임아웃 시 콘텐츠 보존용)
                 streamed_so_far = ""
 
@@ -515,16 +522,8 @@ async def chat_stream(request: ChatRequest):
                         logger.warning(
                             "[stream] hard timeout 초과 (%.1fs)", hard_timeout,
                         )
-                        timeout_msg = "응답 생성 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."
-                        if pre_collected_actions:
-                            for evt in _build_timeout_events(timeout_msg, streamed_so_far):
-                                yield evt
-                        else:
-                            error_chunk = StreamResponse(
-                                type="error", content=timeout_msg,
-                            )
-                            yield f"data: {error_chunk.model_dump_json()}\n\n"
-
+                        for evt in _emit_timeout("응답 생성 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."):
+                            yield evt
                         return
                     try:
                         chunk = await asyncio.wait_for(
@@ -534,45 +533,29 @@ async def chat_stream(request: ChatRequest):
                         break
                     except asyncio.TimeoutError:
                         logger.warning(
-                            "[stream] hard timeout 초과 (%.1fs)", hard_timeout,
+                            "[stream] asyncio 청크 대기 중 hard timeout 초과 (%.1fs)", hard_timeout,
                         )
-                        timeout_msg = "응답 생성 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."
-                        if pre_collected_actions:
-                            for evt in _build_timeout_events(timeout_msg, streamed_so_far):
-                                yield evt
-                        else:
-                            error_chunk = StreamResponse(
-                                type="error", content=timeout_msg,
-                            )
-                            yield f"data: {error_chunk.model_dump_json()}\n\n"
-
+                        for evt in _emit_timeout("응답 생성 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."):
+                            yield evt
                         return
 
                     # 소프트 타임아웃 체크 (기존 호환)
                     if time.time() - start_time > stream_timeout:
-                        timeout_msg = "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."
-                        if pre_collected_actions:
-                            for evt in _build_timeout_events(timeout_msg, streamed_so_far):
-                                yield evt
-                        else:
-                            error_chunk = StreamResponse(
-                                type="error", content=timeout_msg,
-                            )
-                            yield f"data: {error_chunk.model_dump_json()}\n\n"
-
+                        for evt in _emit_timeout("응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요."):
+                            yield evt
                         return
 
                     if chunk["type"] == "token":
-                        streamed_so_far += chunk["content"]
+                        streamed_so_far += chunk.get("content", "")
                         stream_chunk = StreamResponse(
                             type="token",
-                            content=chunk["content"],
+                            content=chunk.get("content", ""),
                             metadata={"index": token_index},
                         )
                         yield f"data: {stream_chunk.model_dump_json()}\n\n"
                         token_index += 1
                     elif chunk["type"] == "done":
-                        final_content = chunk["content"]
+                        final_content = chunk.get("content", "")
                         final_sources = chunk.get("sources", [])
                         final_domains = chunk.get("domains", [])
                         final_actions = chunk.get("actions", [])
@@ -727,7 +710,7 @@ async def chat_stream(request: ChatRequest):
                                 "doc_download_url": s.metadata.get("doc_download_url", ""),
                                 "form_download_url": s.metadata.get("form_download_url", ""),
                                 "form_s3_key": s.metadata.get("form_s3_key", ""),
-                            } if hasattr(s, 'metadata') else {},
+                            } if hasattr(s, 'metadata') and s.metadata is not None else {},
                         }
                         for s in final_sources
                     ],

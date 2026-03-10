@@ -5,7 +5,6 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File
 from sqlalchemy.orm import Session
-from typing import List
 
 from config.database import get_db
 from apps.common.models import User
@@ -23,7 +22,7 @@ def get_company_service(db: Session = Depends(get_db)) -> CompanyService:
     return CompanyService(db)
 
 
-@router.get("", response_model=List[CompanyResponse])
+@router.get("", response_model=list[CompanyResponse])
 async def get_companies(
     service: CompanyService = Depends(get_company_service),
     current_user: User = Depends(get_current_user),

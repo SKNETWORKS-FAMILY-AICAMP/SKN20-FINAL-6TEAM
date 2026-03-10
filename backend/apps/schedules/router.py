@@ -2,7 +2,6 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from sqlalchemy.orm import Session
-from typing import List
 from datetime import datetime
 
 from config.database import get_db
@@ -20,7 +19,7 @@ def get_schedule_service(db: Session = Depends(get_db)) -> ScheduleService:
     return ScheduleService(db)
 
 
-@router.get("", response_model=List[ScheduleResponse])
+@router.get("", response_model=list[ScheduleResponse])
 async def get_schedules(
     company_id: int | None = Query(None, description="기업 ID 필터"),
     start_from: datetime | None = Query(None, description="시작일 이후"),

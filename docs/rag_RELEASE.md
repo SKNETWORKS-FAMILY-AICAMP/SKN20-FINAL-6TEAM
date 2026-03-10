@@ -1,12 +1,19 @@
 # Release Notes
 
-## [2026-03-10] - RAGAS 평가 시스템 개선 + 자료실 버그 수정
+## [2026-03-10] - RAGAS 평가 시스템 개선 + 자료실 버그 수정 + 스트리밍 안정성 개선
 
 ### Features
 - **RAGAS 평가 시스템 개선** (`evaluation/ragas_evaluator.py`, `evaluation/__main__.py`): 한국어 커스텀 프롬프트(Faithfulness/AR), `strip_system_artifacts()`, `text-embedding-3-large` 적용 — 배치 평가 CLI 리팩토링 (`--compare` 모드), `ground_truth_alignment.py` 및 `noncommittal_verify.py` 신규 추가, `requirements.txt`에 `ragas>=0.4.0,<1.0.0` 버전 핀
 
 ### Bug Fixes
 - **자료실 3가지 이슈 수정** (`agents/executor.py`): 문서 파일명 형식 개선 — `{회사이름}_{유형}_{날짜}_{순번:03d}.ext`
+- **스트리밍 chunk KeyError 방어** (`routes/chat.py`): `chunk["content"]` → `chunk.get("content", "")` — "content" 키 누락 시 KeyError 방지
+- **캐시 저장 시 AttributeError 방어** (`routes/chat.py`): `s.metadata.get()` 호출 전 `s.metadata is not None` 체크 추가
+- **CrossEncoder 사전 로딩 실패 처리** (`main.py`): 모델 로딩 실패 시 서비스 기동 불가를 경고 로그로 대체
+
+### Refactoring
+- **타임아웃 처리 중복 제거** (`routes/chat.py`): 3곳에 반복되던 타임아웃 yield 로직을 `_emit_timeout()` 헬퍼로 통합 (~30줄 제거)
+- **타임아웃 로그 메시지 구분** (`routes/chat.py`): hard deadline 선제 차단과 asyncio.TimeoutError 경로의 로그 메시지 구분
 
 ## [2026-03-09] - 코드 품질 개선 + 공고 원문 청킹 제거 + 보안 강화
 

@@ -8,8 +8,6 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
-from typing import List
-
 from config.database import get_db
 from apps.common.models import User
 from apps.common.deps import get_current_user
@@ -35,7 +33,7 @@ def get_history_service(db: Session = Depends(get_db)) -> HistoryService:
     return HistoryService(db)
 
 
-@router.get("", response_model=List[HistoryResponse])
+@router.get("", response_model=list[HistoryResponse])
 async def get_histories(
     agent_code: str | None = Query(None, description="에이전트 코드 필터"),
     limit: int = Query(50, ge=1, le=100, description="조회 개수"),
@@ -52,7 +50,7 @@ async def get_histories(
     )
 
 
-@router.get("/threads", response_model=List[HistoryThreadSummaryResponse])
+@router.get("/threads", response_model=list[HistoryThreadSummaryResponse])
 async def get_history_threads(
     limit: int = Query(20, ge=1, le=100, description="조회 개수"),
     offset: int = Query(0, ge=0, description="오프셋"),

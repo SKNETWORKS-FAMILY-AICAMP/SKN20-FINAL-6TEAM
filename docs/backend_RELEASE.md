@@ -1,10 +1,13 @@
 # Release Notes
 
-## [2026-03-10] - 자료실 버그 수정 + ChromaDB 메모리 상향 + RDS 동기화
+## [2026-03-10] - 자료실 버그 수정 + ChromaDB 메모리 상향 + RDS 동기화 + 코드 정리
 
 ### Bug Fixes
 - **자료실 3가지 이슈 수정** (`apps/announces/schemas.py`): 공고 첨부파일 NULL 방어 — `doc_s3_key`/`form_s3_key` 타입을 `str | None`으로 변경
 - **ChromaDB 메모리 한도 상향 및 database.sql RDS 동기화** (`database.sql`): `file` 테이블에서 `file_size`, `file_format` 컬럼 제거 — 실제 RDS 스키마와 동기화
+
+### Refactoring
+- **구식 typing import 제거** (`apps/announces/router.py`, `apps/companies/router.py`, `apps/histories/router.py`, `apps/schedules/router.py`): `from typing import List` 제거 → Python 3.9+ 내장 `list[...]` 문법으로 통일
 
 ## [2026-03-09] - 자료실 기능 추가 + 보안 강화 + 코드 품질 개선
 
