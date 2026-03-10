@@ -288,38 +288,39 @@ const MainPage: React.FC = () => {
         description={'\uCC3D\uC5C5, \uC138\uBB34, \uB178\uBB34, \uBC95\uB960, \uC9C0\uC6D0\uC0AC\uC5C5, \uB9C8\uCF00\uD305 \uD1B5\uD569 \uC0C1\uB2F4'}
       />
 
-      {/* Quick questions */}
-      <div className="p-4 bg-gray-50 border-b">
-        <Typography variant="small" color="gray" className="mb-2 !text-gray-700">
-          빠른 질문
-        </Typography>
-        <div className="flex flex-wrap gap-2">
-          {quickQuestions.map((item, index) => (
-            <button
-              key={index}
-              onClick={() => handleSendMessage(item.question)}
-              disabled={isInputDisabled}
-              className="px-3 py-1.5 text-sm bg-white border rounded-full hover:bg-blue-50 hover:border-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Messages area */}
       <div className="min-h-0 flex-1 overflow-auto p-4 space-y-4">
         {!currentSessionId || messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-gray-500">
-              <Typography variant="h6" color="gray" className="mb-2 !text-gray-800">
+              <Typography
+                variant="h6"
+                color="gray"
+                className="mb-2 !text-[1.375rem] !text-gray-800"
+              >
                 {user
                   ? `${user.username}님, 환영합니다!`
                   : 'Bizi에 오신 것을 환영합니다!'}
               </Typography>
-              <Typography variant="small" color="gray" className="mb-4 !text-gray-700">
+              <Typography
+                variant="small"
+                color="gray"
+                className="mb-4 !text-[0.9125rem] !text-gray-700"
+              >
                 궁금한 점을 자유롭게 물어보세요.
               </Typography>
+              <div className="mb-4 flex flex-wrap justify-center gap-2">
+                {quickQuestions.map((item, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleSendMessage(item.question)}
+                    disabled={isInputDisabled}
+                    className="px-3 py-1.5 text-sm text-[#5b5b5b] bg-white border rounded-full hover:bg-blue-50 hover:border-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
               {!currentSessionId && sessions.length > 0 && (
                 <button
                   onClick={handleNewChat}
