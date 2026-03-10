@@ -46,7 +46,7 @@
       <b>오학성</b><br/>
       <sub>👑 팀장</sub><br/>
       <sub>PM · AWS 배포</sub><br/><br/>
-      <a href="https://github.com/Backgold1804">
+      <a href="[https://github.com/ohaksung](https://github.com/Backgold1804)">
         <img src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white"/>
       </a>
     </td>
@@ -54,7 +54,7 @@
       <b>이경현</b><br/>
       <sub>🔍 팀원</sub><br/>
       <sub>데이터 수집 · RAG<br/>(임베딩 테스트 · RAGAS 평가)</sub><br/><br/>
-      <a href="https://github.com/monpump">
+      <a href="[https://github.com/leekyunghyun](https://github.com/monpump)">
         <img src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white"/>
       </a>
     </td>
@@ -62,7 +62,7 @@
       <b>정소영</b><br/>
       <sub>🎨 팀원</sub><br/>
       <sub>산출물 관리 · Frontend</sub><br/><br/>
-      <a href="https://github.com/mansio0314">
+      <a href="[https://github.com/jungsoyoung](https://github.com/mansio0314)">
         <img src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white"/>
       </a>
     </td>
@@ -70,7 +70,7 @@
       <b>이도경</b><br/>
       <sub>🔗 팀원</sub><br/>
       <sub>데이터 전처리 · 멀티턴</sub><br/><br/>
-      <a href="https://github.com/I-Am-Dokyung-Lee">
+      <a href="[https://github.com/leedokyung](https://github.com/I-Am-Dokyung-Lee)">
         <img src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white"/>
       </a>
     </td>
@@ -78,7 +78,7 @@
       <b>안채연</b><br/>
       <sub>⚙️ 팀원</sub><br/>
       <sub>데이터 전처리 · RAG · Frontend</sub><br/><br/>
-      <a href="https://github.com/hochaeyeon">
+      <a href="[https://github.com/anchaeyeon](https://github.com/hochaeyeon)">
         <img src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white"/>
       </a>
     </td>
@@ -86,7 +86,7 @@
       <b>김효빈</b><br/>
       <sub>📄 팀원</sub><br/>
       <sub>데이터 전처리 · 문서 생성</sub><br/><br/>
-      <a href="https://github.com/kimobi6033">
+      <a href="[https://github.com/kimhyobin](https://github.com/kimobi6033)">
         <img src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white"/>
       </a>
     </td>
@@ -344,6 +344,7 @@
 | 🏛️ | **정부 지원사업 연동** | 기업마당 + K-Startup API, 사업자 프로필 기반 조건 맞춤 추천 |
 | ⚡ | **실시간 스트리밍** | SSE(Server-Sent Events) 기반 실시간 답변 스트리밍 |
 | 💬 | **멀티턴 대화** | Redis 세션 메모리 기반 대화 맥락 유지 |
+| 📁 | **자료실** | AI가 생성한 문서(근로계약서, 사업계획서 등)를 보관하는 내 문서 탭, 정부 지원사업 공고의 첨부파일(공고문·신청양식)을 열람·다운로드하는 공고 첨부파일 탭 |
 
 </div>
 
@@ -386,6 +387,16 @@
     <td align="center" colspan="2">
       <img src="docs/image/대시보드.gif" width="80%" alt="관리자 대시보드 데모"/>
       <br/><b>📊 관리자 대시보드 (데모)</b>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="산출물/최종발표/document-library-my-docs.png" width="100%" alt="자료실 - 내 문서"/>
+      <br/><b>📁 자료실 — 내 문서</b>
+    </td>
+    <td align="center">
+      <img src="산출물/최종발표/document-library-announce.png" width="100%" alt="자료실 - 공고 첨부파일"/>
+      <br/><b>📎 자료실 — 공고 첨부파일</b>
     </td>
   </tr>
 </table>
