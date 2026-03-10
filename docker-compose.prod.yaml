@@ -86,6 +86,9 @@ services:
       RAG_SERVICE_URL: http://rag:8001
       # AWS S3 (문서 저장소)
       AWS_S3_BUCKET: ${AWS_S3_BUCKET:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-northeast-2}
       # AWS SES 알림 (미설정 시 알림 비활성화)
       AWS_REGION: ${AWS_REGION:-ap-northeast-2}
       SES_FROM: ${SES_FROM:-}
