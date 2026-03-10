@@ -382,13 +382,7 @@
       <img src="산출물/7주차/images/user-flows/09-company-registration-form.png" width="100%" alt="기업 등록 폼"/>
       <br/><b>📝 기업 등록 폼</b>
     </td>
-  </tr>
-    <tr>
-    <td align="center" colspan="2">
-      <img src="docs/image/대시보드.gif" width="80%" alt="관리자 대시보드 데모"/>
-      <br/><b>📊 관리자 대시보드 (데모)</b>
-    </td>
-  </tr>
+      </tr>
   <tr>
     <td align="center">
       <img src="docs/image/document-library-my-docs.png" width="100%" alt="자료실 - 내 문서"/>
@@ -399,6 +393,13 @@
       <br/><b>📎 자료실 — 공고 첨부파일</b>
     </td>
   </tr>
+  </tr>
+    <tr>
+    <td align="center" colspan="2">
+      <img src="docs/image/대시보드.gif" width="80%" alt="관리자 대시보드 데모"/>
+      <br/><b>📊 관리자 대시보드 (데모)</b>
+    </td>
+
 </table>
 
 ---
