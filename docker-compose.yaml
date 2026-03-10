@@ -99,6 +99,10 @@ services:
       - BIZNO_API_KEY=${BIZNO_API_KEY:-}
       - RAG_SERVICE_URL=http://rag:8001
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-ap-northeast-2}
     depends_on:
       ssh-tunnel:
         condition: service_healthy

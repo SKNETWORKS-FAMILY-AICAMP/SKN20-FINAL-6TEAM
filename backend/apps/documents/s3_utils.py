@@ -1,6 +1,7 @@
 import logging
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from config.settings import settings
@@ -13,7 +14,11 @@ _s3_client = None
 def _get_s3_client():
     global _s3_client
     if _s3_client is None:
-        _s3_client = boto3.client("s3")
+        _s3_client = boto3.client(
+            "s3",
+            region_name=settings.AWS_REGION,
+            config=Config(signature_version="s3v4"),
+        )
     return _s3_client
 
 
