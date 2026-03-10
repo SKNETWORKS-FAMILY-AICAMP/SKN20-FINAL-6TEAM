@@ -7,6 +7,9 @@ import pytest
 from utils.domain_classifier import (
     DomainClassificationResult,
     DomainClassifier,
+    DomainEvaluation,
+    LLMClassificationOutput,
+    VALID_DOMAINS,
     get_domain_classifier,
     reset_domain_classifier,
 )
@@ -347,30 +350,57 @@ class TestKeywordGuardrail:
         assert result.domains == ["startup_funding"]
         assert result.is_relevant is True
 
-    def test_guardrail_augment_low_confidence(self, classifier: DomainClassifier) -> None:
-        """LLM 저신뢰 + 키워드 불일치 → 도메인 병합."""
-        llm_result = DomainClassificationResult(
-            domains=["finance_tax"], confidence=0.6, is_relevant=True, method="llm",
-        )
-        result = classifier._apply_keyword_guardrail(
-            llm_result, ["startup_funding"], "소상공인 정책자금"
-        )
-        assert result.method == "keyword_augmented"
-        assert "startup_funding" in result.domains
-        assert "finance_tax" in result.domains
-
-    def test_guardrail_no_change_high_confidence(self, classifier: DomainClassifier) -> None:
-        """LLM 고신뢰 → LLM 결과 유지."""
+    def test_guardrail_mismatch_merge(self, classifier: DomainClassifier) -> None:
+        """LLM 도메인과 키워드 도메인 완전 불일치 → 병합 (Case 1.5)."""
         llm_result = DomainClassificationResult(
             domains=["finance_tax"], confidence=0.9, is_relevant=True, method="llm",
             intent="consultation",
         )
         result = classifier._apply_keyword_guardrail(
+            llm_result, ["startup_funding"], "소상공인 정책자금"
+        )
+        assert result.method == "keyword_mismatch_merge"
+        assert "startup_funding" in result.domains
+        assert "finance_tax" in result.domains
+        assert result.confidence == 0.75
+
+    def test_guardrail_mismatch_merge_multi_domain(self, classifier: DomainClassifier) -> None:
+        """복합 도메인: LLM 도메인과 키워드 완전 불일치 → 모두 병합."""
+        llm_result = DomainClassificationResult(
+            domains=["hr_labor", "law_common"], confidence=0.85, is_relevant=True, method="llm",
+            intent="consultation",
+        )
+        result = classifier._apply_keyword_guardrail(
+            llm_result, ["startup_funding"], "소상공인 창업 관련 해고 분쟁"
+        )
+        assert result.method == "keyword_mismatch_merge"
+        assert "startup_funding" in result.domains
+        assert "hr_labor" in result.domains
+        assert "law_common" in result.domains
+
+    def test_guardrail_augment_partial_mismatch(self, classifier: DomainClassifier) -> None:
+        """LLM 도메인과 키워드 부분 일치 + 저신뢰 → 누락 도메인 병합 (Case 2)."""
+        llm_result = DomainClassificationResult(
+            domains=["finance_tax"], confidence=0.6, is_relevant=True, method="llm",
+        )
+        result = classifier._apply_keyword_guardrail(
+            llm_result, ["finance_tax", "startup_funding"], "법인설립 후 법인세"
+        )
+        assert result.method == "keyword_augmented"
+        assert "startup_funding" in result.domains
+        assert "finance_tax" in result.domains
+
+    def test_guardrail_no_change_high_confidence_partial_match(self, classifier: DomainClassifier) -> None:
+        """LLM 고신뢰 + 부분 일치 → LLM 결과 유지 (Case 3)."""
+        llm_result = DomainClassificationResult(
+            domains=["finance_tax", "startup_funding"], confidence=0.95, is_relevant=True, method="llm",
+            intent="consultation",
+        )
+        result = classifier._apply_keyword_guardrail(
             llm_result, ["startup_funding"], "정책자금"
         )
-        # 고신뢰(0.9 >= 0.8)이므로 LLM 결과 유지
         assert result.method == "llm"
-        assert result.domains == ["finance_tax"]
+        assert result.domains == ["finance_tax", "startup_funding"]
 
     def test_guardrail_no_change_matching_domains(self, classifier: DomainClassifier) -> None:
         """LLM 도메인과 키워드 도메인 일치 → 변경 없음."""
@@ -385,17 +415,18 @@ class TestKeywordGuardrail:
 
     # ========== classify + 가드레일 통합 테스트 ==========
 
-    def test_classify_with_guardrail_override(self, classifier: DomainClassifier) -> None:
-        """classify: LLM 오분류 → 키워드 가드레일 보정."""
+    def test_classify_with_guardrail_mismatch_merge(self, classifier: DomainClassifier) -> None:
+        """classify: LLM 오분류(완전 불일치) → 키워드 병합."""
         llm_wrong = DomainClassificationResult(
-            domains=["finance_tax"], confidence=0.6, is_relevant=True, method="llm",
+            domains=["finance_tax"], confidence=0.85, is_relevant=True, method="llm",
             intent="consultation",
         )
         with patch.object(classifier, "_llm_classify", return_value=llm_wrong):
             result = classifier.classify("소상공인 정책자금 지원 조건")
 
         assert "startup_funding" in result.domains
-        assert result.method == "keyword_augmented"
+        assert "finance_tax" in result.domains
+        assert result.method == "keyword_mismatch_merge"
 
     def test_classify_keyword_fallback_on_llm_error(self, classifier: DomainClassifier) -> None:
         """classify: LLM 실패 → 키워드 폴백."""
@@ -454,3 +485,161 @@ class TestGetDomainClassifier:
         classifier = get_domain_classifier()
 
         assert isinstance(classifier, DomainClassifier)
+
+
+class TestLLMClassificationOutput:
+    """LLMClassificationOutput Pydantic 모델 테스트."""
+
+    def test_output_model_creation(self) -> None:
+        """LLMClassificationOutput 모델 정상 생성."""
+        output = LLMClassificationOutput(
+            query_analysis="세금 관련 질문",
+            is_relevant=True,
+            domain_evaluations=[
+                DomainEvaluation(domain="finance_tax", is_related=True, evidence="세금 관련"),
+                DomainEvaluation(domain="hr_labor", is_related=False, evidence="노무 무관"),
+            ],
+            confidence=0.9,
+            intent="consultation",
+            reasoning="세무 도메인 질문",
+        )
+        assert output.is_relevant is True
+        assert len(output.domain_evaluations) == 2
+        assert output.domain_evaluations[0].is_related is True
+
+    def test_output_extracts_related_domains(self) -> None:
+        """domain_evaluations에서 is_related=True 도메인만 추출."""
+        output = LLMClassificationOutput(
+            query_analysis="복합 질문",
+            is_relevant=True,
+            domain_evaluations=[
+                DomainEvaluation(domain="startup_funding", is_related=False, evidence="무관"),
+                DomainEvaluation(domain="finance_tax", is_related=True, evidence="세금"),
+                DomainEvaluation(domain="hr_labor", is_related=True, evidence="퇴직금"),
+                DomainEvaluation(domain="law_common", is_related=False, evidence="무관"),
+            ],
+            confidence=0.85,
+            intent="consultation",
+            reasoning="세무+노무 복합",
+        )
+        domains = [e.domain for e in output.domain_evaluations if e.is_related]
+        assert domains == ["finance_tax", "hr_labor"]
+
+    def test_valid_domains_constant(self) -> None:
+        """VALID_DOMAINS 상수 검증."""
+        assert set(VALID_DOMAINS) == {"startup_funding", "finance_tax", "hr_labor", "law_common"}
+
+
+class TestStructuredOutputIntegration:
+    """Structured Output을 사용하는 _llm_classify 통합 테스트."""
+
+    @pytest.fixture
+    def classifier(self) -> DomainClassifier:
+        mock_settings = Mock()
+        mock_settings.domain_classification_max_retries = 2
+        mock_settings.enable_keyword_guardrail = False
+        with patch("utils.domain_classifier.get_settings") as mock_get_settings:
+            mock_get_settings.return_value = mock_settings
+            return DomainClassifier()
+
+    def test_structured_output_single_domain(self, classifier: DomainClassifier) -> None:
+        """Structured output으로 단일 도메인 분류."""
+        mock_output = LLMClassificationOutput(
+            query_analysis="부가세 신고 관련 질문",
+            is_relevant=True,
+            domain_evaluations=[
+                DomainEvaluation(domain="startup_funding", is_related=False, evidence="창업 무관"),
+                DomainEvaluation(domain="finance_tax", is_related=True, evidence="부가세 신고"),
+                DomainEvaluation(domain="hr_labor", is_related=False, evidence="노무 무관"),
+                DomainEvaluation(domain="law_common", is_related=False, evidence="법률 무관"),
+            ],
+            confidence=0.9,
+            intent="consultation",
+            reasoning="세무 도메인",
+        )
+        mock_chain = Mock()
+        mock_chain.invoke.return_value = mock_output
+
+        with patch("utils.domain_classifier.create_llm") as mock_create_llm, \
+             patch("langchain_core.prompts.ChatPromptTemplate.from_messages") as mock_prompt:
+            mock_llm = Mock()
+            mock_llm.with_structured_output.return_value = Mock()
+            mock_create_llm.return_value = mock_llm
+            mock_prompt.return_value.__or__ = Mock(return_value=mock_chain)
+
+            result = classifier._llm_classify("부가세 신고 방법")
+
+        assert result.domains == ["finance_tax"]
+        assert result.confidence == 0.9
+        assert result.is_relevant is True
+        assert result.method == "llm"
+
+    def test_structured_output_multi_domain(self, classifier: DomainClassifier) -> None:
+        """Structured output으로 복합 도메인 분류."""
+        mock_output = LLMClassificationOutput(
+            query_analysis="해고 절차와 손해배상",
+            is_relevant=True,
+            domain_evaluations=[
+                DomainEvaluation(domain="startup_funding", is_related=False, evidence="무관"),
+                DomainEvaluation(domain="finance_tax", is_related=False, evidence="무관"),
+                DomainEvaluation(domain="hr_labor", is_related=True, evidence="해고 절차"),
+                DomainEvaluation(domain="law_common", is_related=True, evidence="손해배상"),
+            ],
+            confidence=0.85,
+            intent="consultation",
+            reasoning="노무+법률 복합",
+        )
+        mock_chain = Mock()
+        mock_chain.invoke.return_value = mock_output
+
+        with patch("utils.domain_classifier.create_llm") as mock_create_llm, \
+             patch("langchain_core.prompts.ChatPromptTemplate.from_messages") as mock_prompt:
+            mock_llm = Mock()
+            mock_llm.with_structured_output.return_value = Mock()
+            mock_create_llm.return_value = mock_llm
+            mock_prompt.return_value.__or__ = Mock(return_value=mock_chain)
+
+            result = classifier._llm_classify("직원 해고 후 손해배상")
+
+        assert set(result.domains) == {"hr_labor", "law_common"}
+        assert result.confidence == 0.85
+
+    def test_structured_output_filters_invalid_domains(self, classifier: DomainClassifier) -> None:
+        """유효하지 않은 도메인 이름은 필터링."""
+        mock_output = LLMClassificationOutput(
+            query_analysis="테스트",
+            is_relevant=True,
+            domain_evaluations=[
+                DomainEvaluation(domain="finance_tax", is_related=True, evidence="세금"),
+                DomainEvaluation(domain="invalid_domain", is_related=True, evidence="잘못된"),
+            ],
+            confidence=0.8,
+            intent="consultation",
+            reasoning="테스트",
+        )
+        mock_chain = Mock()
+        mock_chain.invoke.return_value = mock_output
+
+        with patch("utils.domain_classifier.create_llm") as mock_create_llm, \
+             patch("langchain_core.prompts.ChatPromptTemplate.from_messages") as mock_prompt:
+            mock_llm = Mock()
+            mock_llm.with_structured_output.return_value = Mock()
+            mock_create_llm.return_value = mock_llm
+            mock_prompt.return_value.__or__ = Mock(return_value=mock_chain)
+
+            result = classifier._llm_classify("세금 관련")
+
+        assert result.domains == ["finance_tax"]
+
+    def test_structured_output_error_fallback(self, classifier: DomainClassifier) -> None:
+        """Structured output 실패 시 llm_error 반환."""
+        with patch("utils.domain_classifier.create_llm") as mock_create_llm:
+            mock_llm = Mock()
+            mock_llm.with_structured_output.side_effect = Exception("structured output failed")
+            mock_create_llm.return_value = mock_llm
+
+            result = classifier._llm_classify("테스트 쿼리")
+
+        assert result.method == "llm_error"
+        assert result.domains == []
+        assert result.is_relevant is False

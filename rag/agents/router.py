@@ -415,18 +415,6 @@ class MainRouter:
         state["classification_result"] = classification
         state["domains"] = classification.domains
 
-        # Phase C: 저신뢰도 분류 시 post-classification 검증
-        if (
-            classification.is_relevant
-            and classification.confidence < 0.7
-            and classification.method in ("llm", "llm_retry", "keyword_override", "keyword_augmented")
-        ):
-            validated = await self._avalidate_classification(classify_query, classification)
-            if validated:
-                classification = validated
-                state["classification_result"] = classification
-                state["domains"] = classification.domains
-
         logger.info(
             "[분류] 원본='%s' | 재작성=%s('%s') | 도메인=%s(%.2f) | relevant=%s | method=%s",
             query[:30],

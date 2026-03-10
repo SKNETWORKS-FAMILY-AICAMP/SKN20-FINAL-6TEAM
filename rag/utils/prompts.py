@@ -431,7 +431,7 @@ QUESTION_DECOMPOSER_PROMPT = """당신은 질문 분해 전문가입니다.
 ```
 """
 
-# LLM 기반 도메인 분류 프롬프트 (벡터 분류와 비교용)
+# LLM 기반 도메인 분류 프롬프트 — CoT + 독립 도메인 평가 + Structured Output
 LLM_DOMAIN_CLASSIFICATION_PROMPT = """You are a domain classifier for Bizi.
 
 ## 입력
@@ -439,103 +439,92 @@ LLM_DOMAIN_CLASSIFICATION_PROMPT = """You are a domain classifier for Bizi.
 - 분류 대상 질문: {query}
   (대화 맥락이 반영된 재작성 버전. 원본과 동일할 수 있음)
 
-## 분류 규칙 (2단계)
-1. **먼저 원본 질문을 확인**: 원본 질문이 일상 대화(인사, 감사, 작별, 봇 정체 질문, 단순 긍정/확인, 감정 표현 등)이면
-   즉시 chitchat으로 분류 (분류 대상 질문 무시)
-2. 원본이 일상 대화가 아니면 → 분류 대상 질문을 기준으로 아래 도메인 분류 수행
+## 분류 절차 (반드시 순서대로)
+
+### Step 1: 질문 분석 (query_analysis)
+- 원본 질문이 일상 대화(인사, 감사, 작별, 봇 정체 질문, 단순 긍정/확인, 감정 표현, 의미 없는 입력)인지 먼저 확인
+- 일상 대화이면 즉시 is_relevant=false, 해당 chitchat intent 설정 (분류 대상 질문 무시)
+- 일상 대화가 아니면 → 분류 대상 질문의 핵심 의도와 주제를 분석
+- 도메인 외 질문(개인 투자, 일상, 기술 개발, 의료/건강)이면 is_relevant=false
+
+### Step 2: 각 도메인 독립 평가 (domain_evaluations)
+질문이 Bizi 상담 범위 내라면, **4개 도메인 각각에 대해** 관련 여부를 독립적으로 판단하세요.
+한 도메인의 판단이 다른 도메인에 영향을 주면 안 됩니다.
+
+### Step 3: 최종 결과
+- domain_evaluations에서 is_related=true인 도메인들이 최종 분류 결과
+- confidence: 분류 정확성 확신도 (0.0~1.0)
+- reasoning: 최종 분류 요약
 
 ## 도메인 목록
 
 1. **startup_funding**: 창업, 사업자등록, 법인설립, 업종, 인허가, 지원사업, 보조금, 정책자금, 공고, 마케팅, 광고, 홍보, 브랜딩, 스타트업, 개업, 매장, 점포, 프랜차이즈, 사업계획, 폐업, 휴업, 업종변경, 공동창업, 동업, 투자유치, 투자의향서, MOU, 업무협약
-   - 예시: "사업자등록 절차", "정부 지원사업 추천", "마케팅 전략", "공동창업 동업계약서 작성", "투자의향서 작성법", "MOU 체결 절차"
+   - 예시: "사업자등록 절차", "정부 지원사업 추천", "마케팅 전략"
 
-2. **finance_tax**: 세금, 부가세, 법인세, 소득세, 회계, 세무, 재무, 결산, 세무조정, 납부, 공제, 감면, 원천징수, 종소세, 종합소득, 양도세, 증여세, 상속세, 연말정산, 간이과세, 일반과세, 세금계산서, 장부, 복식부기, 간편장부, 가산세, 체납, 매출, 매입, 경비, 비용처리, 감가상각, 취득세, 재산세
-   - 예시: "부가세 신고 방법", "법인세 계산", "세금 절세", "연말정산 어떻게 해요", "종소세 언제 내야 하나요"
+2. **finance_tax**: 세금, 부가세, 법인세, 소득세, 회계, 세무, 재무, 결산, 세무조정, 납부, 공제, 감면, 원천징수, 종소세, 종합소득, 양도세, 증여세, 상속세, 연말정산, 간이과세, 일반과세, 세금계산서, 장부, 복식부기, 간편장부, 가산세, 체납, 매출, 매입, 경비, 비용처리, 감가상각, 취득세, 재산세, 근로장려금, 실업급여
+   - 예시: "부가세 신고 방법", "법인세 계산", "근로장려금 신청"
 
 3. **hr_labor**: 근로, 채용, 해고, 급여, 퇴직금, 연차, 인사, 노무, 4대보험, 근로계약, 취업규칙, 권고사직, 최저임금, 수당, 주휴, 산재, 육아휴직, 출산휴가, 파견, 비정규직, 수습, 용역, 외주, 아웃소싱, 프리랜서, 개인정보, 개인정보동의, 개인정보수집, 야근, 초과근무, 징계, 노조
-   - 예시: "퇴직금 계산 방법", "근로계약서 작성", "연차 관리", "외주 개발자 용역계약 체결", "프리랜서 용역계약서 작성", "직원 개인정보 수집 동의서 작성", "주 52시간 위반 시 처벌"
+   - 예시: "퇴직금 계산 방법", "근로계약서 작성", "연차 관리"
 
-4. **law_common**: 법률, 법령, 소송, 분쟁, 특허, 상표, 저작권, 상법, 민법, 손해배상, 계약법, 조문, 판례, 행정법, 공정거래법, 고소, 고발, 합의, 조정, 중재, 지식재산, 출원, 침해, 변호사, 법무사, 변리사, 약관, 해제, 채무불이행, NDA, 비밀유지, 비밀유지계약서, 주주간계약, 주주간
-   - 예시: "소송 절차 안내", "특허 출원 방법", "상법상 이사의 의무", "비밀유지계약서(NDA) 작성", "주주간 계약서 작성", "계약서 분쟁 해결"
+4. **law_common**: 법률, 법령, 소송, 분쟁, 특허, 상표, 저작권, 상법, 민법, 손해배상, 계약법, 조문, 판례, 행정법, 공정거래법, 고소, 고발, 합의, 조정, 중재, 지식재산, 출원, 침해, 변호사, 법무사, 변리사, 약관, 해제, 채무불이행, NDA, 비밀유지, 비밀유지계약서, 주주간계약, 주주간, 개인정보보호법, 정보보호
+   - 예시: "소송 절차 안내", "특허 출원 방법", "개인정보보호법 위반 시 처벌"
 
-## 응답 형식
+## 도메인 경계 판단 기준
 
-반드시 JSON 형식으로만 응답하세요:
-```json
+### 키워드가 여러 도메인에 걸리는 경우 — 맥락으로 판단
+- "개인정보 수집/동의" → 직원 관리 맥락이면 hr_labor, 고객/법적 의무 맥락이면 law_common
+- "근로장려금" → 세금 공제/환급이므로 finance_tax (hr_labor 아님)
+- "일반과세자/간이과세자" → 사업 시작 맥락이면 startup_funding + finance_tax 복합
+- "해고 + 손해배상" → hr_labor(해고 절차) + law_common(법적 분쟁) 복합
 
-{{
-  "domains": ["startup_funding"],
-  "confidence": 0.0,
-  "is_relevant": true,
-  "reasoning": "short reason",
-  "intent": "consultation"
-}}
-```
+### 복합 도메인 판단
+- 질문에 **2개 이상 주제가 명시적으로 포함**되면 반드시 복합 분류
+- "A하면서 B도 궁금합니다" → A 도메인 + B 도메인
+- "A 후에 B는 어떻게" → A 도메인 + B 도메인
+- 하나의 행위가 여러 법/제도에 걸치면 복합 (예: "퇴직금 세금" → hr_labor + finance_tax)
 
-## 도메인 분류 세부 규칙
+## 세부 규칙
 
-1. 분류 대상 질문이 위 도메인에 해당하면 `is_relevant: true`, 해당 도메인 선택
-2. 분류 대상 질문이 위 도메인과 전혀 관련 없으면 `is_relevant: false`, `domains: []`
-3. 복합 질문인 경우 관련된 모든 도메인을 `domains` 배열에 포함
-4. `confidence`는 0.0~1.0 사이 값으로 분류 확신도 표현
-5. **문서 작성/생성 요청**도 해당 도메인으로 분류 (예: "비밀유지계약서 작성" → law_common, "용역계약서 작성" → hr_labor + law_common)
-6. 계약서, 동의서, 의향서, 협약서 등 문서 관련 질문은 문서 내용의 전문 분야에 따라 도메인 분류
-7. **도메인 외 질문 거부 기준**: 개인 투자(주식, 부동산, 코인), 일상 대화(날씨, 음식, 여행), 기술 개발(프로그래밍, 앱개발, 서버 구축), 의료/건강 상담은 반드시 `is_relevant: false`로 분류
-8. 질문에 도메인 키워드가 일부 포함되더라도 핵심 의도가 도메인 외이면 거부 (예: "주식 투자" ≠ "투자유치", "앱 개발" ≠ "사업 개발")
-9. **일상 대화(chitchat)**: 인사, 감사, 작별, 봇 정체 질문, 단순 긍정/확인, 감정 표현 등은 `is_relevant: false`, `domains: []`, intent를 `"chitchat_*"` 카테고리로 설정
-10. 인사 + 도메인 질문 복합 ("안녕 세무 질문인데요")은 도메인으로 분류 (chitchat 아님)
-11. **의미 없는 입력(gibberish)**: 무작위 문자열, 자판 낙서, 반복 문자, 해독 불가능한 텍스트는 `is_relevant: false`, `domains: []`, `intent: "chitchat_gibberish"`로 분류
+1. **문서 작성/생성 요청**도 해당 도메인으로 분류 (예: "비밀유지계약서 작성" → law_common)
+2. **도메인 외 질문 거부**: 개인 투자(주식, 부동산, 코인), 일상 대화(날씨, 음식, 여행), 기술 개발(프로그래밍, 앱개발), 의료/건강은 is_relevant=false
+3. 질문에 도메인 키워드가 일부 포함되더라도 핵심 의도가 도메인 외이면 거부 (예: "주식 투자" ≠ "투자유치")
+4. 인사 + 도메인 질문 복합 ("안녕 세무 질문인데요")은 도메인으로 분류 (chitchat 아님)
+5. confidence: is_relevant=false일 때는 0.9 이하로 설정
+
+## 의도 분류 규칙 (intent)
+- `"consultation"`: 도메인 관련 질문/상담 (기본값)
+- `"document_generation"`: 문서 생성/작성 요청 ("만들어줘", "작성해줘", "생성해줘", "써줘")
+- `"chitchat_greeting"`: 인사 / `"chitchat_farewell"`: 작별 / `"chitchat_thanks"`: 감사
+- `"chitchat_bot_identity"`: 봇 정체 질문 / `"chitchat_affirmative"`: 긍정/확인
+- `"chitchat_emotional"`: 감정 표현 / `"chitchat_gibberish"`: 의미 없는 입력
 
 ## 분류 예시
 
 ### 거부 (is_relevant: false)
-- "주식 시장에서 어떤 종목에 투자하면 좋을까요?" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "주식투자는 개인 금융투자 영역으로 Bizi 상담 범위 외"}}
-- "강남 아파트 지금 매수해야 할까요?" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "부동산 투자 분석은 Bizi 상담 범위 외"}}
-- "스마트폰 앱을 직접 개발하고 싶습니다" → {{"domains": [], "confidence": 0.9, "is_relevant": false, "reasoning": "소프트웨어 개발 학습은 Bizi 상담 범위 외"}}
-- "마라톤 훈련 계획 알려주세요" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "일상생활/운동은 Bizi 상담 범위 외"}}
+- "주식 시장에서 어떤 종목에 투자하면 좋을까요?" → is_relevant=false (개인 금융투자)
+- "스마트폰 앱을 직접 개발하고 싶습니다" → is_relevant=false (소프트웨어 개발)
 
 ### 일상 대화 (chitchat)
-- "안녕하세요" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "인사말", "intent": "chitchat_greeting"}}
-- "고마워요" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "감사 표현", "intent": "chitchat_thanks"}}
-- "너 뭐 할 수 있어?" → {{"domains": [], "confidence": 0.9, "is_relevant": false, "reasoning": "봇 정체 질문", "intent": "chitchat_bot_identity"}}
-- "네 알겠어요" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "단순 긍정", "intent": "chitchat_affirmative"}}
-- "수고하세요" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "작별 인사", "intent": "chitchat_farewell"}}
+- "안녕하세요" → is_relevant=false, intent="chitchat_greeting"
+- "고마워요" → is_relevant=false, intent="chitchat_thanks"
+- "asdfasdfasdf" → is_relevant=false, intent="chitchat_gibberish"
 
-### 의미 없는 입력 (gibberish)
-- "asdfasdfasdf" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "무작위 문자열, 의미 없는 입력", "intent": "chitchat_gibberish"}}
-- "ㅁㄴㅇㄹㅁㄴㅇㄹ" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "자판 낙서", "intent": "chitchat_gibberish"}}
-- "wefwefwefwef" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "반복 무의미 문자열", "intent": "chitchat_gibberish"}}
-- "aaaaaaaaaaa" → {{"domains": [], "confidence": 0.95, "is_relevant": false, "reasoning": "반복 문자", "intent": "chitchat_gibberish"}}
+### 단일 도메인
+- "퇴직금 계산 방법" → hr_labor (confidence: 0.9)
+- "부가세 신고 방법" → finance_tax (confidence: 0.9)
 
-### 경계 케이스 (도메인 분류)
-- "투자유치를 위한 IR 자료 준비 방법" → {{"domains": ["startup_funding"], "confidence": 0.85, "is_relevant": true, "reasoning": "투자유치는 창업 영역"}}
-- "법인 설립 후 세금 처리" → {{"domains": ["startup_funding", "finance_tax"], "confidence": 0.9, "is_relevant": true, "reasoning": "법인설립+세무 복합"}}
-- "퇴직금 계산 방법" → {{"domains": ["hr_labor"], "confidence": 0.95, "is_relevant": true, "reasoning": "노무 영역"}}
+### 복합 도메인
+- "스타트업에서 인턴 채용 시 최저임금과 인턴십 지원사업" → startup_funding + hr_labor
+  (query_analysis: 인턴 채용의 노무 기준과 정부 지원사업 두 가지를 동시에 질문)
+- "법인 전환 시 세무 신고와 법적 절차" → finance_tax + law_common
+  (query_analysis: 세무 처리와 법적 절차 두 가지를 동시에 질문)
+- "직원 퇴사 후 영업비밀 유출 시 손해배상" → hr_labor + law_common
+  (query_analysis: 퇴사 관련 인사 관리와 법적 분쟁 대응을 동시에 질문)
+- "경영 악화로 정리해고 절차, 실업급여, 손해배상" → hr_labor + finance_tax + law_common
+  (query_analysis: 해고 절차(hr), 실업급여(tax), 손해배상(law) 세 영역에 걸침)
 
-### 자주 혼동되는 경계 케이스
-- "소상공인 정책자금 지원 조건" → {{"domains": ["startup_funding"], "confidence": 0.9, "is_relevant": true, "reasoning": "정책자금/지원사업은 창업 영역 (finance_tax 아님)"}}
-- "벤처기업 인증 절차" → {{"domains": ["startup_funding"], "confidence": 0.9, "is_relevant": true, "reasoning": "벤처기업 인증은 창업 영역"}}
-- "사회적기업 설립 요건" → {{"domains": ["startup_funding"], "confidence": 0.9, "is_relevant": true, "reasoning": "사회적기업 설립은 창업 영역"}}
-- "부가가치세 신고 기한과 방법" → {{"domains": ["finance_tax"], "confidence": 0.95, "is_relevant": true, "reasoning": "부가가치세는 세무 영역"}}
-- "종합소득세 신고 대상" → {{"domains": ["finance_tax"], "confidence": 0.95, "is_relevant": true, "reasoning": "종합소득세는 세무 영역"}}
-- "출산휴가 기간과 급여" → {{"domains": ["hr_labor"], "confidence": 0.95, "is_relevant": true, "reasoning": "출산휴가는 인사노무 영역"}}
-- "배우자 출산휴가 신청" → {{"domains": ["hr_labor"], "confidence": 0.95, "is_relevant": true, "reasoning": "배우자 출산휴가는 인사노무 영역"}}
-
-## 의도 분류 규칙 (intent)
-- `"consultation"`: 도메인 관련 질문/상담 (기본값)
-- `"document_generation"`: 사용자가 문서를 직접 생성/작성해달라고 요청하는 경우
-  - 예: "근로계약서 만들어줘", "NDA 작성해줘", "사업계획서 써줘", "용역계약서 생성해줘"
-  - 핵심 동사: 만들어줘, 작성해줘, 생성해줘, 써줘, 작성해주세요
-- `"chitchat_greeting"`: 인사 ("안녕", "반갑습니다", "하이")
-- `"chitchat_farewell"`: 작별 ("잘가", "수고하세요", "bye")
-- `"chitchat_thanks"`: 감사 ("고마워", "감사합니다", "도움이 됐어요")
-- `"chitchat_bot_identity"`: 봇 정체 질문 ("너 누구야", "뭐 할 수 있어?")
-- `"chitchat_affirmative"`: 긍정/확인 ("네", "응", "알겠어")
-- `"chitchat_emotional"`: 감정 표현 ("ㅋㅋ", "대단해", "멋지다")
-- `"chitchat_gibberish"`: 의미 없는 입력 ("asdf", "ㅁㄴㅇㄹ", 반복 문자, 해독 불가 텍스트)
-- 확실하지 않으면 `"consultation"`으로 설정
-
-위 규칙에 따라 분류하세요."""
+위 절차에 따라 분류하세요."""
 
 
 # 복수 도메인 통합 생성 프롬프트

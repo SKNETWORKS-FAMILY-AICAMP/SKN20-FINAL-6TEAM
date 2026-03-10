@@ -6,15 +6,40 @@ LLM 결과를 강한 키워드 매칭으로 검증/보정하며, LLM 실패 시 
 실패 시 domain_classification_max_retries만큼 재시도합니다.
 """
 
-import json
 import logging
-import re
 from dataclasses import dataclass
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 from utils.config import create_llm, get_settings
 from utils.prompts import LLM_DOMAIN_CLASSIFICATION_PROMPT
 
 logger = logging.getLogger(__name__)
+
+VALID_DOMAINS = ("startup_funding", "finance_tax", "hr_labor", "law_common")
+
+
+class DomainEvaluation(BaseModel):
+    """개별 도메인에 대한 독립 평가."""
+
+    domain: str = Field(description="도메인 이름")
+    is_related: bool = Field(description="이 도메인과 관련 있는지")
+    evidence: str = Field(description="판단 근거 (1문장)")
+
+
+class LLMClassificationOutput(BaseModel):
+    """LLM 도메인 분류 구조화 출력."""
+
+    query_analysis: str = Field(description="질문의 핵심 의도와 주제 분석 (2~3문장)")
+    is_relevant: bool = Field(description="Bizi 상담 범위 내 질문인지")
+    domain_evaluations: list[DomainEvaluation] = Field(
+        description="각 도메인에 대한 독립 평가"
+    )
+    confidence: float = Field(description="분류 정확성 확신도 (0.0~1.0)")
+    intent: str = Field(default="consultation", description="의도 분류")
+    reasoning: str = Field(description="최종 분류 요약")
+
 
 # 강한 키워드 — 이 키워드가 쿼리에 포함되면 해당 도메인으로 간주
 _STRONG_DOMAIN_KEYWORDS: dict[str, set[str]] = {
@@ -27,6 +52,7 @@ _STRONG_DOMAIN_KEYWORDS: dict[str, set[str]] = {
         "부가가치세", "부가세", "법인세", "소득세", "종합소득세", "종소세",
         "양도세", "증여세", "상속세", "연말정산", "세금계산서", "원천징수",
         "세무조정", "간이과세", "가산세", "감가상각", "취득세", "재산세",
+        "근로장려금",
     },
     "hr_labor": {
         "근로계약", "퇴직금", "연차", "4대보험", "최저임금", "주휴수당",
@@ -37,6 +63,7 @@ _STRONG_DOMAIN_KEYWORDS: dict[str, set[str]] = {
         "소송", "판례", "특허", "상표", "저작권", "손해배상",
         "고소", "고발", "민법", "상법", "공정거래", "NDA",
         "비밀유지계약", "주주간계약", "변호사", "법무사", "변리사",
+        "개인정보보호", "정보보호",
     },
 }
 
@@ -78,9 +105,10 @@ class DomainClassifier:
         self._llm_instance = None
 
     def _llm_classify(self, query: str, original_query: str | None = None) -> DomainClassificationResult:
-        """LLM 기반 도메인 분류.
+        """LLM 기반 도메인 분류 (Structured Output).
 
         프롬프트에 original_query와 query를 모두 전달합니다.
+        with_structured_output으로 Pydantic 모델을 직접 반환받습니다.
         실패 시 method="llm_error"를 반환하여 caller가 재시도할 수 있습니다.
 
         Args:
@@ -91,44 +119,36 @@ class DomainClassifier:
             분류 결과 (실패 시 method="llm_error")
         """
         try:
-            from langchain_core.output_parsers import StrOutputParser
             from langchain_core.prompts import ChatPromptTemplate
 
             if self._llm_instance is None:
                 self._llm_instance = create_llm("domain_classification", temperature=0.0)
-            llm = self._llm_instance
+
+            structured_llm = self._llm_instance.with_structured_output(
+                LLMClassificationOutput, method="json_schema"
+            )
             prompt = ChatPromptTemplate.from_messages([
                 ("human", LLM_DOMAIN_CLASSIFICATION_PROMPT),
             ])
-            chain = prompt | llm | StrOutputParser()
+            chain = prompt | structured_llm
 
-            response = chain.invoke({
+            result: LLMClassificationOutput = chain.invoke({
                 "query": query,
                 "original_query": original_query or query,
             })
 
-            # JSON 파싱 — 코드 블록 제거
-            cleaned = response.strip()
-            if cleaned.startswith("```"):
-                lines = cleaned.split("\n")
-                lines = [ln for ln in lines if not ln.strip().startswith("```")]
-                cleaned = "\n".join(lines)
-
-            # Robust JSON parse
-            try:
-                result = json.loads(cleaned)
-            except Exception:
-                obj_match = re.search(r"\{[\s\S]*\}", cleaned)
-                if not obj_match:
-                    raise
-                result = json.loads(obj_match.group(0))
+            # domain_evaluations에서 is_related=True인 유효 도메인 추출
+            domains = [
+                e.domain for e in result.domain_evaluations
+                if e.is_related and e.domain in VALID_DOMAINS
+            ]
 
             return DomainClassificationResult(
-                domains=result.get("domains", []),
-                confidence=float(result.get("confidence", 0.5)),
-                is_relevant=result.get("is_relevant", True),
+                domains=domains,
+                confidence=result.confidence,
+                is_relevant=result.is_relevant,
                 method="llm",
-                intent=result.get("intent", "consultation"),
+                intent=result.intent,
             )
 
         except Exception as e:
@@ -188,9 +208,25 @@ class DomainClassifier:
                 intent="consultation",
             )
 
-        # Case 2: LLM 도메인과 키워드 도메인 불일치 → 키워드 도메인 병합
+        # Case 1.5: LLM 도메인과 키워드 도메인이 완전 불일치 → 키워드 도메인 병합
+        # (LLM이 고신뢰도로 잘못된 도메인을 반환한 경우에도 키워드 도메인 추가)
+        if kw_domains and not (kw_domains & llm_domains):
+            merged = list(llm_domains | kw_domains)
+            logger.warning(
+                "[가드레일] 도메인 완전 불일치 병합: llm=%s + keyword=%s → %s",
+                llm_result.domains, keyword_domains, merged,
+            )
+            return DomainClassificationResult(
+                domains=merged,
+                confidence=0.75,
+                is_relevant=True,
+                method="keyword_mismatch_merge",
+                intent=llm_result.intent or "consultation",
+            )
+
+        # Case 2: LLM 도메인과 키워드 도메인 부분 불일치 → 키워드 도메인 병합
         missing = kw_domains - llm_domains
-        if missing and llm_result.confidence < 0.8:
+        if missing and llm_result.confidence < 0.9:
             merged = list(llm_domains | kw_domains)
             logger.info(
                 "[가드레일] 도메인 보강: llm=%s + keyword=%s → %s",
