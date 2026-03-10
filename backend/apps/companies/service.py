@@ -6,6 +6,7 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from apps.common.cascade import soft_delete_company_children
 from apps.common.models import Company
 from apps.companies.schemas import CompanyCreate, CompanyUpdate
 
@@ -163,7 +164,7 @@ class CompanyService:
         return company
 
     def delete_company(self, company_id: int, user_id: int) -> bool:
-        """기업을 소프트 삭제합니다.
+        """기업을 소프트 삭제합니다 (연관 Schedule/File 포함).
 
         Args:
             company_id: 기업 ID
@@ -176,6 +177,7 @@ class CompanyService:
         if not company:
             return False
 
+        soft_delete_company_children(self.db, company_id)
         company.use_yn = False
         self.db.commit()
         return True

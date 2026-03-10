@@ -524,6 +524,10 @@ LLM_DOMAIN_CLASSIFICATION_PROMPT = """You are a domain classifier for Bizi.
 - "경영 악화로 정리해고 절차, 실업급여, 손해배상" → hr_labor + finance_tax + law_common
   (query_analysis: 해고 절차(hr), 실업급여(tax), 손해배상(law) 세 영역에 걸침)
 
+### 경계 케이스 (인사말 + 도메인)
+- "안녕하세요 세무 관련 질문이 있는데요" → {{"domains": ["finance_tax"], "confidence": 0.85, "is_relevant": true, "reasoning": "인사말 포함이나 실질 의도는 세무 상담", "intent": "consultation"}}
+- "반갑습니다 근로계약서 작성 방법 알려주세요" → {{"domains": ["hr_labor"], "confidence": 0.9, "is_relevant": true, "reasoning": "인사 후 노무 관련 요청이 이어지므로 도메인 상담으로 처리", "intent": "consultation"}}
+
 위 절차에 따라 분류하세요."""
 
 

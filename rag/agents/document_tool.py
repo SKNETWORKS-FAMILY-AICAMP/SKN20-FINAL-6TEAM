@@ -48,7 +48,6 @@ class DocumentTool:
     def should_invoke(
         self,
         query: str,
-        domain: str,
         context: dict[str, Any] | None = None,
     ) -> tuple[bool, str | None]:
         """문서 생성이 필요한지 판단합니다 (LLM 의도 분류).
@@ -57,7 +56,6 @@ class DocumentTool:
 
         Args:
             query: 사용자 질문
-            domain: 분류된 도메인
             context: 추가 컨텍스트
 
         Returns:

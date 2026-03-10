@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session
 
+from apps.common.cascade import soft_delete_user_cascade
 from apps.common.models import User, Code
 from apps.common.notification_settings import (
     DEFAULT_NOTIFICATION_SETTINGS,
@@ -91,11 +92,8 @@ class UserService:
         return user
 
     def delete_user(self, user: User) -> None:
-        """사용자를 소프트 삭제합니다 (회원 탈퇴).
-
-        Args:
-            user: 삭제할 사용자 객체
-        """
+        """사용자를 소프트 삭제합니다 (회원 탈퇴)."""
+        soft_delete_user_cascade(self.db, user.user_id)
         user.use_yn = False
         self.db.commit()
 

@@ -68,6 +68,13 @@ _STRONG_DOMAIN_KEYWORDS: dict[str, set[str]] = {
 }
 
 
+ClassificationMethod = Literal[
+    "llm", "llm_retry", "llm_error", "llm_retry_failed",
+    "followup_fallback", "keyword_override",
+    "keyword_mismatch_merge", "keyword_augmented", "keyword_fallback",
+]
+
+
 @dataclass
 class DomainClassificationResult:
     """도메인 분류 결과.
@@ -76,15 +83,33 @@ class DomainClassificationResult:
         domains: 분류된 도메인 리스트
         confidence: 분류 신뢰도(0.0-1.0)
         is_relevant: 관련 질문 여부
-        method: 분류 방식('llm', 'llm_retry', 'llm_error', 'llm_retry_failed')
+        method: 분류 방식
         intent: 의도 분류 (consultation, document_generation, chitchat_* 등)
     """
 
     domains: list[str]
     confidence: float
     is_relevant: bool
-    method: str
+    method: ClassificationMethod
     intent: str | None = None
+
+    @classmethod
+    def make_followup_fallback(
+        cls,
+        classification: "DomainClassificationResult",
+        previous_domains: list[str],
+    ) -> "DomainClassificationResult":
+        """폴백 시 원본 intent 보존 (chitchat intent는 consultation으로 재설정)."""
+        intent = classification.intent
+        if intent and intent.startswith("chitchat"):
+            intent = "consultation"
+        return cls(
+            domains=previous_domains,
+            confidence=max(classification.confidence, 0.5),
+            is_relevant=True,
+            method="followup_fallback",
+            intent=intent,
+        )
 
 
 class DomainClassifier:
@@ -102,7 +127,7 @@ class DomainClassifier:
     def __init__(self) -> None:
         """DomainClassifier를 초기화합니다."""
         self.settings = get_settings()
-        self._llm_instance = None
+        self._structured_chain = None
 
     def _llm_classify(self, query: str, original_query: str | None = None) -> DomainClassificationResult:
         """LLM 기반 도메인 분류 (Structured Output).
@@ -121,18 +146,17 @@ class DomainClassifier:
         try:
             from langchain_core.prompts import ChatPromptTemplate
 
-            if self._llm_instance is None:
-                self._llm_instance = create_llm("domain_classification", temperature=0.0)
+            if self._structured_chain is None:
+                llm = create_llm("domain_classification", temperature=0.0)
+                structured_llm = llm.with_structured_output(
+                    LLMClassificationOutput, method="json_schema"
+                )
+                prompt = ChatPromptTemplate.from_messages([
+                    ("human", LLM_DOMAIN_CLASSIFICATION_PROMPT),
+                ])
+                self._structured_chain = prompt | structured_llm
 
-            structured_llm = self._llm_instance.with_structured_output(
-                LLMClassificationOutput, method="json_schema"
-            )
-            prompt = ChatPromptTemplate.from_messages([
-                ("human", LLM_DOMAIN_CLASSIFICATION_PROMPT),
-            ])
-            chain = prompt | structured_llm
-
-            result: LLMClassificationOutput = chain.invoke({
+            result: LLMClassificationOutput = self._structured_chain.invoke({
                 "query": query,
                 "original_query": original_query or query,
             })

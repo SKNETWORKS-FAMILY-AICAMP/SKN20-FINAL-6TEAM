@@ -63,7 +63,6 @@ from vectorstores.chroma import ChromaVectorStore
 logger = logging.getLogger(__name__)
 
 
-
 class RouterState(TypedDict):
     """라우터 상태 타입."""
 
@@ -326,55 +325,6 @@ class MainRouter:
 
         return None
 
-    async def _avalidate_classification(
-        self, query: str, classification: DomainClassificationResult,
-    ) -> DomainClassificationResult | None:
-        """저신뢰도 분류에 대해 BM25 점수로 검증.
-
-        해당 도메인에서 BM25 top-3 검색 후 점수가 너무 낮으면
-        키워드 기반 대체 도메인으로 리다이렉트합니다.
-
-        Args:
-            query: 분류 대상 쿼리
-            classification: 원본 분류 결과
-
-        Returns:
-            보정된 분류 결과 (보정 불필요 시 None)
-        """
-        from chains.rag_chain import get_rag_chain
-
-        domain = classification.domains[0] if classification.domains else None
-        if not domain:
-            return None
-
-        try:
-            rag_chain = get_rag_chain()
-            if not rag_chain.hybrid_searcher:
-                return None
-
-            docs = await asyncio.to_thread(
-                rag_chain.hybrid_searcher.bm25_search, query, domain, k=3,
-            )
-            if not docs or all(d.metadata.get("bm25_score", 0) < 0.1 for d in docs):
-                keyword_domains = self.domain_classifier._detect_keyword_domains(query)
-                alt_domains = [d for d in keyword_domains if d != domain]
-                if alt_domains:
-                    logger.warning(
-                        "[검증] 도메인 '%s' BM25 점수 미달 → 대체 도메인 %s",
-                        domain, alt_domains,
-                    )
-                    return DomainClassificationResult(
-                        domains=alt_domains,
-                        confidence=0.6,
-                        is_relevant=True,
-                        method="post_validation_redirect",
-                        intent=classification.intent,
-                    )
-        except Exception as e:
-            logger.warning("[검증] BM25 검증 실패: %s", e)
-
-        return None
-
     async def _aclassify_node(self, state: RouterState) -> RouterState:
         """비동기 분류 노드: 벡터 유사도 기반으로 도메인을 식별합니다."""
         start = time.time()
@@ -447,12 +397,7 @@ class MainRouter:
                     classification.confidence,
                     previous_domains,
                 )
-                classification = DomainClassificationResult(
-                    domains=previous_domains,
-                    confidence=max(classification.confidence, 0.5),
-                    is_relevant=True,
-                    method="followup_fallback",
-                )
+                classification = DomainClassificationResult.make_followup_fallback(classification, previous_domains)
                 state["classification_result"] = classification
                 state["domains"] = classification.domains
 
@@ -520,7 +465,6 @@ class MainRouter:
                 # (shortcut 아닌 경우: 도메인 응답 + 문서 생성 액션 병행)
                 should_doc, detected_doc_type = self.document_tool.should_invoke(
                     classify_query,
-                    classification.domains[0] if classification.domains else "",
                 )
                 if should_doc and detected_doc_type:
                     state["detected_document_type"] = detected_doc_type
@@ -1153,12 +1097,7 @@ class MainRouter:
                     classification.confidence,
                     previous_domains,
                 )
-                classification = DomainClassificationResult(
-                    domains=previous_domains,
-                    confidence=max(classification.confidence, 0.5),
-                    is_relevant=True,
-                    method="followup_fallback",
-                )
+                classification = DomainClassificationResult.make_followup_fallback(classification, previous_domains)
             else:
                 # 거부 시에도 키워드 기반 액션은 수집 (문서 생성 버튼 등)
                 fallback_actions = self.generator._collect_actions(
@@ -1226,6 +1165,7 @@ class MainRouter:
             }
             return
 
+        # NOTE: astream에서는 should_invoke 미사용 (LLM intent + 키워드 shortcut만)
         # 문서 생성 shortcut (스트리밍 경로): LLM intent 우선, fallback으로 키워드
         if classification.is_relevant:
             is_doc_gen = classification.intent == "document_generation"
