@@ -326,6 +326,55 @@ class MainRouter:
 
         return None
 
+    async def _avalidate_classification(
+        self, query: str, classification: DomainClassificationResult,
+    ) -> DomainClassificationResult | None:
+        """저신뢰도 분류에 대해 BM25 점수로 검증.
+
+        해당 도메인에서 BM25 top-3 검색 후 점수가 너무 낮으면
+        키워드 기반 대체 도메인으로 리다이렉트합니다.
+
+        Args:
+            query: 분류 대상 쿼리
+            classification: 원본 분류 결과
+
+        Returns:
+            보정된 분류 결과 (보정 불필요 시 None)
+        """
+        from chains.rag_chain import get_rag_chain
+
+        domain = classification.domains[0] if classification.domains else None
+        if not domain:
+            return None
+
+        try:
+            rag_chain = get_rag_chain()
+            if not rag_chain.hybrid_searcher:
+                return None
+
+            docs = await asyncio.to_thread(
+                rag_chain.hybrid_searcher.bm25_search, query, domain, k=3,
+            )
+            if not docs or all(d.metadata.get("bm25_score", 0) < 0.1 for d in docs):
+                keyword_domains = self.domain_classifier._detect_keyword_domains(query)
+                alt_domains = [d for d in keyword_domains if d != domain]
+                if alt_domains:
+                    logger.warning(
+                        "[검증] 도메인 '%s' BM25 점수 미달 → 대체 도메인 %s",
+                        domain, alt_domains,
+                    )
+                    return DomainClassificationResult(
+                        domains=alt_domains,
+                        confidence=0.6,
+                        is_relevant=True,
+                        method="post_validation_redirect",
+                        intent=classification.intent,
+                    )
+        except Exception as e:
+            logger.warning("[검증] BM25 검증 실패: %s", e)
+
+        return None
+
     async def _aclassify_node(self, state: RouterState) -> RouterState:
         """비동기 분류 노드: 벡터 유사도 기반으로 도메인을 식별합니다."""
         start = time.time()
@@ -365,6 +414,18 @@ class MainRouter:
         )
         state["classification_result"] = classification
         state["domains"] = classification.domains
+
+        # Phase C: 저신뢰도 분류 시 post-classification 검증
+        if (
+            classification.is_relevant
+            and classification.confidence < 0.7
+            and classification.method in ("llm", "llm_retry", "keyword_override", "keyword_augmented")
+        ):
+            validated = await self._avalidate_classification(classify_query, classification)
+            if validated:
+                classification = validated
+                state["classification_result"] = classification
+                state["domains"] = classification.domains
 
         logger.info(
             "[분류] 원본='%s' | 재작성=%s('%s') | 도메인=%s(%.2f) | relevant=%s | method=%s",

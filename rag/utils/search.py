@@ -417,6 +417,30 @@ class HybridSearcher:
 
         return documents
 
+    def bm25_search(self, query: str, domain: str, k: int = 3) -> list[Document]:
+        """BM25 전용 검색 (post-classification 검증용).
+
+        Args:
+            query: 검색 쿼리
+            domain: 도메인
+            k: 반환할 결과 수
+
+        Returns:
+            BM25 점수가 metadata에 포함된 문서 리스트
+        """
+        self._ensure_bm25_index(domain)
+        bm25_index = self.bm25_indices.get(domain)
+        if not bm25_index:
+            return []
+
+        results = bm25_index.search(query, k=k)
+        docs = []
+        for sr in results:
+            doc = sr.document
+            doc.metadata["bm25_score"] = sr.score
+            docs.append(doc)
+        return docs
+
     def search(
         self,
         query: str,

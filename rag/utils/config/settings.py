@@ -64,6 +64,10 @@ class Settings(BaseSettings):
         ge=0,
         description="LLM 도메인 분류 실패 시 최대 재시도 횟수"
     )
+    enable_keyword_guardrail: bool = Field(
+        default=True,
+        description="LLM 도메인 분류 결과를 키워드 가드레일로 검증/보정"
+    )
     llm_max_retries: int = Field(default=1, description="LLM API 호출 재시도 횟수 (API 연결 실패 대비)")
 
     # -- 평가 & 재시도 --
@@ -636,6 +640,7 @@ class Settings(BaseSettings):
         "enable_cross_domain_rerank",
         "enable_domain_rejection",
         "domain_classification_max_retries",
+        "enable_keyword_guardrail",
         "enable_llm_evaluation",
         "enable_ragas_evaluation",
         "enable_post_eval_retry",

@@ -1,7 +1,8 @@
 """도메인 분류 모듈.
 
-LLM 기반 단일 경로로 도메인을 분류합니다.
+LLM 기반 도메인 분류 + 키워드 가드레일로 오분류를 보정합니다.
 원본 쿼리로 chitchat을 먼저 감지하고, 재작성된 쿼리로 도메인을 분류합니다.
+LLM 결과를 강한 키워드 매칭으로 검증/보정하며, LLM 실패 시 키워드 폴백을 제공합니다.
 실패 시 domain_classification_max_retries만큼 재시도합니다.
 """
 
@@ -14,6 +15,30 @@ from utils.config import create_llm, get_settings
 from utils.prompts import LLM_DOMAIN_CLASSIFICATION_PROMPT
 
 logger = logging.getLogger(__name__)
+
+# 강한 키워드 — 이 키워드가 쿼리에 포함되면 해당 도메인으로 간주
+_STRONG_DOMAIN_KEYWORDS: dict[str, set[str]] = {
+    "startup_funding": {
+        "창업", "사업자등록", "법인설립", "지원사업", "보조금", "정책자금",
+        "벤처기업", "스타트업", "소상공인", "사회적기업", "개업", "폐업",
+        "프랜차이즈", "투자유치", "공동창업",
+    },
+    "finance_tax": {
+        "부가가치세", "부가세", "법인세", "소득세", "종합소득세", "종소세",
+        "양도세", "증여세", "상속세", "연말정산", "세금계산서", "원천징수",
+        "세무조정", "간이과세", "가산세", "감가상각", "취득세", "재산세",
+    },
+    "hr_labor": {
+        "근로계약", "퇴직금", "연차", "4대보험", "최저임금", "주휴수당",
+        "출산휴가", "육아휴직", "산재", "해고", "권고사직", "취업규칙",
+        "수습", "야근", "초과근무", "징계", "노조",
+    },
+    "law_common": {
+        "소송", "판례", "특허", "상표", "저작권", "손해배상",
+        "고소", "고발", "민법", "상법", "공정거래", "NDA",
+        "비밀유지계약", "주주간계약", "변호사", "법무사", "변리사",
+    },
+}
 
 
 @dataclass
@@ -115,12 +140,80 @@ class DomainClassifier:
                 method="llm_error",
             )
 
+    def _detect_keyword_domains(self, query: str) -> list[str]:
+        """쿼리에서 강한 키워드 매칭으로 도메인 감지.
+
+        Args:
+            query: 분류 대상 쿼리
+
+        Returns:
+            매칭된 도메인 리스트 (없으면 빈 리스트)
+        """
+        detected = []
+        for domain, keywords in _STRONG_DOMAIN_KEYWORDS.items():
+            if any(kw in query for kw in keywords):
+                detected.append(domain)
+        return detected
+
+    def _apply_keyword_guardrail(
+        self,
+        llm_result: DomainClassificationResult,
+        keyword_domains: list[str],
+        query: str,
+    ) -> DomainClassificationResult:
+        """LLM 결과와 키워드 결과 비교, 불일치 시 보정.
+
+        Args:
+            llm_result: LLM 분류 결과
+            keyword_domains: 키워드 매칭으로 감지된 도메인 리스트
+            query: 원본 쿼리
+
+        Returns:
+            보정된 분류 결과
+        """
+        llm_domains = set(llm_result.domains)
+        kw_domains = set(keyword_domains)
+
+        # Case 1: LLM이 관련없다고 했지만 키워드는 매칭 → 키워드 우선
+        if not llm_result.is_relevant and kw_domains:
+            logger.warning(
+                "[가드레일] LLM 거부 오버라이드: llm=%s → keyword=%s",
+                llm_result.domains, keyword_domains,
+            )
+            return DomainClassificationResult(
+                domains=keyword_domains,
+                confidence=0.7,
+                is_relevant=True,
+                method="keyword_override",
+                intent="consultation",
+            )
+
+        # Case 2: LLM 도메인과 키워드 도메인 불일치 → 키워드 도메인 병합
+        missing = kw_domains - llm_domains
+        if missing and llm_result.confidence < 0.8:
+            merged = list(llm_domains | kw_domains)
+            logger.info(
+                "[가드레일] 도메인 보강: llm=%s + keyword=%s → %s",
+                llm_result.domains, keyword_domains, merged,
+            )
+            return DomainClassificationResult(
+                domains=merged,
+                confidence=llm_result.confidence,
+                is_relevant=True,
+                method="keyword_augmented",
+                intent=llm_result.intent,
+            )
+
+        # Case 3: 일치 또는 LLM 고신뢰 → LLM 결과 유지
+        return llm_result
+
     def classify(self, query: str, original_query: str | None = None) -> DomainClassificationResult:
-        """LLM 기반 도메인 분류.
+        """LLM 기반 도메인 분류 + 키워드 가드레일.
 
         original_query로 chitchat을 먼저 감지하고,
         query로 도메인을 분류합니다.
-        실패 시 domain_classification_max_retries만큼 재시도합니다.
+        LLM 성공 시 키워드 가드레일로 검증/보정하며,
+        LLM 실패 시 키워드 폴백을 먼저 시도합니다.
 
         Args:
             query: 분류 대상 쿼리 (재작성된 쿼리)
@@ -137,9 +230,29 @@ class DomainClassifier:
                 llm_result.confidence,
                 llm_result.intent,
             )
+            # 키워드 가드레일 — LLM 결과 검증/보정
+            if self.settings.enable_keyword_guardrail:
+                keyword_domains = self._detect_keyword_domains(query)
+                if keyword_domains:
+                    llm_result = self._apply_keyword_guardrail(llm_result, keyword_domains, query)
             return llm_result
 
-        # LLM 실패 → 재시도
+        # LLM 실패 → 키워드 폴백 (재시도 전에 키워드로 시도)
+        if self.settings.enable_keyword_guardrail:
+            keyword_domains = self._detect_keyword_domains(query)
+            if keyword_domains:
+                logger.info(
+                    "[도메인 분류] LLM 실패, 키워드 폴백: %s", keyword_domains,
+                )
+                return DomainClassificationResult(
+                    domains=keyword_domains,
+                    confidence=0.7,
+                    is_relevant=True,
+                    method="keyword_fallback",
+                    intent="consultation",
+                )
+
+        # 키워드도 없으면 LLM 재시도
         for attempt in range(self.settings.domain_classification_max_retries):
             logger.warning(
                 "[도메인 분류] LLM 분류 실패, 재시도 (%d/%d)",

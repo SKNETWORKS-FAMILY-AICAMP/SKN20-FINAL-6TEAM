@@ -83,6 +83,7 @@ class TestDomainClassifier:
         """테스트용 설정."""
         mock_settings = Mock()
         mock_settings.domain_classification_max_retries = 2
+        mock_settings.enable_keyword_guardrail = False
         return mock_settings
 
     @pytest.fixture
@@ -228,6 +229,7 @@ class TestLLMIntentParsing:
     def classifier(self) -> DomainClassifier:
         mock_settings = Mock()
         mock_settings.domain_classification_max_retries = 2
+        mock_settings.enable_keyword_guardrail = False
 
         with patch("utils.domain_classifier.get_settings") as mock_get_settings:
             mock_get_settings.return_value = mock_settings
@@ -278,6 +280,152 @@ class TestLLMIntentParsing:
             result = classifier.classify("사업자등록 절차")
 
         assert result.intent == "consultation"
+
+
+class TestKeywordGuardrail:
+    """키워드 가드레일 테스트."""
+
+    @pytest.fixture
+    def mock_settings(self) -> Mock:
+        """테스트용 설정."""
+        mock_settings = Mock()
+        mock_settings.domain_classification_max_retries = 2
+        mock_settings.enable_keyword_guardrail = True
+        return mock_settings
+
+    @pytest.fixture
+    def classifier(self, mock_settings: Mock) -> DomainClassifier:
+        """DomainClassifier 인스턴스."""
+        with patch("utils.domain_classifier.get_settings") as mock_get_settings:
+            mock_get_settings.return_value = mock_settings
+            return DomainClassifier()
+
+    # ========== _detect_keyword_domains 테스트 ==========
+
+    def test_detect_startup_keywords(self, classifier: DomainClassifier) -> None:
+        """창업 도메인 키워드 감지."""
+        result = classifier._detect_keyword_domains("소상공인 정책자금 지원 조건")
+        assert "startup_funding" in result
+
+    def test_detect_finance_keywords(self, classifier: DomainClassifier) -> None:
+        """세무 도메인 키워드 감지."""
+        result = classifier._detect_keyword_domains("부가가치세 신고 기한")
+        assert "finance_tax" in result
+
+    def test_detect_hr_keywords(self, classifier: DomainClassifier) -> None:
+        """인사노무 도메인 키워드 감지."""
+        result = classifier._detect_keyword_domains("출산휴가 기간과 급여")
+        assert "hr_labor" in result
+
+    def test_detect_law_keywords(self, classifier: DomainClassifier) -> None:
+        """법률 도메인 키워드 감지."""
+        result = classifier._detect_keyword_domains("손해배상 소송 절차")
+        assert "law_common" in result
+
+    def test_detect_multiple_domains(self, classifier: DomainClassifier) -> None:
+        """복수 도메인 키워드 감지."""
+        result = classifier._detect_keyword_domains("법인설립 후 법인세 신고")
+        assert "startup_funding" in result
+        assert "finance_tax" in result
+
+    def test_detect_no_keywords(self, classifier: DomainClassifier) -> None:
+        """키워드 미매칭 시 빈 리스트."""
+        result = classifier._detect_keyword_domains("오늘 날씨 어때요")
+        assert result == []
+
+    # ========== _apply_keyword_guardrail 테스트 ==========
+
+    def test_guardrail_override_llm_rejection(self, classifier: DomainClassifier) -> None:
+        """LLM 거부 + 키워드 매칭 → 키워드 오버라이드."""
+        llm_result = DomainClassificationResult(
+            domains=[], confidence=0.9, is_relevant=False, method="llm",
+        )
+        result = classifier._apply_keyword_guardrail(
+            llm_result, ["startup_funding"], "소상공인 정책자금"
+        )
+        assert result.method == "keyword_override"
+        assert result.domains == ["startup_funding"]
+        assert result.is_relevant is True
+
+    def test_guardrail_augment_low_confidence(self, classifier: DomainClassifier) -> None:
+        """LLM 저신뢰 + 키워드 불일치 → 도메인 병합."""
+        llm_result = DomainClassificationResult(
+            domains=["finance_tax"], confidence=0.6, is_relevant=True, method="llm",
+        )
+        result = classifier._apply_keyword_guardrail(
+            llm_result, ["startup_funding"], "소상공인 정책자금"
+        )
+        assert result.method == "keyword_augmented"
+        assert "startup_funding" in result.domains
+        assert "finance_tax" in result.domains
+
+    def test_guardrail_no_change_high_confidence(self, classifier: DomainClassifier) -> None:
+        """LLM 고신뢰 → LLM 결과 유지."""
+        llm_result = DomainClassificationResult(
+            domains=["finance_tax"], confidence=0.9, is_relevant=True, method="llm",
+            intent="consultation",
+        )
+        result = classifier._apply_keyword_guardrail(
+            llm_result, ["startup_funding"], "정책자금"
+        )
+        # 고신뢰(0.9 >= 0.8)이므로 LLM 결과 유지
+        assert result.method == "llm"
+        assert result.domains == ["finance_tax"]
+
+    def test_guardrail_no_change_matching_domains(self, classifier: DomainClassifier) -> None:
+        """LLM 도메인과 키워드 도메인 일치 → 변경 없음."""
+        llm_result = DomainClassificationResult(
+            domains=["finance_tax"], confidence=0.7, is_relevant=True, method="llm",
+            intent="consultation",
+        )
+        result = classifier._apply_keyword_guardrail(
+            llm_result, ["finance_tax"], "부가가치세 신고"
+        )
+        assert result.method == "llm"
+
+    # ========== classify + 가드레일 통합 테스트 ==========
+
+    def test_classify_with_guardrail_override(self, classifier: DomainClassifier) -> None:
+        """classify: LLM 오분류 → 키워드 가드레일 보정."""
+        llm_wrong = DomainClassificationResult(
+            domains=["finance_tax"], confidence=0.6, is_relevant=True, method="llm",
+            intent="consultation",
+        )
+        with patch.object(classifier, "_llm_classify", return_value=llm_wrong):
+            result = classifier.classify("소상공인 정책자금 지원 조건")
+
+        assert "startup_funding" in result.domains
+        assert result.method == "keyword_augmented"
+
+    def test_classify_keyword_fallback_on_llm_error(self, classifier: DomainClassifier) -> None:
+        """classify: LLM 실패 → 키워드 폴백."""
+        llm_error = DomainClassificationResult(
+            domains=[], confidence=0.0, is_relevant=False, method="llm_error",
+        )
+        with patch.object(classifier, "_llm_classify", return_value=llm_error):
+            result = classifier.classify("부가가치세 신고 기한")
+
+        assert result.method == "keyword_fallback"
+        assert result.domains == ["finance_tax"]
+        assert result.is_relevant is True
+
+    def test_classify_guardrail_disabled(self, mock_settings: Mock) -> None:
+        """enable_keyword_guardrail=False 시 가드레일 비활성화."""
+        mock_settings.enable_keyword_guardrail = False
+        with patch("utils.domain_classifier.get_settings") as mock_get_settings:
+            mock_get_settings.return_value = mock_settings
+            classifier = DomainClassifier()
+
+        llm_wrong = DomainClassificationResult(
+            domains=["finance_tax"], confidence=0.6, is_relevant=True, method="llm",
+            intent="consultation",
+        )
+        with patch.object(classifier, "_llm_classify", return_value=llm_wrong):
+            result = classifier.classify("소상공인 정책자금 지원 조건")
+
+        # 가드레일 비활성화 → LLM 결과 그대로
+        assert result.method == "llm"
+        assert result.domains == ["finance_tax"]
 
 
 class TestGetDomainClassifier:

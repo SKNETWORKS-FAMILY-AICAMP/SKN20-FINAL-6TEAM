@@ -512,6 +512,15 @@ LLM_DOMAIN_CLASSIFICATION_PROMPT = """You are a domain classifier for Bizi.
 - "법인 설립 후 세금 처리" → {{"domains": ["startup_funding", "finance_tax"], "confidence": 0.9, "is_relevant": true, "reasoning": "법인설립+세무 복합"}}
 - "퇴직금 계산 방법" → {{"domains": ["hr_labor"], "confidence": 0.95, "is_relevant": true, "reasoning": "노무 영역"}}
 
+### 자주 혼동되는 경계 케이스
+- "소상공인 정책자금 지원 조건" → {{"domains": ["startup_funding"], "confidence": 0.9, "is_relevant": true, "reasoning": "정책자금/지원사업은 창업 영역 (finance_tax 아님)"}}
+- "벤처기업 인증 절차" → {{"domains": ["startup_funding"], "confidence": 0.9, "is_relevant": true, "reasoning": "벤처기업 인증은 창업 영역"}}
+- "사회적기업 설립 요건" → {{"domains": ["startup_funding"], "confidence": 0.9, "is_relevant": true, "reasoning": "사회적기업 설립은 창업 영역"}}
+- "부가가치세 신고 기한과 방법" → {{"domains": ["finance_tax"], "confidence": 0.95, "is_relevant": true, "reasoning": "부가가치세는 세무 영역"}}
+- "종합소득세 신고 대상" → {{"domains": ["finance_tax"], "confidence": 0.95, "is_relevant": true, "reasoning": "종합소득세는 세무 영역"}}
+- "출산휴가 기간과 급여" → {{"domains": ["hr_labor"], "confidence": 0.95, "is_relevant": true, "reasoning": "출산휴가는 인사노무 영역"}}
+- "배우자 출산휴가 신청" → {{"domains": ["hr_labor"], "confidence": 0.95, "is_relevant": true, "reasoning": "배우자 출산휴가는 인사노무 영역"}}
+
 ## 의도 분류 규칙 (intent)
 - `"consultation"`: 도메인 관련 질문/상담 (기본값)
 - `"document_generation"`: 사용자가 문서를 직접 생성/작성해달라고 요청하는 경우
