@@ -46,7 +46,7 @@
       <b>오학성</b><br/>
       <sub>👑 팀장</sub><br/>
       <sub>PM · AWS 배포</sub><br/><br/>
-      <a href="[https://github.com/ohaksung](https://github.com/Backgold1804)">
+      <a href="https://github.com/Backgold1804">
         <img src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white"/>
       </a>
     </td>
@@ -54,7 +54,7 @@
       <b>이경현</b><br/>
       <sub>🔍 팀원</sub><br/>
       <sub>데이터 수집 · RAG<br/>(임베딩 테스트 · RAGAS 평가)</sub><br/><br/>
-      <a href="[https://github.com/leekyunghyun](https://github.com/monpump)">
+      <a href="https://github.com/monpump">
         <img src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white"/>
       </a>
     </td>
@@ -62,7 +62,7 @@
       <b>정소영</b><br/>
       <sub>🎨 팀원</sub><br/>
       <sub>산출물 관리 · Frontend</sub><br/><br/>
-      <a href="[https://github.com/jungsoyoung](https://github.com/mansio0314)">
+      <a href="https://github.com/mansio0314">
         <img src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white"/>
       </a>
     </td>
@@ -70,7 +70,7 @@
       <b>이도경</b><br/>
       <sub>🔗 팀원</sub><br/>
       <sub>데이터 전처리 · 멀티턴</sub><br/><br/>
-      <a href="[https://github.com/leedokyung](https://github.com/I-Am-Dokyung-Lee)">
+      <a href="https://github.com/I-Am-Dokyung-Lee">
         <img src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white"/>
       </a>
     </td>
@@ -78,7 +78,7 @@
       <b>안채연</b><br/>
       <sub>⚙️ 팀원</sub><br/>
       <sub>데이터 전처리 · RAG · Frontend</sub><br/><br/>
-      <a href="[https://github.com/anchaeyeon](https://github.com/hochaeyeon)">
+      <a href="https://github.com/hochaeyeon">
         <img src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white"/>
       </a>
     </td>
@@ -86,7 +86,7 @@
       <b>김효빈</b><br/>
       <sub>📄 팀원</sub><br/>
       <sub>데이터 전처리 · 문서 생성</sub><br/><br/>
-      <a href="[https://github.com/kimhyobin](https://github.com/kimobi6033)">
+      <a href="https://github.com/kimobi6033">
         <img src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white"/>
       </a>
     </td>
