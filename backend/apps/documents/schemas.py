@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 class DocumentCreate(BaseModel):
@@ -33,6 +33,13 @@ class DocumentResponse(BaseModel):
     file_metadata: dict | None = None
     create_date: datetime | None = None
     update_date: datetime | None = None
+
+    @computed_field
+    @property
+    def format(self) -> str | None:
+        if not self.file_name or '.' not in self.file_name:
+            return None
+        return self.file_name.rsplit('.', 1)[-1].lower()
 
 
 class DocumentListResponse(BaseModel):

@@ -1,5 +1,10 @@
 # Release Notes
 
+## [2026-03-10] - 자료실 버그 수정 + react-markdown 다운그레이드
+
+### Bug Fixes
+- **자료실 3가지 이슈 수정** (`package.json`): `react-markdown` v10 → v9 다운그레이드 — React 18 호환성 복원
+
 ## [2026-03-09] - 자료실 기능 추가 + API 모듈 분리 + 코드 품질 개선
 
 ### Features

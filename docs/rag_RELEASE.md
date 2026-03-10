@@ -1,5 +1,13 @@
 # Release Notes
 
+## [2026-03-10] - RAGAS 평가 시스템 개선 + 자료실 버그 수정
+
+### Features
+- **RAGAS 평가 시스템 개선** (`evaluation/ragas_evaluator.py`, `evaluation/__main__.py`): 한국어 커스텀 프롬프트(Faithfulness/AR), `strip_system_artifacts()`, `text-embedding-3-large` 적용 — 배치 평가 CLI 리팩토링 (`--compare` 모드), `ground_truth_alignment.py` 및 `noncommittal_verify.py` 신규 추가, `requirements.txt`에 `ragas>=0.4.0,<1.0.0` 버전 핀
+
+### Bug Fixes
+- **자료실 3가지 이슈 수정** (`agents/executor.py`): 문서 파일명 형식 개선 — `{회사이름}_{유형}_{날짜}_{순번:03d}.ext`
+
 ## [2026-03-09] - 코드 품질 개선 + 공고 원문 청킹 제거 + 보안 강화
 
 ### Security

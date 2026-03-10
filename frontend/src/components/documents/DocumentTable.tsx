@@ -26,12 +26,6 @@ interface DocumentTableProps {
   onRefresh: () => void;
 }
 
-const formatFileSize = (bytes?: number): string => {
-  if (bytes == null) return '-';
-  return `${Math.ceil(bytes / 1024)} KB`;
-};
-
-
 const DocumentTable: React.FC<DocumentTableProps> = ({
   items,
   total,
@@ -101,7 +95,6 @@ const DocumentTable: React.FC<DocumentTableProps> = ({
               <th className="px-4 py-3 text-left font-medium text-gray-700">파일명</th>
               <th className="px-4 py-3 text-left font-medium text-gray-700">문서유형</th>
               <th className="px-4 py-3 text-left font-medium text-gray-700">형식</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-700">크기</th>
               <th className="px-4 py-3 text-left font-medium text-gray-700">생성일</th>
               <th className="px-4 py-3 text-left font-medium text-gray-700">액션</th>
             </tr>
@@ -118,7 +111,6 @@ const DocumentTable: React.FC<DocumentTableProps> = ({
                 <td className="px-4 py-3 text-gray-700">
                   {item.format ? item.format.toUpperCase() : '-'}
                 </td>
-                <td className="px-4 py-3 text-gray-700">{formatFileSize(item.file_size)}</td>
                 <td className="px-4 py-3 text-gray-700">{formatDateShort(item.create_date)}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1">
