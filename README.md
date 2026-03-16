@@ -85,7 +85,7 @@
     <td align="center" width="16.6%">
       <b>김효빈</b><br/>
       <sub>📄 팀원</sub><br/>
-      <sub>데이터 전처리 · 문서 생성</sub><br/><br/>
+      <sub>데이터 전처리 · RAG · 문서 생성</sub><br/><br/>
       <a href="[https://github.com/kimhyobin](https://github.com/kimobi6033)">
         <img src="https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white"/>
       </a>
